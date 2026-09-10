@@ -1,0 +1,14 @@
+node_modules/
+.netlify/
+dist/
+data/store/
+data/translations/
+test/fixtures/generated/
+assets/master/*.pptx
+!assets/master/.gitkeep
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+__pycache__/

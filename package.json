@@ -1,0 +1,30 @@
+{
+  "name": "ghrc-visit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GHRC 參訪系統：訪前準備 → 客製簡報 → 訪後回饋 → 長期檔案",
+  "type": "module",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "dev": "node scripts/dev-server.mjs",
+    "deck": "node cli/deck.mjs",
+    "fixtures": "python3 scripts/make-fixture.py test/fixtures/generated/master-fixture.pptx",
+    "test": "node --test \"test/*.test.mjs\"",
+    "test:e2e": "node test/e2e/smoke.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "slim": "python3 scripts/slim-master.py"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.124.0",
+    "@netlify/blobs": "^11.0.3",
+    "@xmldom/xmldom": "^0.9.12",
+    "jszip": "^3.10.2",
+    "qrcode": "^1.5.4",
+    "zod": "^4.6.1"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^6.0.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^6.0.2"
+  }
+}

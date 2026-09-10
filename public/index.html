@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GHRC Visit · Green Health Research Center</title>
+<meta name="robots" content="noindex">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Apple SD Gothic Neo", "Hiragino Sans", sans-serif; }
+  .avatar { width: 64px; height: 64px; border-radius: 9999px; object-fit: cover; background: #e7e5e4; color: #44403c; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 1.05rem; flex: none; }
+  .tag { display: inline-block; font-size: .75rem; padding: .15rem .5rem; border-radius: 9999px; background: #f5f5f4; color: #57534e; margin: .15rem .25rem 0 0; }
+  .second { color: #78716c; font-size: .9em; }
+  .card { background: #fff; border: 1px solid #e7e5e4; border-radius: 1rem; padding: 1.25rem; }
+  .btn { display: inline-flex; align-items: center; gap: .4rem; padding: .55rem 1rem; border-radius: .75rem; background: #1c1917; color: #fff; font-weight: 500; }
+  .btn:disabled { opacity: .5; }
+  .btn-soft { background: #f5f5f4; color: #1c1917; }
+  .btn-soft[aria-pressed="true"] { background: #1c1917; color: #fff; }
+  input[type=text], input[type=email], textarea { width: 100%; border: 1px solid #d6d3d1; border-radius: .6rem; padding: .55rem .7rem; background: #fff; }
+  label.choice { display: flex; gap: .6rem; align-items: flex-start; padding: .5rem .6rem; border: 1px solid #e7e5e4; border-radius: .6rem; background: #fff; cursor: pointer; }
+  label.choice:has(input:checked) { border-color: #1c1917; background: #fafaf9; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body class="bg-stone-50 text-stone-900">
+<main class="max-w-3xl mx-auto px-4 py-8 space-y-8" id="app">
+  <header class="space-y-2">
+    <p class="text-sm text-stone-500" id="centerLine">Green Health Research Center · NTU College of Bioresources and Agriculture</p>
+    <h1 class="text-2xl sm:text-3xl font-semibold leading-tight" id="welcome">Welcome to the Green Health Research Center</h1>
+    <p class="text-lg" id="orgLine"></p>
+    <p class="text-stone-600" id="dateLine"></p>
+    <p class="text-sm text-amber-700" id="notice" hidden></p>
+  </header>
+
+  <section id="programmeSec" hidden>
+    <h2 class="text-lg font-semibold mb-3"><span id="programmeTitle"></span> <span class="second" id="programmeTitle2"></span></h2>
+    <ol class="card divide-y divide-stone-100" id="programme"></ol>
+  </section>
+
+  <section>
+    <h2 class="text-lg font-semibold mb-3"><span id="labsTitle"></span> <span class="second" id="labsTitle2"></span></h2>
+    <div class="space-y-4" id="labs"></div>
+  </section>
+
+  <!-- 互動層放最後，不搶戲（工作包 4.7） -->
+  <section class="card space-y-3" id="emailSec">
+    <h2 class="text-lg font-semibold"><span id="emailTitle"></span></h2>
+    <p class="text-stone-600 text-sm" id="emailBody"></p>
+    <form id="emailForm" class="space-y-2">
+      <input type="text" name="name" id="emailName" autocomplete="name">
+      <input type="email" name="email" id="emailEmail" autocomplete="email" required>
+      <textarea name="note" id="emailNote" rows="2"></textarea>
+      <button class="btn" type="submit" id="emailSend"></button>
+      <p class="text-sm text-emerald-700" id="emailDone" hidden></p>
+    </form>
+    <details class="text-sm text-stone-500">
+      <summary id="roomTitle" class="cursor-pointer"></summary>
+      <div class="flex flex-wrap gap-2 mt-2" id="roomButtons"></div>
+      <p class="mt-2 text-emerald-700" id="roomDone" hidden></p>
+    </details>
+  </section>
+
+  <section class="card space-y-4" id="respond">
+    <h2 class="text-xl font-semibold"><span id="respondTitle"></span></h2>
+    <p class="text-stone-600" id="respondIntro"></p>
+    <form id="respondForm" class="space-y-5">
+      <fieldset class="space-y-2">
+        <legend class="font-medium mb-1">1. <span id="qCoop"></span> <span class="second" id="qCoop2"></span></legend>
+        <div class="grid sm:grid-cols-2 gap-2" id="coopChoices"></div>
+      </fieldset>
+      <fieldset class="space-y-2">
+        <legend class="font-medium mb-1">2. <span id="qNext"></span> <span class="second" id="qNext2"></span></legend>
+        <div class="grid sm:grid-cols-2 gap-2" id="nextChoices"></div>
+        <input type="text" id="nextOther" hidden>
+      </fieldset>
+      <fieldset class="space-y-2">
+        <legend class="font-medium mb-1">3. <span id="qBetter"></span></legend>
+        <p class="second" id="qBetter2"></p>
+        <p class="text-sm text-stone-500"><span id="oneSentence"></span> <span class="second" id="oneSentence2"></span></p>
+        <textarea id="suggestion" rows="3"></textarea>
+      </fieldset>
+      <label class="choice"><input type="checkbox" id="anonymous"><span><span id="anonLabel"></span> <span class="second" id="anonLabel2"></span><br><span class="text-xs text-stone-500" id="anonNote"></span></span></label>
+      <div class="grid sm:grid-cols-2 gap-2" id="identity">
+        <input type="text" id="rName" autocomplete="name">
+        <input type="email" id="rEmail" autocomplete="email">
+      </div>
+      <button class="btn" type="submit" id="respondSend"></button>
+      <p class="text-emerald-700" id="respondDone" hidden></p>
+      <p class="text-red-700 text-sm" id="respondErr" hidden></p>
+    </form>
+  </section>
+
+  <footer class="text-xs text-stone-400 pt-4">
+    <p id="footerLine">Green Health Research Center · Landscape Building, Department of Horticulture and Landscape Architecture, National Taiwan University</p>
+  </footer>
+</main>
+
+<script>
+(async function () {
+  const $ = (id) => document.getElementById(id);
+  const ROOMS = ["301", "302", "303", "304", "305"];
+  const qs = new URLSearchParams(location.search);
+  const pathId = location.pathname.replace(/^\/+|\/+$/g, "");
+  const visitId = qs.get("visit") || (/^\d{4}-\d{2}-\d{2}-[a-z0-9-]+$/.test(pathId) ? pathId : "");
+
+  const [labsData, i18n] = await Promise.all([
+    fetch("/data/labs.json").then((r) => r.json()),
+    fetch("/data/i18n.json").then((r) => r.json()),
+  ]);
+  let visit = null;
+  if (visitId) {
+    try {
+      const r = await fetch(`/api/visits?id=${encodeURIComponent(visitId)}&public=1`);
+      const j = await r.json();
+      if (j.ok) visit = j.visit;
+      else showNotice("This visit page could not be found. 找不到這次參訪的頁面。");
+    } catch (e) {
+      showNotice("Could not load the visit. 無法載入參訪資料。");
+    }
+  }
+  const lang2 = (visit && visit.language) || qs.get("lang") || "en";
+  const primary = lang2 === "zh" ? "zh" : "en";
+  const secondary = lang2 === primary ? "" : lang2;
+  const T = (k) => (i18n[primary] || i18n.en)[k] || i18n.en[k] || "";
+  const T2 = (k) => (secondary ? (i18n[secondary] || {})[k] || "" : "");
+  const labName = (lab) => lab["name_" + (primary === "zh" ? "zh" : "en")] || lab.name_en;
+  const labName2 = (lab) => (secondary ? lab["name_" + secondary] || (secondary !== "en" ? "" : lab.name_en) : "") || (primary === "zh" ? lab.name_en : "");
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  function showNotice(msg) { $("notice").textContent = msg; $("notice").hidden = false; }
+
+  document.documentElement.lang = primary === "zh" ? "zh-Hant" : "en";
+  $("centerLine").textContent = T("center") + (T2("center") ? " · " + T2("center") : "");
+  $("welcome").textContent = T("welcome");
+  if (T2("welcome")) $("welcome").insertAdjacentHTML("beforeend", `<span class="block text-lg font-normal text-stone-500 mt-1">${esc(T2("welcome"))}</span>`);
+  if (visit) {
+    $("orgLine").textContent = [visit.org && visit.org.name, visit.org && visit.org.name_local].filter(Boolean).join(" · ");
+    $("dateLine").textContent = formatDate(visit.date, visit.start_time);
+  }
+
+  // 今日流程
+  if (visit && visit.programme && visit.programme.length) {
+    $("programmeSec").hidden = false;
+    $("programmeTitle").textContent = T("programme");
+    $("programmeTitle2").textContent = T2("programme");
+    $("programme").innerHTML = visit.programme.map((b) => `
+      <li class="flex gap-4 py-3">
+        <span class="w-28 flex-none tabular-nums text-stone-500">${esc(b.start)} – ${esc(b.end)}</span>
+        <span><span class="font-medium">${esc(b.title_en)}</span>${b.title_2nd ? `<span class="second block">${esc(b.title_2nd)}</span>` : ""}${b.rooms && b.rooms.length ? `<span class="block text-xs text-stone-400 mt-0.5">${b.rooms.map((r) => "Lab " + esc(r)).join(" → ")}</span>` : ""}</span>
+      </li>`).join("");
+  }
+
+  // 五間研究室的老師卡片：先排今天的動線，其餘放後面
+  $("labsTitle").textContent = T("labs");
+  $("labsTitle2").textContent = T2("labs");
+  const route = visit && visit.itinerary ? visit.itinerary.map((s) => String(s.room)) : [];
+  const ordered = [...labsData.labs].sort((a, b) => rank(a.room) - rank(b.room));
+  function rank(room) { const i = route.indexOf(room); return i < 0 ? 100 + Number(room) : i; }
+  $("labs").innerHTML = ordered.map((lab) => {
+    const onRoute = !route.length || route.includes(lab.room);
+    const lead = lab.lead || {};
+    const initials = (lead.name_en || lead.name_zh || "?").split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+    const oneLine = primary === "zh" ? lab.one_line_zh || lab.one_line_en : lab.one_line_en;
+    const oneLine2 = secondary === "zh" ? lab.one_line_zh : "";
+    const expertise = primary === "zh" ? lab.expertise_zh || lab.expertise_en : lab.expertise_en;
+    const papers = (lab.papers || []).map((p) => `<li><a class="underline decoration-stone-300 hover:decoration-stone-900" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a>${p.venue ? ` <span class="text-stone-400">· ${esc(p.venue)}</span>` : ""}</li>`).join("");
+    return `
+      <article class="card ${onRoute ? "" : "opacity-60"}" id="lab-${lab.room}">
+        <div class="flex gap-4">
+          ${lead.photo || lab.photo ? `<img class="avatar" src="${esc(lead.photo || lab.photo)}" alt="">` : `<div class="avatar">${esc(initials)}</div>`}
+          <div class="min-w-0 flex-1">
+            <p class="text-xs uppercase tracking-wide text-stone-400">Lab ${esc(lab.room)} · ${esc(lab.stage || "")}${lab.stage_zh && primary === "zh" ? " " + esc(lab.stage_zh) : ""}</p>
+            <h3 class="font-semibold text-lg leading-snug">${esc(labName(lab))}${labName2(lab) ? ` <span class="second font-normal">${esc(labName2(lab))}</span>` : ""}</h3>
+            <p class="mt-1"><span class="text-stone-500 text-sm">${esc(T("lead"))}${T2("lead") ? " · " + esc(T2("lead")) : ""}</span> <span class="font-medium">${esc(lead.name_zh || "")} ${esc(lead.name_en || "")}</span>${lead.title_en ? `<span class="block text-sm text-stone-500">${esc(primary === "zh" ? lead.title_zh || lead.title_en : lead.title_en)}</span>` : ""}</p>
+          </div>
+        </div>
+        <p class="mt-3">${esc(oneLine)}</p>
+        ${oneLine2 ? `<p class="second mt-1">${esc(oneLine2)}</p>` : ""}
+        ${expertise && expertise.length ? `<p class="mt-2">${expertise.map((e) => `<span class="tag">${esc(e)}</span>`).join("")}</p>` : ""}
+        ${(primary === "zh" ? lab.background_zh : lab.background_en) ? `<p class="mt-2 text-sm text-stone-600">${esc(primary === "zh" ? lab.background_zh : lab.background_en)}</p>` : ""}
+        ${papers ? `<p class="mt-3 text-sm text-stone-500">${esc(T("papers"))}</p><ul class="text-sm list-disc pl-5 space-y-0.5">${papers}</ul>` : ""}
+      </article>`;
+  }).join("");
+
+  // 留信箱（現場）
+  $("emailTitle").textContent = T("leave_email_title") + (T2("leave_email_title") ? " · " + T2("leave_email_title") : "");
+  $("emailBody").textContent = T("leave_email_body") + (T2("leave_email_body") ? "\n" + T2("leave_email_body") : "");
+  $("emailName").placeholder = T("name_optional");
+  $("emailEmail").placeholder = T("email");
+  $("emailNote").placeholder = T("note_optional");
+  $("emailSend").textContent = T("send");
+  $("emailForm").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    if (!visit) return showNotice("This page is not linked to a visit. 這個頁面沒有連到參訪。");
+    $("emailSend").disabled = true;
+    const r = await post("/api/respond", { visit_id: visit.visit_id, source: "onsite", name: $("emailName").value, email: $("emailEmail").value, note: $("emailNote").value });
+    $("emailSend").disabled = false;
+    if (r.ok) { $("emailDone").textContent = T("thanks"); $("emailDone").hidden = false; $("emailForm").reset(); }
+    else showNotice(r.error || "error");
+  });
+
+  // 備援：來賓自己按「現在進入哪一間」
+  $("roomTitle").textContent = T("now_in_room");
+  $("roomButtons").innerHTML = ROOMS.map((r) => `<button type="button" class="btn btn-soft" data-room="${r}">${r}</button>`).join("");
+  $("roomButtons").addEventListener("click", async (ev) => {
+    const b = ev.target.closest("button[data-room]");
+    if (!b || !visit) return;
+    const r = await post("/api/timeline", { visit_id: visit.visit_id, room: b.dataset.room, source: "guest" });
+    if (r.ok) { $("roomDone").textContent = `${b.dataset.room} ✓`; $("roomDone").hidden = false; }
+  });
+
+  // 訪後三個回應項目（工作包 4.6）
+  $("respondTitle").textContent = T("respond_title") + (T2("respond_title") ? " · " + T2("respond_title") : "");
+  $("respondIntro").textContent = T("respond_intro") + (T2("respond_intro") ? "\n" + T2("respond_intro") : "");
+  $("qCoop").textContent = T("cooperate"); $("qCoop2").textContent = T2("cooperate");
+  $("qNext").textContent = T("next"); $("qNext2").textContent = T2("next");
+  $("qBetter").textContent = T("ask_better"); $("qBetter2").textContent = T2("ask_better");
+  $("oneSentence").textContent = T("one_sentence"); $("oneSentence2").textContent = T2("one_sentence");
+  $("anonLabel").textContent = T("anonymous"); $("anonLabel2").textContent = T2("anonymous"); $("anonNote").textContent = T("anonymous_note");
+  $("rName").placeholder = T("name_optional"); $("rEmail").placeholder = T("email");
+  $("nextOther").placeholder = T("next_other_hint");
+  $("respondSend").textContent = T("send");
+  $("coopChoices").innerHTML = labsData.labs.map((lab) => `<label class="choice"><input type="checkbox" name="coop" value="${lab.room}"><span><span class="font-medium">Lab ${lab.room}</span> ${esc(labName(lab))}<br><span class="text-sm text-stone-500">${esc((lab.lead || {}).name_zh || "")} ${esc((lab.lead || {}).name_en || "")}</span></span></label>`).join("");
+  $("nextChoices").innerHTML = ["papers", "meeting", "exchange", "other"].map((k) => `<label class="choice"><input type="checkbox" name="next" value="${k}"><span>${esc(T("next_" + k))}${T2("next_" + k) ? `<span class="second block">${esc(T2("next_" + k))}</span>` : ""}</span></label>`).join("");
+  $("nextChoices").addEventListener("change", () => { $("nextOther").hidden = !$("nextChoices").querySelector('input[value="other"]').checked; });
+  $("anonymous").addEventListener("change", () => {
+    const anon = $("anonymous").checked;
+    $("identity").hidden = anon;
+    if (anon) { $("rName").value = ""; $("rEmail").value = ""; }
+  });
+  const doneKey = visit ? `ghrc-responded-${visit.visit_id}` : "";
+  try { if (doneKey && localStorage.getItem(doneKey)) { $("respondDone").textContent = T("already_sent"); $("respondDone").hidden = false; } } catch (e) {}
+  $("respondForm").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    $("respondErr").hidden = true;
+    if (!visit) { $("respondErr").textContent = "This page is not linked to a visit."; $("respondErr").hidden = false; return; }
+    const anonymous = $("anonymous").checked;
+    const payload = {
+      visit_id: visit.visit_id,
+      source: "letter",
+      anonymous,
+      name: anonymous ? "" : $("rName").value,
+      email: anonymous ? "" : $("rEmail").value,
+      cooperate_rooms: [...document.querySelectorAll('input[name="coop"]:checked')].map((i) => i.value),
+      next_actions: [...document.querySelectorAll('input[name="next"]:checked')].map((i) => i.value),
+      next_other: $("nextOther").hidden ? "" : $("nextOther").value,
+      suggestion: $("suggestion").value,
+    };
+    $("respondSend").disabled = true;
+    const r = await post("/api/respond", payload);
+    $("respondSend").disabled = false;
+    if (r.ok) {
+      $("respondDone").textContent = T("respond_thanks") + (T2("respond_thanks") ? "\n" + T2("respond_thanks") : "");
+      $("respondDone").hidden = false;
+      $("respondForm").reset(); $("identity").hidden = false; $("nextOther").hidden = true;
+      try { if (doneKey) localStorage.setItem(doneKey, "1"); } catch (e) {}
+    } else { $("respondErr").textContent = r.error || "error"; $("respondErr").hidden = false; }
+  });
+  if (location.hash === "#respond" || qs.get("mode") === "respond") setTimeout(() => $("respond").scrollIntoView({ behavior: "smooth" }), 200);
+
+  async function post(url, body) {
+    try {
+      const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      return await r.json();
+    } catch (e) { return { ok: false, error: String(e) }; }
+  }
+  function formatDate(d, t) {
+    if (!d) return "";
+    const dt = new Date(`${d}T${t || "00:00"}:00+08:00`);
+    const en = dt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Taipei" });
+    const zh = `${d.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$1年$2月$3日")}`;
+    return `${en}${t ? " · " + t : ""}${primary === "zh" || secondary === "zh" ? " · " + zh : ""}`;
+  }
+})();
+</script>
+</body>
+</html>

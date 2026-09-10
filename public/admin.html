@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GHRC 參訪 · 主辦端</title>
+<meta name="robots" content="noindex">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", sans-serif; }
+  .card { background: #fff; border: 1px solid #e7e5e4; border-radius: 1rem; padding: 1.25rem; }
+  .btn { display: inline-flex; align-items: center; gap: .4rem; padding: .5rem .9rem; border-radius: .7rem; background: #1c1917; color: #fff; font-weight: 500; font-size: .95rem; }
+  .btn:disabled { opacity: .45; cursor: wait; }
+  .btn-soft { background: #f5f5f4; color: #1c1917; }
+  .btn-danger { background: #b91c1c; }
+  input[type=text], input[type=email], input[type=date], input[type=time], input[type=number], select, textarea { width: 100%; border: 1px solid #d6d3d1; border-radius: .55rem; padding: .45rem .6rem; background: #fff; font-size: .95rem; }
+  label.f { display: block; font-size: .8rem; color: #57534e; margin-bottom: .15rem; }
+  .tab { padding: .5rem .9rem; border-radius: .7rem; font-weight: 500; color: #57534e; }
+  .tab[aria-selected="true"] { background: #1c1917; color: #fff; }
+  table { width: 100%; font-size: .9rem; }
+  th { text-align: left; color: #78716c; font-weight: 500; padding: .35rem .4rem; }
+  td { padding: .3rem .4rem; vertical-align: top; border-top: 1px solid #f5f5f4; }
+  td input, td select { padding: .3rem .45rem; }
+  .muted { color: #78716c; font-size: .85rem; }
+  .ok { color: #047857; } .err { color: #b91c1c; }
+  pre.wrap { white-space: pre-wrap; word-break: break-word; font-family: inherit; }
+  [hidden] { display: none !important; }
+  .slide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: .25rem .75rem; font-size: .85rem; }
+</style>
+</head>
+<body class="bg-stone-50 text-stone-900">
+<div class="max-w-5xl mx-auto px-4 py-6 space-y-6">
+  <header class="flex flex-wrap items-center gap-3">
+    <h1 class="text-xl font-semibold mr-auto">GHRC 參訪 · 主辦端</h1>
+    <span class="muted" id="backendInfo"></span>
+    <input type="text" id="token" placeholder="ADMIN_TOKEN" class="!w-48" autocomplete="off">
+    <button class="btn btn-soft" id="tokenSave">登入</button>
+  </header>
+
+  <nav class="flex flex-wrap gap-1" role="tablist">
+    <button class="tab" role="tab" data-tab="pre" aria-selected="true">訪前</button>
+    <button class="tab" role="tab" data-tab="wrapup">收工</button>
+    <button class="tab" role="tab" data-tab="post">訪後信</button>
+    <button class="tab" role="tab" data-tab="data">資料</button>
+  </nav>
+
+  <p id="flash" class="text-sm" hidden></p>
+
+  <!-- ───────── 訪前 ───────── -->
+  <section id="tab-pre" class="space-y-5">
+    <div class="card space-y-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <label class="f mb-0">參訪</label>
+        <select id="preVisitSelect" class="!w-auto"><option value="">＋ 新增一次參訪</option></select>
+        <span class="muted" id="preStatus"></span>
+      </div>
+    </div>
+
+    <div class="card space-y-3">
+      <h2 class="font-semibold">1. 貼上 email 往來，AI 抽取背景</h2>
+      <p class="muted">單位、人名、職稱、人數、隨行名單與聯絡方式、對口老師、來訪目的、興趣、日期時間。結果只顯示給你確認，不會自動存檔。</p>
+      <textarea id="emailText" rows="8" placeholder="把 email 往來（含轉寄、簽名檔）整段貼進來……"></textarea>
+      <button class="btn" id="extractBtn">AI 抽取</button>
+      <ul class="text-sm text-amber-700 list-disc pl-5" id="uncertainties"></ul>
+    </div>
+
+    <div class="card space-y-4">
+      <h2 class="font-semibold">2. 確認訪客背景</h2>
+      <div class="grid sm:grid-cols-3 gap-3">
+        <div class="sm:col-span-2"><label class="f">單位名稱（英文為主）</label><input type="text" id="orgName"></div>
+        <div><label class="f">單位名稱（當地語）</label><input type="text" id="orgLocal"></div>
+        <div><label class="f">單位類型</label><select id="orgType"><option value="government">政府單位</option><option value="university">大學</option><option value="enterprise">企業</option><option value="school">中小學／學生團</option><option value="ngo">NGO</option><option value="other">其他</option></select></div>
+        <div><label class="f">國家</label><input type="text" id="orgCountry"></div>
+        <div><label class="f">第二語言</label><select id="language"><option value="en">English</option><option value="zh">中文</option><option value="ko">한국어</option><option value="ja">日本語</option></select></div>
+        <div><label class="f">日期</label><input type="date" id="date"></div>
+        <div><label class="f">開始時間</label><input type="time" id="startTime"></div>
+        <div><label class="f">總分鐘</label><input type="number" id="duration" min="15" step="5"></div>
+        <div><label class="f">人數</label><input type="number" id="headcount" min="0"></div>
+        <div><label class="f">對口老師</label><select id="contactTeacher"><option>張俊彥</option><option>林寶秀</option><option>陳惠美</option><option>張伯茹</option><option>鄭佳昆</option></select></div>
+        <div><label class="f">網址代碼（存檔後不可改）</label><input type="text" id="code" placeholder="例如 uwa"></div>
+        <div class="sm:col-span-3"><label class="f">來訪目的</label><input type="text" id="purpose"></div>
+        <div class="sm:col-span-3"><label class="f">興趣關鍵字（逗號分隔）</label><input type="text" id="interests"></div>
+      </div>
+      <div>
+        <div class="flex items-center justify-between"><label class="f">參訪名單（每一個人都要留 email：訪後信會寄給名單上每一個人）</label><button class="btn btn-soft" id="addGuest" type="button">＋ 加一人</button></div>
+        <table id="guestTable"><thead><tr><th>姓名</th><th>職稱</th><th>email</th><th>單位</th><th>主賓</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <div class="card space-y-4">
+      <h2 class="font-semibold">3. 行程與選頁</h2>
+      <div class="flex flex-wrap gap-2 items-center">
+        <button class="btn" id="planBtn">AI 排行程與選頁</button>
+        <span class="muted" id="planInfo"></span>
+      </div>
+      <p class="muted" id="rationale"></p>
+      <div>
+        <div class="flex items-center justify-between"><label class="f">今日流程（第 2 頁 Programme）</label><button class="btn btn-soft" id="addBlock" type="button">＋ 區塊</button></div>
+        <table id="programmeTable"><thead><tr><th>開始</th><th>結束</th><th>類型</th><th>英文</th><th>第二語言</th><th>頁碼</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+      <div>
+        <label class="f">研究室動線（順序與分鐘；留 0 表示不去）</label>
+        <div class="flex flex-wrap gap-2" id="itinerary"></div>
+      </div>
+      <div>
+        <div class="flex items-center justify-between"><label class="f">選用頁次 <span id="slideCount"></span></label><span class="muted">章節編號與實體頁序不一致，這裡照頁序列</span></div>
+        <div class="slide-grid" id="slideGrid"></div>
+      </div>
+    </div>
+
+    <div class="card space-y-4">
+      <div class="flex flex-wrap gap-2 items-center">
+        <button class="btn" id="saveBtn">儲存</button>
+        <span class="muted" id="saveInfo"></span>
+      </div>
+      <div id="afterSave" hidden class="space-y-4">
+        <div class="flex flex-wrap gap-6 items-start">
+          <div id="qr"></div>
+          <div class="space-y-2 min-w-0">
+            <p><a id="pageLink" class="underline break-all" target="_blank" rel="noopener"></a></p>
+            <div class="flex flex-wrap gap-2">
+              <button class="btn btn-soft" id="copyLink">複製網址</button>
+              <button class="btn btn-soft" id="downloadSpec">下載 spec JSON（產簡報用）</button>
+              <button class="btn btn-soft" id="downloadIcs">下載收工提醒 .ics</button>
+              <button class="btn btn-soft" id="openWrapup">開收工頁</button>
+            </div>
+            <p class="muted">產簡報：把 spec 存到 <code>data/visits/</code>，本機執行 <code id="deckCmd"></code></p>
+          </div>
+        </div>
+        <div class="space-y-2">
+          <div class="flex flex-wrap gap-2 items-center">
+            <button class="btn" id="confirmLetterBtn">AI 草擬確認信</button>
+            <button class="btn btn-soft" id="copyConfirm">複製信件</button>
+          </div>
+          <input type="text" id="confirmSubject" placeholder="主旨">
+          <textarea id="confirmBody" rows="10" placeholder="確認信草稿會出現在這裡"></textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── 收工 ───────── -->
+  <section id="tab-wrapup" class="space-y-5" hidden>
+    <div class="card space-y-2">
+      <label class="f">參訪</label>
+      <select id="wrapVisitSelect"></select>
+      <p class="muted">來賓離開後兩個動作，一分鐘。受訪的是主持人自己。</p>
+    </div>
+    <div class="card space-y-3">
+      <h2 class="font-semibold">動作一｜拍一張簽名簿</h2>
+      <input type="file" id="signbookFile" accept="image/*" capture="environment">
+      <img id="signbookPreview" class="max-h-64 rounded-lg" hidden alt="">
+      <div class="flex flex-wrap gap-2"><button class="btn" id="signbookUpload" disabled>上傳並讀字</button><span class="muted" id="signbookInfo"></span></div>
+      <div id="signbookEntries" class="space-y-2" hidden>
+        <label class="f">AI 讀到的留言（可修改；署名看不清就留空）</label>
+        <table id="signbookTable"><thead><tr><th>留言</th><th>署名</th><th></th></tr></thead><tbody></tbody></table>
+        <div class="flex gap-2"><button class="btn btn-soft" id="signbookAdd" type="button">＋ 一則</button><button class="btn" id="signbookSave">存入回饋</button></div>
+        <details class="muted"><summary>整頁轉錄</summary><pre class="wrap" id="signbookTranscript"></pre></details>
+      </div>
+    </div>
+    <div class="card space-y-3">
+      <h2 class="font-semibold">動作二｜三十秒口述</h2>
+      <p class="muted">今天誰來、最想看哪一間、問了什麼、有沒有透露合作意願。</p>
+      <div class="flex flex-wrap gap-2 items-center">
+        <button class="btn" id="recBtn">● 開始錄音</button>
+        <span id="recTimer" class="tabular-nums muted">0:00</span>
+        <button class="btn btn-soft" id="recUpload" disabled>上傳並轉文字</button>
+        <span class="muted" id="recInfo"></span>
+      </div>
+      <audio id="recAudio" controls hidden></audio>
+      <div>
+        <label class="f">逐字稿（沒錄音也可以直接打字，再按「抽取」）</label>
+        <textarea id="transcript" rows="4"></textarea>
+        <button class="btn btn-soft mt-2" id="extractDictationBtn">從逐字稿抽取</button>
+      </div>
+      <div id="dictationFields" class="grid sm:grid-cols-2 gap-3" hidden>
+        <div><label class="f">誰來</label><input type="text" id="dWho"></div>
+        <div><label class="f">最想看哪幾間（逗號分隔房號）</label><input type="text" id="dRooms"></div>
+        <div class="sm:col-span-2"><label class="f">問了什麼（每行一題）</label><textarea id="dQuestions" rows="3"></textarea></div>
+        <div><label class="f">合作意願</label><input type="text" id="dCoop"></div>
+        <div><label class="f">後續事項（每行一項）</label><textarea id="dFollow" rows="2"></textarea></div>
+        <div class="sm:col-span-2"><button class="btn" id="dictationSave">確認並存入回饋</button> <span class="muted" id="dictationInfo"></span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── 訪後信 ───────── -->
+  <section id="tab-post" class="space-y-5" hidden>
+    <div class="card space-y-3">
+      <div class="grid sm:grid-cols-3 gap-3">
+        <div class="sm:col-span-2"><label class="f">參訪</label><select id="postVisitSelect"></select></div>
+        <div><label class="f">寄件者</label><select id="sender"><option value="director">中心主任 張俊彥</option><option value="contact">對口老師</option></select></div>
+      </div>
+      <div class="flex flex-wrap gap-2"><button class="btn" id="thanksBtn">AI 草擬感謝信</button><span class="muted" id="thanksInfo"></span></div>
+      <input type="text" id="thanksSubject" placeholder="主旨">
+      <textarea id="thanksBody" rows="16" placeholder="感謝信草稿：專頁連結、他最想看的研究室的論文與老師聯絡方式、三個回應項目（含請益語氣的開放建議欄位、可不具名）"></textarea>
+      <p class="muted">三個回應項目的措辭固定為請益語氣，且回覆頁支援真匿名；請保留信裡的那一段。</p>
+    </div>
+    <div class="card space-y-3">
+      <div class="flex items-center justify-between"><h2 class="font-semibold">寄送對象：名單上每一個人 ＋ 現場留信箱的人</h2><button class="btn btn-soft" id="recipientsRefresh">重新整理</button></div>
+      <div id="recipients" class="space-y-1"></div>
+      <div class="flex flex-wrap gap-2 items-center">
+        <button class="btn" id="sendBtn">寄出</button>
+        <button class="btn btn-soft" id="copyThanks">複製信件</button>
+        <a class="btn btn-soft" id="mailtoLink" hidden target="_blank" rel="noopener">用自己的信箱寄（mailto）</a>
+        <span id="sendInfo"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── 資料 ───────── -->
+  <section id="tab-data" class="space-y-5" hidden>
+    <div class="card space-y-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <h2 class="font-semibold mr-auto">歷次參訪</h2>
+        <a class="btn btn-soft" id="csvVisits" download>visits.csv</a>
+        <a class="btn btn-soft" id="csvResponses" download>responses.csv</a>
+        <a class="btn btn-soft" id="csvTimeline" download>timeline.csv</a>
+        <a class="btn btn-soft" id="csvPerf" download>slide_performance.csv</a>
+      </div>
+      <table id="visitsTable"><thead><tr><th>日期</th><th>單位</th><th>類型</th><th>國家</th><th>人數</th><th>狀態</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="card space-y-3" id="visitDetail" hidden>
+      <div class="flex flex-wrap gap-2 items-center"><h2 class="font-semibold mr-auto" id="detailTitle"></h2><button class="btn" id="summaryBtn">AI 產一頁摘要</button></div>
+      <pre class="wrap text-sm" id="summary"></pre>
+      <h3 class="font-medium">回覆（responses）</h3>
+      <table id="responsesTable"><thead><tr><th>來源</th><th>姓名</th><th>email</th><th>最想看</th><th>想合作</th><th>希望我們</th><th>簽名簿／建議／備註</th><th>時間</th></tr></thead><tbody></tbody></table>
+      <h3 class="font-medium">動線（timeline，推補後）</h3>
+      <table id="timelineTable"><thead><tr><th>空間</th><th>進入</th><th>離開</th><th>分鐘</th><th>來源</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="card space-y-3">
+      <div class="flex flex-wrap gap-2 items-center"><h2 class="font-semibold mr-auto">跨場次彙整：開放建議裡重複出現的問題</h2><button class="btn" id="digestBtn">AI 彙整</button></div>
+      <pre class="wrap text-sm" id="digest"></pre>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const ROOMS = ["301", "302", "303", "304", "305"];
+  const state = { visits: [], visit: null, slides: null, labs: null, thanksRecipients: [], signbookEntries: [], recBlob: null, saved: false };
+
+  // ── token ──
+  try { $("token").value = localStorage.getItem("ghrc-admin-token") || ""; } catch (e) {}
+  $("tokenSave").onclick = () => { try { localStorage.setItem("ghrc-admin-token", $("token").value.trim()); } catch (e) {} boot(); };
+  const token = () => $("token").value.trim();
+
+  async function api(path, opts = {}) {
+    const headers = { authorization: `Bearer ${token()}`, ...(opts.body && !(opts.body instanceof FormData) ? { "content-type": "application/json" } : {}), ...(opts.headers || {}) };
+    let r;
+    try {
+      r = await fetch(path, { ...opts, headers, body: opts.body && !(opts.body instanceof FormData) ? JSON.stringify(opts.body) : opts.body });
+    } catch (e) { return { ok: false, error: "連不上伺服器：" + e }; }
+    const text = await r.text();
+    try { return JSON.parse(text); } catch (e) { return { ok: false, error: `${r.status} ${text.slice(0, 200)}` }; }
+  }
+  function flash(msg, cls = "ok") { const f = $("flash"); f.textContent = msg; f.className = "text-sm " + cls; f.hidden = false; clearTimeout(flash.t); flash.t = setTimeout(() => (f.hidden = true), 6000); }
+  async function busy(btn, fn) { const t = btn.textContent; btn.disabled = true; btn.textContent = "…"; try { return await fn(); } finally { btn.disabled = false; btn.textContent = t; } }
+  const download = (name, text, type = "application/json") => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); };
+  const copy = async (text) => { try { await navigator.clipboard.writeText(text); flash("已複製"); } catch (e) { flash("無法複製，請手動選取", "err"); } };
+
+  // ── tabs ──
+  document.querySelectorAll(".tab").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
+  function showTab(name) {
+    document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
+    for (const t of ["pre", "wrapup", "post", "data"]) $("tab-" + t).hidden = t !== name;
+    if (name === "data") loadDataTab();
+    if (name === "post") loadRecipients();
+  }
+
+  // ── boot ──
+  async function boot() {
+    const [slides, labs] = await Promise.all([fetch("/data/slides.json").then((r) => r.json()), fetch("/data/labs.json").then((r) => r.json())]);
+    state.slides = slides; state.labs = labs;
+    renderItinerary(); renderSlideGrid();
+    await loadVisits();
+    fillForm(state.visit || emptyVisit());
+    const m = /wrapup=([\w-]+)/.exec(location.hash);
+    if (m) { showTab("wrapup"); $("wrapVisitSelect").value = m[1]; }
+  }
+  async function loadVisits() {
+    const r = await api("/api/visits");
+    if (!r.ok) { $("backendInfo").textContent = r.error; flash(r.error, "err"); return; }
+    state.visits = r.visits;
+    $("backendInfo").textContent = `資料層：${r.backend} · ${r.visits.length} 場`;
+    const opts = r.visits.map((v) => `<option value="${esc(v.visit_id)}">${esc(v.date)} ${esc(v.org)}（${esc(v.status)}）</option>`).join("");
+    $("preVisitSelect").innerHTML = `<option value="">＋ 新增一次參訪</option>${opts}`;
+    const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+    const pick = r.visits.find((v) => v.date === today) || r.visits[0];
+    for (const id of ["wrapVisitSelect", "postVisitSelect"]) { $(id).innerHTML = opts || `<option value="">（尚無參訪）</option>`; if (pick) $(id).value = pick.visit_id; }
+  }
+  function emptyVisit() {
+    return { visit_id: "", date: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10), start_time: "10:00", duration_minutes: 90, org: { name: "", name_local: "", type: "university", country: "" }, guests: [], headcount: 0, contact_teacher: "張俊彥", purpose: "", interests: [], language: "en", programme: [], itinerary: ROOMS.map((room) => ({ room, minutes: 8 })), slides: [], text_edits: [], letters: {}, deck: {}, signbook: {}, dictation: {}, status: "draft" };
+  }
+
+  // ── 訪前：表單 ──
+  $("preVisitSelect").onchange = async () => {
+    const id = $("preVisitSelect").value;
+    if (!id) return fillForm(emptyVisit());
+    const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
+    if (r.ok) fillForm(r.visit); else flash(r.error, "err");
+  };
+  function fillForm(v) {
+    state.visit = v; state.saved = !!v.visit_id && state.visits.some((x) => x.visit_id === v.visit_id);
+    $("orgName").value = v.org?.name || ""; $("orgLocal").value = v.org?.name_local || ""; $("orgType").value = v.org?.type || "university"; $("orgCountry").value = v.org?.country || "";
+    $("language").value = v.language || "en"; $("date").value = v.date || ""; $("startTime").value = v.start_time || "10:00"; $("duration").value = v.duration_minutes || 90; $("headcount").value = v.headcount || 0;
+    $("contactTeacher").value = v.contact_teacher || "張俊彥"; $("purpose").value = v.purpose || ""; $("interests").value = (v.interests || []).join(", ");
+    $("code").value = state.saved ? v.visit_id.slice(11) : ""; $("code").disabled = state.saved;
+    $("preStatus").textContent = state.saved ? `${v.visit_id} · ${v.status}` : "尚未存檔";
+    renderGuests(v.guests || []); renderProgramme(v.programme || []); renderItinerary(v.itinerary); renderSlideGrid(v.slides || []);
+    $("rationale").textContent = v.plan_rationale || ""; $("uncertainties").innerHTML = (v.uncertainties || []).map((u) => `<li>${esc(u)}</li>`).join("");
+    $("afterSave").hidden = !state.saved;
+    if (state.saved) showSaved(v);
+    $("confirmSubject").value = v.letters?.confirmation?.subject || ""; $("confirmBody").value = v.letters?.confirmation?.body || "";
+  }
+  function readForm() {
+    const v = { ...(state.visit || emptyVisit()) };
+    v.org = { name: $("orgName").value.trim(), name_local: $("orgLocal").value.trim(), type: $("orgType").value, country: $("orgCountry").value.trim() };
+    v.language = $("language").value; v.date = $("date").value; v.start_time = $("startTime").value; v.duration_minutes = Number($("duration").value) || 90; v.headcount = Number($("headcount").value) || 0;
+    v.contact_teacher = $("contactTeacher").value; v.purpose = $("purpose").value.trim(); v.interests = $("interests").value.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+    v.guests = [...$("guestTable").tBodies[0].rows].map((tr) => ({ name: tr.cells[0].firstChild.value.trim(), title: tr.cells[1].firstChild.value.trim(), email: tr.cells[2].firstChild.value.trim(), affiliation: tr.cells[3].firstChild.value.trim(), role: tr.cells[4].firstChild.checked ? "lead" : "member" })).filter((g) => g.name || g.email);
+    v.programme = [...$("programmeTable").tBodies[0].rows].map((tr) => ({ start: tr.cells[0].firstChild.value, end: tr.cells[1].firstChild.value, kind: tr.cells[2].firstChild.value, title_en: tr.cells[3].firstChild.value, title_2nd: tr.cells[4].firstChild.value, slides_range: tr.cells[5].firstChild.value, rooms: tr.cells[2].firstChild.value === "tour" ? readItinerary().map((s) => s.room) : [] }));
+    v.itinerary = readItinerary();
+    v.slides = [...document.querySelectorAll("#slideGrid input:checked")].map((i) => Number(i.value));
+    if (!state.saved && $("code").value.trim()) v.code = $("code").value.trim().toLowerCase();
+    return v;
+  }
+  function renderGuests(guests) {
+    $("guestTable").tBodies[0].innerHTML = guests.map((g) => guestRow(g)).join("");
+  }
+  const guestRow = (g = {}) => `<tr><td><input type="text" value="${esc(g.name)}"></td><td><input type="text" value="${esc(g.title)}"></td><td><input type="email" value="${esc(g.email)}"></td><td><input type="text" value="${esc(g.affiliation)}"></td><td class="text-center"><input type="radio" name="lead" ${g.role === "lead" ? "checked" : ""}></td><td><button type="button" class="muted" onclick="this.closest('tr').remove()">✕</button></td></tr>`;
+  $("addGuest").onclick = () => $("guestTable").tBodies[0].insertAdjacentHTML("beforeend", guestRow());
+  function renderProgramme(blocks) { $("programmeTable").tBodies[0].innerHTML = blocks.map(blockRow).join(""); }
+  const blockRow = (b = { kind: "other" }) => `<tr><td><input type="time" value="${esc(b.start)}"></td><td><input type="time" value="${esc(b.end)}"></td><td><select>${["briefing", "tour", "discussion", "photo", "other"].map((k) => `<option ${b.kind === k ? "selected" : ""}>${k}</option>`).join("")}</select></td><td><input type="text" value="${esc(b.title_en)}"></td><td><input type="text" value="${esc(b.title_2nd)}"></td><td><input type="text" value="${esc(b.slides_range || "")}"></td><td><button type="button" class="muted" onclick="this.closest('tr').remove()">✕</button></td></tr>`;
+  $("addBlock").onclick = () => $("programmeTable").tBodies[0].insertAdjacentHTML("beforeend", blockRow());
+  function renderItinerary(it) {
+    const by = new Map((it || []).map((s, i) => [String(s.room), { ...s, order: i }]));
+    const rooms = [...ROOMS].sort((a, b) => (by.has(a) ? by.get(a).order : 99) - (by.has(b) ? by.get(b).order : 99));
+    $("itinerary").innerHTML = rooms.map((room, i) => { const s = by.get(room); const lab = (state.labs?.labs || []).find((l) => l.room === room); return `<label class="card !p-2 !rounded-lg flex items-center gap-2"><span class="muted">${i + 1}.</span><span class="font-medium">${room}</span><span class="muted">${esc(lab?.lead?.name_zh || "")}</span><input type="number" min="0" class="!w-16" value="${s ? s.minutes : 0}" data-room="${room}"> 分</label>`; }).join("");
+  }
+  const readItinerary = () => [...document.querySelectorAll("#itinerary input[data-room]")].map((i) => ({ room: i.dataset.room, minutes: Number(i.value) || 0 })).filter((s) => s.minutes > 0);
+  function renderSlideGrid(selected = []) {
+    const set = new Set(selected);
+    $("slideGrid").innerHTML = (state.slides?.slides || []).map((s) => `<label class="flex gap-1 items-start"><input type="checkbox" value="${s.n}" ${set.has(s.n) ? "checked" : ""} ${s.always ? "disabled checked" : ""}><span><span class="muted">${String(s.n).padStart(2, "0")}</span> ${esc(s.title)}${s.video ? " ▶" : ""}${s.lab ? ` <span class="muted">${s.lab}</span>` : ""}</span></label>`).join("");
+    updateSlideCount();
+  }
+  $("slideGrid").addEventListener("change", updateSlideCount);
+  function updateSlideCount() {
+    const chosen = [...document.querySelectorAll("#slideGrid input:checked")].map((i) => Number(i.value));
+    const mins = chosen.reduce((s, n) => s + ((state.slides?.slides || []).find((x) => x.n === n)?.minutes || 1), 0);
+    $("slideCount").textContent = `（${chosen.length} 頁，約 ${Math.round(mins)} 分鐘）`;
+  }
+
+  // ── 訪前：AI ──
+  $("extractBtn").onclick = () => busy($("extractBtn"), async () => {
+    const r = await api("/api/extract", { method: "POST", body: { email_text: $("emailText").value } });
+    if (!r.ok) return flash(r.error, "err");
+    state.saved = false; $("preVisitSelect").value = "";
+    fillForm({ ...emptyVisit(), ...r.visit, visit_id: "" });
+    flash("抽取完成，請逐項確認（尤其是名單的 email）");
+  });
+  $("planBtn").onclick = () => busy($("planBtn"), async () => {
+    const r = await api("/api/plan", { method: "POST", body: { visit: readForm() } });
+    if (!r.ok) return flash(r.error, "err");
+    const v = r.visit; state.visit = { ...state.visit, ...v, visit_id: state.saved ? state.visit.visit_id : "" };
+    renderProgramme(v.programme); renderItinerary(v.itinerary); renderSlideGrid(v.slides);
+    $("rationale").textContent = v.plan_rationale || ""; $("planInfo").textContent = `簡報約 ${r.estimated_briefing_minutes} 分鐘${r.master_text_available ? "" : "（尚無母簡報文字：第 1–3 頁的替換文字要在產檔時處理）"}`;
+    flash("已排好，請確認後儲存");
+  });
+  $("saveBtn").onclick = () => busy($("saveBtn"), async () => {
+    const v = readForm();
+    if (!v.org.name) return flash("單位名稱必填", "err");
+    const r = await api("/api/visits", { method: "POST", body: v });
+    if (!r.ok) return flash(r.error, "err");
+    await loadVisits(); $("preVisitSelect").value = r.visit.visit_id; fillForm(r.visit);
+    flash(`已儲存 ${r.visit.visit_id}`);
+  });
+  function showSaved(v) {
+    $("afterSave").hidden = false;
+    $("pageLink").textContent = v.page_url; $("pageLink").href = v.page_url;
+    $("qr").innerHTML = ""; if (window.QRCode) new QRCode($("qr"), { text: v.page_url, width: 128, height: 128 });
+    $("deckCmd").textContent = `npm run deck -- --visit=${v.visit_id}`;
+    $("saveInfo").textContent = `更新：${(v.updated_at || "").replace("T", " ").slice(0, 16)}`;
+  }
+  $("copyLink").onclick = () => copy(state.visit.page_url);
+  $("downloadSpec").onclick = () => download(`${state.visit.visit_id}.json`, JSON.stringify(state.visit, null, 2));
+  $("downloadIcs").onclick = () => download(`${state.visit.visit_id}-wrapup.ics`, ics(state.visit), "text/calendar");
+  $("openWrapup").onclick = () => { $("wrapVisitSelect").value = state.visit.visit_id; showTab("wrapup"); };
+  $("confirmLetterBtn").onclick = () => busy($("confirmLetterBtn"), async () => {
+    const r = await api("/api/letter", { method: "POST", body: { visit_id: state.visit.visit_id, kind: "confirmation", sender: "contact" } });
+    if (!r.ok) return flash(r.error, "err");
+    $("confirmSubject").value = r.draft.subject; $("confirmBody").value = r.draft.body;
+  });
+  $("copyConfirm").onclick = () => copy(`${$("confirmSubject").value}\n\n${$("confirmBody").value}`);
+  function ics(v) {
+    const start = new Date(`${v.date}T${v.start_time || "10:00"}:00+08:00`); const end = new Date(start.getTime() + (v.duration_minutes || 90) * 60000);
+    const f = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z"); const url = `${location.origin}/admin.html#wrapup=${v.visit_id}`;
+    return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//GHRC Visit//EN", "BEGIN:VEVENT", `UID:${v.visit_id}@visit.healsdesign.org`, `DTSTAMP:${f(new Date())}`, `DTSTART:${f(start)}`, `DTEND:${f(end)}`, `SUMMARY:GHRC 參訪收工：${v.org?.name || v.visit_id}`, `DESCRIPTION:來賓離開後：1) 拍一張簽名簿 2) 講三十秒口述。\\n${url}`, `URL:${url}`, "BEGIN:VALARM", "TRIGGER:PT0M", "ACTION:DISPLAY", "DESCRIPTION:拍簽名簿、三十秒口述", "END:VALARM", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+  }
+
+  // ── 收工：簽名簿 ──
+  $("signbookFile").onchange = async () => {
+    const file = $("signbookFile").files[0]; if (!file) return;
+    state.signbookDataUrl = await downscale(file, 2000, 0.85);
+    $("signbookPreview").src = state.signbookDataUrl; $("signbookPreview").hidden = false; $("signbookUpload").disabled = false;
+  };
+  $("signbookUpload").onclick = () => busy($("signbookUpload"), async () => {
+    const r = await api("/api/signbook", { method: "POST", body: { visit_id: $("wrapVisitSelect").value, image: state.signbookDataUrl } });
+    if (!r.ok) { $("signbookInfo").textContent = r.error; return flash(r.error, "err"); }
+    $("signbookInfo").textContent = `照片已存：${r.photo_key}`;
+    state.signbookEntries = r.entries || []; renderSignbook(); $("signbookTranscript").textContent = r.transcript || ""; $("signbookEntries").hidden = false;
+  });
+  function renderSignbook() { $("signbookTable").tBodies[0].innerHTML = state.signbookEntries.map((e) => `<tr><td><textarea rows="2">${esc(e.text)}</textarea></td><td><input type="text" value="${esc(e.signed_by)}"></td><td><button type="button" class="muted" onclick="this.closest('tr').remove()">✕</button></td></tr>`).join(""); }
+  $("signbookAdd").onclick = () => { state.signbookEntries = readSignbook(); state.signbookEntries.push({ text: "", signed_by: "", language: "" }); renderSignbook(); };
+  const readSignbook = () => [...$("signbookTable").tBodies[0].rows].map((tr) => ({ text: tr.cells[0].firstChild.value.trim(), signed_by: tr.cells[1].firstChild.value.trim(), language: "" }));
+  $("signbookSave").onclick = () => busy($("signbookSave"), async () => {
+    const r = await api("/api/signbook", { method: "POST", body: { visit_id: $("wrapVisitSelect").value, action: "save", entries: readSignbook() } });
+    if (!r.ok) return flash(r.error, "err"); flash(`已存入 ${r.saved} 則簽名簿留言`);
+  });
+  function downscale(file, maxEdge, quality) {
+    return new Promise((resolve) => { const img = new Image(); img.onload = () => { const s = Math.min(1, maxEdge / Math.max(img.width, img.height)); const c = document.createElement("canvas"); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s); c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); resolve(c.toDataURL("image/jpeg", quality)); URL.revokeObjectURL(img.src); }; img.src = URL.createObjectURL(file); });
+  }
+
+  // ── 收工：口述 ──
+  let rec = null, recChunks = [], recStart = 0, recTick = null;
+  $("recBtn").onclick = async () => {
+    if (rec && rec.state === "recording") { rec.stop(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"].find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || "";
+      rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); recChunks = [];
+      rec.ondataavailable = (e) => e.data.size && recChunks.push(e.data);
+      rec.onstop = () => { stream.getTracks().forEach((t) => t.stop()); clearInterval(recTick); state.recBlob = new Blob(recChunks, { type: rec.mimeType || "audio/webm" }); $("recAudio").src = URL.createObjectURL(state.recBlob); $("recAudio").hidden = false; $("recUpload").disabled = false; $("recBtn").textContent = "● 重新錄"; };
+      rec.start(); recStart = Date.now(); $("recBtn").textContent = "■ 停止";
+      recTick = setInterval(() => { const s = Math.floor((Date.now() - recStart) / 1000); $("recTimer").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }, 500);
+    } catch (e) { flash("無法使用麥克風：" + e, "err"); }
+  };
+  $("recUpload").onclick = () => busy($("recUpload"), async () => {
+    const fd = new FormData(); fd.append("visit_id", $("wrapVisitSelect").value); fd.append("audio", state.recBlob, "dictation.webm");
+    const r = await api("/api/transcribe", { method: "POST", body: fd });
+    if (!r.ok) { $("recInfo").textContent = r.error; if (r.transcript) $("transcript").value = r.transcript; return flash(r.error, "err"); }
+    $("transcript").value = r.transcript; fillDictation(r.extracted); $("recInfo").textContent = r.audio_key ? `音檔已存：${r.audio_key}` : "";
+  });
+  $("extractDictationBtn").onclick = () => busy($("extractDictationBtn"), async () => {
+    const r = await api("/api/transcribe", { method: "POST", body: { visit_id: $("wrapVisitSelect").value, transcript: $("transcript").value } });
+    if (!r.ok) return flash(r.error, "err"); fillDictation(r.extracted);
+  });
+  function fillDictation(x) { $("dictationFields").hidden = false; $("dWho").value = x.who_came || ""; $("dRooms").value = (x.most_wanted_rooms || []).join(", "); $("dQuestions").value = (x.questions || []).join("\n"); $("dCoop").value = x.cooperation || ""; $("dFollow").value = (x.follow_ups || []).join("\n"); }
+  $("dictationSave").onclick = () => busy($("dictationSave"), async () => {
+    const extracted = { who_came: $("dWho").value.trim(), most_wanted_rooms: $("dRooms").value.split(/[,，\s]+/).filter((r) => ROOMS.includes(r)), questions: $("dQuestions").value.split("\n").map((s) => s.trim()).filter(Boolean), cooperation: $("dCoop").value.trim(), follow_ups: $("dFollow").value.split("\n").map((s) => s.trim()).filter(Boolean), other: "" };
+    const r = await api("/api/transcribe", { method: "POST", body: { visit_id: $("wrapVisitSelect").value, action: "save", extracted } });
+    if (!r.ok) return flash(r.error, "err"); $("dictationInfo").textContent = "已存入"; flash("口述已存入回饋");
+  });
+
+  // ── 訪後信 ──
+  $("postVisitSelect").onchange = loadRecipients;
+  $("recipientsRefresh").onclick = loadRecipients;
+  async function loadRecipients() {
+    const id = $("postVisitSelect").value; if (!id) return;
+    const [rec, v] = await Promise.all([api("/api/letter", { method: "POST", body: { visit_id: id, action: "recipients" } }), api(`/api/visits?id=${encodeURIComponent(id)}`)]);
+    if (rec.ok) { state.thanksRecipients = rec.recipients; renderRecipients(); }
+    if (v.ok) { const t = v.visit.letters?.thanks; $("thanksSubject").value = t?.subject || ""; $("thanksBody").value = t?.body || ""; if (t?.sender) $("sender").value = t.sender; $("sendInfo").innerHTML = t?.sent_at ? `<span class="ok">已於 ${esc(t.sent_at.slice(0, 16).replace("T", " "))} 寄給 ${t.sent_to?.length || 0} 人</span>` : ""; }
+  }
+  function renderRecipients() {
+    $("recipients").innerHTML = state.thanksRecipients.length ? state.thanksRecipients.map((r, i) => `<label class="flex gap-2 items-center"><input type="checkbox" checked data-i="${i}"><span>${esc(r.name)} <span class="muted">${esc(r.email)} · ${r.from === "list" ? "名單" : "現場留信箱"}</span></span></label>`).join("") : `<p class="muted">名單上沒有 email。請回「訪前」補上隨行名單的聯絡方式。</p>`;
+  }
+  $("thanksBtn").onclick = () => busy($("thanksBtn"), async () => {
+    const r = await api("/api/letter", { method: "POST", body: { visit_id: $("postVisitSelect").value, kind: "thanks", sender: $("sender").value } });
+    if (!r.ok) return flash(r.error, "err");
+    $("thanksSubject").value = r.draft.subject; $("thanksBody").value = r.draft.body; state.thanksRecipients = r.recipients; renderRecipients();
+  });
+  $("copyThanks").onclick = () => copy(`${$("thanksSubject").value}\n\n${$("thanksBody").value}`);
+  $("sendBtn").onclick = () => busy($("sendBtn"), async () => {
+    const recipients = [...document.querySelectorAll("#recipients input:checked")].map((i) => state.thanksRecipients[Number(i.dataset.i)]);
+    if (!recipients.length) return flash("沒有勾選收件人", "err");
+    if (!confirm(`寄給 ${recipients.length} 人？`)) return;
+    const r = await api("/api/letter", { method: "POST", body: { visit_id: $("postVisitSelect").value, action: "send", kind: "thanks", sender: $("sender").value, subject: $("thanksSubject").value, body: $("thanksBody").value, recipients } });
+    if (!r.ok && !r.reason) return flash(r.error || "寄送失敗", "err");
+    if (r.sent) { $("sendInfo").innerHTML = `<span class="ok">已寄給 ${r.sent_to.length} 人${r.failed?.length ? `，${r.failed.length} 人失敗` : ""}</span>`; $("mailtoLink").hidden = true; flash("已寄出"); loadVisits(); }
+    else { $("sendInfo").innerHTML = `<span class="err">尚未寄出：Netlify 沒有設定 Gmail（GMAIL_CLIENT_ID／SECRET／REFRESH_TOKEN）。請用右邊的 mailto 或複製信件自行寄送。</span>`; $("mailtoLink").href = r.mailto; $("mailtoLink").hidden = false; }
+  });
+
+  // ── 資料 ──
+  async function loadDataTab() {
+    const t = encodeURIComponent(token());
+    $("csvVisits").href = `/api/visits?export=csv&table=visits&token=${t}`; $("csvResponses").href = `/api/visits?export=csv&table=responses&token=${t}`; $("csvTimeline").href = `/api/visits?export=csv&table=timeline&token=${t}`; $("csvPerf").href = `/api/visits?export=csv&table=slide_performance&token=${t}`;
+    await loadVisits();
+    $("visitsTable").tBodies[0].innerHTML = state.visits.map((v) => `<tr class="cursor-pointer hover:bg-stone-50" data-id="${esc(v.visit_id)}"><td>${esc(v.date)}</td><td>${esc(v.org)}</td><td>${esc(v.type)}</td><td>${esc(v.country)}</td><td>${esc(v.headcount)}</td><td>${esc(v.status)}</td></tr>`).join("");
+  }
+  $("visitsTable").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-id]"); if (tr) showDetail(tr.dataset.id); });
+  async function showDetail(id) {
+    const [v, tl] = await Promise.all([api(`/api/visits?id=${encodeURIComponent(id)}`), api(`/api/timeline?id=${encodeURIComponent(id)}`)]);
+    if (!v.ok) return flash(v.error, "err");
+    state.detailId = id; $("visitDetail").hidden = false; $("detailTitle").textContent = `${v.visit.date} ${v.visit.org?.name}`; $("summary").textContent = v.visit.summary || "（尚未產生摘要）";
+    $("responsesTable").tBodies[0].innerHTML = v.responses.map((r) => `<tr><td>${esc(r.source)}${r.anonymous ? "<br><span class='muted'>不具名</span>" : ""}</td><td>${esc(r.name)}</td><td>${esc(r.email)}</td><td>${esc((r.most_wanted_rooms || []).join(" "))}</td><td>${esc((r.cooperate_rooms || []).join(" "))}</td><td>${esc((r.next_actions || []).join(" "))}${r.next_other ? "<br>" + esc(r.next_other) : ""}</td><td>${esc([r.signbook_text, r.suggestion, r.note].filter(Boolean).join("\n"))}</td><td class="muted">${esc(r.submitted_at.slice(0, 16).replace("T", " "))}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">（尚無回覆）</td></tr>`;
+    $("timelineTable").tBodies[0].innerHTML = (tl.timeline || []).map((r) => `<td>${r.room}</td><td>${fmtT(r.enter)}</td><td>${fmtT(r.exit)}</td><td>${r.minutes}</td><td>${esc(r.source)}</td>`).map((s) => `<tr>${s}</tr>`).join("") || `<tr><td colspan="5" class="muted">（尚無排程或訊號）</td></tr>`;
+  }
+  const fmtT = (iso) => new Date(iso).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Taipei" });
+  $("summaryBtn").onclick = () => busy($("summaryBtn"), async () => { const r = await api("/api/summary", { method: "POST", body: { visit_id: state.detailId } }); if (!r.ok) return flash(r.error, "err"); $("summary").textContent = r.summary; });
+  $("digestBtn").onclick = () => busy($("digestBtn"), async () => { const r = await api("/api/summary", { method: "POST", body: { digest: true } }); if (!r.ok) return flash(r.error, "err"); $("digest").textContent = r.digest; });
+
+  boot();
+})();
+</script>
+</body>
+</html>

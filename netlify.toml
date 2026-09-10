@@ -1,0 +1,23 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "22"
+  AWS_LAMBDA_JS_RUNTIME = "nodejs22.x"
+
+[functions]
+  node_bundler = "esbuild"
+  included_files = ["public/data/**"]
+
+# /api/<name> → 對應的 function（netlify/functions/<name>.mts）
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# 專屬網址 visit.healsdesign.org/<visit_id> → 來賓端專頁（既有靜態檔優先）
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
