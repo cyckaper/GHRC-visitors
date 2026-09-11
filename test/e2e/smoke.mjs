@@ -57,6 +57,7 @@ try {
   await page.click("#planBtn");
   await page.waitForFunction(() => document.querySelectorAll("#programmeTable tbody tr").length > 0);
   check((await page.locator("#slideGrid input[data-slide]:checked").count()) >= 5, "plan selects slides");
+  check((await page.locator("#programmeTable tbody tr select").evaluateAll((els) => els.map((e) => e.options[e.selectedIndex].text))).includes("綜合討論"), "programme table shows a 綜合討論 block");
   check((await page.locator("#slideGrid fieldset[data-group]").count()) >= 10, "slides are grouped into blocks");
   const before = await page.locator("#slideGrid input[data-slide]:checked").count();
   await page.click("#slidesNone");

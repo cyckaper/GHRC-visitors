@@ -102,7 +102,7 @@ API 金鑰一律走 Netlify Function，**絕不出現在前端**。
 | 12–14 | 核心主張 Core Proposition | 02 | 13 閉環證據鏈；14 空間與經費來源 |
 | 15–20 | Lab 301 智能室（張俊彥） | 03 量測 | 15 分隔頁；18 HealthCloud；19 **影片**；20 七站工具鏈 |
 | 21–28 | Lab 302 規劃室（林寶秀） | 03 設計 | ENVI-met 微氣候模擬全套 |
-| 29–38 | Lab 303 模擬室（陳惠美・鄭佳昆） | 03 驗證 | VR 設備、360VR 教材、傷口疼痛；35/37/38 **影片** |
+| 29–38 | Lab 303 模擬室（陳惠美） | 03 驗證 | VR 設備、360VR 教材、傷口疼痛；35/37/38 **影片** |
 | 39–42 | 研究成果：病患照護、高齡與學童、北區農村綠色照顧 | 04 | 夾在 03 中間 |
 | 43–48 | Lab 305 IVR 研究選輯（鄭佳昆） | 03 驗證 | 43 總覽；44–48 五個研究 |
 | 49–50 | Lab 304 全景影院（張伯茹） | 03 處方 | CAVE VR |
@@ -121,11 +121,11 @@ API 金鑰一律走 Netlify Function，**絕不出現在前端**。
 |---|---|---|
 | 301 | Health Landscape Intelligence Lab 健康景觀智能室 | 張俊彥 Chun-Yen Chang |
 | 302 | Healing Environment Planning Lab 療癒環境規劃室 | 林寶秀 Bau-Show Lin |
-| 303 | Landscape Simulation Lab 景觀環境模擬室 | 陳惠美 Hui-Mei Chen・鄭佳昆 Chia-Kuen Cheng |
+| 303 | Landscape Simulation Lab 景觀環境模擬室 | 陳惠美 Hui-Mei Chen |
 | 304 | Panoramic Cinema Lab 全景影院體驗室 | 張伯茹 Po-Ju Chang |
 | 305 | 304 外部空間，IVR 研究 | 鄭佳昆 Chia-Kuen Cheng |
 
-> 來賓端專頁的老師卡片，**303 只列陳惠美**（明確指示，與母簡報不同）。簡報本身照母簡報列兩人。
+> 本系統所有標示（老師卡片、選頁區塊標題、負責人索引、提示詞）**303 只列陳惠美**（明確指示）。母簡報投影片裡的文字本系統不改寫。
 
 ---
 
@@ -304,5 +304,6 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - 主辦端 API 用 `Authorization: Bearer ADMIN_TOKEN`；現場訊號用 `SIGNAL_KEY`；`respond` 與 `visits?public=1` 公開。
 - 老師卡片內容 `public/data/labs.json` 的 `confirmed=false` 表示尚待老師確認；照片 `photo` 為 null 時顯示縮寫。
 - **現場動線第一站固定是總體介紹**：`itinerary[0].room === "briefing"`（可填 `location`，例如 304），之後才是 301–305；`lib/visit.mjs ensureBriefingFirst` 在存檔與排程時強制。現場訊號 `room=briefing` 代表簡報室（開總體簡報＝整場起點）。
+- 今日流程固定含三個區塊：總體簡報（briefing）→ 研究室參訪（tour）→ **綜合討論（discussion）**，合照可省略；`plan.mts` 在 AI 漏掉綜合討論時自動補上並回傳 `warnings`。**時間分配預設**（`lib/visit.mjs allocateProgramme`）：總體介紹 20 分、每間研究室 20 分、合照 5 分，剩下的時間全部給綜合討論；總時間不夠時先縮研究室（每間至少 5）、再縮總體介紹（至少 10），綜合討論至少 10。預設總長 150 分。
 - 後台「選用頁次」依 `public/data/slides.json` 的 `groups` 分區塊（章節／研究室）：區塊方框整區選、「只選這區」、全選／全不選；必選頁永遠保留。每一頁必須恰好屬於一個區塊。
 - 開放建議欄位措辭在 `public/data/i18n.json`（`ask_better`、`one_sentence`、`anonymous`），ko／ja 譯文請母語者校閱。
