@@ -260,7 +260,8 @@
       <table id="visitsTable"><thead><tr><th>日期</th><th>單位</th><th>類型</th><th>國家</th><th>人數</th><th>狀態</th></tr></thead><tbody></tbody></table>
     </div>
     <div class="card space-y-3" id="visitDetail" hidden>
-      <div class="flex flex-wrap gap-2 items-center"><h2 class="font-semibold mr-auto" id="detailTitle"></h2><button class="btn" id="summaryBtn">AI 產一頁摘要</button></div>
+      <div class="flex flex-wrap gap-2 items-center"><h2 class="font-semibold mr-auto" id="detailTitle"></h2><button class="btn" id="summaryBtn">AI 產一頁摘要</button><button class="btn btn-soft" id="driveBtn">備份到 Google Drive</button></div>
+      <p class="text-sm" id="driveInfo"></p>
       <pre class="wrap text-sm" id="summary"></pre>
       <h3 class="font-medium">回覆（responses）</h3>
       <table id="responsesTable"><thead><tr><th>來源</th><th>姓名</th><th>email</th><th>最想看</th><th>想合作</th><th>希望我們</th><th>簽名簿／建議／備註</th><th>時間</th></tr></thead><tbody></tbody></table>
@@ -829,11 +830,32 @@
     const [v, tl] = await Promise.all([api(`/api/visits?id=${encodeURIComponent(id)}`), api(`/api/timeline?id=${encodeURIComponent(id)}`)]);
     if (!v.ok) return flash(v.error, "err");
     state.detailId = id; $("visitDetail").hidden = false; $("detailTitle").textContent = `${v.visit.date} ${v.visit.org?.name}`; $("summary").textContent = v.visit.summary || "（尚未產生摘要）";
+    const d = v.visit.drive;
+    $("driveInfo").innerHTML = d?.backed_up_at ? `<span class="ok">已備份 ${esc(d.backed_up_at.slice(0, 16).replace("T", " "))}${d.items ? `（${d.items} 個檔案）` : ""}</span> <a class="underline" target="_blank" rel="noopener" href="${esc(d.url || "")}">在 Drive 開啟</a>` : "";
     $("responsesTable").tBodies[0].innerHTML = v.responses.map((r) => `<tr><td>${esc(r.source)}${r.anonymous ? "<br><span class='muted'>不具名</span>" : ""}</td><td>${esc(r.name)}</td><td>${esc(r.email)}</td><td>${esc((r.most_wanted_rooms || []).join(" "))}</td><td>${esc((r.cooperate_rooms || []).join(" "))}</td><td>${esc((r.next_actions || []).join(" "))}${r.next_other ? "<br>" + esc(r.next_other) : ""}</td><td>${esc([r.signbook_text, r.suggestion, r.note].filter(Boolean).join("\n"))}</td><td class="muted">${esc(r.submitted_at.slice(0, 16).replace("T", " "))}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">（尚無回覆）</td></tr>`;
     $("timelineTable").tBodies[0].innerHTML = (tl.timeline || []).map((r) => `<td>${r.room}</td><td>${fmtT(r.enter)}</td><td>${fmtT(r.exit)}</td><td>${r.minutes}</td><td>${esc(r.source)}</td>`).map((s) => `<tr>${s}</tr>`).join("") || `<tr><td colspan="5" class="muted">（尚無排程或訊號）</td></tr>`;
   }
   const fmtT = (iso) => new Date(iso).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Taipei" });
   $("summaryBtn").onclick = () => busy($("summaryBtn"), async () => { const r = await api("/api/summary", { method: "POST", body: { visit_id: state.detailId } }); if (!r.ok) return flash(r.error, "err"); $("summary").textContent = r.summary; });
+  // 長期檔案另存 Google Drive：一次一個檔（避開 function 逾時），中心的 Drive 帳號一場一個資料夾
+  $("driveBtn").onclick = () => busy($("driveBtn"), async () => {
+    const id = state.detailId; if (!id) return;
+    const info = $("driveInfo");
+    const plan = await api(`/api/drive?id=${encodeURIComponent(id)}`);
+    if (!plan.ok) { info.textContent = plan.error; return flash(plan.error, "err"); }
+    if (!plan.configured) { info.textContent = plan.hint; return flash("Google Drive 尚未設定", "err"); }
+    let url = plan.drive?.url || "";
+    let n = 0;
+    for (const item of plan.items) {
+      info.textContent = `上傳 ${++n}/${plan.items.length}：${item.name}`;
+      const r = await api("/api/drive", { method: "POST", body: { visit_id: id, key: item.key } });
+      if (!r.ok) { info.textContent = r.error; return flash(r.error, "err"); }
+      url = r.drive?.url || url;
+    }
+    await api("/api/drive", { method: "POST", body: { visit_id: id, done: true, items: n } });
+    info.innerHTML = `<span class="ok">已備份 ${n} 個檔案</span> <a class="underline" target="_blank" rel="noopener" href="${esc(url)}">在 Drive 開啟</a>`;
+    flash("已另存到 Google Drive");
+  });
   $("digestBtn").onclick = () => busy($("digestBtn"), async () => { const r = await api("/api/summary", { method: "POST", body: { digest: true } }); if (!r.ok) return flash(r.error, "err"); $("digest").textContent = r.digest; });
 
   boot();

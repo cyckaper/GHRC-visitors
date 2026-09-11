@@ -69,6 +69,8 @@ export interface Visit {
     thanks?: { subject: string; body: string; sender: string; drafted_at: string; sent_to?: { name: string; email: string }[]; sent_at?: string };
   };
   summary: string;
+  /** Google Drive 備份（/api/drive）：這場參訪在 Drive 上的資料夾。 */
+  drive?: { folder_id?: string; url?: string; backed_up_at?: string; items?: number };
   status: "draft" | "confirmed" | "done";
   created_at: string;
   updated_at: string;
