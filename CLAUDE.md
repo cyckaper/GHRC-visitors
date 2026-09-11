@@ -228,9 +228,13 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
 
 ### 4. 長期檔案與回饋下一次簡報
 
-- **每場另存一份到 Google Drive**：`/api/drive`，中心 Drive 的 `GHRC 參訪/<日期> <單位>/` 一場一個資料夾，
+- **每場自動備份到 Google Drive**：中心 Drive 的 `GHRC 參訪/<日期> <單位>/` 一場一個資料夾，
   放參訪資料.json、回覆.csv、動線.csv、一頁摘要.md、簽名簿照片、主持人口述音檔、當天簡報.pdf、現場合照。
-  後台「資料」分頁選一場按「備份到 Google Drive」；一次一個檔（避開 function 逾時），同名覆蓋所以可重複按。
+  **不必手動按**：資料寫進去的端點（`visits` 存檔、`signbook`、`transcribe`、`materials`、`letter` 寄出、`summary`、
+  來賓的 `respond`）都會呼叫 `lib/drive.mts triggerDriveSync()`，觸發背景函式 `drive-sync-background`
+  （Netlify 背景函式，15 分鐘上限，一次把整場搬完；一般函式 10 秒不夠）。`drive-cron` 每晚台北時間兩點掃一次補漏。
+  `needsSync()` 比對 `visit.drive.backed_up_at` 與參訪／回覆的時間，沒有新東西就跳過；同步只寫 `visit.drive`，
+  **不動 `updated_at`**，否則下一次會永遠認為有變動。後台「資料」分頁的「立即備份到 Drive」是手動補救用的（一次一個檔，顯示進度）。
   授權沿用寄信那組 Google OAuth（`GOOGLE_*` 優先，沒有就用 `GMAIL_*`），refresh token 要含 `drive.file`；
   用中心自己的帳號而不是服務帳戶（服務帳戶沒有 Drive 配額）。站台的 Blobs 仍是主要資料層，Drive 是另存的檔案庫。
   **`GOOGLE_DRIVE_FOLDER_ID` 通常留空**：`drive.file` 只看得到程式自己建立的檔案，指定別人建的資料夾會存取不到，
@@ -297,7 +301,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 - `public/admin.html`：訪前（貼信或上傳名單檔抽取 → 確認 → 排行程選頁 → 儲存 → QR／**產生簡報 .pptx**／.ics／確認信）、收工（簽名簿照片讀字、三十秒口述錄音轉文字抽取、或打字、**當天資料**：簡報 PDF、合照、相關連結放上專頁）、訪後信（草擬、全名單收件人、寄出或 mailto）、資料（列表、回覆、動線、摘要、跨場次彙整、CSV）。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
 - `public/index.html`：專屬網址 `/<visit_id>`；全頁英文為主、第二語言為輔（預設中文，ko／ja 來賓用韓／日文）；流程（參訪當天標出「現在」）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
-- `netlify/functions/*.mts`：`visits` `extract` `plan` `letter` `respond` `timeline` `signbook` `transcribe` `summary` `media` `materials` `translate` `master` `drive`；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
+- `netlify/functions/*.mts`：`visits` `extract` `plan` `letter` `respond` `timeline` `signbook` `transcribe` `summary` `media` `materials` `translate` `master` `drive` `drive-sync-background`（自動備份）`drive-cron`（每晚補漏，`export const config = { schedule }`）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
 - `public/lib/pptx.mjs`：母簡報子集化核心（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證），零 Node 相依，瀏覽器與 CLI 共用；`cli/lib/pptx.mjs` 只是注入 jszip／xmldom 的 Node 入口；`cli/deck.mjs` 加上 QR（qrcode 套件）與 PDF（LibreOffice）。`--inspect`、`--dump`、`--validate`。
 - `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-shortcuts.mjs`：研究室電腦捷徑與 NFC 網址。

@@ -343,6 +343,31 @@ test("drive backup: lists everything the archive folder should get; refuses to u
   assert.ok(post.body.error.includes("Google Drive"));
 });
 
+test("drive auto-backup: the background sync endpoint needs the token and stands down until Google is configured", async () => {
+  assert.equal((await api("/api/drive-sync-background", { method: "POST", body: JSON.stringify({ visit_id: visitId }) })).status, 401);
+  const r = await api("/api/drive-sync-background", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId }) });
+  assert.equal(r.status, 503, "no Google credentials in the test environment");
+  assert.ok(r.body.error.includes("GOOGLE_CLIENT_ID"));
+  assert.equal((await api("/api/drive-sync-background", { method: "POST", headers: admin, body: "{}" })).status, 400);
+  // 沒設定 Drive 時，寫入端點照常運作（triggerDriveSync 直接跳過）
+  const v = await api(`/api/visits?id=${visitId}`, { headers: admin });
+  assert.equal((await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(v.body.visit) })).status, 200);
+  assert.equal((await api("/api/respond", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visit_id: visitId, anonymous: true, suggestion: "auto-backup should not break this" }) })).status, 200);
+});
+
+test("drive: needsSync only fires when something changed after the last backup", async () => {
+  const { needsSync, plan } = await import("../netlify/lib/drive.mts");
+  const base = { visit_id: "x", date: "2026-11-17", updated_at: "2026-11-17T10:00:00.000Z", org: { name: "X" }, materials: { deck_pdf: "", photos: [], links: [] } };
+  assert.equal(needsSync(base, []), true, "never backed up");
+  const backed = { ...base, drive: { backed_up_at: "2026-11-17T11:00:00.000Z" } };
+  assert.equal(needsSync(backed, []), false, "nothing new since the backup");
+  assert.equal(needsSync({ ...backed, updated_at: "2026-11-17T12:00:00.000Z" }, []), true, "the visit changed");
+  assert.equal(needsSync(backed, [{ submitted_at: "2026-11-17T12:30:00.000Z" }]), true, "a guest replied");
+  assert.equal(needsSync(backed, [{ submitted_at: "2026-11-17T10:30:00.000Z" }]), false, "an older reply is already in the backup");
+  assert.deepEqual(plan(base).map((i) => i.name), ["參訪資料.json", "回覆.csv", "動線.csv"]);
+  assert.ok(plan({ ...base, summary: "x", signbook: { photo_key: "signbook/x/1.jpg" }, materials: { deck_pdf: "materials/x/a.pdf", photos: ["materials/x/b.jpg"], links: [] } }).map((i) => i.name).includes("現場合照-01.jpg"));
+});
+
 test("static: guest page served for /<visit_id> fallback and admin page exists", async () => {
   const r = await fetch(`${base}/${visitId}`);
   assert.equal(r.status, 200);

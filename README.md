@@ -14,7 +14,7 @@
 | 現場 | 老師／主持人 | 開簡報的桌面捷徑、門口 NFC 貼紙自動送動線訊號；總體簡報最後一頁問「您最想看哪一部分」 | `scripts/make-shortcuts.mjs` |
 | 收工 | 主持人 | 拍一張簽名簿（AI 讀字）＋ 三十秒口述（轉文字、抽取），一分鐘；再把簡報 PDF、合照、相關連結放上專屬頁面 | `admin.html`「收工」（.ics 提醒直達） |
 | 訪後 | 承辦 | AI 草擬感謝信 → 寄給**名單上每一個人**；信裡三個回應項目（含請益語氣的開放建議欄位，可**真匿名**） | `admin.html`「訪後信」→ 來賓端 `#respond` |
-| 長期 | 中心 | 一頁摘要、跨場次建議彙整、CSV 匯出、slide_performance；每場「備份到 Google Drive」（資料與媒體檔另存中心的 Drive） | `admin.html`「資料」 |
+| 長期 | 中心 | 一頁摘要、跨場次建議彙整、CSV 匯出、slide_performance；**每場自動備份到中心的 Google Drive**（資料有變動就同步，另有每晚補漏） | `admin.html`「資料」 |
 
 ## 目錄
 
@@ -22,7 +22,7 @@
 public/            單檔 HTML（Tailwind CDN，無建置）：index.html 來賓端、admin.html 主辦端、data/*.json
 public/lib/        pptx.mjs：母簡報子集化核心（瀏覽器與 CLI 共用，零 Node 相依）
 public/assets/master/  （選用）slim-master.pptx 靜態檔；平常改用後台「上傳母簡報」存進 Blobs，不必進 git
-netlify/functions/ API（.mts）：visits extract plan letter respond timeline signbook transcribe summary media materials translate master drive
+netlify/functions/ API（.mts）：visits extract plan letter respond timeline signbook transcribe summary media materials translate master drive drive-sync-background drive-cron
 netlify/lib/       函式共用：store（file／blobs／sheets）、ai（Claude、Whisper、mock）、http、data、types
 lib/               純 JS 共用：visit（id、匿名化、寄送清單、ICS）、timeline（動線推補）
 cli/               npm run deck：同一份核心的本機入口 → pptx（＋PDF）

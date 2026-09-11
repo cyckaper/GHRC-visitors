@@ -3,6 +3,7 @@ import { loadPublicData } from "../lib/data.mts";
 import { getStore } from "../lib/store.mts";
 import { draftLetter } from "../lib/ai.mts";
 import { recipientList } from "../../lib/visit.mjs";
+import { triggerDriveSync } from "../lib/drive.mts";
 
 /**
  * POST /api/letter {visit_id, kind: confirmation|thanks, sender: director|contact}   → 草稿（存在 visit.letters）
@@ -52,6 +53,7 @@ export default async (req: Request) => {
     }
     visit.updated_at = nowISO();
     await store.putVisit(visit);
+    await triggerDriveSync(visit.visit_id);
     return json({ ok: failed.length === 0, sent: sent.length > 0, sent_to: sent, failed });
   }
 

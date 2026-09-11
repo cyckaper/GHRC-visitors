@@ -186,8 +186,9 @@ try {
 
   // 當天：留信箱與備援按鍵出現
   await page.goto(`${base}/2026-10-07-uwa?phase=today`);
-  await page.waitForSelector("#emailSec:not([hidden])");
-  check((await page.textContent("#labsTitle")).includes("Today"), "on the day: today's laboratories");
+  // #emailSec 在 HTML 裡本來就沒有 hidden，要等腳本把標題填好才算渲染完
+  await page.waitForFunction(() => document.getElementById("labsTitle").textContent.length > 0);
+  check((await page.textContent("#labsTitle")).includes("Today") && (await page.isVisible("#emailSec")), "on the day: today's laboratories, on-site email box shown");
   await page.fill("#emailEmail", "walkin@example.org");
   await page.click("#emailSend");
   await page.waitForSelector("#emailDone:not([hidden])");
@@ -195,7 +196,7 @@ try {
 
   // 訪後（感謝信的 #respond 連結）：過去式，三個回應項目
   await page.goto(`${base}/2026-10-07-uwa#respond`);
-  await page.waitForSelector("#respond:not([hidden])");
+  await page.waitForFunction(() => document.getElementById("labsTitle").textContent.length > 0);
   check((await page.textContent("#labsTitle")).includes("visited") && (await page.textContent("#welcome")).includes("Thank you") && (await page.isHidden("#emailSec")), "after the visit: past tense, thank-you heading, no on-site email box");
   check((await page.textContent("#qBetter")) === "From your perspective, what should we be doing better?", "open-suggestion wording is the 請益 question");
   await page.check("#anonymous");
