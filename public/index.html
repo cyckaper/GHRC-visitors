@@ -190,9 +190,9 @@
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const mediaUrl = (x) => (/^https?:\/\//i.test(x) ? x : `/api/media?key=${encodeURIComponent(x)}`);
   // 頁面階段：訪前（將參訪，不放留信箱與感謝表單）、當天（留信箱、備援按鍵）、訪後（過去式、三個回應項目）。
-  // 感謝信的 #respond 連結一律當訪後；?phase=before|today|after 可強制（預覽用）。
+  // 沒有參訪代碼的首頁一律從訪前開始；感謝信的 #respond 連結一律當訪後；?phase=before|today|after 可強制（預覽用）。
   const today = taipeiToday();
-  const phase = ["before", "today", "after"].includes(qs.get("phase")) ? qs.get("phase") : location.hash === "#respond" ? "after" : !visit || !visit.date ? "today" : visit.date > today ? "before" : visit.date < today ? "after" : "today";
+  const phase = ["before", "today", "after"].includes(qs.get("phase")) ? qs.get("phase") : location.hash === "#respond" && visit ? "after" : !visit || !visit.date ? "before" : visit.date > today ? "before" : visit.date < today ? "after" : "today";
 
   function showNotice(msg) { $("notice").textContent = msg; $("notice").hidden = false; }
 
@@ -202,8 +202,18 @@
   const welcomeKey = phase === "after" ? "welcome_after" : "welcome";
   $("welcome").textContent = T(welcomeKey);
   if (T2(welcomeKey)) $("welcome").insertAdjacentHTML("beforeend", `<span class="block text-lg font-normal text-stone-500 mt-1">${esc(T2(welcomeKey))}</span>`);
-  $("emailSec").hidden = phase !== "today";
-  $("respond").hidden = phase === "before";
+  // 留信箱與回應表單各有自己的連結，帶連結進來就一定看得到：
+  //   /<visit_id>#email    現場留信箱（QR、桌卡用）
+  //   /<visit_id>#respond  訪後三個回應項目（感謝信用）
+  const applySections = () => {
+    const w = (location.hash.replace("#", "") || qs.get("mode") || "").toLowerCase();
+    $("emailSec").hidden = !(w === "email" || phase === "today");
+    $("respond").hidden = !(w === "respond" || phase !== "before");
+    return w;
+  };
+  const want = applySections();
+  // 有人在頁面上點到 #email／#respond 連結時（只改 hash 不重載）也要跟著開
+  addEventListener("hashchange", () => { const w = applySections(); if (w === "email" || w === "respond") $(w === "email" ? "emailSec" : "respond").scrollIntoView({ behavior: "smooth" }); });
   if (visit) {
     $("orgLine").textContent = [visit.org && visit.org.name, visit.org && visit.org.name_local].filter(Boolean).join(" · ");
     $("dateLine").textContent = formatDate(visit.date, visit.start_time);
@@ -254,7 +264,7 @@
   }
 
   // 五間研究室的老師卡片：先排今天的動線，其餘放後面；標題依階段用「將參訪／今天參訪／參訪過」
-  const labsKey = !visit ? "labs_generic" : phase === "before" ? "labs" : phase === "after" ? "labs_after" : "labs_today";
+  const labsKey = phase === "before" ? "labs" : phase === "after" ? "labs_after" : visit ? "labs_today" : "labs_generic";
   $("labsTitle").textContent = T(labsKey);
   $("labsTitle2").textContent = T2(labsKey);
   const steps = visit && visit.itinerary ? visit.itinerary.map((s) => ({ ...s, room: String(s.room) })) : [];
@@ -379,7 +389,7 @@
       try { if (doneKey) localStorage.setItem(doneKey, "1"); } catch (e) {}
     } else { $("respondErr").textContent = r.error || "error"; $("respondErr").hidden = false; }
   });
-  if (location.hash === "#respond" || qs.get("mode") === "respond") setTimeout(() => $("respond").scrollIntoView({ behavior: "smooth" }), 200);
+  if (want === "respond" || want === "email") setTimeout(() => $(want === "email" ? "emailSec" : "respond").scrollIntoView({ behavior: "smooth" }), 200);
 
   // 進場動畫：捲到哪、哪裡浮現（不支援 IntersectionObserver 就全部直接顯示）
   const reveal = document.querySelectorAll(".reveal");

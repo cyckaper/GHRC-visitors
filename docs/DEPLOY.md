@@ -74,6 +74,21 @@ python3 scripts/slim-master.py "GHRC 介紹簡報2026-9.pptx" --out public/asset
 - 把 slim master 放上站台有兩種方式：**後台「上傳母簡報 .pptx」一次**（切成 4 MB 分塊存進 Netlify Blobs，`/api/master`，要 ADMIN_TOKEN，不公開；之後「產生簡報」直接抓），或 commit 到 `public/assets/master/slim-master.pptx`（Netlify 公開發佈，知道網址的人都能下載）。兩者都沒有時，按「產生簡報」會當場請你從電腦選檔，產完可一鍵存到站台。**可以直接選 396 MB 的原始母簡報**：含影片或超過 60 MB 的檔會先在瀏覽器裡瘦身（抽影片留海報、大圖縮到 2000px），大約一兩分鐘，存到站台的是瘦身後的版本。原始母檔留在 Drive 當備份。
 - 產出後：`npm run deck -- --inspect` 看頁次是否與 `public/data/slides.json` 的索引一致（章節編號與實體頁序不一致是已知現象，索引以頁序為準）；`npm run deck -- --dump` 寫 `data/master-text.json` 並 commit，之後 `/api/plan` 就能產生第 1–3 頁（封面、流程、架構）逐字替換的 `text_edits`。
 
+## 6.5 另存 Google Drive（長期檔案）
+
+後台「資料」分頁選一場參訪 → **備份到 Google Drive**：中心 Drive 的 `GHRC 參訪/<日期> <單位>/` 會多一個資料夾，
+放參訪資料.json、回覆.csv、動線.csv、一頁摘要.md、簽名簿照片、主持人口述音檔、當天簡報.pdf、現場合照。同名覆蓋，可以重複按。
+
+Netlify 環境變數（沿用寄信那組 Google OAuth 也可以，但 refresh token 必須含 `drive.file` 權限）：
+
+| 變數 | 說明 |
+|---|---|
+| `GOOGLE_CLIENT_ID`／`GOOGLE_CLIENT_SECRET` | OAuth 用戶端；沒設就用 `GMAIL_CLIENT_ID`／`GMAIL_CLIENT_SECRET` |
+| `GOOGLE_REFRESH_TOKEN` | 中心 Google 帳號授權的 refresh token（scope 至少 `https://www.googleapis.com/auth/drive.file`，要寄信再加 `gmail.send`）；沒設就用 `GMAIL_REFRESH_TOKEN` |
+| `GOOGLE_DRIVE_FOLDER_ID` | 要放進哪個資料夾（Drive 網址 `/folders/<id>` 那一段）；不設就放我的雲端硬碟根目錄 |
+
+用中心自己的 Google 帳號授權，不要用服務帳戶——服務帳戶沒有 Drive 儲存配額，上傳會被拒。
+
 ## 7. 產出當次簡報
 
 平常在後台「訪前」存檔後按 **產生簡報 .pptx**：瀏覽器抓 slim master（後台上傳的、站台靜態檔、或當場選檔）、依選頁與流程子集化、韓／日文版呼叫 `/api/translate` 翻譯中文段落、直接下載 `GHRC_<visit_id>.pptx`。PDF 請用 PowerPoint 另存，再到「收工」放上專屬頁面。本機 CLI 是備援（多出 LibreOffice 轉 PDF）：

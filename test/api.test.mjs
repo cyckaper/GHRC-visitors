@@ -324,6 +324,25 @@ test("summary writes visit.summary and slide_performance rows; digest lists sugg
   assert.equal(list.body.visits.length, 1);
 });
 
+test("drive backup: lists everything the archive folder should get; refuses to upload until Google is configured", async () => {
+  assert.equal((await api(`/api/drive?id=${visitId}`)).status, 401, "needs the admin token");
+  const r = await api(`/api/drive?id=${visitId}`, { headers: admin });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.configured, false, "no Google credentials in the test environment");
+  assert.ok(r.body.hint.includes("GOOGLE_DRIVE_FOLDER_ID"));
+  const names = r.body.items.map((i) => i.name);
+  assert.ok(names.includes("參訪資料.json") && names.includes("回覆.csv") && names.includes("動線.csv"));
+  assert.ok(names.includes("一頁摘要.md"), "the summary written earlier is archived too");
+  assert.ok(names.some((n) => n.startsWith("簽名簿.")), "signbook photo");
+  assert.ok(names.some((n) => n.startsWith("主持人口述.")), "dictation audio");
+  assert.ok(names.includes("當天簡報.pdf"), "materials PDF");
+  assert.ok(names.some((n) => n.startsWith("現場合照-01.")), "materials photo");
+  assert.equal((await api(`/api/drive?id=2026-01-01-nope`, { headers: admin })).status, 404);
+  const post = await api("/api/drive", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, key: "visit.json" }) });
+  assert.equal(post.status, 503);
+  assert.ok(post.body.error.includes("Google Drive"));
+});
+
 test("static: guest page served for /<visit_id> fallback and admin page exists", async () => {
   const r = await fetch(`${base}/${visitId}`);
   assert.equal(r.status, 200);
