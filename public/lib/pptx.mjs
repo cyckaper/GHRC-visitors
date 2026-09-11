@@ -403,8 +403,12 @@ export class Deck {
       if (f.startsWith("docProps/")) continue;
       removed.push(f);
       this.remove(f);
-      if (f.endsWith(".xml")) await this.removeOverride(`/${f}`);
     }
+    // 指向不存在 part 的 Override 一律清掉：抽掉影片、圖片換副檔名都會留下這種殘骸，
+    // 留著 PowerPoint 會說檔案壞了（真母簡報把 mp4 宣告成 Override，不是 Default）
+    const left = new Set(this.files());
+    const { overrides } = await this.contentTypes();
+    for (const [partName] of overrides) if (!left.has(partName.slice(1))) await this.removeOverride(partName);
     return removed;
   }
 
