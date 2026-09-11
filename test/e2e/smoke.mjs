@@ -108,6 +108,7 @@ try {
     const storedMb = parseFloat((/([\d.]+) MB/.exec(await page.textContent("#masterRow")) || [])[1] || "99");
     check(storedMb < 3, `master was slimmed in the browser before storing (${storedMb} MB, fixture is 11.3 MB with a video)`);
     check(/瘦身：抽掉 1 個影片/.test(await page.textContent("#deckReport")), "slim report shown: 1 video stripped");
+    check((await page.locator("#subLinks").count()) === 0, "the pre-visit block does not carry the two interaction links");
     await page.reload();
     await page.waitForFunction(() => document.getElementById("backendInfo").textContent.includes("file"));
     await page.selectOption("#preVisitSelect", "2026-10-07-uwa");
@@ -132,6 +133,8 @@ try {
   check((await page.inputValue("#dRooms")) === "303", "dictation extraction finds room 303");
   await page.click("#dictationSave");
   await page.waitForFunction(() => document.getElementById("dictationInfo").textContent.includes("已存入"));
+  const wrapLinks = await page.textContent("#wrapLinks");
+  check(wrapLinks.includes("#email") && wrapLinks.includes("#respond"), "after the visit, the wrap-up tab produces the on-site email and response links");
 
   // 動作三：合照與連結放上專屬頁面
   const pngPath = path.join(tmp, "group.png");
@@ -162,6 +165,9 @@ try {
   await page.goto(`${base}/2026-10-07-uwa`);
   await page.waitForSelector("#lab-303");
   check((await page.textContent("#labsTitle")).includes("will visit") && (await page.isHidden("#respond")) && (await page.isHidden("#emailSec")), "before the visit: future tense, no thank-you form, no on-site email box");
+  await page.goto(`${base}/2026-10-07-uwa#email`);
+  await page.waitForSelector("#emailSec:not([hidden])");
+  check(await page.isHidden("#respond"), "#email link opens the on-site email box on its own, even before the visit");
   check((await page.textContent("#lab-301")).includes("seven-workstation"), "301 describes a seven-workstation array");
   check((await page.locator("#labs article").count()) === 6, "guest page shows the briefing step plus five lab cards");
   check((await page.textContent("#labs article:first-child")).includes("Center overview"), "briefing card comes first");

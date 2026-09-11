@@ -161,6 +161,7 @@
       <label class="f">參訪</label>
       <select id="wrapVisitSelect"></select>
       <p class="muted">來賓離開後兩個動作，一分鐘。受訪的是主持人自己。</p>
+      <p class="text-sm flex flex-wrap items-center gap-x-3 gap-y-1" id="wrapLinks"></p>
     </div>
     <div class="card space-y-3">
       <h2 class="font-semibold">動作一｜拍一張簽名簿</h2>
@@ -734,6 +735,7 @@
 
   // ── 收工：當天資料（專屬頁面的 PDF、合照、連結） ──
   $("wrapVisitSelect").addEventListener("change", loadMaterials);
+  $("wrapLinks").addEventListener("click", (e) => { const b = e.target.closest("[data-copy]"); if (b) copy(b.dataset.copy); });
   const mediaUrl = (x) => (/^https?:\/\//i.test(x) ? x : `/api/media?key=${encodeURIComponent(x)}`);
   async function loadMaterials() {
     const id = $("wrapVisitSelect").value; if (!id) return;
@@ -741,6 +743,10 @@
     if (!r.ok) return;
     state.wrapVisit = r.visit;
     $("materialsPageLink").textContent = r.visit.page_url; $("materialsPageLink").href = r.visit.page_url;
+    // 行程走完才產出的兩個連結：現場留信箱（桌卡、QR）與訪後回應（放進感謝信）
+    $("wrapLinks").innerHTML = [["email", "留信箱"], ["respond", "回應表單"]]
+      .map(([k, label]) => `<span><span class="muted">${label}</span> <a class="underline break-all" target="_blank" rel="noopener" href="${esc(r.visit.page_url)}#${k}">${esc(r.visit.page_url.replace(/^https?:\/\//, ""))}#${k}</a> <button type="button" class="underline" data-copy="${esc(r.visit.page_url)}#${k}">複製</button></span>`)
+      .join("");
     renderMaterials(r.visit.materials || { deck_pdf: "", photos: [], links: [] });
   }
   function renderMaterials(m) {

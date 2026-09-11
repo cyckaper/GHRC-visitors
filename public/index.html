@@ -202,8 +202,18 @@
   const welcomeKey = phase === "after" ? "welcome_after" : "welcome";
   $("welcome").textContent = T(welcomeKey);
   if (T2(welcomeKey)) $("welcome").insertAdjacentHTML("beforeend", `<span class="block text-lg font-normal text-stone-500 mt-1">${esc(T2(welcomeKey))}</span>`);
-  $("emailSec").hidden = phase !== "today";
-  $("respond").hidden = phase === "before";
+  // 留信箱與回應表單各有自己的連結，帶連結進來就一定看得到：
+  //   /<visit_id>#email    現場留信箱（QR、桌卡用）
+  //   /<visit_id>#respond  訪後三個回應項目（感謝信用）
+  const applySections = () => {
+    const w = (location.hash.replace("#", "") || qs.get("mode") || "").toLowerCase();
+    $("emailSec").hidden = !(w === "email" || phase === "today");
+    $("respond").hidden = !(w === "respond" || phase !== "before");
+    return w;
+  };
+  const want = applySections();
+  // 有人在頁面上點到 #email／#respond 連結時（只改 hash 不重載）也要跟著開
+  addEventListener("hashchange", () => { const w = applySections(); if (w === "email" || w === "respond") $(w === "email" ? "emailSec" : "respond").scrollIntoView({ behavior: "smooth" }); });
   if (visit) {
     $("orgLine").textContent = [visit.org && visit.org.name, visit.org && visit.org.name_local].filter(Boolean).join(" · ");
     $("dateLine").textContent = formatDate(visit.date, visit.start_time);
@@ -379,7 +389,7 @@
       try { if (doneKey) localStorage.setItem(doneKey, "1"); } catch (e) {}
     } else { $("respondErr").textContent = r.error || "error"; $("respondErr").hidden = false; }
   });
-  if (location.hash === "#respond" || qs.get("mode") === "respond") setTimeout(() => $("respond").scrollIntoView({ behavior: "smooth" }), 200);
+  if (want === "respond" || want === "email") setTimeout(() => $(want === "email" ? "emailSec" : "respond").scrollIntoView({ behavior: "smooth" }), 200);
 
   // 進場動畫：捲到哪、哪裡浮現（不支援 IntersectionObserver 就全部直接顯示）
   const reveal = document.querySelectorAll(".reveal");
