@@ -229,7 +229,7 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
 ### 4. 長期檔案與回饋下一次簡報
 
 - **每場自動備份到 Google Drive**：中心 Drive 的 `GHRC 參訪/<日期> <單位>/` 一場一個資料夾，
-  放參訪資料.json、回覆.csv、動線.csv、一頁摘要.md、簽名簿照片、主持人口述音檔、當天簡報.pdf、現場合照。
+  放參訪資料.json、回覆.csv、動線.csv、一頁摘要.md、簽名簿照片、主持人口述音檔、當天簡報.pdf、現場合照（**用原始檔名**，例如 IMG_0696.jpg；同名的加序號。不用流水號，否則刪掉中間一張時編號往前遞補會蓋掉別張的內容）。
   **不必手動按**：資料寫進去的端點（`visits` 存檔、`signbook`、`transcribe`、`materials`、`letter` 寄出、`summary`、
   來賓的 `respond`）都會呼叫 `lib/drive.mts triggerDriveSync()`，觸發背景函式 `drive-sync-background`
   （Netlify 背景函式，15 分鐘上限，一次把整場搬完；一般函式 10 秒不夠）。`drive-cron` 每晚台北時間兩點掃一次補漏。
