@@ -50,8 +50,8 @@
 node scripts/make-shortcuts.mjs --site=https://visit.healsdesign.org --key=<SIGNAL_KEY> --out=dist/shortcuts
 ```
 
-- **訊號一 老師開簡報**：`dist/shortcuts/<房號>/今日參訪.bat`（Windows）或 `.command`（macOS）放到研究室電腦，桌面建捷徑；把裡面的簡報路徑改成當天檔案。點開＝送訊號＋開簡報。
-- **訊號二 NFC 貼紙**：五片 NTAG213 貼在門口。iPhone「捷徑」→ 自動化 → NFC → 「取得 URL 內容」填 `dist/shortcuts/<房號>/signal.url` 裡的網址 → 關閉「執行前先詢問」。碰一下即送出。
+- **訊號一 老師開簡報**：`dist/shortcuts/<房號>/今日參訪.bat`（Windows）或 `.command`（macOS）放到研究室電腦，桌面建捷徑；把裡面的簡報路徑改成當天檔案。點開＝送訊號＋開簡報。動線第一站是總體介紹，所以簡報室電腦放 `briefing/` 那一份：開總體簡報就是整場的起點訊號。
+- **訊號二 NFC 貼紙**：六片 NTAG213 貼在門口（簡報室一片用 `briefing/signal.url`，五間研究室各一片）。iPhone「捷徑」→ 自動化 → NFC → 「取得 URL 內容」填 `dist/shortcuts/<房號>/signal.url` 裡的網址 → 關閉「執行前先詢問」。碰一下即送出。
 - 訊號不帶 visit_id，伺服器對到「今天」排定的參訪；同一天多場時取時間窗涵蓋現在的那一場。
 - 備援：研究生 `source=student`；來賓端頁面最下面「我現在在哪一間」。
 

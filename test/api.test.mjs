@@ -70,6 +70,8 @@ test("plan → programme, itinerary, slides (always-slides present), then save",
   const planned = p.body.visit;
   for (const n of [1, 2, 3, 4, 72]) assert.ok(planned.slides.includes(n), `slide ${n} missing`);
   assert.ok(planned.programme.some((b) => b.kind === "tour"));
+  assert.equal(planned.itinerary[0].room, "briefing", "route starts with the overall briefing");
+  assert.ok(planned.itinerary[0].minutes > 0);
   assert.equal(planned.itinerary.reduce((s, x) => s + x.minutes, 0) <= 90, true);
   const saved = await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(planned) });
   assert.equal(saved.status, 200, JSON.stringify(saved.body));
@@ -103,14 +105,19 @@ test("signals: keyed sources need SIGNAL_KEY, resolve today's visit, guest fallb
   assert.equal(badKey.status, 401);
   const ok = await api(`/api/timeline?room=303&source=presentation&key=test-signal&visit_id=${visitId}&at=2026-10-07T02:31:00Z`);
   assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  const brief = await api(`/api/timeline?room=briefing&source=presentation&key=test-signal&visit_id=${visitId}&at=2026-10-07T02:01:00Z`);
+  assert.equal(brief.status, 200, "the briefing room PC shortcut is a valid signal");
+  assert.equal((await api(`/api/timeline?room=999&source=presentation&key=test-signal&visit_id=${visitId}`)).status, 400);
   const guest = await api("/api/timeline", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ room: "304", source: "guest", visit_id: visitId, at: "2026-10-07T02:45:00Z" }) });
   assert.equal(guest.status, 200);
   const noId = await api("/api/timeline", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ room: "304", source: "guest" }) });
   assert.equal(noId.status, 400);
   const tl = await api(`/api/timeline?id=${visitId}`, { headers: admin });
   assert.equal(tl.status, 200);
-  assert.equal(tl.body.signals.length, 2);
+  assert.equal(tl.body.signals.length, 3);
   assert.ok(tl.body.timeline.find((r) => r.room === "303").source === "presentation");
+  assert.equal(tl.body.timeline[0].room, "briefing");
+  assert.equal(tl.body.timeline[0].source, "presentation");
 });
 
 test("respond: anonymous suggestion is stored with no identity; named onsite email is kept", async () => {

@@ -114,7 +114,7 @@ export const PlanSchema = z.object({
       slides_range: z.string(),
     }),
   ),
-  itinerary: z.array(z.object({ room: z.enum(ROOMS), minutes: z.number().int(), focus: z.string() })),
+  itinerary: z.array(z.object({ room: z.enum(["briefing", ...ROOMS]), minutes: z.number().int(), focus: z.string() })),
   slides: z.array(z.number().int()),
   cover_text: z.object({ org_line: z.string(), guest_lines: z.array(z.string()), date_line: z.string() }),
   text_edits: z.array(z.object({ slide: z.number().int(), find: z.string(), replace: z.string() })),
@@ -135,7 +135,7 @@ const PLAN_SYSTEM = `你替 GHRC 排一次參訪的行程並從母簡報挑頁�
 
 行程規則：
 - 從 start_time 開始，總長 = duration_minutes，區塊順序通常是 briefing（總體簡報）→ tour（依序參訪研究室）→ discussion（座談）→ photo（合照，5 分鐘，可省略）。時間短就縮短 briefing 與 tour。
-- itinerary 是 tour 區塊內各房間的順序與分鐘數，預設 301→302→303→304→305，依興趣可調整或省略房間；分鐘數總和 = tour 區塊長度。
+- itinerary 是現場動線。**第一步固定是 room="briefing"（總體介紹，在簡報室）**，minutes = briefing 區塊長度、focus 寫這場總體簡報要強調什麼；之後才是 tour 區塊內各房間的順序與分鐘數，預設 301→302→303→304→305，依興趣可調整或省略房間；房間分鐘數總和 = tour 區塊長度。
 - title_2nd 用來賓的第二語言（language）；language=en 時 title_2nd 留空。
 - slides_range 用「01 – 12」這種格式描述該區塊對應的**輸出後**頁碼範圍（輸出後頁碼 = 選用頁在 slides 陣列裡的序號，從 1 起算），非簡報區塊填「—」。
 - cover_text：封面要替換的三段文字：org_line（單位名稱，英文為主，可加當地語）、guest_lines（主要來賓一到三行：姓名 職稱）、date_line（例如「7 October 2026 · 2026年10月7日」）。
@@ -350,7 +350,8 @@ function mockPlan(visit: Visit, slidesIndex: any): Plan {
   const total = Number(visit.duration_minutes) || 90;
   const briefing = Math.max(10, Math.round(total * 0.3));
   const tour = Math.max(15, Math.round(total * 0.45));
-  const rooms = (visit.itinerary?.length ? visit.itinerary.map((s) => s.room) : ["301", "302", "303", "304", "305"]) as any[];
+  const labSteps = (visit.itinerary || []).map((s) => String(s.room)).filter((r) => r !== "briefing");
+  const rooms = (labSteps.length ? labSteps : ["301", "302", "303", "304", "305"]) as any[];
   const perRoom = Math.max(3, Math.floor(tour / rooms.length));
   const type = visit.org?.type || "university";
   const picked = new Set<number>(all.filter((s) => s.always).map((s) => s.n));
@@ -384,7 +385,7 @@ function mockPlan(visit: Visit, slidesIndex: any): Plan {
   const lead = visit.guests?.find((g) => g.role === "lead") || visit.guests?.[0];
   return {
     programme: b,
-    itinerary: rooms.map((room) => ({ room, minutes: perRoom, focus: "" })),
+    itinerary: [{ room: "briefing" as any, minutes: briefing, focus: "總體介紹" }, ...rooms.map((room) => ({ room, minutes: perRoom, focus: "" }))],
     slides,
     cover_text: { org_line: visit.org?.name || "", guest_lines: lead ? [`${lead.name} ${lead.title}`.trim()] : [], date_line: visit.date },
     text_edits: [],

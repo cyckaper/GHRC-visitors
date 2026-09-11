@@ -153,10 +153,20 @@
   // 五間研究室的老師卡片：先排今天的動線，其餘放後面
   $("labsTitle").textContent = T("labs");
   $("labsTitle2").textContent = T2("labs");
-  const route = visit && visit.itinerary ? visit.itinerary.map((s) => String(s.room)) : [];
+  const steps = visit && visit.itinerary ? visit.itinerary.map((s) => ({ ...s, room: String(s.room) })) : [];
+  const briefingStep = steps.find((s) => s.room === "briefing");
+  const route = steps.map((s) => s.room).filter((r) => r !== "briefing");
   const ordered = [...labsData.labs].sort((a, b) => rank(a.room) - rank(b.room));
   function rank(room) { const i = route.indexOf(room); return i < 0 ? 100 + Number(room) : i; }
-  $("labs").innerHTML = ordered.map((lab) => {
+  // 動線第一站：總體介紹（總體簡報）
+  const briefingCard = briefingStep ? `
+      <article class="card" id="briefing-card">
+        <p class="text-xs uppercase tracking-wide text-stone-400">1 · ${esc(T("briefing"))}</p>
+        <h3 class="font-semibold text-lg leading-snug">${esc(T("briefing"))}${T2("briefing") ? ` <span class="second font-normal">${esc(T2("briefing"))}</span>` : ""}</h3>
+        <p class="mt-1 text-stone-600 text-sm">${briefingStep.location ? esc(briefingStep.location) + " · " : ""}${esc(String(briefingStep.minutes))} ${esc(T("minutes"))}${T2("minutes") ? " / " + esc(T2("minutes")) : ""}</p>
+        <p class="mt-1 text-sm text-stone-500">${esc(T("briefing_hint"))}${T2("briefing_hint") ? `<span class="second block">${esc(T2("briefing_hint"))}</span>` : ""}</p>
+      </article>` : "";
+  $("labs").innerHTML = briefingCard + ordered.map((lab, idx) => {
     const onRoute = !route.length || route.includes(lab.room);
     const lead = lab.lead || {};
     const initials = (lead.name_en || lead.name_zh || "?").split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
@@ -169,7 +179,7 @@
         <div class="flex gap-4">
           ${lead.photo || lab.photo ? `<img class="avatar" src="${esc(lead.photo || lab.photo)}" alt="">` : `<div class="avatar">${esc(initials)}</div>`}
           <div class="min-w-0 flex-1">
-            <p class="text-xs uppercase tracking-wide text-stone-400">Lab ${esc(lab.room)} · ${esc(lab.stage || "")}${lab.stage_zh && primary === "zh" ? " " + esc(lab.stage_zh) : ""}</p>
+            <p class="text-xs uppercase tracking-wide text-stone-400">${briefingStep && onRoute ? `${route.indexOf(lab.room) >= 0 ? route.indexOf(lab.room) + 2 : idx + 2} · ` : ""}Lab ${esc(lab.room)} · ${esc(lab.stage || "")}${lab.stage_zh && primary === "zh" ? " " + esc(lab.stage_zh) : ""}</p>
             <h3 class="font-semibold text-lg leading-snug">${esc(labName(lab))}${labName2(lab) ? ` <span class="second font-normal">${esc(labName2(lab))}</span>` : ""}</h3>
             <p class="mt-1"><span class="text-stone-500 text-sm">${esc(T("lead"))}${T2("lead") ? " · " + esc(T2("lead")) : ""}</span> <span class="font-medium">${esc(lead.name_zh || "")} ${esc(lead.name_en || "")}</span>${lead.title_en ? `<span class="block text-sm text-stone-500">${esc(primary === "zh" ? lead.title_zh || lead.title_en : lead.title_en)}</span>` : ""}</p>
           </div>

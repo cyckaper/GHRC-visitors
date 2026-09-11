@@ -303,4 +303,5 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - API 路徑 `/api/<name>` 由 `netlify.toml` 轉到 `/.netlify/functions/<name>`；函式不設 `config.path`。
 - 主辦端 API 用 `Authorization: Bearer ADMIN_TOKEN`；現場訊號用 `SIGNAL_KEY`；`respond` 與 `visits?public=1` 公開。
 - 老師卡片內容 `public/data/labs.json` 的 `confirmed=false` 表示尚待老師確認；照片 `photo` 為 null 時顯示縮寫。
+- **現場動線第一站固定是總體介紹**：`itinerary[0].room === "briefing"`（可填 `location`，例如 304），之後才是 301–305；`lib/visit.mjs ensureBriefingFirst` 在存檔與排程時強制。現場訊號 `room=briefing` 代表簡報室（開總體簡報＝整場起點）。
 - 開放建議欄位措辭在 `public/data/i18n.json`（`ask_better`、`one_sentence`、`anonymous`），ko／ja 譯文請母語者校閱。

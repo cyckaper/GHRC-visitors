@@ -23,9 +23,10 @@ export interface ProgrammeBlock {
 }
 
 export interface ItineraryStep {
-  room: string;
+  room: string; // "briefing"（總體介紹，固定第一步）或 301–305
   minutes: number;
   focus?: string;
+  location?: string; // briefing 的地點（例如 304 或 簡報室），選填
 }
 
 export interface TextEdit {

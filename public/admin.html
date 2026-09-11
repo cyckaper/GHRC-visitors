@@ -100,7 +100,7 @@
         <table id="programmeTable"><thead><tr><th>開始</th><th>結束</th><th>類型</th><th>英文</th><th>第二語言</th><th>頁碼</th><th></th></tr></thead><tbody></tbody></table>
       </div>
       <div>
-        <label class="f">研究室動線（順序與分鐘；留 0 表示不去）</label>
+        <label class="f">現場動線（第一站固定是總體介紹；研究室留 0 表示不去）</label>
         <div class="flex flex-wrap gap-2" id="itinerary"></div>
       </div>
       <div>
@@ -322,7 +322,7 @@
     v.language = $("language").value; v.date = $("date").value; v.start_time = $("startTime").value; v.duration_minutes = Number($("duration").value) || 90; v.headcount = Number($("headcount").value) || 0;
     v.contact_teacher = $("contactTeacher").value; v.purpose = $("purpose").value.trim(); v.interests = $("interests").value.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
     v.guests = [...$("guestTable").tBodies[0].rows].map((tr) => ({ name: tr.cells[0].firstChild.value.trim(), title: tr.cells[1].firstChild.value.trim(), email: tr.cells[2].firstChild.value.trim(), affiliation: tr.cells[3].firstChild.value.trim(), role: tr.cells[4].firstChild.checked ? "lead" : "member" })).filter((g) => g.name || g.email);
-    v.programme = [...$("programmeTable").tBodies[0].rows].map((tr) => ({ start: tr.cells[0].firstChild.value, end: tr.cells[1].firstChild.value, kind: tr.cells[2].firstChild.value, title_en: tr.cells[3].firstChild.value, title_2nd: tr.cells[4].firstChild.value, slides_range: tr.cells[5].firstChild.value, rooms: tr.cells[2].firstChild.value === "tour" ? readItinerary().map((s) => s.room) : [] }));
+    v.programme = [...$("programmeTable").tBodies[0].rows].map((tr) => ({ start: tr.cells[0].firstChild.value, end: tr.cells[1].firstChild.value, kind: tr.cells[2].firstChild.value, title_en: tr.cells[3].firstChild.value, title_2nd: tr.cells[4].firstChild.value, slides_range: tr.cells[5].firstChild.value, rooms: tr.cells[2].firstChild.value === "tour" ? labRoute() : [] }));
     v.itinerary = readItinerary();
     v.slides = [...document.querySelectorAll("#slideGrid input:checked")].map((i) => Number(i.value));
     if (!state.saved && $("code").value.trim()) v.code = $("code").value.trim().toLowerCase();
@@ -338,10 +338,20 @@
   $("addBlock").onclick = () => $("programmeTable").tBodies[0].insertAdjacentHTML("beforeend", blockRow());
   function renderItinerary(it) {
     const by = new Map((it || []).map((s, i) => [String(s.room), { ...s, order: i }]));
+    // 第一站固定是總體介紹（總體簡報）；分鐘數預設取今日流程 briefing 區塊的長度
+    const briefing = by.get("briefing") || { minutes: briefingMinutesFromProgramme() || 20, location: "" };
     const rooms = [...ROOMS].sort((a, b) => (by.has(a) ? by.get(a).order : 99) - (by.has(b) ? by.get(b).order : 99));
-    $("itinerary").innerHTML = rooms.map((room, i) => { const s = by.get(room); const lab = (state.labs?.labs || []).find((l) => l.room === room); return `<label class="card !p-2 !rounded-lg flex items-center gap-2"><span class="muted">${i + 1}.</span><span class="font-medium">${room}</span><span class="muted">${esc(lab?.lead?.name_zh || "")}</span><input type="number" min="0" class="!w-16" value="${s ? s.minutes : 0}" data-room="${room}"> 分</label>`; }).join("");
+    const first = `<label class="card !p-2 !rounded-lg flex items-center gap-2 border-stone-900"><span class="muted">1.</span><span class="font-medium">總體介紹</span><input type="text" class="!w-28" placeholder="地點，如 304" value="${esc(briefing.location || "")}" data-briefing-location><input type="number" min="1" class="!w-16" value="${briefing.minutes || 20}" data-room="briefing"> 分</label>`;
+    $("itinerary").innerHTML = first + rooms.map((room, i) => { const s = by.get(room); const lab = (state.labs?.labs || []).find((l) => l.room === room); return `<label class="card !p-2 !rounded-lg flex items-center gap-2"><span class="muted">${i + 2}.</span><span class="font-medium">${room}</span><span class="muted">${esc(lab?.lead?.name_zh || "")}</span><input type="number" min="0" class="!w-16" value="${s ? s.minutes : 0}" data-room="${room}"> 分</label>`; }).join("");
   }
-  const readItinerary = () => [...document.querySelectorAll("#itinerary input[data-room]")].map((i) => ({ room: i.dataset.room, minutes: Number(i.value) || 0 })).filter((s) => s.minutes > 0);
+  function briefingMinutesFromProgramme() {
+    const tr = [...($("programmeTable").tBodies[0]?.rows || [])].find((r) => r.cells[2].firstChild.value === "briefing");
+    if (!tr) return 0;
+    const [s, e] = [tr.cells[0].firstChild.value, tr.cells[1].firstChild.value].map((v) => { const [h, m] = v.split(":").map(Number); return h * 60 + m; });
+    return e > s ? e - s : 0;
+  }
+  const readItinerary = () => [...document.querySelectorAll("#itinerary input[data-room]")].map((i) => ({ room: i.dataset.room, minutes: Number(i.value) || 0, ...(i.dataset.room === "briefing" ? { location: ($("itinerary").querySelector("[data-briefing-location]") || {}).value || "" } : {}) })).filter((s) => s.room === "briefing" || s.minutes > 0);
+  const labRoute = () => readItinerary().filter((s) => s.room !== "briefing").map((s) => s.room);
   function renderSlideGrid(selected = []) {
     const set = new Set(selected);
     $("slideGrid").innerHTML = (state.slides?.slides || []).map((s) => `<label class="flex gap-1 items-start"><input type="checkbox" value="${s.n}" ${set.has(s.n) ? "checked" : ""} ${s.always ? "disabled checked" : ""}><span><span class="muted">${String(s.n).padStart(2, "0")}</span> ${esc(s.title)}${s.video ? " ▶" : ""}${s.lab ? ` <span class="muted">${s.lab}</span>` : ""}</span></label>`).join("");
