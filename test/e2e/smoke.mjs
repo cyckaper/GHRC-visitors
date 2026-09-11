@@ -58,6 +58,11 @@ try {
   await page.click("#tokenSave");
   await page.waitForFunction(() => document.getElementById("backendInfo").textContent.includes("file"));
   check(await page.isHidden("#token") && await page.isVisible("#authOk"), "token field is put away after login");
+  check(await page.evaluate(() => { try { return !localStorage.getItem("ghrc-admin-token"); } catch (e) { return true; } }), "the admin token is not left sitting in localStorage");
+  // 登入一次就好：重新整理不必再貼一次 token（伺服器發的 cookie 記住了）
+  await page.reload();
+  await page.waitForFunction(() => document.getElementById("backendInfo").textContent.includes("file"));
+  check(await page.isHidden("#token") && await page.isVisible("#authOk"), "still signed in after a reload — nothing to paste again");
   await page.fill("#emailText", `Dear Prof. Chang,\n\nWe would like to visit on 2026-10-07 at 10:00. My colleague Jane Doe <jane@uwa.edu.au> joins me.\n\nSimon Kilbane, University of Western Australia\nsimon@uwa.edu.au`);
   await page.click("#extractBtn");
   await page.waitForFunction(() => document.getElementById("orgName").value.length > 0);

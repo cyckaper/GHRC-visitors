@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 /** 環境變數：Netlify 執行環境用 Netlify.env，本機開發／測試退回 process.env。 */
 export function env(name: string): string | undefined {
@@ -36,15 +36,62 @@ function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(ha, hb);
 }
 
-/** 主辦端保護：Authorization: Bearer <ADMIN_TOKEN>。未設定 ADMIN_TOKEN 時一律拒絕。 */
+/** 貼進來的字串是不是 ADMIN_TOKEN（登入用；比對時間固定）。 */
+export function checkAdminToken(given: string): boolean {
+  const token = env("ADMIN_TOKEN");
+  return !!token && !!given && safeEqual(given, token);
+}
+
+/**
+ * 主辦端登入 session（functions/session.mts）：工作人員貼一次 ADMIN_TOKEN，這台瀏覽器就記住半年。
+ * cookie 值是 `v1.<到期毫秒>.<HMAC>`，用 ADMIN_TOKEN 當金鑰簽的，**本身不是 ADMIN_TOKEN**；
+ * HttpOnly 讓網頁的 JS 讀不到。改用 cookie 是因為 iPad Safari 會把 localStorage 當追蹤資料清掉
+ * （七天沒互動就沒了），伺服器設的 cookie 不受那條規則影響。
+ */
+const SESSION_COOKIE = "ghrc_admin";
+export const SESSION_DAYS = 180;
+const signSession = (exp: number, token: string) => createHmac("sha256", token).update(`v1.${exp}`).digest("hex");
+
+export function newSessionValue(days = SESSION_DAYS): string | null {
+  const token = env("ADMIN_TOKEN");
+  if (!token) return null;
+  const exp = Date.now() + days * 86400000;
+  return `v1.${exp}.${signSession(exp, token)}`;
+}
+
+function validSession(value: string): boolean {
+  const token = env("ADMIN_TOKEN");
+  if (!token) return false;
+  const m = /^v1\.(\d{10,})\.([0-9a-f]{64})$/.exec(value.trim());
+  if (!m || Number(m[1]) <= Date.now()) return false;
+  return safeEqual(m[2], signSession(Number(m[1]), token));
+}
+
+function cookie(req: Request, name: string): string {
+  for (const part of (req.headers.get("cookie") || "").split(";")) {
+    const i = part.indexOf("=");
+    if (i > 0 && part.slice(0, i).trim() === name) return part.slice(i + 1).trim();
+  }
+  return "";
+}
+
+/** Set-Cookie 字串；value 給 null 就是登出。只有 https 才加 Secure（本機 http 開發要送得出去）。 */
+export function sessionCookieHeader(req: Request, value: string | null, days = SESSION_DAYS): string {
+  const secure = new URL(req.url).protocol === "https:" ? "; Secure" : "";
+  return `${SESSION_COOKIE}=${value || ""}; Path=/; Max-Age=${value ? days * 86400 : 0}; HttpOnly; SameSite=Strict${secure}`;
+}
+
+/** 主辦端保護：Authorization: Bearer <ADMIN_TOKEN>、?token=，或登入過的 session cookie。未設定 ADMIN_TOKEN 時一律拒絕。 */
 export function requireAdmin(req: Request): Response | null {
   const token = env("ADMIN_TOKEN");
   if (!token) return fail(503, "ADMIN_TOKEN 尚未設定（Netlify 環境變數）");
   const auth = req.headers.get("authorization") || "";
   const m = /^Bearer\s+(.+)$/i.exec(auth);
   const given = m ? m[1].trim() : new URL(req.url).searchParams.get("token") || "";
-  if (!given || !safeEqual(given, token)) return fail(401, "未授權");
-  return null;
+  if (given && safeEqual(given, token)) return null;
+  const c = cookie(req, SESSION_COOKIE);
+  if (c && validSession(c)) return null;
+  return fail(401, "未授權");
 }
 
 /** 現場訊號保護：x-signal-key 標頭、body.key 或 ?key=。 */

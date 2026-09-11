@@ -314,19 +314,35 @@
   const ROOMS = ["301", "302", "303", "304", "305"];
   const state = { visits: [], visit: null, slides: null, labs: null, thanksRecipients: [], signbookEntries: [], recBlob: null, saved: false };
 
-  // ── token：存在這台瀏覽器；登入成功後收起輸入框，只留「已登入」與登出 ──
-  try { $("token").value = localStorage.getItem("ghrc-admin-token") || ""; } catch (e) {}
-  $("tokenSave").onclick = () => { try { localStorage.setItem("ghrc-admin-token", $("token").value.trim()); } catch (e) {} boot(); };
+  // ── 登入：貼一次 ADMIN_TOKEN，伺服器發一個 HttpOnly cookie，這台裝置 180 天不用再登入 ──
+  // （以前把 token 存 localStorage，iPad Safari 會當追蹤資料清掉，七天沒開就要重登；cookie 不受那條規則影響）
+  const LEGACY_KEY = "ghrc-admin-token";
+  const legacyToken = () => { try { return localStorage.getItem(LEGACY_KEY) || ""; } catch (e) { return ""; } };
+  const forgetLegacy = () => { try { localStorage.removeItem(LEGACY_KEY); } catch (e) {} };
+  const token = () => $("token").value.trim() || legacyToken();
+  async function signIn(given) {
+    const r = await api("/api/session", { method: "POST", body: { token: given } });
+    if (r.ok) { forgetLegacy(); $("token").value = ""; }
+    return r;
+  }
+  $("tokenSave").onclick = () => busy($("tokenSave"), async () => {
+    const given = $("token").value.trim();
+    if (!given) return flash("請貼上 ADMIN_TOKEN", "err");
+    const r = await signIn(given);
+    if (!r.ok) return flash(r.error, "err");
+    flash(`已登入，這台裝置 ${r.days || 180} 天內不用再登入`);
+    await boot();
+  });
   $("token").addEventListener("keydown", (e) => { if (e.key === "Enter") $("tokenSave").click(); });
-  $("logout").onclick = () => { try { localStorage.removeItem("ghrc-admin-token"); } catch (e) {} $("token").value = ""; setAuth(false); $("backendInfo").textContent = ""; $("token").focus(); };
-  const token = () => $("token").value.trim();
+  $("logout").onclick = async () => { forgetLegacy(); await api("/api/session", { method: "DELETE" }); $("token").value = ""; setAuth(false); $("backendInfo").textContent = ""; $("token").focus(); };
   function setAuth(ok) { $("authBox").hidden = ok; $("authOk").hidden = !ok; }
 
   async function api(path, opts = {}) {
-    const headers = { authorization: `Bearer ${token()}`, ...(opts.body && !(opts.body instanceof FormData) ? { "content-type": "application/json" } : {}), ...(opts.headers || {}) };
+    const t = token();
+    const headers = { ...(t ? { authorization: `Bearer ${t}` } : {}), ...(opts.body && !(opts.body instanceof FormData) ? { "content-type": "application/json" } : {}), ...(opts.headers || {}) };
     let r;
     try {
-      r = await fetch(path, { ...opts, headers, body: opts.body && !(opts.body instanceof FormData) ? JSON.stringify(opts.body) : opts.body });
+      r = await fetch(path, { ...opts, headers, credentials: "same-origin", body: opts.body && !(opts.body instanceof FormData) ? JSON.stringify(opts.body) : opts.body });
     } catch (e) { return { ok: false, error: "連不上伺服器：" + e }; }
     const text = await r.text();
     try { return JSON.parse(text); } catch (e) { return { ok: false, error: `${r.status} ${text.slice(0, 200)}` }; }
@@ -645,7 +661,7 @@
     const row = $("masterRow");
     for (let i = 0; i < total; i++) {
       row.innerHTML = `<span class="muted">上傳母簡報 ${i + 1}/${total}…</span>`;
-      const r = await fetch(`/api/master?upload=${id}&part=${i}&total=${total}`, { method: "POST", headers: { authorization: `Bearer ${token()}`, "content-type": "application/octet-stream" }, body: bytes.slice(i * PART, (i + 1) * PART) });
+      const r = await fetch(`/api/master?upload=${id}&part=${i}&total=${total}`, { method: "POST", headers: { ...(token() ? { authorization: `Bearer ${token()}` } : {}), "content-type": "application/octet-stream" }, credentials: "same-origin", body: bytes.slice(i * PART, (i + 1) * PART) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.ok) throw new Error(j.error || `第 ${i + 1} 塊上傳失敗（${r.status}）`);
     }
@@ -666,7 +682,7 @@
       const parts = [];
       for (let i = 0; i < state.master.parts; i++) {
         log(`下載母簡報 ${i + 1}/${state.master.parts}…`);
-        const r = await fetch(`/api/master?part=${i}`, { headers: { authorization: `Bearer ${token()}` } });
+        const r = await fetch(`/api/master?part=${i}`, { headers: { ...(token() ? { authorization: `Bearer ${token()}` } : {}) }, credentials: "same-origin" });
         if (!r.ok) throw new Error(`母簡報第 ${i + 1} 塊抓不到（${r.status}）`);
         parts.push(new Uint8Array(await r.arrayBuffer()));
       }
@@ -988,7 +1004,15 @@ $("driveInfo").innerHTML = d?.backed_up_at
   });
   $("digestBtn").onclick = () => busy($("digestBtn"), async () => { const r = await api("/api/summary", { method: "POST", body: { digest: true } }); if (!r.ok) return flash(r.error, "err"); $("digest").textContent = r.digest; });
 
-  boot();
+  // 開場：把舊版存在瀏覽器的 token 換成 cookie，然後看 cookie 還在不在
+  (async () => {
+    const legacy = legacyToken();
+    if (legacy) await signIn(legacy);
+    const s = await api("/api/session");
+    if (s.ok) return boot();
+    setAuth(false);
+    $("token").focus();
+  })();
 })();
 </script>
 </body>
