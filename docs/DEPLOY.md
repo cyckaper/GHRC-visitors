@@ -84,10 +84,22 @@ Netlify 環境變數（沿用寄信那組 Google OAuth 也可以，但 refresh t
 | 變數 | 說明 |
 |---|---|
 | `GOOGLE_CLIENT_ID`／`GOOGLE_CLIENT_SECRET` | OAuth 用戶端；沒設就用 `GMAIL_CLIENT_ID`／`GMAIL_CLIENT_SECRET` |
-| `GOOGLE_REFRESH_TOKEN` | 中心 Google 帳號授權的 refresh token（scope 至少 `https://www.googleapis.com/auth/drive.file`，要寄信再加 `gmail.send`）；沒設就用 `GMAIL_REFRESH_TOKEN` |
-| `GOOGLE_DRIVE_FOLDER_ID` | 要放進哪個資料夾（Drive 網址 `/folders/<id>` 那一段）；不設就放我的雲端硬碟根目錄 |
+| `GOOGLE_REFRESH_TOKEN` | 中心 Google 帳號授權的 refresh token（scope `https://www.googleapis.com/auth/drive.file`，要寄信再加 `gmail.send`）；沒設就用 `GMAIL_REFRESH_TOKEN` |
+| `GOOGLE_DRIVE_FOLDER_ID` | **通常不要設**。不設時系統會在你的雲端硬碟自己建一個「GHRC 參訪」資料夾 |
+
+拿 refresh token（只做一次）：
+
+1. [Google Cloud Console](https://console.cloud.google.com/) 建一個專案 → 「API 和服務」→ 啟用 **Google Drive API**
+2. 「OAuth 同意畫面」→ External → 填名稱與聯絡信箱 → **發布狀態設為「正式版」**（測試模式的 refresh token 七天就失效；`drive.file` 屬於非敏感範圍，按發布即可，不必送審）
+3. 「憑證」→ 建立 OAuth 用戶端 ID → **網頁應用程式** → 已授權的重新導向 URI 填 `https://developers.google.com/oauthplayground` → 記下用戶端 ID 與密鑰
+4. 開 [OAuth Playground](https://developers.google.com/oauthplayground/) → 右上齒輪勾「Use your own OAuth credentials」填入剛才兩個值 → 左欄輸入 scope `https://www.googleapis.com/auth/drive.file` → Authorize（選中心要用的那個 Google 帳號）→ Exchange authorization code for tokens → 複製 **Refresh token**
+5. 三個值填進 Netlify 環境變數（Site configuration → Environment variables）
+
+**為什麼不要設 `GOOGLE_DRIVE_FOLDER_ID`**：`drive.file` 只讓程式看得到「它自己建立的檔案」，指定一個別人建的資料夾會存取不到。
+真的要指定既有資料夾，refresh token 得改用全權限的 `https://www.googleapis.com/auth/drive`——那是受限範圍，發布前要送 Google 審查，不建議。
 
 用中心自己的 Google 帳號授權，不要用服務帳戶——服務帳戶沒有 Drive 儲存配額，上傳會被拒。
+**帳號選定後就不要換**：`drive.file` 只看得到自己建立的檔案，換一個帳號授權等於從空的開始，先前那個「GHRC 參訪」資料夾不會再被認出來。
 
 ## 7. 產出當次簡報
 
