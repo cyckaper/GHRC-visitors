@@ -124,6 +124,108 @@ export async function extractVisit(emailText: string, today: string, attachments
   return structured(ExtractedSchema, `${EXTRACT_SYSTEM}\n\n${CENTER_FACTS}\n今天是 ${today}。`, content, 12000);
 }
 
+// ─────────────────── 1.5 訪客背景研判（訪前功課） ───────────────────
+
+const BackgroundSchema = z.object({
+  org_profile: z.string(),
+  people: z.array(z.object({ name: z.string(), note: z.string() })),
+  purposes: z.array(z.string()),
+  rooms: z.array(z.object({ room: z.enum(ROOMS), why: z.string() })),
+  prepare: z.array(z.string()),
+  unknowns: z.array(z.string()),
+  sources: z.array(z.object({ title: z.string(), url: z.string() })),
+});
+export type VisitBackground = z.infer<typeof BackgroundSchema> & { searched?: boolean; researched_at?: string };
+
+const RESEARCH_SYSTEM = `你在替臺大綠色健康研究中心（GHRC）的主辦端做訪前功課：查這次來賓與他們單位的**公開專業資料**，判斷他們這一趟可能想看什麼。
+
+只查公開的專業資訊：單位的性質與業務、來賓的職稱與所屬、研究或政策領域、近期公開的計畫、報導或活動。
+不要查私人生活，不要臆測沒有根據的事。查不到就說查不到——寧可少寫，不要編。
+每一項寫下來的事實都要能對應到你讀過的來源網址；推論要標明是推論。`;
+
+const BACKGROUND_SYSTEM = `把訪前功課整理成主辦端看得懂的一頁研判（繁體中文）。
+
+- org_profile：這是什麼樣的單位、為什麼會來（2–4 句）。查到的事實與推論要分清楚，推論寫「推測」。
+- people：名單上被點名的人，一人一句他的位置與關注（查不到就寫「查不到公開資料」）。
+- purposes：**可能的參訪目的**，最可能的放最前面，每項一句話，並帶上依據（「信裡寫…」「單位近期在推…」）。
+- rooms：五間研究室裡他們可能最想看的（room 只能是 301–305），why 一句話說為什麼。
+- prepare：主辦端可以先準備或當天可以談的點，具體、可執行。
+- unknowns：查不到或需要跟對方確認的事。
+- sources：實際讀過的網址（title ＋ url）；沒有查網路就給空陣列。
+- 不要把來賓當顧客，不要用滿意度或服務業用語；這是同行的學術交流。
+- 沒有內容的欄位給空陣列或空字串，不要硬湊。
+
+${CENTER_FACTS}`;
+
+const textOf = (res: Anthropic.Message) =>
+  res.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("\n")
+    .trim();
+
+/** 訪客背景：先用網路搜尋做功課，再整理成固定結構。帳號沒開網路搜尋時退回「只讀來信」的研判。 */
+async function researchNotes(user: string): Promise<{ notes: string; searched: boolean }> {
+  const c = client();
+  const base = { model: model(), max_tokens: 8000, system: `${RESEARCH_SYSTEM}\n\n${CENTER_FACTS}` };
+  const messages: Anthropic.MessageParam[] = [{ role: "user", content: user }];
+  try {
+    const tools: Anthropic.ToolUnion[] = [{ type: "web_search_20260209", name: "web_search", max_uses: 8 }];
+    let res = await c.messages.create({ ...base, messages, tools });
+    // 伺服器端工具跑到一半會回 pause_turn：把這一輪接回去讓它跑完
+    for (let i = 0; i < 3 && res.stop_reason === "pause_turn"; i++) {
+      messages.push({ role: "assistant", content: res.content as any });
+      res = await c.messages.create({ ...base, messages, tools });
+    }
+    if (res.stop_reason === "refusal") throw new Error("模型拒絕了這個請求");
+    return { notes: textOf(res), searched: true };
+  } catch (e: any) {
+    if (/拒絕/.test(String(e?.message || ""))) throw e;
+    // 網路搜尋不能用（帳號沒開、暫時失敗）：還是給一份研判，但要說沒查網路
+    const res = await c.messages.create({ ...base, messages: [{ role: "user", content: user }] });
+    return { notes: textOf(res), searched: false };
+  }
+}
+
+export async function researchVisitor(visit: Visit): Promise<VisitBackground> {
+  const facts = [
+    `單位：${visit.org?.name || "（未填）"}${visit.org?.name_local ? `（${visit.org.name_local}）` : ""}`,
+    `單位類型：${visit.org?.type || "未知"}　國家：${visit.org?.country || "未知"}`,
+    `日期：${visit.date || "未定"}　可用時間：${visit.duration_minutes || 0} 分鐘　人數：${visit.headcount || 0}`,
+    `來訪目的（來信寫的）：${visit.purpose || "（未填）"}`,
+    `興趣關鍵字：${(visit.interests || []).join("、") || "（無）"}`,
+    `名單：${(visit.guests || []).map((g) => [g.name, g.title, g.affiliation].filter(Boolean).join("／")).join("；") || "（無）"}`,
+  ].join("\n");
+  if (isMock()) return mockBackground(visit);
+  const { notes, searched } = await researchNotes(
+    `這一場參訪的已知資料：\n\n${facts}\n\n請查這個單位與名單上的人的公開專業資料，然後寫下你查到什麼、判斷他們可能想看什麼，並列出你讀過的網址。`,
+  );
+  const background = await structured<z.infer<typeof BackgroundSchema>>(
+    BackgroundSchema,
+    BACKGROUND_SYSTEM,
+    `已知資料：\n${facts}\n\n訪前功課筆記${searched ? "（有查網路）" : "（沒有查網路，只根據來信）"}：\n\n${notes}`,
+    6000,
+  );
+  return { ...background, searched };
+}
+
+function mockBackground(visit: Visit): VisitBackground {
+  const org = visit.org?.name || "（單位）";
+  return {
+    org_profile: `（AI_MOCK）${org} 是來信裡的來訪單位，這裡是研判用的範例資料。`,
+    people: (visit.guests || []).slice(0, 3).map((g) => ({ name: g.name, note: `（AI_MOCK）${g.title || "職稱未知"}` })),
+    purposes: [`（AI_MOCK）了解中心的量測與驗證方法`, `（AI_MOCK）評估後續合作或委託研究的可能`],
+    rooms: [
+      { room: "301", why: "（AI_MOCK）想看實際怎麼量" },
+      { room: "303", why: "（AI_MOCK）想看模擬與驗證" },
+    ],
+    prepare: ["（AI_MOCK）準備一個與對方領域接近的案例"],
+    unknowns: ["（AI_MOCK）名單的職稱需要跟對方確認"],
+    sources: [],
+    searched: false,
+  };
+}
+
 // ───────────────────────── 2. 排程與選頁 ─────────────────────────
 
 export const PlanSchema = z.object({

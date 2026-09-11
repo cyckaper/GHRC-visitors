@@ -355,6 +355,26 @@ test("drive auto-backup: the background sync endpoint needs the token and stands
   assert.equal((await api("/api/respond", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visit_id: visitId, anonymous: true, suggestion: "auto-backup should not break this" }) })).status, 200);
 });
 
+test("research: 訪前功課回傳可能的參訪目的，不自動落庫", async () => {
+  assert.equal((await api("/api/research", { method: "POST", body: JSON.stringify({ visit: { org: { name: "X" } } }) })).status, 401, "needs the admin token");
+  const empty = await api("/api/research", { method: "POST", headers: admin, body: JSON.stringify({ visit: { org: { name: "" }, guests: [] } }) });
+  assert.equal(empty.status, 400, "nothing to look up");
+
+  const r = await api("/api/research", {
+    method: "POST",
+    headers: admin,
+    body: JSON.stringify({ visit: { org: { name: "University of Western Australia", type: "university", country: "Australia" }, guests: [{ name: "Simon Kilbane", title: "Programme Director" }], purpose: "landscape and health" } }),
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const b = r.body.background;
+  assert.ok(b.purposes.length, "可能的參訪目的");
+  assert.ok(b.rooms.every((x) => ["301", "302", "303", "304", "305"].includes(x.room)), "只會指到中心的五間研究室");
+  assert.ok(b.researched_at, "有時間戳");
+  // 研究結果不會自己寫進參訪：要主辦端按儲存
+  const after = await api(`/api/visits?id=${visitId}`, { headers: admin });
+  assert.equal(after.body.visit.background, undefined, "research 不自動落庫");
+});
+
 test("session: 貼一次 ADMIN_TOKEN 就換到 cookie，之後這台瀏覽器不必再授權", async () => {
   assert.equal((await api("/api/session")).status, 401, "no cookie, no token → not signed in");
   const bad = await api("/api/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "nope" }) });

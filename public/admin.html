@@ -103,6 +103,16 @@
       </div>
     </div>
 
+    <div class="card space-y-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <h2 class="font-semibold">2.5 訪客背景研判</h2>
+        <button class="btn btn-soft" id="researchBtn" type="button">AI 查訪客背景</button>
+        <span class="muted" id="researchInfo"></span>
+      </div>
+      <p class="muted">用網路查這個單位與名單上的人的公開專業資料，整理出<b>可能的參訪目的</b>、可能最想看哪幾間、可以先準備什麼。只給主辦端看，不會出現在來賓專頁或信裡；按下面的「儲存」才會存進這一場。</p>
+      <div id="background" class="space-y-3"></div>
+    </div>
+
     <div class="card space-y-4">
       <h2 class="font-semibold">3. 行程</h2>
       <div class="flex flex-wrap gap-2 items-center">
@@ -423,7 +433,7 @@
     $("contactTeacher").value = v.contact_teacher || "張俊彥"; $("purpose").value = v.purpose || ""; $("interests").value = (v.interests || []).join(", ");
     $("code").value = state.saved ? v.visit_id.slice(11) : ""; $("code").disabled = state.saved;
     $("preStatus").textContent = state.saved ? `${v.visit_id} · ${v.status}` : "尚未存檔";
-    renderGuests(v.guests || []); renderProgramme(v.programme || []); renderItinerary(v.itinerary); renderDeckState(v);
+    renderGuests(v.guests || []); renderProgramme(v.programme || []); renderItinerary(v.itinerary); renderDeckState(v); renderBackground(v.background);
     $("rationale").textContent = v.plan_rationale || ""; $("uncertainties").innerHTML = (v.uncertainties || []).map((u) => `<li>${esc(u)}</li>`).join("");
     $("afterSave").hidden = !state.saved;
     if (state.saved) showSaved(v);
@@ -438,6 +448,7 @@
     v.programme = [...$("programmeTable").tBodies[0].rows].map((tr) => ({ start: tr.cells[0].firstChild.value, end: tr.cells[1].firstChild.value, kind: tr.cells[2].firstChild.value, title_en: tr.cells[3].firstChild.value, title_2nd: tr.cells[4].firstChild.value, slides_range: tr.cells[5].firstChild.value, rooms: tr.cells[2].firstChild.value === "tour" ? labRoute() : [] }));
     v.itinerary = readItinerary();
     v.slides = Array.isArray(state.visit?.slides) ? state.visit.slides : [];
+    if (state.visit?.background) v.background = state.visit.background;
     if (!state.saved && $("code").value.trim()) v.code = $("code").value.trim().toLowerCase();
     return v;
   }
@@ -593,6 +604,33 @@
     const mins = chosen.reduce((s, n) => s + ((state.slides?.slides || []).find((x) => x.n === n)?.minutes || 1), 0);
     $("slideCount").textContent = `（${chosen.length} 頁，約 ${Math.round(mins)} 分鐘）`;
   }
+
+  // ── 訪前：訪客背景研判（訪前功課） ──
+  const ROOM_LABEL = { 301: "301 智能室", 302: "302 規劃室", 303: "303 模擬室", 304: "304 全景影院", 305: "305 IVR" };
+  function renderBackground(b) {
+    const box = $("background");
+    if (!b || !b.org_profile) { box.innerHTML = ""; $("researchInfo").textContent = ""; return; }
+    const list = (items, fn) => (items || []).map((x) => `<li>${fn(x)}</li>`).join("");
+    box.innerHTML = `
+      <p>${esc(b.org_profile)}</p>
+      ${(b.purposes || []).length ? `<div><div class="f">可能的參訪目的</div><ol class="text-sm list-decimal pl-5 space-y-1">${list(b.purposes, esc)}</ol></div>` : ""}
+      ${(b.people || []).length ? `<div><div class="f">名單上的人</div><ul class="text-sm list-disc pl-5">${list(b.people, (p) => `<span class="font-medium">${esc(p.name)}</span>　${esc(p.note)}`)}</ul></div>` : ""}
+      ${(b.rooms || []).length ? `<div><div class="f">可能最想看</div><ul class="text-sm list-disc pl-5">${list(b.rooms, (r) => `<span class="font-medium">${esc(ROOM_LABEL[r.room] || r.room)}</span>　${esc(r.why)}`)}</ul></div>` : ""}
+      ${(b.prepare || []).length ? `<div><div class="f">可以先準備</div><ul class="text-sm list-disc pl-5">${list(b.prepare, esc)}</ul></div>` : ""}
+      ${(b.unknowns || []).length ? `<div><div class="f">還要確認</div><ul class="text-sm text-amber-700 list-disc pl-5">${list(b.unknowns, esc)}</ul></div>` : ""}
+      ${(b.sources || []).length ? `<div><div class="f">資料來源</div><ul class="text-sm list-disc pl-5">${list(b.sources, (x) => `<a class="underline break-all" target="_blank" rel="noopener" href="${esc(x.url)}">${esc(x.title || x.url)}</a>`)}</ul></div>` : `<p class="muted">（沒有查到網路資料，以上只根據來信內容）</p>`}`;
+    $("researchInfo").textContent = b.researched_at ? `${b.searched ? "查過網路" : "未查網路"} · ${b.researched_at.slice(0, 16).replace("T", " ")}` : "";
+  }
+  $("researchBtn").onclick = () => busy($("researchBtn"), async () => {
+    const v = readForm();
+    if (!v.org.name && !v.guests.length) return flash("先填單位名稱或名單，才查得到東西", "err");
+    $("background").innerHTML = `<p class="muted">查資料中……（要讀幾個網頁，大約半分鐘到一分鐘）</p>`;
+    const r = await api("/api/research", { method: "POST", body: { visit: v } });
+    if (!r.ok) { $("background").innerHTML = ""; return flash(r.error, "err"); }
+    state.visit = { ...state.visit, ...v, background: r.background };
+    renderBackground(r.background);
+    flash("背景研判完成，請自己再判斷一次；按「儲存」才會存進這一場");
+  });
 
   // ── 訪前：AI ──
   $("listFiles").onchange = () => { $("listFilesInfo").innerHTML = [...$("listFiles").files].map((f) => `<li>${esc(f.name)} <span class="muted">${(f.size / 1024).toFixed(0)} KB</span></li>`).join(""); };
