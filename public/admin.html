@@ -172,6 +172,7 @@
         <div class="flex flex-wrap items-center justify-between gap-2"><h2 class="font-semibold">選用頁次 <span id="slideCount" class="muted font-normal"></span></h2><span class="muted">依區塊勾選：區塊標題的方框整區選；「只選這區」會清掉其他區塊；必選頁（封面、流程、架構、核心宣稱、謝謝）永遠保留</span></div>
         <div class="flex flex-wrap gap-2"><button type="button" class="btn btn-soft" id="slidesAll">全選</button><button type="button" class="btn btn-soft" id="slidesNone">全不選（保留必選頁）</button></div>
         <div class="space-y-2" id="slideGrid"></div>
+        <p class="muted" id="deckNeedsVisit" hidden>這裡列的是母簡報的頁次，先看先勾都可以；要<b>儲存選頁</b>或<b>產生 .pptx</b>，得先有一場參訪（到「訪前」建一場並儲存）。</p>
         <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="slidesSave">儲存選頁</button><span class="muted" id="slidesInfo"></span></div>
       </div>
 
@@ -469,21 +470,36 @@
     let id = $("deckVisitSelect").value;
     if (!id && !(state.visits || []).length) { await loadVisits(); id = $("deckVisitSelect").value; }
     if (!id) {
-      state.deckVisit = null; $("deckWork").hidden = true;
+      // 沒有參訪也要看得到母簡報的頁次；只是還不能存、不能產檔
+      state.deckVisit = null;
+      $("noDeck").checked = false;
+      $("deckWork").hidden = false;
+      renderSlideGrid([]);
+      $("slidesInfo").textContent = "";
+      deckNeedsVisit(true);
       $("deckStatus").className = "text-sm err";
-      $("deckStatus").innerHTML = `這裡還沒有任何參訪，所以沒有東西可以選頁。${isPreviewSite ? "（預覽站的資料是獨立的，正式站的參訪不會出現在這裡）" : ""} <button type="button" class="underline" id="deckGoPre">到「訪前」建一場</button>`;
+      $("deckStatus").innerHTML = `還沒有任何參訪${isPreviewSite ? "（預覽站的資料是獨立的，正式站的參訪不會出現在這裡）" : ""}。 <button type="button" class="underline" id="deckGoPre">到「訪前」建一場</button>`;
       $("deckGoPre").onclick = () => showTab("pre");
+      checkMaster();
       return;
     }
     const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
     if (!r.ok) { state.deckVisit = null; $("deckWork").hidden = true; dnote(`讀不到這場參訪：${r.error}`, "err"); return flash(r.error, "err"); }
     state.deckVisit = r.visit;
+    deckNeedsVisit(false);
     $("noDeck").checked = !!r.visit.deck?.skip;
     renderSlideGrid(r.visit.slides || []);
     $("slidesInfo").textContent = "";
     applyNoDeck();
     dnote(`${r.visit.date}　${r.visit.org?.name || r.visit.visit_id}`);
     checkMaster();
+  }
+  /** 沒有參訪可以存的時候：頁次照樣列出來，但存檔與產檔關起來並說明原因。 */
+  function deckNeedsVisit(on) {
+    $("deckNeedsVisit").hidden = !on;
+    $("slidesSave").disabled = on;
+    $("deckBtn").disabled = on;
+    $("noDeck").disabled = on;
   }
   function applyNoDeck() {
     const skip = $("noDeck").checked;

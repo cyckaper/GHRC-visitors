@@ -63,6 +63,13 @@ try {
   await page.reload();
   await page.waitForFunction(() => document.getElementById("backendInfo").textContent.includes("file"));
   check(await page.isHidden("#token") && await page.isVisible("#authOk"), "still signed in after a reload — nothing to paste again");
+
+  // 一場參訪都還沒有的時候，簡報分頁仍要列出母簡報的頁次（只是不能存、不能產檔）
+  await page.click('[data-tab="deck"]');
+  await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-slide]").length > 0);
+  check((await page.locator("#slideGrid input[data-slide]").count()) === 72, "the master deck's pages are listed even with no visit yet");
+  check(await page.isDisabled("#slidesSave") && await page.isDisabled("#deckBtn") && (await page.isVisible("#deckNeedsVisit")), "…but saving and building are held back until a visit exists, and it says why");
+  await page.click('[data-tab="pre"]');
   await page.fill("#emailText", `Dear Prof. Chang,\n\nWe would like to visit on 2026-10-07 at 10:00. My colleague Jane Doe <jane@uwa.edu.au> joins me.\n\nSimon Kilbane, University of Western Australia\nsimon@uwa.edu.au`);
   await page.click("#extractBtn");
   await page.waitForFunction(() => document.getElementById("orgName").value.length > 0);
