@@ -109,8 +109,9 @@
         <div class="flex flex-wrap gap-2" id="itinerary"></div>
       </div>
       <div>
-        <div class="flex items-center justify-between"><label class="f">選用頁次 <span id="slideCount"></span></label><span class="muted">章節編號與實體頁序不一致，這裡照頁序列</span></div>
-        <div class="slide-grid" id="slideGrid"></div>
+        <div class="flex flex-wrap items-center justify-between gap-2"><label class="f">選用頁次 <span id="slideCount"></span></label><span class="muted">依區塊勾選：區塊標題的方框整區選；「只選這區」會清掉其他區塊；必選頁（封面、流程、架構、核心宣稱、謝謝）永遠保留</span></div>
+        <div class="flex flex-wrap gap-2 mb-2"><button type="button" class="btn btn-soft" id="slidesAll">全選</button><button type="button" class="btn btn-soft" id="slidesNone">全不選（保留必選頁）</button></div>
+        <div class="space-y-2" id="slideGrid"></div>
       </div>
     </div>
 
@@ -329,7 +330,7 @@
     v.guests = [...$("guestTable").tBodies[0].rows].map((tr) => ({ name: tr.cells[0].firstChild.value.trim(), title: tr.cells[1].firstChild.value.trim(), email: tr.cells[2].firstChild.value.trim(), affiliation: tr.cells[3].firstChild.value.trim(), role: tr.cells[4].firstChild.checked ? "lead" : "member" })).filter((g) => g.name || g.email);
     v.programme = [...$("programmeTable").tBodies[0].rows].map((tr) => ({ start: tr.cells[0].firstChild.value, end: tr.cells[1].firstChild.value, kind: tr.cells[2].firstChild.value, title_en: tr.cells[3].firstChild.value, title_2nd: tr.cells[4].firstChild.value, slides_range: tr.cells[5].firstChild.value, rooms: tr.cells[2].firstChild.value === "tour" ? labRoute() : [] }));
     v.itinerary = readItinerary();
-    v.slides = [...document.querySelectorAll("#slideGrid input:checked")].map((i) => Number(i.value));
+    v.slides = slideInputs().filter((i) => i.checked).map((i) => Number(i.value));
     if (!state.saved && $("code").value.trim()) v.code = $("code").value.trim().toLowerCase();
     return v;
   }
@@ -357,14 +358,56 @@
   }
   const readItinerary = () => [...document.querySelectorAll("#itinerary input[data-room]")].map((i) => ({ room: i.dataset.room, minutes: Number(i.value) || 0, ...(i.dataset.room === "briefing" ? { location: ($("itinerary").querySelector("[data-briefing-location]") || {}).value || "" } : {}) })).filter((s) => s.room === "briefing" || s.minutes > 0);
   const labRoute = () => readItinerary().filter((s) => s.room !== "briefing").map((s) => s.room);
+  // 選用頁次：依區塊（章節／研究室）分組；區塊方框整區選、「只選這區」、全選／全不選；必選頁永遠保留
+  function slideGroups() {
+    const slides = state.slides?.slides || [];
+    const groups = state.slides?.groups?.length ? state.slides.groups : [{ id: "all", title: "全部頁次", slides: slides.map((s) => s.n) }];
+    const byN = new Map(slides.map((s) => [s.n, s]));
+    return groups.map((g) => ({ ...g, items: g.slides.map((n) => byN.get(n)).filter(Boolean) })).filter((g) => g.items.length);
+  }
   function renderSlideGrid(selected = []) {
     const set = new Set(selected);
-    $("slideGrid").innerHTML = (state.slides?.slides || []).map((s) => `<label class="flex gap-1 items-start"><input type="checkbox" value="${s.n}" ${set.has(s.n) ? "checked" : ""} ${s.always ? "disabled checked" : ""}><span><span class="muted">${String(s.n).padStart(2, "0")}</span> ${esc(s.title)}${s.video ? " ▶" : ""}${s.lab ? ` <span class="muted">${s.lab}</span>` : ""}</span></label>`).join("");
+    $("slideGrid").innerHTML = slideGroups().map((g) => {
+      const ns = g.items.map((s) => s.n);
+      const range = ns.length > 1 ? `${String(ns[0]).padStart(2, "0")}–${String(ns[ns.length - 1]).padStart(2, "0")}` : String(ns[0]).padStart(2, "0");
+      return `<fieldset class="card !p-3 !rounded-lg" data-group="${g.id}">
+        <div class="flex flex-wrap items-center gap-2 mb-2">
+          <label class="flex items-center gap-2 font-medium"><input type="checkbox" data-group-toggle="${g.id}"> ${esc(g.title)} <span class="muted">${range}</span></label>
+          <span class="muted" data-group-count="${g.id}"></span>
+          <button type="button" class="muted underline ml-auto" data-group-only="${g.id}">只選這區</button>
+        </div>
+        <div class="slide-grid">${g.items.map((s) => `<label class="flex gap-1 items-start"><input type="checkbox" data-slide value="${s.n}" ${set.has(s.n) || s.always ? "checked" : ""} ${s.always ? "disabled" : ""}><span><span class="muted">${String(s.n).padStart(2, "0")}</span> ${esc(s.title)}${s.video ? " ▶" : ""}${s.always ? ' <span class="muted">必選</span>' : ""}</span></label>`).join("")}</div>
+      </fieldset>`;
+    }).join("");
+    syncSlideGroups();
+  }
+  const slideInputs = (groupId) => [...document.querySelectorAll(`#slideGrid ${groupId ? `[data-group="${groupId}"] ` : ""}input[data-slide]`)];
+  const setSlides = (inputs, on) => inputs.forEach((i) => { if (!i.disabled) i.checked = on; });
+  $("slideGrid").addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.matches("[data-group-toggle]")) setSlides(slideInputs(t.dataset.groupToggle), t.checked);
+    syncSlideGroups();
+  });
+  $("slideGrid").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-group-only]");
+    if (!b) return;
+    setSlides(slideInputs(), false); setSlides(slideInputs(b.dataset.groupOnly), true); syncSlideGroups();
+  });
+  $("slidesAll").onclick = () => { setSlides(slideInputs(), true); syncSlideGroups(); };
+  $("slidesNone").onclick = () => { setSlides(slideInputs(), false); syncSlideGroups(); };
+  function syncSlideGroups() {
+    for (const g of slideGroups()) {
+      const inputs = slideInputs(g.id);
+      const on = inputs.filter((i) => i.checked).length;
+      const toggle = document.querySelector(`#slideGrid [data-group-toggle="${g.id}"]`);
+      if (toggle) { toggle.checked = on === inputs.length; toggle.indeterminate = on > 0 && on < inputs.length; }
+      const count = document.querySelector(`#slideGrid [data-group-count="${g.id}"]`);
+      if (count) count.textContent = `${on}/${inputs.length} 頁`;
+    }
     updateSlideCount();
   }
-  $("slideGrid").addEventListener("change", updateSlideCount);
   function updateSlideCount() {
-    const chosen = [...document.querySelectorAll("#slideGrid input:checked")].map((i) => Number(i.value));
+    const chosen = slideInputs().filter((i) => i.checked).map((i) => Number(i.value));
     const mins = chosen.reduce((s, n) => s + ((state.slides?.slides || []).find((x) => x.n === n)?.minutes || 1), 0);
     $("slideCount").textContent = `（${chosen.length} 頁，約 ${Math.round(mins)} 分鐘）`;
   }
