@@ -58,9 +58,14 @@
     </div>
 
     <div class="card space-y-3">
-      <h2 class="font-semibold">1. 貼上 email 往來，AI 抽取背景</h2>
+      <h2 class="font-semibold">1. 貼上 email 往來或上傳名單檔，AI 抽取背景</h2>
       <p class="muted">單位、人名、職稱、人數、隨行名單與聯絡方式、對口老師、來訪目的、興趣、日期時間。結果只顯示給你確認，不會自動存檔。</p>
-      <textarea id="emailText" rows="8" placeholder="把 email 往來（含轉寄、簽名檔）整段貼進來……"></textarea>
+      <textarea id="emailText" rows="8" placeholder="把 email 往來（含轉寄、簽名檔）整段貼進來……（也可以只上傳名單檔）"></textarea>
+      <div class="flex flex-wrap items-center gap-2">
+        <input type="file" id="listFiles" multiple accept=".docx,.xlsx,.xlsm,.pptx,.csv,.tsv,.txt,.md,.pdf,.jpg,.jpeg,.png,.webp">
+        <span class="muted">名單檔：Word（.docx）、Excel（.xlsx）、CSV／文字、PDF、名單照片，最多 8 個共 5 MB；.doc／.xls 請先另存新格式</span>
+      </div>
+      <ul id="listFilesInfo" class="text-sm text-stone-600 list-disc pl-5"></ul>
       <button class="btn" id="extractBtn">AI 抽取</button>
       <ul class="text-sm text-amber-700 list-disc pl-5" id="uncertainties"></ul>
     </div>
@@ -100,12 +105,13 @@
         <table id="programmeTable"><thead><tr><th>開始</th><th>結束</th><th>類型</th><th>英文</th><th>第二語言</th><th>頁碼</th><th></th></tr></thead><tbody></tbody></table>
       </div>
       <div>
-        <label class="f">研究室動線（順序與分鐘；留 0 表示不去）</label>
+        <label class="f">現場動線（第一站固定是總體介紹；研究室留 0 表示不去）</label>
         <div class="flex flex-wrap gap-2" id="itinerary"></div>
       </div>
       <div>
-        <div class="flex items-center justify-between"><label class="f">選用頁次 <span id="slideCount"></span></label><span class="muted">章節編號與實體頁序不一致，這裡照頁序列</span></div>
-        <div class="slide-grid" id="slideGrid"></div>
+        <div class="flex flex-wrap items-center justify-between gap-2"><label class="f">選用頁次 <span id="slideCount"></span></label><span class="muted">依區塊勾選：區塊標題的方框整區選；「只選這區」會清掉其他區塊；必選頁（封面、流程、架構、核心宣稱、謝謝）永遠保留</span></div>
+        <div class="flex flex-wrap gap-2 mb-2"><button type="button" class="btn btn-soft" id="slidesAll">全選</button><button type="button" class="btn btn-soft" id="slidesNone">全不選（保留必選頁）</button></div>
+        <div class="space-y-2" id="slideGrid"></div>
       </div>
     </div>
 
@@ -322,9 +328,9 @@
     v.language = $("language").value; v.date = $("date").value; v.start_time = $("startTime").value; v.duration_minutes = Number($("duration").value) || 90; v.headcount = Number($("headcount").value) || 0;
     v.contact_teacher = $("contactTeacher").value; v.purpose = $("purpose").value.trim(); v.interests = $("interests").value.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
     v.guests = [...$("guestTable").tBodies[0].rows].map((tr) => ({ name: tr.cells[0].firstChild.value.trim(), title: tr.cells[1].firstChild.value.trim(), email: tr.cells[2].firstChild.value.trim(), affiliation: tr.cells[3].firstChild.value.trim(), role: tr.cells[4].firstChild.checked ? "lead" : "member" })).filter((g) => g.name || g.email);
-    v.programme = [...$("programmeTable").tBodies[0].rows].map((tr) => ({ start: tr.cells[0].firstChild.value, end: tr.cells[1].firstChild.value, kind: tr.cells[2].firstChild.value, title_en: tr.cells[3].firstChild.value, title_2nd: tr.cells[4].firstChild.value, slides_range: tr.cells[5].firstChild.value, rooms: tr.cells[2].firstChild.value === "tour" ? readItinerary().map((s) => s.room) : [] }));
+    v.programme = [...$("programmeTable").tBodies[0].rows].map((tr) => ({ start: tr.cells[0].firstChild.value, end: tr.cells[1].firstChild.value, kind: tr.cells[2].firstChild.value, title_en: tr.cells[3].firstChild.value, title_2nd: tr.cells[4].firstChild.value, slides_range: tr.cells[5].firstChild.value, rooms: tr.cells[2].firstChild.value === "tour" ? labRoute() : [] }));
     v.itinerary = readItinerary();
-    v.slides = [...document.querySelectorAll("#slideGrid input:checked")].map((i) => Number(i.value));
+    v.slides = slideInputs().filter((i) => i.checked).map((i) => Number(i.value));
     if (!state.saved && $("code").value.trim()) v.code = $("code").value.trim().toLowerCase();
     return v;
   }
@@ -338,26 +344,86 @@
   $("addBlock").onclick = () => $("programmeTable").tBodies[0].insertAdjacentHTML("beforeend", blockRow());
   function renderItinerary(it) {
     const by = new Map((it || []).map((s, i) => [String(s.room), { ...s, order: i }]));
+    // 第一站固定是總體介紹（總體簡報）；分鐘數預設取今日流程 briefing 區塊的長度
+    const briefing = by.get("briefing") || { minutes: briefingMinutesFromProgramme() || 20, location: "" };
     const rooms = [...ROOMS].sort((a, b) => (by.has(a) ? by.get(a).order : 99) - (by.has(b) ? by.get(b).order : 99));
-    $("itinerary").innerHTML = rooms.map((room, i) => { const s = by.get(room); const lab = (state.labs?.labs || []).find((l) => l.room === room); return `<label class="card !p-2 !rounded-lg flex items-center gap-2"><span class="muted">${i + 1}.</span><span class="font-medium">${room}</span><span class="muted">${esc(lab?.lead?.name_zh || "")}</span><input type="number" min="0" class="!w-16" value="${s ? s.minutes : 0}" data-room="${room}"> 分</label>`; }).join("");
+    const first = `<label class="card !p-2 !rounded-lg flex items-center gap-2 border-stone-900"><span class="muted">1.</span><span class="font-medium">總體介紹</span><input type="text" class="!w-28" placeholder="地點，如 304" value="${esc(briefing.location || "")}" data-briefing-location><input type="number" min="1" class="!w-16" value="${briefing.minutes || 20}" data-room="briefing"> 分</label>`;
+    $("itinerary").innerHTML = first + rooms.map((room, i) => { const s = by.get(room); const lab = (state.labs?.labs || []).find((l) => l.room === room); return `<label class="card !p-2 !rounded-lg flex items-center gap-2"><span class="muted">${i + 2}.</span><span class="font-medium">${room}</span><span class="muted">${esc(lab?.lead?.name_zh || "")}</span><input type="number" min="0" class="!w-16" value="${s ? s.minutes : 0}" data-room="${room}"> 分</label>`; }).join("");
   }
-  const readItinerary = () => [...document.querySelectorAll("#itinerary input[data-room]")].map((i) => ({ room: i.dataset.room, minutes: Number(i.value) || 0 })).filter((s) => s.minutes > 0);
+  function briefingMinutesFromProgramme() {
+    const tr = [...($("programmeTable").tBodies[0]?.rows || [])].find((r) => r.cells[2].firstChild.value === "briefing");
+    if (!tr) return 0;
+    const [s, e] = [tr.cells[0].firstChild.value, tr.cells[1].firstChild.value].map((v) => { const [h, m] = v.split(":").map(Number); return h * 60 + m; });
+    return e > s ? e - s : 0;
+  }
+  const readItinerary = () => [...document.querySelectorAll("#itinerary input[data-room]")].map((i) => ({ room: i.dataset.room, minutes: Number(i.value) || 0, ...(i.dataset.room === "briefing" ? { location: ($("itinerary").querySelector("[data-briefing-location]") || {}).value || "" } : {}) })).filter((s) => s.room === "briefing" || s.minutes > 0);
+  const labRoute = () => readItinerary().filter((s) => s.room !== "briefing").map((s) => s.room);
+  // 選用頁次：依區塊（章節／研究室）分組；區塊方框整區選、「只選這區」、全選／全不選；必選頁永遠保留
+  function slideGroups() {
+    const slides = state.slides?.slides || [];
+    const groups = state.slides?.groups?.length ? state.slides.groups : [{ id: "all", title: "全部頁次", slides: slides.map((s) => s.n) }];
+    const byN = new Map(slides.map((s) => [s.n, s]));
+    return groups.map((g) => ({ ...g, items: g.slides.map((n) => byN.get(n)).filter(Boolean) })).filter((g) => g.items.length);
+  }
   function renderSlideGrid(selected = []) {
     const set = new Set(selected);
-    $("slideGrid").innerHTML = (state.slides?.slides || []).map((s) => `<label class="flex gap-1 items-start"><input type="checkbox" value="${s.n}" ${set.has(s.n) ? "checked" : ""} ${s.always ? "disabled checked" : ""}><span><span class="muted">${String(s.n).padStart(2, "0")}</span> ${esc(s.title)}${s.video ? " ▶" : ""}${s.lab ? ` <span class="muted">${s.lab}</span>` : ""}</span></label>`).join("");
+    $("slideGrid").innerHTML = slideGroups().map((g) => {
+      const ns = g.items.map((s) => s.n);
+      const range = ns.length > 1 ? `${String(ns[0]).padStart(2, "0")}–${String(ns[ns.length - 1]).padStart(2, "0")}` : String(ns[0]).padStart(2, "0");
+      return `<fieldset class="card !p-3 !rounded-lg" data-group="${g.id}">
+        <div class="flex flex-wrap items-center gap-2 mb-2">
+          <label class="flex items-center gap-2 font-medium"><input type="checkbox" data-group-toggle="${g.id}"> ${esc(g.title)} <span class="muted">${range}</span></label>
+          <span class="muted" data-group-count="${g.id}"></span>
+          <button type="button" class="muted underline ml-auto" data-group-only="${g.id}">只選這區</button>
+        </div>
+        <div class="slide-grid">${g.items.map((s) => `<label class="flex gap-1 items-start"><input type="checkbox" data-slide value="${s.n}" ${set.has(s.n) || s.always ? "checked" : ""} ${s.always ? "disabled" : ""}><span><span class="muted">${String(s.n).padStart(2, "0")}</span> ${esc(s.title)}${s.video ? " ▶" : ""}${s.always ? ' <span class="muted">必選</span>' : ""}</span></label>`).join("")}</div>
+      </fieldset>`;
+    }).join("");
+    syncSlideGroups();
+  }
+  const slideInputs = (groupId) => [...document.querySelectorAll(`#slideGrid ${groupId ? `[data-group="${groupId}"] ` : ""}input[data-slide]`)];
+  const setSlides = (inputs, on) => inputs.forEach((i) => { if (!i.disabled) i.checked = on; });
+  $("slideGrid").addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.matches("[data-group-toggle]")) setSlides(slideInputs(t.dataset.groupToggle), t.checked);
+    syncSlideGroups();
+  });
+  $("slideGrid").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-group-only]");
+    if (!b) return;
+    setSlides(slideInputs(), false); setSlides(slideInputs(b.dataset.groupOnly), true); syncSlideGroups();
+  });
+  $("slidesAll").onclick = () => { setSlides(slideInputs(), true); syncSlideGroups(); };
+  $("slidesNone").onclick = () => { setSlides(slideInputs(), false); syncSlideGroups(); };
+  function syncSlideGroups() {
+    for (const g of slideGroups()) {
+      const inputs = slideInputs(g.id);
+      const on = inputs.filter((i) => i.checked).length;
+      const toggle = document.querySelector(`#slideGrid [data-group-toggle="${g.id}"]`);
+      if (toggle) { toggle.checked = on === inputs.length; toggle.indeterminate = on > 0 && on < inputs.length; }
+      const count = document.querySelector(`#slideGrid [data-group-count="${g.id}"]`);
+      if (count) count.textContent = `${on}/${inputs.length} 頁`;
+    }
     updateSlideCount();
   }
-  $("slideGrid").addEventListener("change", updateSlideCount);
   function updateSlideCount() {
-    const chosen = [...document.querySelectorAll("#slideGrid input:checked")].map((i) => Number(i.value));
+    const chosen = slideInputs().filter((i) => i.checked).map((i) => Number(i.value));
     const mins = chosen.reduce((s, n) => s + ((state.slides?.slides || []).find((x) => x.n === n)?.minutes || 1), 0);
     $("slideCount").textContent = `（${chosen.length} 頁，約 ${Math.round(mins)} 分鐘）`;
   }
 
   // ── 訪前：AI ──
+  $("listFiles").onchange = () => { $("listFilesInfo").innerHTML = [...$("listFiles").files].map((f) => `<li>${esc(f.name)} <span class="muted">${(f.size / 1024).toFixed(0)} KB</span></li>`).join(""); };
+  const readFileB64 = (file) => new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(String(fr.result).replace(/^data:[^,]*,/, "")); fr.onerror = () => reject(fr.error); fr.readAsDataURL(file); });
   $("extractBtn").onclick = () => busy($("extractBtn"), async () => {
-    const r = await api("/api/extract", { method: "POST", body: { email_text: $("emailText").value } });
+    const picked = [...$("listFiles").files];
+    if (picked.length > 8) return flash("一次最多 8 個檔案", "err");
+    if (picked.reduce((s, f) => s + f.size, 0) > 5 * 1024 * 1024) return flash("檔案總量超過 5 MB，請分批或改貼文字", "err");
+    const files = [];
+    for (const f of picked) files.push({ name: f.name, type: f.type, data: await readFileB64(f) });
+    const r = await api("/api/extract", { method: "POST", body: { email_text: $("emailText").value, files } });
     if (!r.ok) return flash(r.error, "err");
+    $("listFilesInfo").innerHTML = (r.files_read || []).map((f) => `<li>${esc(f.name)} <span class="ok">已讀（${f.kind === "text" ? `${f.chars} 字` : f.kind === "document" ? "PDF 交給 AI 直接讀" : "照片交給 AI 直接讀"}）</span></li>`).join("") + (r.warnings || []).map((w) => `<li class="err">${esc(w)}</li>`).join("");
     state.saved = false; $("preVisitSelect").value = "";
     fillForm({ ...emptyVisit(), ...r.visit, visit_id: "" });
     flash("抽取完成，請逐項確認（尤其是名單的 email）");

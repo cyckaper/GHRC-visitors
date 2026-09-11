@@ -283,13 +283,13 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 **已完成（P1–P4 最小可用系統 ＋ P5 捷徑 ＋ P6 產檔 ＋ P7 摘要／彙整）**
 
-- `public/admin.html`：訪前（貼信抽取 → 確認 → 排行程選頁 → 儲存 → QR／spec／.ics／確認信）、收工（簽名簿照片讀字、三十秒口述錄音轉文字抽取、或打字）、訪後信（草擬、全名單收件人、寄出或 mailto）、資料（列表、回覆、動線、摘要、跨場次彙整、CSV）。
+- `public/admin.html`：訪前（貼信或上傳名單檔抽取 → 確認 → 排行程選頁 → 儲存 → QR／spec／.ics／確認信）、收工（簽名簿照片讀字、三十秒口述錄音轉文字抽取、或打字）、訪後信（草擬、全名單收件人、寄出或 mailto）、資料（列表、回覆、動線、摘要、跨場次彙整、CSV）。
 - `public/index.html`：專屬網址 `/<visit_id>`；流程、五間老師卡片（303 只列陳惠美）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。
-- `netlify/functions/*.mts`：`visits` `extract` `plan` `letter` `respond` `timeline` `signbook` `transcribe` `summary` `media`；共用在 `netlify/lib/`（store／ai／http／data／types）。
+- `netlify/functions/*.mts`：`visits` `extract` `plan` `letter` `respond` `timeline` `signbook` `transcribe` `summary` `media`；共用在 `netlify/lib/`（store／ai／http／data／types／files）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
 - `cli/deck.mjs` ＋ `cli/lib/pptx.mjs`：母簡報子集化（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證、PDF）。`--inspect`、`--dump`、`--validate`。
 - `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-shortcuts.mjs`：研究室電腦捷徑與 NFC 網址。
-- 測試：`npm test`（單元、API 走本機 dev server、產檔與瘦身走合成簡報）、`npm run test:e2e`（Chromium）。`AI_MOCK=1` 讓所有 AI 呼叫回固定範例。
+- 測試：`npm test`（單元、API 走本機 dev server、產檔與瘦身走合成簡報）、`npm run test:e2e`（Chromium）。`AI_MOCK=1` 讓所有 AI 呼叫回固定範例。CI：`.github/workflows/ci.yml` 在每個 PR 與 main 的 push 跑同一套（typecheck → npm test → e2e）。
 
 **尚未在真實環境驗證（首次建置時沒有金鑰與母簡報）**
 
@@ -303,4 +303,6 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - API 路徑 `/api/<name>` 由 `netlify.toml` 轉到 `/.netlify/functions/<name>`；函式不設 `config.path`。
 - 主辦端 API 用 `Authorization: Bearer ADMIN_TOKEN`；現場訊號用 `SIGNAL_KEY`；`respond` 與 `visits?public=1` 公開。
 - 老師卡片內容 `public/data/labs.json` 的 `confirmed=false` 表示尚待老師確認；照片 `photo` 為 null 時顯示縮寫。
+- **現場動線第一站固定是總體介紹**：`itinerary[0].room === "briefing"`（可填 `location`，例如 304），之後才是 301–305；`lib/visit.mjs ensureBriefingFirst` 在存檔與排程時強制。現場訊號 `room=briefing` 代表簡報室（開總體簡報＝整場起點）。
+- 後台「選用頁次」依 `public/data/slides.json` 的 `groups` 分區塊（章節／研究室）：區塊方框整區選、「只選這區」、全選／全不選；必選頁永遠保留。每一頁必須恰好屬於一個區塊。
 - 開放建議欄位措辭在 `public/data/i18n.json`（`ask_better`、`one_sentence`、`anonymous`），ko／ja 譯文請母語者校閱。

@@ -62,6 +62,23 @@ test("extract → visit draft keeps every email on the list", async () => {
   assert.equal(v.language, "en");
 });
 
+test("extract accepts uploaded list files: csv + docx text is read, .doc is reported unsupported", async () => {
+  const JSZip = (await import("jszip")).default;
+  const zip = new JSZip();
+  zip.file("word/document.xml", `<w:document xmlns:w="w"><w:body><w:tbl><w:tr><w:tc><w:p><w:r><w:t>Kim Lee</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>kim.lee@uwa.edu.au</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>`);
+  const docx = Buffer.from(await zip.generateAsync({ type: "uint8array" })).toString("base64");
+  const csv = Buffer.from("name,email\nJane Doe,jane.doe@uwa.edu.au\n").toString("base64");
+  const r = await api("/api/extract", { method: "POST", headers: admin, body: JSON.stringify({ email_text: "", files: [{ name: "list.csv", type: "text/csv", data: csv }, { name: "list.docx", type: "", data: `data:application/octet-stream;base64,${docx}` }, { name: "old.doc", type: "application/msword", data: Buffer.from("x").toString("base64") }] }) });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.files_read.map((f) => f.name), ["list.csv", "list.docx"]);
+  assert.equal(r.body.warnings.length, 1);
+  assert.ok(r.body.warnings[0].includes("old.doc"));
+  const emails = r.body.visit.guests.map((g) => g.email).sort();
+  assert.deepEqual(emails, ["jane.doe@uwa.edu.au", "kim.lee@uwa.edu.au"]);
+  const empty = await api("/api/extract", { method: "POST", headers: admin, body: JSON.stringify({ email_text: "", files: [] }) });
+  assert.equal(empty.status, 400);
+});
+
 test("plan → programme, itinerary, slides (always-slides present), then save", async () => {
   const ex = await api("/api/extract", { method: "POST", headers: admin, body: JSON.stringify({ email_text: EMAIL }) });
   const visit = { ...ex.body.visit, code: "uwa", start_time: "10:00", duration_minutes: 90 };
@@ -70,6 +87,8 @@ test("plan → programme, itinerary, slides (always-slides present), then save",
   const planned = p.body.visit;
   for (const n of [1, 2, 3, 4, 72]) assert.ok(planned.slides.includes(n), `slide ${n} missing`);
   assert.ok(planned.programme.some((b) => b.kind === "tour"));
+  assert.equal(planned.itinerary[0].room, "briefing", "route starts with the overall briefing");
+  assert.ok(planned.itinerary[0].minutes > 0);
   assert.equal(planned.itinerary.reduce((s, x) => s + x.minutes, 0) <= 90, true);
   const saved = await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(planned) });
   assert.equal(saved.status, 200, JSON.stringify(saved.body));
@@ -103,14 +122,19 @@ test("signals: keyed sources need SIGNAL_KEY, resolve today's visit, guest fallb
   assert.equal(badKey.status, 401);
   const ok = await api(`/api/timeline?room=303&source=presentation&key=test-signal&visit_id=${visitId}&at=2026-10-07T02:31:00Z`);
   assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  const brief = await api(`/api/timeline?room=briefing&source=presentation&key=test-signal&visit_id=${visitId}&at=2026-10-07T02:01:00Z`);
+  assert.equal(brief.status, 200, "the briefing room PC shortcut is a valid signal");
+  assert.equal((await api(`/api/timeline?room=999&source=presentation&key=test-signal&visit_id=${visitId}`)).status, 400);
   const guest = await api("/api/timeline", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ room: "304", source: "guest", visit_id: visitId, at: "2026-10-07T02:45:00Z" }) });
   assert.equal(guest.status, 200);
   const noId = await api("/api/timeline", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ room: "304", source: "guest" }) });
   assert.equal(noId.status, 400);
   const tl = await api(`/api/timeline?id=${visitId}`, { headers: admin });
   assert.equal(tl.status, 200);
-  assert.equal(tl.body.signals.length, 2);
+  assert.equal(tl.body.signals.length, 3);
   assert.ok(tl.body.timeline.find((r) => r.room === "303").source === "presentation");
+  assert.equal(tl.body.timeline[0].room, "briefing");
+  assert.equal(tl.body.timeline[0].source, "presentation");
 });
 
 test("respond: anonymous suggestion is stored with no identity; named onsite email is kept", async () => {

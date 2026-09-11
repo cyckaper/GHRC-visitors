@@ -4,7 +4,7 @@ import type { Visit } from "../lib/types.mts";
 import { isValidVisitId } from "../../lib/visit.mjs";
 import { reconcileTimeline } from "../../lib/timeline.mjs";
 
-const ROOMS = new Set(["301", "302", "303", "304", "305"]);
+const ROOMS = new Set(["briefing", "301", "302", "303", "304", "305"]); // briefing = 總體介紹（簡報室）
 const KEYED = new Set(["presentation", "nfc", "student"]);
 
 /**
@@ -34,7 +34,7 @@ export default async (req: Request) => {
 
   const room = String(input.room || "").trim();
   const source = String(input.source || "nfc").trim();
-  if (!ROOMS.has(room)) return fail(400, "room 需為 301–305");
+  if (!ROOMS.has(room)) return fail(400, "room 需為 briefing 或 301–305");
   if (KEYED.has(source)) {
     if (!checkSignalKey(req, input.key)) return fail(401, "SIGNAL_KEY 不對或未設定");
   } else if (source === "guest") {

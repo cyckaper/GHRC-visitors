@@ -19,7 +19,8 @@ const key = String(args.key || process.env.SIGNAL_KEY || "");
 if (!key) { console.error("需要 --key=<SIGNAL_KEY>（與 Netlify 環境變數相同）"); process.exit(2); }
 const deck = String(args.deck || "");
 const out = path.resolve(String(args.out || "dist/shortcuts"));
-const ROOMS = ["301", "302", "303", "304", "305"];
+const ROOMS = ["briefing", "301", "302", "303", "304", "305"]; // briefing = 總體介紹的簡報室電腦：開總體簡報就是整場的起點訊號
+const LABEL = { briefing: "總體介紹（簡報室）", "301": "Lab 301", "302": "Lab 302", "303": "Lab 303", "304": "Lab 304", "305": "Lab 305" };
 
 for (const room of ROOMS) {
   const dir = path.join(out, room);
@@ -28,14 +29,14 @@ for (const room of ROOMS) {
   const nfc = `${site}/api/timeline?room=${room}&source=nfc&key=${encodeURIComponent(key)}`;
   await fs.writeFile(path.join(dir, "今日參訪.bat"), [
     "@echo off",
-    `rem GHRC 參訪：Lab ${room} 開簡報就記時（訊號一）。桌面放這個檔的捷徑。`,
+    `rem GHRC 參訪：${LABEL[room]} 開簡報就記時（訊號一）。桌面放這個檔的捷徑。`,
     `curl -s -m 5 "${url}" >nul 2>&1`,
     deck ? `start "" "${deck}"` : `rem 把當天簡報路徑填在下一行，例如 start "" "C:\\GHRC\\today.pptx"`,
     deck ? "" : `rem start "" "C:\\GHRC\\today.pptx"`,
   ].join("\r\n"));
   await fs.writeFile(path.join(dir, "今日參訪.command"), [
     "#!/bin/bash",
-    `# GHRC 參訪：Lab ${room} 開簡報就記時（訊號一）。`,
+    `# GHRC 參訪：${LABEL[room]} 開簡報就記時（訊號一）。`,
     `curl -s -m 5 "${url}" >/dev/null 2>&1 &`,
     deck ? `open "${deck}"` : `# open "/Users/you/GHRC/today.pptx"`,
   ].join("\n"), { mode: 0o755 });
@@ -48,12 +49,12 @@ await fs.writeFile(path.join(out, "README.md"), `# 現場訊號捷徑
 
 ## 訊號一｜老師開簡報（研究室電腦）
 
-每間研究室電腦桌面放一個「今日參訪」捷徑，指到 \`<房號>/今日參訪.bat\`（Windows）或 \`今日參訪.command\`（macOS）。
+簡報室電腦（\`briefing/\`，總體介紹是動線的第一站）與每間研究室電腦桌面各放一個「今日參訪」捷徑，指到 \`<房號>/今日參訪.bat\`（Windows）或 \`今日參訪.command\`（macOS）。
 老師從那裡點開簡報，捷徑先在背景送一個訊號（一秒），再開簡報。把 .bat／.command 裡的簡報路徑改成當天的檔案。
 
 ## 訊號二｜主持人進門碰 NFC 貼紙（iPhone）
 
-五間門口各貼一片 NFC 貼紙（NTAG213 即可）。在 iPhone「捷徑」App：
+簡報室與五間研究室門口各貼一片 NFC 貼紙（NTAG213 即可），簡報室那片用 \`briefing/signal.url\`。在 iPhone「捷徑」App：
 
 1. 自動化 → 新增自動化 → NFC → 掃描貼紙並命名（例如 Lab 303）→ 立即執行（關閉「執行前先詢問」）
 2. 動作：「取得 URL 內容」，URL 填該房間的 \`signal.url\` 內容：

@@ -1,5 +1,7 @@
 # GHRC 參訪系統 · ghrc-visit
 
+[![CI](https://github.com/cyckaper/GHRC-visitors/actions/workflows/ci.yml/badge.svg)](https://github.com/cyckaper/GHRC-visitors/actions/workflows/ci.yml)
+
 臺大生農學院綠色健康研究中心（GHRC）的參訪閉環：**訪前準備 → 客製簡報 → 訪後回饋 → 長期檔案 → 回饋下一次簡報**。
 構想與否決清單見 `docs/工作包.md`；開發規範見 `CLAUDE.md`；部署與設定見 `docs/DEPLOY.md`。
 
@@ -7,7 +9,7 @@
 
 | 階段 | 誰 | 做什麼 | 在哪 |
 |---|---|---|---|
-| 訪前 | 承辦 | 貼上 email 往來 → AI 抽出單位、名單（含隨行者 email）、目的、興趣 → 確認 → AI 排行程、選頁 → 儲存 → 拿到專屬網址與 QR、確認信草稿、收工提醒 .ics | `admin.html`「訪前」 |
+| 訪前 | 承辦 | 貼上 email 往來、或上傳名單檔（Word／Excel／CSV／PDF／照片）→ AI 抽出單位、名單（含隨行者 email）、目的、興趣 → 確認 → AI 排行程、選頁 → 儲存 → 拿到專屬網址與 QR、確認信草稿、收工提醒 .ics | `admin.html`「訪前」 |
 | 訪前 | 承辦 | 產出當次簡報：`npm run deck -- --visit=<visit_id>` | 本機 CLI |
 | 現場 | 老師／主持人 | 開簡報的桌面捷徑、門口 NFC 貼紙自動送動線訊號；總體簡報最後一頁問「您最想看哪一部分」 | `scripts/make-shortcuts.mjs` |
 | 收工 | 主持人 | 拍一張簽名簿（AI 讀字）＋ 三十秒口述（轉文字、抽取），一分鐘 | `admin.html`「收工」（.ics 提醒直達） |

@@ -56,7 +56,22 @@ try {
   await page.fill("#code", "uwa");
   await page.click("#planBtn");
   await page.waitForFunction(() => document.querySelectorAll("#programmeTable tbody tr").length > 0);
-  check((await page.locator("#slideGrid input:checked").count()) >= 5, "plan selects slides");
+  check((await page.locator("#slideGrid input[data-slide]:checked").count()) >= 5, "plan selects slides");
+  check((await page.locator("#slideGrid fieldset[data-group]").count()) >= 10, "slides are grouped into blocks");
+  const before = await page.locator("#slideGrid input[data-slide]:checked").count();
+  await page.click("#slidesNone");
+  check((await page.locator("#slideGrid input[data-slide]:checked").count()) === 5, "全不選 keeps only the five always-slides");
+  await page.click('#slideGrid [data-group-only="lab302"]');
+  check((await page.locator('#slideGrid [data-group="lab302"] input[data-slide]:checked').count()) === 8 && (await page.locator("#slideGrid input[data-slide]:checked").count()) === 13, "只選這區 selects the whole block plus always-slides");
+  await page.check('#slideGrid [data-group-toggle="ch06"]');
+  check((await page.locator("#slideGrid input[data-slide]:checked").count()) === 19, "block toggle adds the whole block");
+  await page.click("#slidesAll");
+  check((await page.locator("#slideGrid input[data-slide]:checked").count()) === 72, "全選 selects every slide");
+  await page.click("#slidesNone");
+  await page.click('#slideGrid [data-group-only="lab303"]');
+  check(before > 0, "restored a selection for the rest of the flow");
+  check((await page.textContent("#itinerary label:first-child")).includes("總體介紹"), "route starts with the overall briefing");
+  check((await page.inputValue('#itinerary input[data-room="briefing"]')) !== "0", "briefing has minutes");
   await page.click("#saveBtn");
   await page.waitForSelector("#afterSave:not([hidden])");
   const link = await page.textContent("#pageLink");
@@ -86,7 +101,8 @@ try {
   // ── 來賓端 ──
   await page.goto(`${base}/2026-10-07-uwa`);
   await page.waitForSelector("#lab-303");
-  check((await page.locator("#labs article").count()) === 5, "guest page shows five lab cards");
+  check((await page.locator("#labs article").count()) === 6, "guest page shows the briefing step plus five lab cards");
+  check((await page.textContent("#labs article:first-child")).includes("Center overview"), "briefing card comes first");
   check((await page.textContent("#lab-303")).includes("陳惠美") && !(await page.textContent("#lab-303")).includes("鄭佳昆"), "303 lists only 陳惠美");
   check((await page.locator("#programme li").count()) > 0, "programme rendered");
   check((await page.textContent("#qBetter")) === "From your perspective, what should we be doing better?", "open-suggestion wording is the 請益 question");

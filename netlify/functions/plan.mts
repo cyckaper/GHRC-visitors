@@ -3,6 +3,7 @@ import { loadMasterText, loadPublicData } from "../lib/data.mts";
 import { planVisit } from "../lib/ai.mts";
 import type { Visit } from "../lib/types.mts";
 import { normalizeVisit } from "./visits.mts";
+import { briefingBlockMinutes, ensureBriefingFirst } from "../../lib/visit.mjs";
 
 /** POST /api/plan {visit} → {plan, visit}（排行程、選頁；結果回傳給人確認） */
 export default async (req: Request) => {
@@ -23,7 +24,8 @@ export default async (req: Request) => {
     const merged: Visit = {
       ...visit,
       programme: plan.programme,
-      itinerary: plan.itinerary.map((s) => ({ room: s.room, minutes: s.minutes, focus: s.focus })),
+      // 動線第一步固定是總體介紹；AI 沒排就依 briefing 區塊長度補上
+      itinerary: ensureBriefingFirst(plan.itinerary.map((s) => ({ room: s.room, minutes: s.minutes, focus: s.focus })), briefingBlockMinutes(plan.programme) || 20),
       slides,
       text_edits: plan.text_edits,
       cover_text: plan.cover_text,

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { reconcileTimeline, plannedEntries } from "../lib/timeline.mjs";
-import { makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS } from "../lib/visit.mjs";
+import { makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -9,7 +9,7 @@ const visit = {
   start_time: "10:00",
   duration_minutes: 90,
   programme: [{ kind: "briefing", start: "10:00", end: "10:20" }, { kind: "tour", start: "10:20", end: "11:00" }],
-  itinerary: [{ room: "301", minutes: 10 }, { room: "302", minutes: 10 }, { room: "303", minutes: 10 }, { room: "304", minutes: 10 }],
+  itinerary: [{ room: "briefing", minutes: 20, location: "304" }, { room: "301", minutes: 10 }, { room: "302", minutes: 10 }, { room: "303", minutes: 10 }, { room: "304", minutes: 10 }],
   guests: [
     { name: "Simon Kilbane", title: "Programme Director", email: "simon@uwa.example", role: "lead" },
     { name: "A. Companion", title: "", email: "companion@uwa.example", role: "member" },
@@ -20,18 +20,40 @@ const visit = {
   dictation: { transcript: "secret" },
 };
 
-test("plannedEntries starts at the tour block and chains room minutes", () => {
+test("plannedEntries starts with the briefing at the visit start and chains room minutes", () => {
   const rows = plannedEntries(visit);
+  assert.equal(rows.length, 5);
+  assert.equal(rows[0].room, "briefing");
+  assert.equal(rows[0].planned.toISOString(), "2026-10-07T02:00:00.000Z");
+  assert.equal(rows[1].planned.toISOString(), "2026-10-07T02:20:00.000Z");
+  assert.equal(rows[4].planned.toISOString(), "2026-10-07T02:50:00.000Z");
+});
+
+test("legacy itinerary without a briefing step still starts at the tour block", () => {
+  const rows = plannedEntries({ ...visit, itinerary: visit.itinerary.slice(1) });
   assert.equal(rows.length, 4);
   assert.equal(rows[0].planned.toISOString(), "2026-10-07T02:20:00.000Z");
-  assert.equal(rows[3].planned.toISOString(), "2026-10-07T02:50:00.000Z");
+});
+
+test("the route always starts with a briefing step", () => {
+  assert.equal(emptyVisit().itinerary[0].room, "briefing");
+  const fixed = ensureBriefingFirst([{ room: "301", minutes: 8 }, { room: "briefing", minutes: 15 }, { room: "302", minutes: 8 }], 20);
+  assert.deepEqual(fixed.map((s) => s.room), ["briefing", "301", "302"]);
+  assert.equal(fixed[0].minutes, 15);
+  const added = ensureBriefingFirst([{ room: "301", minutes: 8 }], 25);
+  assert.equal(added[0].room, "briefing");
+  assert.equal(added[0].minutes, 25);
+  assert.equal(briefingBlockMinutes(visit.programme), 20);
+  assert.equal(briefingBlockMinutes([]), null);
 });
 
 test("no signals → the schedule itself, source schedule", () => {
   const t = reconcileTimeline(visit, []);
-  assert.equal(t.length, 4);
+  assert.equal(t.length, 5);
   assert.ok(t.every((r) => r.source === "schedule"));
-  assert.equal(t[0].minutes, 10);
+  assert.equal(t[0].room, "briefing");
+  assert.equal(t[0].minutes, 20);
+  assert.equal(t[1].minutes, 10);
 });
 
 test("one NFC tap shifts every later room and sets exit of the previous room", () => {
@@ -52,8 +74,10 @@ test("primary signal beats fallback signal for the same room; earliest primary w
     { room: "301", at: "2026-10-07T02:22:00Z", source: "presentation" },
     { room: "301", at: "2026-10-07T02:21:30Z", source: "nfc" },
   ]);
-  assert.equal(t[0].source, "nfc");
-  assert.equal(t[0].enter, "2026-10-07T02:21:30.000Z");
+  const r301 = t.find((r) => r.room === "301");
+  assert.equal(r301.source, "nfc");
+  assert.equal(r301.enter, "2026-10-07T02:21:30.000Z");
+  assert.equal(t.find((r) => r.room === "briefing").exit, r301.enter, "briefing ends when the first lab is entered");
 });
 
 test("visit id generation and validation", () => {

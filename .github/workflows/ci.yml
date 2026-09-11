@@ -1,0 +1,49 @@
+# CI：每個 PR 與 main 的每次 push 都跑型別檢查、單元／API 測試、產檔與瘦身測試、Chromium 冒煙測試。
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: typecheck · unit · api · deck · e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Python deps for the synthetic deck fixture and slim-master
+        run: pip install --quiet python-pptx Pillow
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit, API, deck and slim tests
+        run: npm test
+
+      - name: Browser smoke test (Chromium)
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+          npm run test:e2e

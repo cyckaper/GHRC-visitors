@@ -29,7 +29,10 @@
     "anonymous": "Send anonymously — we do not record who wrote this.",
     "anonymous_note": "When you choose this, no name, email, or address is stored with your answer.",
     "respond_thanks": "Received with thanks. Your advice goes straight to the center's teachers.",
-    "already_sent": "Your reply has been sent."
+    "already_sent": "Your reply has been sent.",
+    "briefing": "Center overview and the laboratories",
+    "briefing_hint": "The visit opens with a short overview before the laboratory tour.",
+    "minutes": "min"
   },
   "zh": {
     "welcome": "歡迎蒞臨綠色健康研究中心",
@@ -60,7 +63,10 @@
     "anonymous": "不具名送出——系統不會記錄是誰填的。",
     "anonymous_note": "勾選後，您的回答不會附上任何姓名、信箱或位址。",
     "respond_thanks": "已收到，謝謝您。您的建議會直接送到中心各位老師手上。",
-    "already_sent": "您的回覆已送出。"
+    "already_sent": "您的回覆已送出。",
+    "briefing": "總體介紹",
+    "briefing_hint": "參訪先由一場總體介紹開始，再依序走訪研究室。",
+    "minutes": "分鐘"
   },
   "ko": {
     "welcome": "녹색건강연구센터에 오신 것을 환영합니다",
@@ -91,7 +97,10 @@
     "anonymous": "익명으로 보내기 — 작성자를 기록하지 않습니다.",
     "anonymous_note": "선택하시면 성함, 이메일, 주소가 답변과 함께 저장되지 않습니다.",
     "respond_thanks": "감사히 받았습니다. 조언은 센터 교수진에게 바로 전달됩니다.",
-    "already_sent": "답변이 전송되었습니다."
+    "already_sent": "답변이 전송되었습니다.",
+    "briefing": "센터 개요",
+    "briefing_hint": "실험실 견학 전에 짧은 센터 개요로 시작합니다.",
+    "minutes": "분"
   },
   "ja": {
     "welcome": "緑色健康研究センターへようこそ",
@@ -122,6 +131,9 @@
     "anonymous": "匿名で送信する — 誰が書いたかは記録しません。",
     "anonymous_note": "選択すると、お名前・メールアドレス・アドレスは回答と一緒に保存されません。",
     "respond_thanks": "ありがとうございます。ご助言はセンターの教員に直接届きます。",
-    "already_sent": "回答は送信済みです。"
+    "already_sent": "回答は送信済みです。",
+    "briefing": "センター概要",
+    "briefing_hint": "研究室見学の前に、短いセンター概要から始まります。",
+    "minutes": "分"
   }
 }

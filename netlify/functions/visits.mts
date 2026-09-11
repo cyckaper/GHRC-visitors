@@ -1,7 +1,7 @@
 import { fail, json, nowISO, readJSON, requireAdmin, siteUrl } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
-import { emptyVisit, isValidVisitId, makeVisitId, publicVisit, toCSV } from "../../lib/visit.mjs";
+import { briefingBlockMinutes, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, toCSV } from "../../lib/visit.mjs";
 
 /**
  * GET  /api/visits?id=X&public=1   來賓端可見子集（不需授權）
@@ -72,7 +72,9 @@ export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   v.duration_minutes = Number(input.duration_minutes) || 90;
   v.interests = Array.isArray(input.interests) ? input.interests.map(String) : [];
   v.programme = Array.isArray(input.programme) ? input.programme : [];
-  v.itinerary = Array.isArray(input.itinerary) ? input.itinerary.map((s) => ({ room: String(s.room), minutes: Number(s.minutes) || 0, focus: s.focus || "" })) : [];
+  v.itinerary = Array.isArray(input.itinerary) ? input.itinerary.map((s) => ({ room: String(s.room), minutes: Number(s.minutes) || 0, focus: s.focus || "", location: s.location ? String(s.location).slice(0, 60) : "" })) : [];
+  // 研究室動線一定先一場總體介紹
+  v.itinerary = ensureBriefingFirst(v.itinerary, briefingBlockMinutes(v.programme) || 20);
   v.slides = Array.isArray(input.slides) ? [...new Set(input.slides.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n > 0))] : [];
   v.text_edits = Array.isArray(input.text_edits) ? input.text_edits : [];
   v.language = (["en", "zh", "ko", "ja"] as const).includes(v.language) ? v.language : "en";

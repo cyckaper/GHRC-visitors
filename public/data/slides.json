@@ -1,78 +1,754 @@
 {
   "_comment": "母簡報（slim master）頁次索引。章節編號與實體頁序不一致，選頁一律以此表為準，不要掃描章節標題。minutes 為口頭講解估計分鐘（影片另計）。",
-  "labLeads": { "301": "張俊彥", "302": "林寶秀", "303": "陳惠美・鄭佳昆", "304": "張伯茹", "305": "鄭佳昆" },
+  "labLeads": {
+    "301": "張俊彥",
+    "302": "林寶秀",
+    "303": "陳惠美・鄭佳昆",
+    "304": "張伯茹",
+    "305": "鄭佳昆"
+  },
   "slides": [
-    { "n": 1,  "title": "封面 Welcome",                          "chapter": null, "role": "cover",     "always": true, "editEachVisit": true, "minutes": 0.5 },
-    { "n": 2,  "title": "今日流程 Programme",                    "chapter": null, "role": "programme", "always": true, "editEachVisit": true, "minutes": 1 },
-    { "n": 3,  "title": "簡報架構 Contents",                     "chapter": null, "role": "contents",  "always": true, "editEachVisit": true, "minutes": 0.5 },
-    { "n": 4,  "title": "核心宣稱 The Claim",                    "chapter": null, "role": "claim",     "always": true, "minutes": 1.5 },
-    { "n": 5,  "title": "組織架構 Organisation（實驗室負責人一覽）","chapter": "08", "role": "organisation", "minutes": 1, "note": "誤標 08；五位老師一覽，可作「您最想看哪一部分」頁的複製來源" },
-    { "n": 6,  "title": "01 Why Now 分隔頁",                     "chapter": "01", "role": "divider", "minutes": 0.2 },
-    { "n": 7,  "title": "三條政策線與一個學術轉向",              "chapter": "01", "audience": ["government", "university"], "minutes": 1.5 },
-    { "n": 8,  "title": "中心沿革 Milestones",                   "chapter": "01", "minutes": 1 },
-    { "n": 9,  "title": "開幕與國際論壇 2024.04.10",             "chapter": "01", "minutes": 0.7 },
-    { "n": 10, "title": "設置辦法三項任務（一）",                "chapter": "01", "audience": ["government"], "minutes": 1 },
-    { "n": 11, "title": "設置辦法三項任務（二）",                "chapter": "01", "audience": ["government"], "minutes": 1 },
-    { "n": 12, "title": "02 Core Proposition 分隔頁",            "chapter": "02", "role": "divider", "minutes": 0.2 },
-    { "n": 13, "title": "閉環證據鏈 Measure→Design→Prescribe",   "chapter": "02", "minutes": 1.5 },
-    { "n": 14, "title": "空間與經費來源",                        "chapter": "02", "audience": ["government", "university"], "minutes": 1, "note": "不放中心總預算數字" },
-    { "n": 15, "title": "Lab 301 分隔頁",                        "chapter": "03", "lab": "301", "role": "divider", "minutes": 0.2 },
-    { "n": 16, "title": "Lab 301 健康景觀智能室（一）",          "chapter": "03", "lab": "301", "minutes": 1 },
-    { "n": 17, "title": "Lab 301 健康景觀智能室（二）",          "chapter": "03", "lab": "301", "minutes": 1 },
-    { "n": 18, "title": "HealthCloud",                           "chapter": "03", "lab": "301", "minutes": 1 },
-    { "n": 19, "title": "Lab 301 影片",                          "chapter": "03", "lab": "301", "video": true, "minutes": 2.5 },
-    { "n": 20, "title": "七站工具鏈",                            "chapter": "03", "lab": "301", "audience": ["enterprise", "university"], "minutes": 1 },
-    { "n": 21, "title": "Lab 302 分隔頁",                        "chapter": "03", "lab": "302", "role": "divider", "minutes": 0.2 },
-    { "n": 22, "title": "Lab 302 ENVI-met 微氣候模擬（一）",     "chapter": "03", "lab": "302", "minutes": 1 },
-    { "n": 23, "title": "Lab 302 ENVI-met 微氣候模擬（二）",     "chapter": "03", "lab": "302", "minutes": 1 },
-    { "n": 24, "title": "Lab 302 ENVI-met 微氣候模擬（三）",     "chapter": "03", "lab": "302", "minutes": 1 },
-    { "n": 25, "title": "Lab 302 ENVI-met 微氣候模擬（四）",     "chapter": "03", "lab": "302", "minutes": 1 },
-    { "n": 26, "title": "Lab 302 ENVI-met 微氣候模擬（五）",     "chapter": "03", "lab": "302", "minutes": 1 },
-    { "n": 27, "title": "Lab 302 ENVI-met 微氣候模擬（六）",     "chapter": "03", "lab": "302", "minutes": 1 },
-    { "n": 28, "title": "Lab 302 ENVI-met 微氣候模擬（七）",     "chapter": "03", "lab": "302", "minutes": 1 },
-    { "n": 29, "title": "Lab 303 分隔頁",                        "chapter": "03", "lab": "303", "role": "divider", "minutes": 0.2 },
-    { "n": 30, "title": "Lab 303 VR 設備（一）",                 "chapter": "03", "lab": "303", "minutes": 1 },
-    { "n": 31, "title": "Lab 303 VR 設備（二）",                 "chapter": "03", "lab": "303", "minutes": 1 },
-    { "n": 32, "title": "Lab 303 360VR 教材（一）",              "chapter": "03", "lab": "303", "audience": ["school", "university"], "minutes": 1 },
-    { "n": 33, "title": "Lab 303 360VR 教材（二）",              "chapter": "03", "lab": "303", "audience": ["school", "university"], "minutes": 1 },
-    { "n": 34, "title": "Lab 303 傷口疼痛（一）",                "chapter": "03", "lab": "303", "minutes": 1 },
-    { "n": 35, "title": "Lab 303 影片（一）",                    "chapter": "03", "lab": "303", "video": true, "minutes": 2.5 },
-    { "n": 36, "title": "Lab 303 傷口疼痛（二）",                "chapter": "03", "lab": "303", "minutes": 1 },
-    { "n": 37, "title": "Lab 303 影片（二）",                    "chapter": "03", "lab": "303", "video": true, "minutes": 2.5 },
-    { "n": 38, "title": "Lab 303 影片（三）",                    "chapter": "03", "lab": "303", "video": true, "minutes": 2.5 },
-    { "n": 39, "title": "研究成果：病患照護",                    "chapter": "04", "audience": ["government", "university", "enterprise"], "minutes": 1 },
-    { "n": 40, "title": "研究成果：高齡與學童",                  "chapter": "04", "audience": ["government", "school"], "minutes": 1 },
-    { "n": 41, "title": "研究成果：北區農村綠色照顧（一）",      "chapter": "04", "audience": ["government"], "minutes": 1 },
-    { "n": 42, "title": "研究成果：北區農村綠色照顧（二）",      "chapter": "04", "audience": ["government"], "minutes": 1 },
-    { "n": 43, "title": "Lab 305 IVR 研究選輯 總覽",             "chapter": "03", "lab": "305", "minutes": 1 },
-    { "n": 44, "title": "Lab 305 IVR 研究（一）",                "chapter": "03", "lab": "305", "minutes": 1 },
-    { "n": 45, "title": "Lab 305 IVR 研究（二）",                "chapter": "03", "lab": "305", "minutes": 1 },
-    { "n": 46, "title": "Lab 305 IVR 研究（三）",                "chapter": "03", "lab": "305", "minutes": 1 },
-    { "n": 47, "title": "Lab 305 IVR 研究（四）",                "chapter": "03", "lab": "305", "minutes": 1 },
-    { "n": 48, "title": "Lab 305 IVR 研究（五）",                "chapter": "03", "lab": "305", "minutes": 1 },
-    { "n": 49, "title": "Lab 304 全景影院 CAVE VR（一）",        "chapter": "03", "lab": "304", "minutes": 1 },
-    { "n": 50, "title": "Lab 304 全景影院 CAVE VR（二）",        "chapter": "03", "lab": "304", "minutes": 1 },
-    { "n": 51, "title": "旗艦案例：CAVE 超慢跑與慢性下背痛（一）","chapter": "04", "lab": "304", "minutes": 1 },
-    { "n": 52, "title": "旗艦案例 影片",                         "chapter": "04", "lab": "304", "video": true, "minutes": 2.5 },
-    { "n": 53, "title": "旗艦案例：依介入對象分群",              "chapter": "04", "lab": "304", "minutes": 1 },
-    { "n": 54, "title": "05 人才與教育 分隔頁",                  "chapter": "05", "role": "divider", "minutes": 0.2, "note": "位置在 55 之前" },
-    { "n": 55, "title": "委託研究計畫",                          "chapter": "04", "audience": ["enterprise", "government"], "minutes": 1 },
-    { "n": 56, "title": "課程",                                  "chapter": "05", "audience": ["university", "school"], "minutes": 1 },
-    { "n": 57, "title": "學生創業",                              "chapter": "05", "audience": ["university", "school", "enterprise"], "minutes": 1 },
-    { "n": 58, "title": "展覽與科普（一）",                      "chapter": "05", "audience": ["school", "government"], "minutes": 1 },
-    { "n": 59, "title": "展覽與科普（二）",                      "chapter": "05", "audience": ["school", "government"], "minutes": 1 },
-    { "n": 60, "title": "展覽與科普（三）",                      "chapter": "05", "audience": ["school"], "minutes": 1 },
-    { "n": 61, "title": "06 國際平台 分隔頁",                    "chapter": "06", "role": "divider", "minutes": 0.2 },
-    { "n": 62, "title": "國際平台 八校",                         "chapter": "06", "audience": ["university"], "minutes": 1 },
-    { "n": 63, "title": "已簽合作",                              "chapter": "06", "audience": ["university", "government"], "minutes": 1 },
-    { "n": 64, "title": "UIUC 三度接觸（一）",                   "chapter": "06", "audience": ["university"], "minutes": 1 },
-    { "n": 65, "title": "UIUC 三度接觸（二）",                   "chapter": "06", "audience": ["university"], "minutes": 1 },
-    { "n": 66, "title": "NTU–UIUC 聯合中心",                     "chapter": "06", "audience": ["university"], "minutes": 1 },
-    { "n": 67, "title": "07 2026 遠見 USR 首獎（一）",           "chapter": "07", "minutes": 0.7 },
-    { "n": 68, "title": "2026 遠見 USR 首獎（二）",              "chapter": "07", "minutes": 0.7 },
-    { "n": 69, "title": "2026 遠見 USR 首獎（三）",              "chapter": "07", "minutes": 0.7 },
-    { "n": 70, "title": "08 未來三年 三項承諾（一）",            "chapter": "08", "minutes": 1 },
-    { "n": 71, "title": "未來三年 三項承諾（二）",               "chapter": "08", "minutes": 1 },
-    { "n": 72, "title": "謝謝 Thank you",                        "chapter": null, "role": "closing", "always": true, "minutes": 0.2 }
-  ]
+    {
+      "n": 1,
+      "title": "封面 Welcome",
+      "chapter": null,
+      "role": "cover",
+      "always": true,
+      "editEachVisit": true,
+      "minutes": 0.5
+    },
+    {
+      "n": 2,
+      "title": "今日流程 Programme",
+      "chapter": null,
+      "role": "programme",
+      "always": true,
+      "editEachVisit": true,
+      "minutes": 1
+    },
+    {
+      "n": 3,
+      "title": "簡報架構 Contents",
+      "chapter": null,
+      "role": "contents",
+      "always": true,
+      "editEachVisit": true,
+      "minutes": 0.5
+    },
+    {
+      "n": 4,
+      "title": "核心宣稱 The Claim",
+      "chapter": null,
+      "role": "claim",
+      "always": true,
+      "minutes": 1.5
+    },
+    {
+      "n": 5,
+      "title": "組織架構 Organisation（實驗室負責人一覽）",
+      "chapter": "08",
+      "role": "organisation",
+      "minutes": 1,
+      "note": "誤標 08；五位老師一覽，可作「您最想看哪一部分」頁的複製來源"
+    },
+    {
+      "n": 6,
+      "title": "01 Why Now 分隔頁",
+      "chapter": "01",
+      "role": "divider",
+      "minutes": 0.2
+    },
+    {
+      "n": 7,
+      "title": "三條政策線與一個學術轉向",
+      "chapter": "01",
+      "audience": [
+        "government",
+        "university"
+      ],
+      "minutes": 1.5
+    },
+    {
+      "n": 8,
+      "title": "中心沿革 Milestones",
+      "chapter": "01",
+      "minutes": 1
+    },
+    {
+      "n": 9,
+      "title": "開幕與國際論壇 2024.04.10",
+      "chapter": "01",
+      "minutes": 0.7
+    },
+    {
+      "n": 10,
+      "title": "設置辦法三項任務（一）",
+      "chapter": "01",
+      "audience": [
+        "government"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 11,
+      "title": "設置辦法三項任務（二）",
+      "chapter": "01",
+      "audience": [
+        "government"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 12,
+      "title": "02 Core Proposition 分隔頁",
+      "chapter": "02",
+      "role": "divider",
+      "minutes": 0.2
+    },
+    {
+      "n": 13,
+      "title": "閉環證據鏈 Measure→Design→Prescribe",
+      "chapter": "02",
+      "minutes": 1.5
+    },
+    {
+      "n": 14,
+      "title": "空間與經費來源",
+      "chapter": "02",
+      "audience": [
+        "government",
+        "university"
+      ],
+      "minutes": 1,
+      "note": "不放中心總預算數字"
+    },
+    {
+      "n": 15,
+      "title": "Lab 301 分隔頁",
+      "chapter": "03",
+      "lab": "301",
+      "role": "divider",
+      "minutes": 0.2
+    },
+    {
+      "n": 16,
+      "title": "Lab 301 健康景觀智能室（一）",
+      "chapter": "03",
+      "lab": "301",
+      "minutes": 1
+    },
+    {
+      "n": 17,
+      "title": "Lab 301 健康景觀智能室（二）",
+      "chapter": "03",
+      "lab": "301",
+      "minutes": 1
+    },
+    {
+      "n": 18,
+      "title": "HealthCloud",
+      "chapter": "03",
+      "lab": "301",
+      "minutes": 1
+    },
+    {
+      "n": 19,
+      "title": "Lab 301 影片",
+      "chapter": "03",
+      "lab": "301",
+      "video": true,
+      "minutes": 2.5
+    },
+    {
+      "n": 20,
+      "title": "七站工具鏈",
+      "chapter": "03",
+      "lab": "301",
+      "audience": [
+        "enterprise",
+        "university"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 21,
+      "title": "Lab 302 分隔頁",
+      "chapter": "03",
+      "lab": "302",
+      "role": "divider",
+      "minutes": 0.2
+    },
+    {
+      "n": 22,
+      "title": "Lab 302 ENVI-met 微氣候模擬（一）",
+      "chapter": "03",
+      "lab": "302",
+      "minutes": 1
+    },
+    {
+      "n": 23,
+      "title": "Lab 302 ENVI-met 微氣候模擬（二）",
+      "chapter": "03",
+      "lab": "302",
+      "minutes": 1
+    },
+    {
+      "n": 24,
+      "title": "Lab 302 ENVI-met 微氣候模擬（三）",
+      "chapter": "03",
+      "lab": "302",
+      "minutes": 1
+    },
+    {
+      "n": 25,
+      "title": "Lab 302 ENVI-met 微氣候模擬（四）",
+      "chapter": "03",
+      "lab": "302",
+      "minutes": 1
+    },
+    {
+      "n": 26,
+      "title": "Lab 302 ENVI-met 微氣候模擬（五）",
+      "chapter": "03",
+      "lab": "302",
+      "minutes": 1
+    },
+    {
+      "n": 27,
+      "title": "Lab 302 ENVI-met 微氣候模擬（六）",
+      "chapter": "03",
+      "lab": "302",
+      "minutes": 1
+    },
+    {
+      "n": 28,
+      "title": "Lab 302 ENVI-met 微氣候模擬（七）",
+      "chapter": "03",
+      "lab": "302",
+      "minutes": 1
+    },
+    {
+      "n": 29,
+      "title": "Lab 303 分隔頁",
+      "chapter": "03",
+      "lab": "303",
+      "role": "divider",
+      "minutes": 0.2
+    },
+    {
+      "n": 30,
+      "title": "Lab 303 VR 設備（一）",
+      "chapter": "03",
+      "lab": "303",
+      "minutes": 1
+    },
+    {
+      "n": 31,
+      "title": "Lab 303 VR 設備（二）",
+      "chapter": "03",
+      "lab": "303",
+      "minutes": 1
+    },
+    {
+      "n": 32,
+      "title": "Lab 303 360VR 教材（一）",
+      "chapter": "03",
+      "lab": "303",
+      "audience": [
+        "school",
+        "university"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 33,
+      "title": "Lab 303 360VR 教材（二）",
+      "chapter": "03",
+      "lab": "303",
+      "audience": [
+        "school",
+        "university"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 34,
+      "title": "Lab 303 傷口疼痛（一）",
+      "chapter": "03",
+      "lab": "303",
+      "minutes": 1
+    },
+    {
+      "n": 35,
+      "title": "Lab 303 影片（一）",
+      "chapter": "03",
+      "lab": "303",
+      "video": true,
+      "minutes": 2.5
+    },
+    {
+      "n": 36,
+      "title": "Lab 303 傷口疼痛（二）",
+      "chapter": "03",
+      "lab": "303",
+      "minutes": 1
+    },
+    {
+      "n": 37,
+      "title": "Lab 303 影片（二）",
+      "chapter": "03",
+      "lab": "303",
+      "video": true,
+      "minutes": 2.5
+    },
+    {
+      "n": 38,
+      "title": "Lab 303 影片（三）",
+      "chapter": "03",
+      "lab": "303",
+      "video": true,
+      "minutes": 2.5
+    },
+    {
+      "n": 39,
+      "title": "研究成果：病患照護",
+      "chapter": "04",
+      "audience": [
+        "government",
+        "university",
+        "enterprise"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 40,
+      "title": "研究成果：高齡與學童",
+      "chapter": "04",
+      "audience": [
+        "government",
+        "school"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 41,
+      "title": "研究成果：北區農村綠色照顧（一）",
+      "chapter": "04",
+      "audience": [
+        "government"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 42,
+      "title": "研究成果：北區農村綠色照顧（二）",
+      "chapter": "04",
+      "audience": [
+        "government"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 43,
+      "title": "Lab 305 IVR 研究選輯 總覽",
+      "chapter": "03",
+      "lab": "305",
+      "minutes": 1
+    },
+    {
+      "n": 44,
+      "title": "Lab 305 IVR 研究（一）",
+      "chapter": "03",
+      "lab": "305",
+      "minutes": 1
+    },
+    {
+      "n": 45,
+      "title": "Lab 305 IVR 研究（二）",
+      "chapter": "03",
+      "lab": "305",
+      "minutes": 1
+    },
+    {
+      "n": 46,
+      "title": "Lab 305 IVR 研究（三）",
+      "chapter": "03",
+      "lab": "305",
+      "minutes": 1
+    },
+    {
+      "n": 47,
+      "title": "Lab 305 IVR 研究（四）",
+      "chapter": "03",
+      "lab": "305",
+      "minutes": 1
+    },
+    {
+      "n": 48,
+      "title": "Lab 305 IVR 研究（五）",
+      "chapter": "03",
+      "lab": "305",
+      "minutes": 1
+    },
+    {
+      "n": 49,
+      "title": "Lab 304 全景影院 CAVE VR（一）",
+      "chapter": "03",
+      "lab": "304",
+      "minutes": 1
+    },
+    {
+      "n": 50,
+      "title": "Lab 304 全景影院 CAVE VR（二）",
+      "chapter": "03",
+      "lab": "304",
+      "minutes": 1
+    },
+    {
+      "n": 51,
+      "title": "旗艦案例：CAVE 超慢跑與慢性下背痛（一）",
+      "chapter": "04",
+      "lab": "304",
+      "minutes": 1
+    },
+    {
+      "n": 52,
+      "title": "旗艦案例 影片",
+      "chapter": "04",
+      "lab": "304",
+      "video": true,
+      "minutes": 2.5
+    },
+    {
+      "n": 53,
+      "title": "旗艦案例：依介入對象分群",
+      "chapter": "04",
+      "lab": "304",
+      "minutes": 1
+    },
+    {
+      "n": 54,
+      "title": "05 人才與教育 分隔頁",
+      "chapter": "05",
+      "role": "divider",
+      "minutes": 0.2,
+      "note": "位置在 55 之前"
+    },
+    {
+      "n": 55,
+      "title": "委託研究計畫",
+      "chapter": "04",
+      "audience": [
+        "enterprise",
+        "government"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 56,
+      "title": "課程",
+      "chapter": "05",
+      "audience": [
+        "university",
+        "school"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 57,
+      "title": "學生創業",
+      "chapter": "05",
+      "audience": [
+        "university",
+        "school",
+        "enterprise"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 58,
+      "title": "展覽與科普（一）",
+      "chapter": "05",
+      "audience": [
+        "school",
+        "government"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 59,
+      "title": "展覽與科普（二）",
+      "chapter": "05",
+      "audience": [
+        "school",
+        "government"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 60,
+      "title": "展覽與科普（三）",
+      "chapter": "05",
+      "audience": [
+        "school"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 61,
+      "title": "06 國際平台 分隔頁",
+      "chapter": "06",
+      "role": "divider",
+      "minutes": 0.2
+    },
+    {
+      "n": 62,
+      "title": "國際平台 八校",
+      "chapter": "06",
+      "audience": [
+        "university"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 63,
+      "title": "已簽合作",
+      "chapter": "06",
+      "audience": [
+        "university",
+        "government"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 64,
+      "title": "UIUC 三度接觸（一）",
+      "chapter": "06",
+      "audience": [
+        "university"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 65,
+      "title": "UIUC 三度接觸（二）",
+      "chapter": "06",
+      "audience": [
+        "university"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 66,
+      "title": "NTU–UIUC 聯合中心",
+      "chapter": "06",
+      "audience": [
+        "university"
+      ],
+      "minutes": 1
+    },
+    {
+      "n": 67,
+      "title": "07 2026 遠見 USR 首獎（一）",
+      "chapter": "07",
+      "minutes": 0.7
+    },
+    {
+      "n": 68,
+      "title": "2026 遠見 USR 首獎（二）",
+      "chapter": "07",
+      "minutes": 0.7
+    },
+    {
+      "n": 69,
+      "title": "2026 遠見 USR 首獎（三）",
+      "chapter": "07",
+      "minutes": 0.7
+    },
+    {
+      "n": 70,
+      "title": "08 未來三年 三項承諾（一）",
+      "chapter": "08",
+      "minutes": 1
+    },
+    {
+      "n": 71,
+      "title": "未來三年 三項承諾（二）",
+      "chapter": "08",
+      "minutes": 1
+    },
+    {
+      "n": 72,
+      "title": "謝謝 Thank you",
+      "chapter": null,
+      "role": "closing",
+      "always": true,
+      "minutes": 0.2
+    }
+  ],
+  "groups": [
+    {
+      "id": "front",
+      "title": "封面、今日流程、簡報架構、核心宣稱、組織架構",
+      "slides": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "id": "ch01",
+      "title": "01 為什麼是現在 Why Now",
+      "slides": [
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ]
+    },
+    {
+      "id": "ch02",
+      "title": "02 核心主張 Core Proposition",
+      "slides": [
+        12,
+        13,
+        14
+      ]
+    },
+    {
+      "id": "lab301",
+      "title": "Lab 301 健康景觀智能室（張俊彥）",
+      "slides": [
+        15,
+        16,
+        17,
+        18,
+        19,
+        20
+      ]
+    },
+    {
+      "id": "lab302",
+      "title": "Lab 302 療癒環境規劃室（林寶秀）",
+      "slides": [
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28
+      ]
+    },
+    {
+      "id": "lab303",
+      "title": "Lab 303 景觀環境模擬室（陳惠美・鄭佳昆）",
+      "slides": [
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38
+      ]
+    },
+    {
+      "id": "outcome",
+      "title": "04 研究成果：病患照護、高齡與學童、北區農村綠色照顧",
+      "slides": [
+        39,
+        40,
+        41,
+        42
+      ]
+    },
+    {
+      "id": "lab305",
+      "title": "Lab 305 IVR 研究選輯（鄭佳昆）",
+      "slides": [
+        43,
+        44,
+        45,
+        46,
+        47,
+        48
+      ]
+    },
+    {
+      "id": "lab304",
+      "title": "Lab 304 全景影院（張伯茹）＋ 旗艦案例 CAVE 超慢跑",
+      "slides": [
+        49,
+        50,
+        51,
+        52,
+        53
+      ]
+    },
+    {
+      "id": "ch05",
+      "title": "05 人才與教育：課程、學生創業、展覽與科普",
+      "slides": [
+        54,
+        56,
+        57,
+        58,
+        59,
+        60
+      ]
+    },
+    {
+      "id": "commis",
+      "title": "04 委託研究計畫",
+      "slides": [
+        55
+      ]
+    },
+    {
+      "id": "ch06",
+      "title": "06 國際平台：八校、已簽合作、UIUC、NTU–UIUC 聯合中心",
+      "slides": [
+        61,
+        62,
+        63,
+        64,
+        65,
+        66
+      ]
+    },
+    {
+      "id": "ch07",
+      "title": "07 2026 遠見 USR 首獎",
+      "slides": [
+        67,
+        68,
+        69
+      ]
+    },
+    {
+      "id": "ch08",
+      "title": "08 未來三年 三項承諾",
+      "slides": [
+        70,
+        71
+      ]
+    },
+    {
+      "id": "closing",
+      "title": "謝謝 Thank you",
+      "slides": [
+        72
+      ]
+    }
+  ],
+  "_comment_groups": "選頁區塊（後台「選用頁次」依此分組，可整區勾選）。順序依實體頁序；章節編號不連續是母簡報本身的現象。"
 }
