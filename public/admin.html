@@ -36,6 +36,7 @@
   <header class="flex flex-wrap items-center gap-3">
     <h1 class="text-xl font-semibold mr-auto">GHRC 參訪 · 主辦端</h1>
     <span class="muted" id="backendInfo"></span>
+    <span id="previewBadge" class="text-sm px-2 py-0.5 rounded-lg bg-amber-100 text-amber-900" hidden>預覽站 · 資料獨立沙箱，看不到正式站的參訪</span>
     <span id="authBox" class="flex items-center gap-2">
       <input type="password" id="token" placeholder="ADMIN_TOKEN" class="!w-48" autocomplete="off">
       <button class="btn btn-soft" id="tokenSave">登入</button>
@@ -339,6 +340,9 @@
   $("token").addEventListener("keydown", (e) => { if (e.key === "Enter") $("tokenSave").click(); });
   $("logout").onclick = async () => { forgetLegacy(); await api("/api/session", { method: "DELETE" }); $("token").value = ""; setAuth(false); $("backendInfo").textContent = ""; $("token").focus(); };
   function setAuth(ok) { $("authBox").hidden = ok; $("authOk").hidden = !ok; }
+  // Netlify 的預覽／分支部署用自己的 Blobs（netlify/lib/store.mts 刻意這樣，測試資料不會混進正式資料）
+  const isPreviewSite = /--/.test(location.hostname) && /\.netlify\.app$/.test(location.hostname);
+  if (isPreviewSite) $("previewBadge").hidden = false;
 
   async function api(path, opts = {}) {
     const t = token();
@@ -464,7 +468,13 @@
     try { await ensureIndexes(); } catch (e) { $("slideGrid").innerHTML = ""; return dnote(`頁次索引載入失敗（${e.message || e}），請重新整理頁面。`, "err"); }
     let id = $("deckVisitSelect").value;
     if (!id && !(state.visits || []).length) { await loadVisits(); id = $("deckVisitSelect").value; }
-    if (!id) { state.deckVisit = null; $("deckWork").hidden = true; return dnote("還沒有參訪，先到「訪前」建一場。", "err"); }
+    if (!id) {
+      state.deckVisit = null; $("deckWork").hidden = true;
+      $("deckStatus").className = "text-sm err";
+      $("deckStatus").innerHTML = `這裡還沒有任何參訪，所以沒有東西可以選頁。${isPreviewSite ? "（預覽站的資料是獨立的，正式站的參訪不會出現在這裡）" : ""} <button type="button" class="underline" id="deckGoPre">到「訪前」建一場</button>`;
+      $("deckGoPre").onclick = () => showTab("pre");
+      return;
+    }
     const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
     if (!r.ok) { state.deckVisit = null; $("deckWork").hidden = true; dnote(`讀不到這場參訪：${r.error}`, "err"); return flash(r.error, "err"); }
     state.deckVisit = r.visit;
