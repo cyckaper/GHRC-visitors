@@ -197,7 +197,8 @@ try {
   // ── 來賓端：首頁（沒有參訪代碼）一律從訪前開始 ──
   await page.goto(`${base}/`);
   await page.waitForSelector("#lab-303");
-  check((await page.textContent("#labsTitle")).includes("will visit") && (await page.isHidden("#respond")) && (await page.isHidden("#emailSec")), "landing page without a visit starts in the pre-visit state");
+  check((await page.textContent("#labsTitle")) === "The five laboratories" && (await page.isHidden("#respond")) && (await page.isHidden("#emailSec")), "landing page without a visit starts in the pre-visit state and does not claim a visit is happening today");
+  check(!(await page.textContent("#labsTitle2")).includes("今天"), "…and the Chinese heading does not say 今天 either");
 
   // ── 來賓端（日期在未來 → 訪前措辭） ──
   await page.goto(`${base}/2026-10-07-uwa`);
