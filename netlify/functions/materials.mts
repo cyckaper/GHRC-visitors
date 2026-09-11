@@ -1,6 +1,7 @@
 import { fail, json, nowISO, readJSON, requireAdmin } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import { sanitizeMaterials } from "../../lib/visit.mjs";
+import { triggerDriveSync } from "../lib/drive.mts";
 
 /**
  * 專屬頁面的「當天資料」（訪後信只能承諾頁面上真的有的東西，所以資料要先放上來）。
@@ -30,6 +31,7 @@ export default async (req: Request) => {
     visit.materials = next;
     visit.updated_at = nowISO();
     await store.putVisit(visit);
+    await triggerDriveSync(visit.visit_id);
     return json({ ok: true, materials: next });
   }
 
@@ -40,6 +42,7 @@ export default async (req: Request) => {
     visit.materials = next;
     visit.updated_at = nowISO();
     await store.putVisit(visit);
+    await triggerDriveSync(visit.visit_id);
     return json({ ok: true, materials: next });
   }
 
@@ -69,6 +72,7 @@ export default async (req: Request) => {
     visit.materials = sanitizeMaterials(next);
     visit.updated_at = nowISO();
     await store.putVisit(visit);
+    await triggerDriveSync(visit.visit_id);
     return json({ ok: true, key, url: `/api/media?key=${encodeURIComponent(key)}`, materials: visit.materials });
   }
 

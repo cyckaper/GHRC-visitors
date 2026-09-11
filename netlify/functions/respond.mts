@@ -1,6 +1,7 @@
 import { fail, json, readJSON } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import { isValidVisitId, sanitizeResponse } from "../../lib/visit.mjs";
+import { triggerDriveSync } from "../lib/drive.mts";
 
 /**
  * POST /api/respond  來賓端回覆（訪後信三個項目、現場留信箱）。公開端點。
@@ -22,5 +23,7 @@ export default async (req: Request) => {
   if (!hasContent) return fail(400, "沒有內容");
   if (!row.anonymous && row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) return fail(400, "email 格式不對");
   await store.appendResponse(row);
+  // 來賓的回覆也自動備份（不具名的內容在 sanitizeResponse 就已經沒有身分）
+  await triggerDriveSync(visitId);
   return json({ ok: true, anonymous: row.anonymous });
 };

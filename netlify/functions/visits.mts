@@ -2,6 +2,7 @@ import { fail, json, nowISO, readJSON, requireAdmin, siteUrl } from "../lib/http
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
 import { briefingBlockMinutes, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, toCSV } from "../../lib/visit.mjs";
+import { triggerDriveSync } from "../lib/drive.mts";
 
 /**
  * GET  /api/visits?id=X&public=1   來賓端可見子集（不需授權）
@@ -56,6 +57,7 @@ export default async (req: Request) => {
     merged.created_at = existing?.created_at || nowISO();
     merged.updated_at = nowISO();
     await store.putVisit(merged);
+    await triggerDriveSync(merged.visit_id);
     return json({ ok: true, visit: merged });
   }
 

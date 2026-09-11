@@ -2,6 +2,7 @@ import { fail, json, nowISO, readJSON, requireAdmin } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import { readSignbook } from "../lib/ai.mts";
 import { sanitizeResponse } from "../../lib/visit.mjs";
+import { triggerDriveSync } from "../lib/drive.mts";
 
 /**
  * POST /api/signbook {visit_id, image: dataURL|base64, media_type}   → 存照片、AI 讀手寫字，回傳 entries 供確認（存在 visit.signbook）
@@ -29,6 +30,7 @@ export default async (req: Request) => {
     visit.signbook = { ...visit.signbook, entries, read_at: visit.signbook?.read_at || nowISO() };
     visit.updated_at = nowISO();
     await store.putVisit(visit);
+    await triggerDriveSync(visit.visit_id);
     return json({ ok: true, saved: n });
   }
 
@@ -47,6 +49,7 @@ export default async (req: Request) => {
     visit.signbook = { photo_key: key, transcript: read.transcript, entries: read.entries, read_at: nowISO() };
     visit.updated_at = nowISO();
     await store.putVisit(visit);
+    await triggerDriveSync(visit.visit_id);
     return json({ ok: true, photo_key: key, ...read });
   } catch (e: any) {
     visit.signbook = { ...visit.signbook, photo_key: key };

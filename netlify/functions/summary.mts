@@ -4,6 +4,7 @@ import { getStore } from "../lib/store.mts";
 import { digestSuggestions, summarizeVisit } from "../lib/ai.mts";
 import type { SlidePerf } from "../lib/types.mts";
 import { reconcileTimeline } from "../../lib/timeline.mjs";
+import { triggerDriveSync } from "../lib/drive.mts";
 
 /**
  * POST /api/summary {visit_id}      → 一頁摘要（存在 visit.summary），並寫 slide_performance
@@ -59,6 +60,7 @@ export default async (req: Request) => {
         }));
       await store.appendSlidePerformance(rows);
     }
+    await triggerDriveSync(visit.visit_id);
     return json({ ok: true, summary, timeline });
   } catch (e: any) {
     return fail(502, `摘要失敗：${e?.message || e}`);

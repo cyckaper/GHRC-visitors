@@ -2,6 +2,7 @@ import { env, fail, json, nowISO, readJSON, requireAdmin } from "../lib/http.mts
 import { getStore } from "../lib/store.mts";
 import { extractDictation, transcribeAudio } from "../lib/ai.mts";
 import { sanitizeResponse } from "../../lib/visit.mjs";
+import { triggerDriveSync } from "../lib/drive.mts";
 
 /**
  * 主持人三十秒口述（工作包 4.3 動作二）。
@@ -54,6 +55,7 @@ export default async (req: Request) => {
         note: [ex.questions?.length ? `問題：${ex.questions.join("；")}` : "", ex.cooperation ? `合作：${ex.cooperation}` : "", ex.follow_ups?.length ? `後續：${ex.follow_ups.join("；")}` : ""].filter(Boolean).join("\n"),
       }),
     );
+    await triggerDriveSync(visit.visit_id);
     return json({ ok: true });
   }
 
@@ -80,6 +82,7 @@ export default async (req: Request) => {
     visit.dictation = { audio_key: audioKey, transcript, extracted, recorded_at: visit.dictation?.recorded_at || nowISO() };
     visit.updated_at = nowISO();
     await store.putVisit(visit);
+    await triggerDriveSync(visit.visit_id);
     return json({ ok: true, audio_key: audioKey, transcript, extracted });
   } catch (e: any) {
     visit.dictation = { ...visit.dictation, audio_key: audioKey, transcript, recorded_at: visit.dictation?.recorded_at || nowISO() };

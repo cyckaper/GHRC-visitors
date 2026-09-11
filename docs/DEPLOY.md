@@ -76,8 +76,10 @@ python3 scripts/slim-master.py "GHRC 介紹簡報2026-9.pptx" --out public/asset
 
 ## 6.5 另存 Google Drive（長期檔案）
 
-後台「資料」分頁選一場參訪 → **備份到 Google Drive**：中心 Drive 的 `GHRC 參訪/<日期> <單位>/` 會多一個資料夾，
-放參訪資料.json、回覆.csv、動線.csv、一頁摘要.md、簽名簿照片、主持人口述音檔、當天簡報.pdf、現場合照。同名覆蓋，可以重複按。
+**設定好之後是全自動的**：每次存檔、收工兩動作、放上當天資料、寄出訪後信、產一頁摘要，以及來賓送出回覆，
+都會自動把那一場同步到中心 Drive 的 `GHRC 參訪/<日期> <單位>/`，裡面放參訪資料.json、回覆.csv、動線.csv、
+一頁摘要.md、簽名簿照片、主持人口述音檔、當天簡報.pdf、現場合照。同名覆蓋，不會愈備份愈多份。
+即時同步若因為網路或部署漏掉，每晚台北時間兩點的 `drive-cron` 會補上。後台「資料」分頁的「立即備份到 Drive」只是手動補救。
 
 Netlify 環境變數（沿用寄信那組 Google OAuth 也可以，但 refresh token 必須含 `drive.file` 權限）：
 
