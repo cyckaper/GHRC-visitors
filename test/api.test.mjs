@@ -355,6 +355,32 @@ test("drive auto-backup: the background sync endpoint needs the token and stands
   assert.equal((await api("/api/respond", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visit_id: visitId, anonymous: true, suggestion: "auto-backup should not break this" }) })).status, 200);
 });
 
+test("session: 貼一次 ADMIN_TOKEN 就換到 cookie，之後這台瀏覽器不必再授權", async () => {
+  assert.equal((await api("/api/session")).status, 401, "no cookie, no token → not signed in");
+  const bad = await api("/api/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "nope" }) });
+  assert.equal(bad.status, 401);
+  assert.ok(!bad.headers.get("set-cookie"), "a wrong token never gets a cookie");
+
+  const ok = await api("/api/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "test-token" }) });
+  assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  const setCookie = ok.headers.get("set-cookie") || "";
+  assert.match(setCookie, /^ghrc_admin=v1\.\d+\.[0-9a-f]{64};/, "cookie is a signed value, never the token itself");
+  assert.ok(!setCookie.includes("test-token"), "the admin token never leaves in the cookie");
+  assert.ok(/HttpOnly/.test(setCookie) && /SameSite=Strict/.test(setCookie) && /Max-Age=15552000/.test(setCookie), setCookie);
+  const cookie = { cookie: setCookie.split(";")[0] };
+
+  // cookie 就能當授權用：不必再帶 Bearer
+  const list = await api("/api/visits", { headers: cookie });
+  assert.equal(list.status, 200, "the cookie alone authorises the admin API");
+  assert.equal((await api("/api/session", { headers: cookie })).status, 200, "still signed in");
+  assert.equal((await api("/api/visits", { headers: { cookie: "ghrc_admin=v1.99999999999999.0000000000000000000000000000000000000000000000000000000000000000" } })).status, 401, "a forged signature is refused");
+  assert.equal((await api("/api/visits", { headers: { cookie: "ghrc_admin=v1.1000000000000.deadbeef" } })).status, 401, "an expired or malformed cookie is refused");
+
+  const out = await api("/api/session", { method: "DELETE" });
+  assert.equal(out.status, 200);
+  assert.match(out.headers.get("set-cookie") || "", /^ghrc_admin=; .*Max-Age=0/, "logout clears the cookie");
+});
+
 test("drive: needsSync only fires when something changed after the last backup", async () => {
   const { needsSync, plan } = await import("../netlify/lib/drive.mts");
   const base = { visit_id: "x", date: "2026-11-17", updated_at: "2026-11-17T10:00:00.000Z", org: { name: "X" }, materials: { deck_pdf: "", photos: [], links: [] } };

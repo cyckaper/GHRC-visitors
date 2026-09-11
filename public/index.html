@@ -263,8 +263,9 @@
     }
   }
 
-  // 五間研究室的老師卡片：先排今天的動線，其餘放後面；標題依階段用「將參訪／今天參訪／參訪過」
-  const labsKey = phase === "before" ? "labs" : phase === "after" ? "labs_after" : visit ? "labs_today" : "labs_generic";
+  // 五間研究室的老師卡片：先排今天的動線，其餘放後面；標題依階段用「將參訪／今天參訪／參訪過」，
+  // 沒有參訪代碼的首頁沒有「今天」可言，用中性的「五間研究室」
+  const labsKey = !visit ? "labs_generic" : phase === "before" ? "labs" : phase === "after" ? "labs_after" : "labs_today";
   $("labsTitle").textContent = T(labsKey);
   $("labsTitle2").textContent = T2(labsKey);
   const steps = visit && visit.itinerary ? visit.itinerary.map((s) => ({ ...s, room: String(s.room) })) : [];
