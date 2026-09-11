@@ -54,6 +54,11 @@ const check = (cond, msg) => { if (!cond) throw new Error(`FAIL: ${msg}`); conso
 try {
   // ── 主辦端 ──
   await page.goto(`${base}/admin.html`);
+  // 還沒登入就先點「簡報」：要說是沒登入，不要怪到「還沒有參訪」頭上（登入是綁裝置的，換手機就會遇到）
+  await page.click('[data-tab="deck"]');
+  await page.waitForFunction(() => /登入/.test(document.getElementById("deckStatus").textContent));
+  check(!(await page.textContent("#deckStatus")).includes("還沒有任何參訪"), "not signed in: the deck tab says so instead of blaming missing visits");
+  await page.click('[data-tab="pre"]');
   await page.fill("#token", "e2e-token");
   await page.click("#tokenSave");
   await page.waitForFunction(() => document.getElementById("backendInfo").textContent.includes("file"));
