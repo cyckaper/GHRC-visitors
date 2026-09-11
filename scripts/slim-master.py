@@ -265,6 +265,21 @@ def remove_unreferenced_media(root, report):
                 os.remove(os.path.join(media_dir, fn))
                 removed += 1
     report.append(f"  刪除未被引用的 media {removed} 個（{freed/1e6:.1f} MB）")
+    drop_dangling_overrides(root)
+
+
+def drop_dangling_overrides(root):
+    """指向不存在 part 的 Override 一律清掉。真的 PowerPoint 檔把 mp4 宣告成 Override，
+    抽掉影片後留著這條，PowerPoint 會說檔案壞了。"""
+    ct = read(root, "[Content_Types].xml")
+    def keep(m):
+        part = re.search(r'PartName="([^"]+)"', m.group(0))
+        if not part:
+            return m.group(0)
+        return m.group(0) if os.path.exists(os.path.join(root, *part.group(1).lstrip("/").split("/"))) else ""
+    out = re.sub(r"<Override\b[^>]*/>", keep, ct)
+    if out != ct:
+        write(root, "[Content_Types].xml", out)
 
 
 def validate(root):

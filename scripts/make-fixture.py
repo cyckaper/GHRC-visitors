@@ -8,10 +8,12 @@
 """
 import io
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 
 from PIL import Image
 from pptx import Presentation
@@ -158,5 +160,26 @@ add_title(s, "Thank you", "謝謝")
 s.shapes.add_picture(portrait, Inches(11), Inches(5.5), width=Inches(1.2))
 
 prs.save(out)
+
+
+def media_as_override(path):
+    """真的 PowerPoint 檔把 media 宣告成 Override，python-pptx 用 Default。
+    fixture 照真檔的做法，抽掉影片後才測得到「Override 指向不存在的 part」。"""
+    with zipfile.ZipFile(path) as z:
+        names = z.namelist()
+        blobs = {n: z.read(n) for n in names}
+    mp4s = [n for n in names if n.lower().endswith(".mp4")]
+    if not mp4s:
+        return
+    ct = blobs["[Content_Types].xml"].decode("utf-8")
+    ct = re.sub(r'<Default\b[^>]*Extension="mp4"[^>]*/>', "", ct, flags=re.I)
+    ct = ct.replace("</Types>", "".join(f'<Override PartName="/{n}" ContentType="video/mp4"/>' for n in mp4s) + "</Types>")
+    blobs["[Content_Types].xml"] = ct.encode("utf-8")
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        for n in names:
+            z.writestr(n, blobs[n])
+
+
+media_as_override(out)
 shutil.rmtree(tmpdir, ignore_errors=True)
 print(f"wrote {out} ({os.path.getsize(out) / 1e6:.1f} MB, {len(prs.slides)} slides, video={'real' if made else 'dummy'})")
