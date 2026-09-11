@@ -91,8 +91,15 @@ test("plan → programme, itinerary, slides (always-slides present), then save",
   const kinds = planned.programme.map((b) => b.kind);
   assert.ok(kinds.includes("discussion"), "programme always has a 綜合討論 block");
   assert.ok(kinds.indexOf("tour") < kinds.indexOf("discussion"), "討論 comes after the tour");
-  assert.equal(planned.programme.find((b) => b.kind === "discussion").title_2nd, "綜合討論");
-  assert.ok(planned.programme.find((b) => b.kind === "discussion").minutes === undefined || true);
+  const disc = planned.programme.find((b) => b.kind === "discussion");
+  assert.equal(disc.title_en, "General discussion");
+  assert.equal(disc.title_2nd, "", "English visit: second-language title stays empty");
+  // 90 分鐘：總體介紹 20、研究室 5×11、合照 5、綜合討論 10（不夠時先縮研究室）
+  const mins = (b) => { const [sh, sm] = b.start.split(":").map(Number); const [eh, em] = b.end.split(":").map(Number); return eh * 60 + em - (sh * 60 + sm); };
+  assert.equal(mins(planned.programme.find((b) => b.kind === "briefing")), 20);
+  assert.equal(mins(disc), 10);
+  assert.equal(planned.itinerary[0].minutes, 20);
+  assert.ok(planned.itinerary.slice(1).every((s) => s.minutes === 11));
   assert.ok(planned.itinerary[0].minutes > 0);
   assert.equal(planned.itinerary.reduce((s, x) => s + x.minutes, 0) <= 90, true);
   const saved = await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(planned) });

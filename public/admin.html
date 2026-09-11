@@ -105,7 +105,7 @@
         <table id="programmeTable"><thead><tr><th>開始</th><th>結束</th><th>類型</th><th>英文</th><th>第二語言</th><th>頁碼</th><th></th></tr></thead><tbody></tbody></table>
       </div>
       <div>
-        <label class="f">現場動線（第一站固定是總體介紹；研究室留 0 表示不去）</label>
+        <label class="f">現場動線（第一站固定是總體介紹；預設總體介紹 20 分、每間 20 分，剩下的時間排進綜合討論；研究室留 0 表示不去）</label>
         <div class="flex flex-wrap gap-2" id="itinerary"></div>
       </div>
       <div>
@@ -299,7 +299,7 @@
     for (const id of ["wrapVisitSelect", "postVisitSelect"]) { $(id).innerHTML = opts || `<option value="">（尚無參訪）</option>`; if (pick) $(id).value = pick.visit_id; }
   }
   function emptyVisit() {
-    return { visit_id: "", date: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10), start_time: "10:00", duration_minutes: 90, org: { name: "", name_local: "", type: "university", country: "" }, guests: [], headcount: 0, contact_teacher: "張俊彥", purpose: "", interests: [], language: "en", programme: [], itinerary: ROOMS.map((room) => ({ room, minutes: 8 })), slides: [], text_edits: [], letters: {}, deck: {}, signbook: {}, dictation: {}, status: "draft" };
+    return { visit_id: "", date: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10), start_time: "10:00", duration_minutes: 150, org: { name: "", name_local: "", type: "university", country: "" }, guests: [], headcount: 0, contact_teacher: "張俊彥", purpose: "", interests: [], language: "en", programme: [], itinerary: [{ room: "briefing", minutes: 20, location: "" }, ...ROOMS.map((room) => ({ room, minutes: 20 }))], slides: [], text_edits: [], letters: {}, deck: {}, signbook: {}, dictation: {}, status: "draft" };
   }
 
   // ── 訪前：表單 ──

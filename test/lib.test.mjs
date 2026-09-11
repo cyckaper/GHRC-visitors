@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { reconcileTimeline, plannedEntries } from "../lib/timeline.mjs";
-import { makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit } from "../lib/visit.mjs";
+import { makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -33,6 +33,21 @@ test("legacy itinerary without a briefing step still starts at the tour block", 
   const rows = plannedEntries({ ...visit, itinerary: visit.itinerary.slice(1) });
   assert.equal(rows.length, 4);
   assert.equal(rows[0].planned.toISOString(), "2026-10-07T02:20:00.000Z");
+});
+
+test("programme allocation: 20 + 5×20 + photo, remainder to 綜合討論; shrinks rooms first when short", () => {
+  const a = allocateProgramme(150, 5);
+  assert.deepEqual([a.briefing, a.perRoom, a.photo, a.discussion], [20, 20, 5, 25]);
+  const b = allocateProgramme(180, 5);
+  assert.equal(b.discussion, 55);
+  const c = allocateProgramme(90, 5); // 不夠：研究室縮到 11 分，綜合討論保底 10
+  assert.deepEqual([c.briefing, c.perRoom, c.photo, c.discussion], [20, 11, 5, 10]);
+  const d = allocateProgramme(45, 5); // 更短：沒合照，研究室 5 分，總體介紹縮到 10
+  assert.deepEqual([d.briefing, d.perRoom, d.photo, d.discussion], [10, 5, 0, 10]);
+  const e = allocateProgramme(120, 3);
+  assert.deepEqual([e.briefing, e.perRoom, e.photo, e.discussion], [20, 20, 5, 35]);
+  assert.equal(emptyVisit().duration_minutes, 150);
+  assert.ok(emptyVisit().itinerary.slice(1).every((s) => s.minutes === 20));
 });
 
 test("the route always starts with a briefing step", () => {
