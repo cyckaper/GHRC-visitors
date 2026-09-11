@@ -141,6 +141,19 @@ try {
   await writeFile(pngPath, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64"));
   await page.setInputFiles("#photoFiles", pngPath);
   await page.waitForSelector("#photoList img");
+  check((await page.textContent("#materialsStatus")).includes("已放上 1 張"), "the photo upload reports back where the work is happening, not only at the top of the page");
+
+  // 縮圖失敗（iPhone 的 HEIC、壞檔）不能沒有反應：退回原檔上傳，狀態列要有交代
+  const badPath = path.join(tmp, "broken.jpg");
+  await writeFile(badPath, Buffer.from("這不是圖檔，瀏覽器解不開"));
+  await page.evaluate(() => (document.getElementById("materialsStatus").textContent = ""));
+  await page.setInputFiles("#photoFiles", badPath);
+  await page.waitForFunction(() => /已放上 1 張合照/.test(document.getElementById("materialsStatus").textContent), null, { timeout: 20000 });
+  check((await page.$$("#photoList img")).length === 2, "a photo the browser cannot decode is uploaded as-is instead of hanging with no feedback");
+  await page.click("#photoList [data-remove-photo]:last-of-type");
+  await page.waitForFunction(() => document.querySelectorAll("#photoList img").length === 1);
+  check(true, "removing a photo takes it off the visit page");
+
   await page.click("#linkAdd");
   await page.fill("#linkTable tbody tr:last-child td:nth-child(1) input", "Lab 303 papers");
   await page.fill("#linkTable tbody tr:last-child td:nth-child(2) input", "https://scholar.example/303");

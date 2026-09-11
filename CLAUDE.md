@@ -229,7 +229,7 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
 ### 4. 長期檔案與回饋下一次簡報
 
 - **每場自動備份到 Google Drive**：中心 Drive 的 `GHRC 參訪/<日期> <單位>/` 一場一個資料夾，
-  放參訪資料.json、回覆.csv、動線.csv、一頁摘要.md、簽名簿照片、主持人口述音檔、當天簡報.pdf、現場合照。
+  放參訪資料.json、回覆.csv、動線.csv、一頁摘要.md、簽名簿照片、主持人口述音檔、當天簡報.pdf、現場合照（**用原始檔名**，例如 IMG_0696.jpg；同名的加序號。不用流水號，否則刪掉中間一張時編號往前遞補會蓋掉別張的內容）。
   **不必手動按**：資料寫進去的端點（`visits` 存檔、`signbook`、`transcribe`、`materials`、`letter` 寄出、`summary`、
   來賓的 `respond`）都會呼叫 `lib/drive.mts triggerDriveSync()`，觸發背景函式 `drive-sync-background`
   （Netlify 背景函式，15 分鐘上限，一次把整場搬完；一般函式 10 秒不夠）。`drive-cron` 每晚台北時間兩點掃一次補漏。
@@ -320,7 +320,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - 主辦端 API 用 `Authorization: Bearer ADMIN_TOKEN`；現場訊號用 `SIGNAL_KEY`；`respond` 與 `visits?public=1` 公開。
 - 老師卡片內容 `public/data/labs.json` 的 `confirmed=false` 表示尚待老師確認；照片 `photo` 為 null 時顯示縮寫。
 - **現場動線第一站固定是總體介紹，地點預設 302**：`itinerary[0].room === "briefing"`，`location` 空白就是 302（`lib/visit.mjs DEFAULT_BRIEFING_LOCATION`），之後才是 301–305；`ensureBriefingFirst` 在存檔與排程時強制，AI 排程不決定地點。現場訊號 `room=briefing` 代表簡報室（開總體簡報＝整場起點）。
-- **當天資料** `visit.materials = { deck_pdf, photos[], links[] }`：值是媒體庫 key（`materials/<visit_id>/<file>`）或 https 連結，`sanitizeMaterials` 只留這兩種。上傳走 `/api/materials`（單檔 4.5 MB 以內；更大的 PDF 貼雲端連結）。**訪後信只能承諾頁面上真的有的東西**：`lib/visit.mjs pageContents()` 算出清單交給提示詞（mock 信也照同一份清單）。PDF 由 PowerPoint 另存，再到「收工」放上去。
+- **當天資料** `visit.materials = { deck_pdf, photos[], links[] }`：值是媒體庫 key（`materials/<visit_id>/<file>`）或 https 連結，`sanitizeMaterials` 只留這兩種。上傳走 `/api/materials`（單檔 4.5 MB 以內；更大的 PDF 貼雲端連結）。合照先在瀏覽器縮到長邊 1600px，**縮不動就原檔上傳**（HEIC、壞檔、記憶體不夠都算），進度與錯誤顯示在「動作三」那張卡片上（`#materialsStatus`），不是只在頁面最上方 —— 上傳失敗時人在頁面中段，看不到頂端的提示。**訪後信只能承諾頁面上真的有的東西**：`lib/visit.mjs pageContents()` 算出清單交給提示詞（mock 信也照同一份清單）。PDF 由 PowerPoint 另存，再到「收工」放上去。
 - 產檔在瀏覽器：`admin.html` 先問 `/api/master`（後台上傳的母簡報，4 MB 分塊存在媒體庫 `master/<upload_id>/part-i` ＋ `master/manifest.json`），再 HEAD `/assets/master/slim-master.pptx`（站台對不存在的路徑會回 index.html，所以看 content-type 不看狀態碼）；兩者都沒有時，「產生簡報」在同一個點擊裡同步開檔案選擇視窗，選完立刻產，並提供「把這份母簡報存到站台」。選檔或上傳時若檔案含影片或超過 60 MB，先在瀏覽器裡瘦身（`public/lib/pptx.mjs slimDeck`：抽影片留海報＋「▶ Video」、超過 3 MB 的圖用 canvas 縮到 2000px、清孤兒；規則同 `scripts/slim-master.py`），所以可以直接選 396 MB 的原始母簡報。JSZip 由 cdnjs 載入、QR 用頁面已有的 qrcodejs 畫 canvas（沒有就只放網址文字）。存檔後區塊不放操作說明，只有一行進度與必要時的警告。
 - **來賓端雙語**：英文永遠是主語，第二語言預設中文（中英對照）；`visit.language` 是 ko／ja 時改英韓、英日。流程區塊的 `title_2nd` 空白時用 `i18n.json` 的 `kind_*` 補第二語言。
 - **來賓端依階段換措辭**：訪前（日期在未來，或沒有參訪代碼的首頁）用「將參訪」、不放留信箱與感謝表單；當天才有留信箱與備援按鍵；訪後（日期已過或從感謝信的 `#respond` 進來）用過去式、標題改「感謝蒞臨」。`?phase=before|today|after` 可強制預覽。兩個互動層各有自己的連結，帶連結進來一定看得到（也支援中途換 hash）：`/<visit_id>#email`（留信箱）、`/<visit_id>#respond`（三個回應項目）。**這兩個連結在行程走完後才產出**，列在後台「收工」分頁，不在訪前。

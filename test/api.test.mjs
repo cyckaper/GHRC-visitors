@@ -336,7 +336,7 @@ test("drive backup: lists everything the archive folder should get; refuses to u
   assert.ok(names.some((n) => n.startsWith("簽名簿.")), "signbook photo");
   assert.ok(names.some((n) => n.startsWith("主持人口述.")), "dictation audio");
   assert.ok(names.includes("當天簡報.pdf"), "materials PDF");
-  assert.ok(names.some((n) => n.startsWith("現場合照-01.")), "materials photo");
+  assert.ok(names.includes("photo2.png"), "合照在 Drive 上用原始檔名，不是流水號");
   assert.equal((await api(`/api/drive?id=2026-01-01-nope`, { headers: admin })).status, 404);
   const post = await api("/api/drive", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, key: "visit.json" }) });
   assert.equal(post.status, 503);
@@ -365,7 +365,15 @@ test("drive: needsSync only fires when something changed after the last backup",
   assert.equal(needsSync(backed, [{ submitted_at: "2026-11-17T12:30:00.000Z" }]), true, "a guest replied");
   assert.equal(needsSync(backed, [{ submitted_at: "2026-11-17T10:30:00.000Z" }]), false, "an older reply is already in the backup");
   assert.deepEqual(plan(base).map((i) => i.name), ["參訪資料.json", "回覆.csv", "動線.csv"]);
-  assert.ok(plan({ ...base, summary: "x", signbook: { photo_key: "signbook/x/1.jpg" }, materials: { deck_pdf: "materials/x/a.pdf", photos: ["materials/x/b.jpg"], links: [] } }).map((i) => i.name).includes("現場合照-01.jpg"));
+  // 合照用原始檔名（拿掉上傳時加的時間戳），同名的加序號，不靠流水號——刪掉中間一張才不會蓋到別張
+  const full = plan({
+    ...base,
+    summary: "x",
+    signbook: { photo_key: "signbook/x/1.jpg" },
+    materials: { deck_pdf: "materials/x/a.pdf", photos: ["materials/x/1789133705833-IMG_0696.jpg", "materials/x/1789134238242-IMG_7836.jpg", "materials/x/1789134999999-IMG_0696.jpg", "https://example.com/p.jpg"], links: [] },
+  });
+  assert.deepEqual(full.map((i) => i.name), ["參訪資料.json", "回覆.csv", "動線.csv", "一頁摘要.md", "簽名簿.jpg", "當天簡報.pdf", "IMG_0696.jpg", "IMG_7836.jpg", "IMG_0696-2.jpg"]);
+  assert.equal(full.find((i) => i.name === "IMG_7836.jpg").key, "materials/x/1789134238242-IMG_7836.jpg");
 });
 
 test("static: guest page served for /<visit_id> fallback and admin page exists", async () => {

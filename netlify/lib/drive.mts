@@ -121,6 +121,15 @@ export async function uploadItem(folder: string, name: string, mime: string, byt
 const ext = (key: string) => (key.split(".").pop() || "").toLowerCase();
 const MIME: Record<string, string> = { pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", webm: "audio/webm", m4a: "audio/mp4", mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg" };
 
+/**
+ * 媒體庫 key → 原始檔名：拿掉 `materials/<visit_id>/` 與上傳時加的時間戳，
+ * 合照在 Drive 上就叫 IMG_0696.jpg 而不是流水號（流水號會在中間刪一張時往前遞補、蓋掉別人的內容）。
+ */
+export function originalName(key: string): string {
+  const base = (key.split("/").pop() || key).replace(/^\d{10,}-/, "");
+  return base || key.split("/").pop() || key;
+}
+
 /** 這場參訪要備份的項目（key 是我們自己的代號，name 是 Drive 上的檔名）。 */
 export function plan(visit: Visit): DriveItem[] {
   const items: DriveItem[] = [
@@ -133,7 +142,18 @@ export function plan(visit: Visit): DriveItem[] {
   if (visit.dictation?.audio_key) items.push({ key: visit.dictation.audio_key, name: `主持人口述.${ext(visit.dictation.audio_key) || "webm"}` });
   const m = visit.materials || { deck_pdf: "", photos: [], links: [] };
   if (m.deck_pdf && !/^https?:/i.test(m.deck_pdf)) items.push({ key: m.deck_pdf, name: "當天簡報.pdf" });
-  (m.photos || []).filter((p) => !/^https?:/i.test(p)).forEach((p, i) => items.push({ key: p, name: `現場合照-${String(i + 1).padStart(2, "0")}.${ext(p) || "jpg"}` }));
+  // 同名的合照（兩支手機都叫 IMG_0001.jpg）加序號，不要互相覆蓋
+  const used = new Set(items.map((i) => i.name));
+  const unique = (name: string) => {
+    const dot = name.lastIndexOf(".");
+    const stem = dot > 0 ? name.slice(0, dot) : name;
+    const tail = dot > 0 ? name.slice(dot) : "";
+    let out = name;
+    for (let n = 2; used.has(out); n += 1) out = `${stem}-${n}${tail}`;
+    used.add(out);
+    return out;
+  };
+  (m.photos || []).filter((p) => !/^https?:/i.test(p)).forEach((p) => items.push({ key: p, name: unique(originalName(p)) }));
   return items;
 }
 
