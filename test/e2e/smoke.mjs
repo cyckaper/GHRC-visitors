@@ -66,10 +66,23 @@ try {
   await page.fill("#code", "uwa");
   await page.click("#planBtn");
   await page.waitForFunction(() => document.querySelectorAll("#programmeTable tbody tr").length > 0);
-  check((await page.locator("#slideGrid input[data-slide]:checked").count()) >= 5, "plan selects slides");
   check((await page.locator("#programmeTable tbody tr select").evaluateAll((els) => els.map((e) => e.options[e.selectedIndex].text))).includes("綜合討論"), "programme table shows a 綜合討論 block");
+  check((await page.locator("#tab-pre #slideGrid").count()) === 0, "the pre-visit tab no longer carries the slide picker");
+  check((await page.textContent("#itinerary label:first-child")).includes("總體介紹"), "route starts with the overall briefing");
+  check((await page.inputValue('#itinerary input[data-room="briefing"]')) !== "0", "briefing has minutes");
+  check((await page.inputValue("#itinerary [data-briefing-location]")) === "302", "briefing room defaults to 302");
+  await page.click("#saveBtn");
+  await page.waitForSelector("#afterSave:not([hidden])");
+  const link = await page.textContent("#pageLink");
+  check(link === `${base}/2026-10-07-uwa`, `saved visit has page url ${link}`);
+  check((await page.textContent("#deckState")).includes("已選"), "the pre-visit tab only reports how many slides are picked");
+
+  // ── 簡報分頁：選頁、不用簡報、產檔 ──
+  await page.click("#openDeck");
+  await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-slide]").length > 0);
+  check((await page.inputValue("#deckVisitSelect")) === "2026-10-07-uwa", "「選頁與產生簡報」opens the deck tab on this visit");
+  check((await page.locator("#slideGrid input[data-slide]:checked").count()) >= 5, "the plan's slides are waiting in the deck tab");
   check((await page.locator("#slideGrid fieldset[data-group]").count()) >= 10, "slides are grouped into blocks");
-  const before = await page.locator("#slideGrid input[data-slide]:checked").count();
   await page.click("#slidesNone");
   check((await page.locator("#slideGrid input[data-slide]:checked").count()) === 5, "全不選 keeps only the five always-slides");
   await page.click('#slideGrid [data-group-only="lab302"]');
@@ -80,15 +93,22 @@ try {
   check((await page.locator("#slideGrid input[data-slide]:checked").count()) === 72, "全選 selects every slide");
   await page.click("#slidesNone");
   await page.click('#slideGrid [data-group-only="lab303"]');
-  check(before > 0, "restored a selection for the rest of the flow");
-  check((await page.textContent("#itinerary label:first-child")).includes("總體介紹"), "route starts with the overall briefing");
-  check((await page.inputValue('#itinerary input[data-room="briefing"]')) !== "0", "briefing has minutes");
-  check((await page.inputValue("#itinerary [data-briefing-location]")) === "302", "briefing room defaults to 302");
-  await page.click("#saveBtn");
-  await page.waitForSelector("#afterSave:not([hidden])");
-  const link = await page.textContent("#pageLink");
-  check(link === `${base}/2026-10-07-uwa`, `saved visit has page url ${link}`);
-  check((await page.locator("#downloadSpec").count()) === 0 && (await page.isVisible("#deckBtn")), "pptx button is the primary action; no spec JSON download");
+  await page.click("#slidesSave");
+  await page.waitForFunction(() => /已儲存/.test(document.getElementById("slidesInfo").textContent));
+  check(true, "選頁 saved from the deck tab");
+
+  // 有些參訪只口頭介紹：勾「這場不用簡報」就收起選頁與產檔，而且存得住
+  await page.check("#noDeck");
+  await page.waitForFunction(() => document.getElementById("deckWork").hidden);
+  await page.waitForFunction(() => /只口頭介紹/.test(document.getElementById("flash").textContent));
+  await page.click('[data-tab="pre"]');
+  check((await page.textContent("#deckState")).includes("不用簡報"), "the pre-visit tab says this visit has no deck");
+  await page.click('[data-tab="deck"]');
+  await page.waitForFunction(() => document.getElementById("deckStatus").textContent.includes("2026-10-07") || document.getElementById("deckStatus").textContent.includes("Western"));
+  check(await page.isChecked("#noDeck"), "「不用簡報」survives a reload of the tab (stored on the visit)");
+  await page.uncheck("#noDeck");
+  await page.waitForSelector("#deckWork:not([hidden])");
+  await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-slide]:checked").length > 0);
 
   // 直接在瀏覽器產 .pptx：站台沒有母簡報 → 按「產生簡報」直接跳選檔（這裡用合成母簡報）→ 下載 → 結構驗證
   if (fixtureAvailable) {
@@ -111,8 +131,9 @@ try {
     check((await page.locator("#subLinks").count()) === 0, "the pre-visit block does not carry the two interaction links");
     await page.reload();
     await page.waitForFunction(() => document.getElementById("backendInfo").textContent.includes("file"));
-    await page.selectOption("#preVisitSelect", "2026-10-07-uwa");
-    await page.waitForSelector("#afterSave:not([hidden])");
+    await page.click('[data-tab="deck"]');
+    await page.selectOption("#deckVisitSelect", "2026-10-07-uwa");
+    await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-slide]").length > 0);
     await page.waitForFunction(() => /移除/.test(document.getElementById("masterRow").textContent));
     const [download2] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), page.click("#deckBtn")]);
     const pptxPath2 = path.join(tmp, "browser2.pptx");
@@ -120,6 +141,10 @@ try {
     const v2 = await (await Deck.load(await readFile(pptxPath2))).validate();
     check(v2.errors.length === 0 && v2.slideCount === 6, "deck built from the master stored on the site (chunked download, no file picker)");
   } else console.log("skip - browser deck build (python-pptx fixture unavailable)");
+  await page.click('[data-tab="pre"]');
+  await page.selectOption("#preVisitSelect", "2026-10-07-uwa");
+  await page.waitForSelector("#afterSave:not([hidden])");
+  check((await page.textContent("#deckState")).includes("已選"), "the pre-visit tab reports the saved slide count after a reload");
   await page.click("#confirmLetterBtn");
   await page.waitForFunction(() => document.getElementById("confirmBody").value.length > 0);
   check(true, "confirmation letter drafted");

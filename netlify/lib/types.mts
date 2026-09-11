@@ -61,7 +61,8 @@ export interface Visit {
   cover_text?: { org_line: string; guest_lines: string[]; date_line: string };
   page_url: string;
   materials: Materials;
-  deck: { spec_path?: string; pptx_url?: string; pdf_url?: string; generated_at?: string };
+  // skip=true：這場不用簡報，只口頭介紹（後台「簡報」分頁勾的）
+  deck: { skip?: boolean; slides?: number; spec_path?: string; pptx_url?: string; pdf_url?: string; generated_at?: string };
   signbook: { photo_key?: string; transcript?: string; entries?: SignbookEntry[]; read_at?: string };
   dictation: { audio_key?: string; transcript?: string; extracted?: DictationExtract; recorded_at?: string };
   letters: {

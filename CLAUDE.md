@@ -299,7 +299,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 **已完成（P1–P4 最小可用系統 ＋ P5 捷徑 ＋ P6 產檔 ＋ P7 摘要／彙整）**
 
-- `public/admin.html`：訪前（貼信或上傳名單檔抽取 → 確認 → 排行程選頁 → 儲存 → QR／**產生簡報 .pptx**／.ics／確認信）、收工（簽名簿照片讀字、三十秒口述錄音轉文字抽取、或打字、**當天資料**：簡報 PDF、合照、相關連結放上專頁）、訪後信（草擬、全名單收件人、寄出或 mailto）、資料（列表、回覆、動線、摘要、跨場次彙整、CSV）。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
+- `public/admin.html`：訪前（貼信或上傳名單檔抽取 → 確認 → 排行程 → 儲存 → QR／.ics／確認信）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、收工（簽名簿照片讀字、三十秒口述錄音轉文字抽取、或打字、**當天資料**：簡報 PDF、合照、相關連結放上專頁）、訪後信（草擬、全名單收件人、寄出或 mailto）、資料（列表、回覆、動線、摘要、跨場次彙整、CSV）。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
 - `public/index.html`：專屬網址 `/<visit_id>`；全頁英文為主、第二語言為輔（預設中文，ko／ja 來賓用韓／日文）；流程（參訪當天標出「現在」）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
 - `netlify/functions/*.mts`：`visits` `extract` `plan` `letter` `respond` `timeline` `signbook` `transcribe` `summary` `media` `materials` `translate` `master` `drive` `drive-sync-background`（自動備份）`drive-cron`（每晚補漏，`export const config = { schedule }`）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
@@ -325,5 +325,6 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - **來賓端雙語**：英文永遠是主語，第二語言預設中文（中英對照）；`visit.language` 是 ko／ja 時改英韓、英日。流程區塊的 `title_2nd` 空白時用 `i18n.json` 的 `kind_*` 補第二語言。
 - **來賓端依階段換措辭**：訪前（日期在未來，或沒有參訪代碼的首頁）用「將參訪」、不放留信箱與感謝表單；當天才有留信箱與備援按鍵；訪後（日期已過或從感謝信的 `#respond` 進來）用過去式、標題改「感謝蒞臨」。`?phase=before|today|after` 可強制預覽。兩個互動層各有自己的連結，帶連結進來一定看得到（也支援中途換 hash）：`/<visit_id>#email`（留信箱）、`/<visit_id>#respond`（三個回應項目）。**這兩個連結在行程走完後才產出**，列在後台「收工」分頁，不在訪前。
 - 今日流程固定含三個區塊：總體簡報（briefing）→ 研究室參訪（tour）→ **綜合討論（discussion）**，合照可省略；`plan.mts` 在 AI 漏掉綜合討論時自動補上並回傳 `warnings`。**時間分配預設**（`lib/visit.mjs allocateProgramme`）：總體介紹 20 分、每間研究室 20 分、合照 5 分，剩下的時間全部給綜合討論；總時間不夠時先縮研究室（每間至少 5）、再縮總體介紹（至少 10），綜合討論至少 10。預設總長 150 分。
+- **選頁與產檔自成一個分頁**（`admin.html`「簡報」）：訪前只排行程與存檔，**有些參訪不用簡報，只口頭介紹**——在簡報分頁勾「這場不用簡報」即可，狀態存成 `visit.deck.skip`，訪前分頁只顯示一行結果。簡報分頁自己選參訪、自己存（`儲存選頁` 寫 `visit.slides`），產檔的規格一律取**存檔後**的那一筆（`state.deckVisit`），所以改了選頁要先存。
 - 後台「選用頁次」依 `public/data/slides.json` 的 `groups` 分區塊（章節／研究室）：區塊方框整區選、「只選這區」、全選／全不選；必選頁永遠保留。每一頁必須恰好屬於一個區塊。
 - 開放建議欄位措辭在 `public/data/i18n.json`（`ask_better`、`one_sentence`、`anonymous`），ko／ja 譯文請母語者校閱。

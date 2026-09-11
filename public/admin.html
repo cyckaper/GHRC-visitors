@@ -48,6 +48,7 @@
 
   <nav class="flex flex-wrap gap-1" role="tablist">
     <button class="tab" role="tab" data-tab="pre" aria-selected="true">訪前</button>
+    <button class="tab" role="tab" data-tab="deck">簡報</button>
     <button class="tab" role="tab" data-tab="wrapup">收工</button>
     <button class="tab" role="tab" data-tab="post">訪後信</button>
     <button class="tab" role="tab" data-tab="data">資料</button>
@@ -102,9 +103,10 @@
     </div>
 
     <div class="card space-y-4">
-      <h2 class="font-semibold">3. 行程與選頁</h2>
+      <h2 class="font-semibold">3. 行程</h2>
       <div class="flex flex-wrap gap-2 items-center">
         <button class="btn" id="planBtn">AI 排行程與選頁</button>
+        <span class="muted">選頁與產檔在「簡報」分頁</span>
         <span class="muted" id="planInfo"></span>
       </div>
       <p class="muted" id="rationale"></p>
@@ -115,11 +117,6 @@
       <div>
         <label class="f">現場動線（第一站固定是總體介紹，地點預設 302；預設總體介紹 20 分、每間 20 分，剩下的時間排進綜合討論；研究室留 0 表示不去）</label>
         <div class="flex flex-wrap gap-2" id="itinerary"></div>
-      </div>
-      <div>
-        <div class="flex flex-wrap items-center justify-between gap-2"><label class="f">選用頁次 <span id="slideCount"></span></label><span class="muted">依區塊勾選：區塊標題的方框整區選；「只選這區」會清掉其他區塊；必選頁（封面、流程、架構、核心宣稱、謝謝）永遠保留</span></div>
-        <div class="flex flex-wrap gap-2 mb-2"><button type="button" class="btn btn-soft" id="slidesAll">全選</button><button type="button" class="btn btn-soft" id="slidesNone">全不選（保留必選頁）</button></div>
-        <div class="space-y-2" id="slideGrid"></div>
       </div>
     </div>
 
@@ -134,15 +131,12 @@
           <div class="space-y-2 min-w-0">
             <p><a id="pageLink" class="underline break-all" target="_blank" rel="noopener"></a></p>
             <div class="flex flex-wrap gap-2">
-              <button class="btn" id="deckBtn">產生簡報 .pptx</button>
+              <button class="btn" id="openDeck">選頁與產生簡報</button>
               <button class="btn btn-soft" id="copyLink">複製網址</button>
               <button class="btn btn-soft" id="downloadIcs">下載收工提醒 .ics</button>
               <button class="btn btn-soft" id="openWrapup">開收工頁</button>
             </div>
-            <p class="text-sm" id="deckInfo" hidden></p>
-            <ul class="text-sm text-stone-600 list-disc pl-5" id="deckReport"></ul>
-            <p class="text-sm flex flex-wrap items-center gap-2" id="masterRow"></p>
-            <input type="file" id="masterFile" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" hidden>
+            <p class="muted" id="deckState"></p>
           </div>
         </div>
         <div class="space-y-2">
@@ -153,6 +147,41 @@
           <input type="text" id="confirmSubject" placeholder="主旨">
           <textarea id="confirmBody" rows="10" placeholder="確認信草稿會出現在這裡"></textarea>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ───────── 簡報 ───────── -->
+  <section id="tab-deck" class="space-y-5" hidden>
+    <div class="card space-y-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <label class="f mb-0">參訪</label>
+        <select id="deckVisitSelect" class="!w-auto"></select>
+        <span class="text-sm muted" id="deckStatus"></span>
+      </div>
+      <label class="flex items-start gap-2">
+        <input type="checkbox" id="noDeck" class="mt-1">
+        <span><span class="font-medium">這場不用簡報，只口頭介紹</span><br><span class="muted">勾起來就不挑頁、不產檔。今日流程的總體介紹照常，只是不放投影片。</span></span>
+      </label>
+      <p class="muted" id="deckSkipNote" hidden>這場不做簡報。要改回來就把上面的勾取消。</p>
+    </div>
+
+    <div id="deckWork" class="space-y-5">
+      <div class="card space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2"><h2 class="font-semibold">選用頁次 <span id="slideCount" class="muted font-normal"></span></h2><span class="muted">依區塊勾選：區塊標題的方框整區選；「只選這區」會清掉其他區塊；必選頁（封面、流程、架構、核心宣稱、謝謝）永遠保留</span></div>
+        <div class="flex flex-wrap gap-2"><button type="button" class="btn btn-soft" id="slidesAll">全選</button><button type="button" class="btn btn-soft" id="slidesNone">全不選（保留必選頁）</button></div>
+        <div class="space-y-2" id="slideGrid"></div>
+        <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="slidesSave">儲存選頁</button><span class="muted" id="slidesInfo"></span></div>
+      </div>
+
+      <div class="card space-y-3">
+        <h2 class="font-semibold">產生簡報</h2>
+        <p class="muted">用這一場存檔的行程與選頁，從母簡報子集化，直接下載 .pptx。改了選頁請先按「儲存選頁」。</p>
+        <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="deckBtn">產生簡報 .pptx</button></div>
+        <p class="text-sm" id="deckInfo" hidden></p>
+        <ul class="text-sm text-stone-600 list-disc pl-5" id="deckReport"></ul>
+        <p class="text-sm flex flex-wrap items-center gap-2" id="masterRow"></p>
+        <input type="file" id="masterFile" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" hidden>
       </div>
     </div>
   </section>
@@ -311,7 +340,8 @@
   document.querySelectorAll(".tab").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
   function showTab(name) {
     document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
-    for (const t of ["pre", "wrapup", "post", "data"]) $("tab-" + t).hidden = t !== name;
+    for (const t of ["pre", "deck", "wrapup", "post", "data"]) $("tab-" + t).hidden = t !== name;
+    if (name === "deck") loadDeckTab();
     if (name === "data") loadDataTab();
     if (name === "post") loadRecipients();
     if (name === "wrapup") loadMaterials();
@@ -321,10 +351,9 @@
   async function boot() {
     const [slides, labs] = await Promise.all([fetch("/data/slides.json").then((r) => r.json()), fetch("/data/labs.json").then((r) => r.json())]);
     state.slides = slides; state.labs = labs;
-    renderItinerary(); renderSlideGrid();
+    renderItinerary();
     await loadVisits();
     fillForm(state.visit || emptyVisit());
-    checkMaster();
     const m = /wrapup=([\w-]+)/.exec(location.hash);
     if (m) { $("wrapVisitSelect").value = m[1]; showTab("wrapup"); }
   }
@@ -338,7 +367,7 @@
     $("preVisitSelect").innerHTML = `<option value="">＋ 新增一次參訪</option>${opts}`;
     const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
     const pick = r.visits.find((v) => v.date === today) || r.visits[0];
-    for (const id of ["wrapVisitSelect", "postVisitSelect"]) { $(id).innerHTML = opts || `<option value="">（尚無參訪）</option>`; if (pick) $(id).value = pick.visit_id; }
+    for (const id of ["deckVisitSelect", "wrapVisitSelect", "postVisitSelect"]) { $(id).innerHTML = opts || `<option value="">（尚無參訪）</option>`; if (pick) $(id).value = pick.visit_id; }
   }
   function emptyVisit() {
     return { visit_id: "", date: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10), start_time: "10:00", duration_minutes: 150, org: { name: "", name_local: "", type: "university", country: "" }, guests: [], headcount: 0, contact_teacher: "張俊彥", purpose: "", interests: [], language: "en", programme: [], itinerary: [{ room: "briefing", minutes: 20, location: "302" }, ...ROOMS.map((room) => ({ room, minutes: 20 }))], slides: [], text_edits: [], materials: { deck_pdf: "", photos: [], links: [] }, letters: {}, deck: {}, signbook: {}, dictation: {}, status: "draft" };
@@ -358,7 +387,7 @@
     $("contactTeacher").value = v.contact_teacher || "張俊彥"; $("purpose").value = v.purpose || ""; $("interests").value = (v.interests || []).join(", ");
     $("code").value = state.saved ? v.visit_id.slice(11) : ""; $("code").disabled = state.saved;
     $("preStatus").textContent = state.saved ? `${v.visit_id} · ${v.status}` : "尚未存檔";
-    renderGuests(v.guests || []); renderProgramme(v.programme || []); renderItinerary(v.itinerary); renderSlideGrid(v.slides || []);
+    renderGuests(v.guests || []); renderProgramme(v.programme || []); renderItinerary(v.itinerary); renderDeckState(v);
     $("rationale").textContent = v.plan_rationale || ""; $("uncertainties").innerHTML = (v.uncertainties || []).map((u) => `<li>${esc(u)}</li>`).join("");
     $("afterSave").hidden = !state.saved;
     if (state.saved) showSaved(v);
@@ -372,7 +401,7 @@
     v.guests = [...$("guestTable").tBodies[0].rows].map((tr) => ({ name: tr.cells[0].firstChild.value.trim(), title: tr.cells[1].firstChild.value.trim(), email: tr.cells[2].firstChild.value.trim(), affiliation: tr.cells[3].firstChild.value.trim(), role: tr.cells[4].firstChild.checked ? "lead" : "member" })).filter((g) => g.name || g.email);
     v.programme = [...$("programmeTable").tBodies[0].rows].map((tr) => ({ start: tr.cells[0].firstChild.value, end: tr.cells[1].firstChild.value, kind: tr.cells[2].firstChild.value, title_en: tr.cells[3].firstChild.value, title_2nd: tr.cells[4].firstChild.value, slides_range: tr.cells[5].firstChild.value, rooms: tr.cells[2].firstChild.value === "tour" ? labRoute() : [] }));
     v.itinerary = readItinerary();
-    v.slides = slideInputs().filter((i) => i.checked).map((i) => Number(i.value));
+    v.slides = Array.isArray(state.visit?.slides) ? state.visit.slides : [];
     if (!state.saved && $("code").value.trim()) v.code = $("code").value.trim().toLowerCase();
     return v;
   }
@@ -401,6 +430,53 @@
   }
   const readItinerary = () => [...document.querySelectorAll("#itinerary input[data-room]")].map((i) => ({ room: i.dataset.room, minutes: Number(i.value) || 0, ...(i.dataset.room === "briefing" ? { location: ($("itinerary").querySelector("[data-briefing-location]") || {}).value || "" } : {}) })).filter((s) => s.room === "briefing" || s.minutes > 0);
   const labRoute = () => readItinerary().filter((s) => s.room !== "briefing").map((s) => s.room);
+  // ── 簡報分頁：選頁與產檔（獨立一頁——有些參訪不用簡報，只口頭介紹） ──
+  $("deckVisitSelect").addEventListener("change", loadDeckTab);
+  const dnote = (msg, cls = "muted") => { const el = $("deckStatus"); el.textContent = msg || ""; el.className = "text-sm " + cls; };
+  async function loadDeckTab() {
+    let id = $("deckVisitSelect").value;
+    if (!id && !(state.visits || []).length) { await loadVisits(); id = $("deckVisitSelect").value; }
+    if (!id) { state.deckVisit = null; $("deckWork").hidden = true; return dnote("還沒有參訪，先到「訪前」建一場。", "err"); }
+    const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
+    if (!r.ok) { state.deckVisit = null; $("deckWork").hidden = true; dnote(`讀不到這場參訪：${r.error}`, "err"); return flash(r.error, "err"); }
+    state.deckVisit = r.visit;
+    $("noDeck").checked = !!r.visit.deck?.skip;
+    renderSlideGrid(r.visit.slides || []);
+    $("slidesInfo").textContent = "";
+    applyNoDeck();
+    dnote(`${r.visit.date}　${r.visit.org?.name || r.visit.visit_id}`);
+    checkMaster();
+  }
+  function applyNoDeck() {
+    const skip = $("noDeck").checked;
+    $("deckWork").hidden = skip;
+    $("deckSkipNote").hidden = !skip;
+  }
+  /** 存檔後把新的那一份同步回訪前分頁，免得訪前再按儲存時蓋掉。 */
+  function afterDeckSave(visit) {
+    state.deckVisit = visit;
+    if (state.visit?.visit_id === visit.visit_id) { state.visit.slides = visit.slides; state.visit.deck = visit.deck; renderDeckState(visit); }
+  }
+  $("noDeck").onchange = async () => {
+    applyNoDeck();
+    const v = state.deckVisit;
+    if (!v) return;
+    const r = await api("/api/visits", { method: "POST", body: { ...v, deck: { ...(v.deck || {}), skip: $("noDeck").checked } } });
+    if (!r.ok) return flash(r.error, "err");
+    afterDeckSave(r.visit);
+    flash($("noDeck").checked ? "這場不做簡報，只口頭介紹" : "這場要做簡報");
+  };
+  $("slidesSave").onclick = () => busy($("slidesSave"), async () => {
+    const v = state.deckVisit;
+    if (!v) return flash("請先選一場參訪", "err");
+    const slides = slideInputs().filter((i) => i.checked).map((i) => Number(i.value));
+    const r = await api("/api/visits", { method: "POST", body: { ...v, slides } });
+    if (!r.ok) { $("slidesInfo").textContent = r.error; return flash(r.error, "err"); }
+    afterDeckSave(r.visit);
+    $("slidesInfo").textContent = `已儲存 ${r.visit.slides.length} 頁`;
+    flash("選頁已儲存");
+  });
+
   // 選用頁次：依區塊（章節／研究室）分組；區塊方框整區選、「只選這區」、全選／全不選；必選頁永遠保留
   function slideGroups() {
     const slides = state.slides?.slides || [];
@@ -475,8 +551,8 @@
     const r = await api("/api/plan", { method: "POST", body: { visit: readForm() } });
     if (!r.ok) return flash(r.error, "err");
     const v = r.visit; state.visit = { ...state.visit, ...v, visit_id: state.saved ? state.visit.visit_id : "" };
-    renderProgramme(v.programme); renderItinerary(v.itinerary); renderSlideGrid(v.slides);
-    $("rationale").textContent = v.plan_rationale || ""; $("planInfo").textContent = `簡報約 ${r.estimated_briefing_minutes} 分鐘${r.master_text_available ? "" : "（尚無母簡報文字：第 1–3 頁的替換文字要在產檔時處理）"}`;
+    renderProgramme(v.programme); renderItinerary(v.itinerary); renderDeckState(state.visit);
+    $("rationale").textContent = v.plan_rationale || ""; $("planInfo").textContent = `也挑了 ${(v.slides || []).length} 頁、簡報約 ${r.estimated_briefing_minutes} 分鐘，存檔後到「簡報」分頁確認${r.master_text_available ? "" : "（尚無母簡報文字：第 1–3 頁的替換文字要在產檔時處理）"}`;
     flash((r.warnings || []).length ? r.warnings.join(" ") : "已排好，請確認後儲存", (r.warnings || []).length ? "err" : "ok");
   });
   $("saveBtn").onclick = () => busy($("saveBtn"), async () => {
@@ -492,8 +568,12 @@
     $("pageLink").textContent = v.page_url; $("pageLink").href = v.page_url;
     $("qr").innerHTML = ""; if (window.QRCode) new QRCode($("qr"), { text: v.page_url, width: 128, height: 128 });
     $("saveInfo").textContent = `更新：${(v.updated_at || "").replace("T", " ").slice(0, 16)}`;
-    $("deckReport").innerHTML = "";
   }
+  /** 訪前頁只報一行簡報狀態，實際的選頁與產檔在「簡報」分頁。 */
+  function renderDeckState(v) {
+    $("deckState").textContent = v?.deck?.skip ? "簡報：這場不用簡報，只口頭介紹" : `簡報：已選 ${(v?.slides || []).length} 頁`;
+  }
+  $("openDeck").onclick = () => { $("deckVisitSelect").value = state.visit.visit_id; showTab("deck"); };
   $("copyLink").onclick = () => copy(state.visit.page_url);
 
   // ── 產生簡報：在瀏覽器裡子集化母簡報（核心 /lib/pptx.mjs 與本機 CLI 同一份），直接下載 .pptx ──
@@ -628,7 +708,7 @@
   }
   // 按「產生簡報」：站台有母簡報就直接產；沒有就先跳選檔視窗（要在同一個點擊裡同步呼叫），選完立刻產
   $("deckBtn").onclick = () => {
-    if (!state.saved) return flash("先儲存這次參訪", "err");
+    if (!state.deckVisit) return flash("請先選一場參訪", "err");
     if (!state.masterBytes && !state.master && !state.masterOnSite) { state.buildAfterPick = true; $("masterFile").value = ""; $("masterFile").click(); return; }
     buildDeck();
   };
@@ -646,7 +726,8 @@
       const info = $("deckInfo"); info.hidden = false; const log = (m) => { info.textContent = m; };
       $("deckReport").innerHTML = "";
       try {
-        const spec = readForm(); spec.visit_id = state.visit.visit_id; spec.page_url = state.visit.page_url;
+        const spec = state.deckVisit;
+        if (!spec) throw new Error("請先選一場參訪");
         const lang = spec.language || "zh";
         const core = await deckCore();
         const master = await masterBytes(log);
@@ -664,8 +745,9 @@
         const lines = [...(offerSave && state.slimReport ? [slimSummary(state.slimReport)] : []), ...report.warnings, ...report.edits.missed.map((m) => `第 ${m.slide} 頁找不到「${(m.find || "").slice(0, 40)}」`)];
         if (report.programme_table && report.programme_table !== "filled") lines.push(`第 2 頁流程表：${report.programme_table}`);
         $("deckReport").innerHTML = lines.map((l) => `<li>${esc(l)}</li>`).join("");
-        state.visit.deck = { ...(state.visit.deck || {}), generated_at: new Date().toISOString(), slides: report.output_slides };
-        api("/api/visits", { method: "POST", body: { ...state.visit } });
+        const deck = { ...(spec.deck || {}), generated_at: new Date().toISOString(), slides: report.output_slides };
+        const saved = await api("/api/visits", { method: "POST", body: { ...spec, deck } });
+        if (saved.ok) afterDeckSave(saved.visit);
       } catch (e) { info.textContent = `產檔失敗：${e.message || e}`; flash(String(e.message || e), "err"); }
     });
   }

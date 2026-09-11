@@ -105,7 +105,7 @@ Netlify 環境變數（沿用寄信那組 Google OAuth 也可以，但 refresh t
 
 ## 7. 產出當次簡報
 
-平常在後台「訪前」存檔後按 **產生簡報 .pptx**：瀏覽器抓 slim master（後台上傳的、站台靜態檔、或當場選檔）、依選頁與流程子集化、韓／日文版呼叫 `/api/translate` 翻譯中文段落、直接下載 `GHRC_<visit_id>.pptx`。PDF 請用 PowerPoint 另存，再到「收工」放上專屬頁面。本機 CLI 是備援（多出 LibreOffice 轉 PDF）：
+平常在後台「訪前」存好這一場，再到「簡報」分頁選頁、按 **產生簡報 .pptx**（不用簡報的場次勾「這場不用簡報，只口頭介紹」就好）：瀏覽器抓 slim master（後台上傳的、站台靜態檔、或當場選檔）、依選頁與流程子集化、韓／日文版呼叫 `/api/translate` 翻譯中文段落、直接下載 `GHRC_<visit_id>.pptx`。PDF 請用 PowerPoint 另存，再到「收工」放上專屬頁面。本機 CLI 是備援（多出 LibreOffice 轉 PDF）：
 
 ```bash
 npm run deck -- --visit=2026-10-07-uwa          # 需要 data/visits/2026-10-07-uwa.json（/api/visits?id=… 的 visit 物件）與 public/assets/master/slim-master.pptx
