@@ -1,5 +1,7 @@
 # GHRC 參訪系統 · ghrc-visit
 
+[![CI](https://github.com/cyckaper/GHRC-visitors/actions/workflows/ci.yml/badge.svg)](https://github.com/cyckaper/GHRC-visitors/actions/workflows/ci.yml)
+
 臺大生農學院綠色健康研究中心（GHRC）的參訪閉環：**訪前準備 → 客製簡報 → 訪後回饋 → 長期檔案 → 回饋下一次簡報**。
 構想與否決清單見 `docs/工作包.md`；開發規範見 `CLAUDE.md`；部署與設定見 `docs/DEPLOY.md`。
 
