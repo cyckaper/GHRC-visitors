@@ -66,18 +66,20 @@ node scripts/make-shortcuts.mjs --site=https://visit.healsdesign.org --key=<SIGN
 
 ```bash
 pip install python-pptx Pillow
-python3 scripts/slim-master.py "GHRC 介紹簡報2026-9.pptx" --out assets/master/slim-master.pptx \
+python3 scripts/slim-master.py "GHRC 介紹簡報2026-9.pptx" --out public/assets/master/slim-master.pptx \
     --video-link 19=<影片連結> --video-link 35=… --video-link 37=… --video-link 38=… --video-link 52=…
 ```
 
 - 影片改成「海報影格 ＋ ▶ Video 連結」（影片放 Drive／YouTube 不公開）；超過 3 MB 或長邊超過 2000px 的圖縮到 2000px、轉 JPEG；清掉沒被引用的媒體；目標 < 30 MB（超過會提示 `--all-images`、`--max-edge 1600`）。
-- `assets/master/*.pptx` 在 `.gitignore` 裡：slim master 也**不進 git**，每台要產檔的電腦各放一份（或放 Drive 共用）。原始母檔留在 Drive 當備份。
+- slim master **進 git**（`public/assets/master/slim-master.pptx`，< 30 MB），Netlify 會公開發佈這個檔：後台「產生簡報 .pptx」直接從站台抓母簡報在瀏覽器裡子集化。知道網址的人都能下載它（內容與現場給來賓看的相同）；不想公開就不要 commit，後台會改成請你從電腦選檔。原始 396 MB 母檔留在 Drive 當備份。
 - 產出後：`npm run deck -- --inspect` 看頁次是否與 `public/data/slides.json` 的索引一致（章節編號與實體頁序不一致是已知現象，索引以頁序為準）；`npm run deck -- --dump` 寫 `data/master-text.json` 並 commit，之後 `/api/plan` 就能產生第 1–3 頁（封面、流程、架構）逐字替換的 `text_edits`。
 
 ## 7. 產出當次簡報
 
+平常在後台「訪前」存檔後按 **產生簡報 .pptx**：瀏覽器抓 slim master（站台上或從電腦選）、依選頁與流程子集化、韓／日文版呼叫 `/api/translate` 翻譯中文段落、直接下載 `GHRC_<visit_id>.pptx`。PDF 請用 PowerPoint 另存，再到「收工」放上專屬頁面。本機 CLI 是備援（多出 LibreOffice 轉 PDF）：
+
 ```bash
-npm run deck -- --visit=2026-10-07-uwa          # 需要 data/visits/2026-10-07-uwa.json（後台下載）與 assets/master/slim-master.pptx
+npm run deck -- --visit=2026-10-07-uwa          # 需要 data/visits/2026-10-07-uwa.json（後台「進階」下載）與 public/assets/master/slim-master.pptx
 npm run deck -- --spec=path/to.json --lang=ko    # 韓文版：中文段落翻成韓文（需 ANTHROPIC_API_KEY；翻譯快取在 data/translations/ko.json）
 npm run deck -- --spec=path/to.json --no-pdf     # 不裝 LibreOffice 時
 ```

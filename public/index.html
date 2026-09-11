@@ -7,43 +7,102 @@
 <meta name="robots" content="noindex">
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Apple SD Gothic Neo", "Hiragino Sans", sans-serif; }
-  .avatar { width: 64px; height: 64px; border-radius: 9999px; object-fit: cover; background: #e7e5e4; color: #44403c; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 1.05rem; flex: none; }
-  .tag { display: inline-block; font-size: .75rem; padding: .15rem .5rem; border-radius: 9999px; background: #f5f5f4; color: #57534e; margin: .15rem .25rem 0 0; }
+  :root { --ink: #1c1917; --accent: #0f766e; --tone: #1c1917; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Apple SD Gothic Neo", "Hiragino Sans", sans-serif; background: #fafaf9; }
+  /* 標題區：柔和的綠—青漸層，兩個慢慢漂移的光暈 */
+  .hero { position: relative; overflow: hidden; border-radius: 1.5rem; padding: 2rem 1.5rem; background: linear-gradient(135deg, #ecfdf5 0%, #f0fdfa 50%, #fefce8 100%); border: 1px solid #d1fae5; }
+  .hero::before, .hero::after { content: ""; position: absolute; border-radius: 50%; filter: blur(42px); opacity: .6; pointer-events: none; animation: drift 16s ease-in-out infinite alternate; }
+  .hero::before { width: 340px; height: 340px; background: #a7f3d0; top: -140px; right: -90px; }
+  .hero::after { width: 280px; height: 280px; background: #fde68a; bottom: -150px; left: -70px; animation-delay: -8s; }
+  .hero > * { position: relative; }
+  @keyframes drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(-36px, 26px) scale(1.18); } }
+  .eyebrow { display: inline-flex; align-items: center; gap: .5rem; font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; color: #047857; }
+  .eyebrow::before { content: ""; width: 1.6rem; height: 2px; background: currentColor; border-radius: 2px; }
+  .grad-text { background: linear-gradient(90deg, #065f46, #0f766e 60%, #4d7c0f); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  /* 進場：往上浮現，依序錯開 */
+  .reveal { opacity: 0; transform: translateY(16px); transition: opacity .6s ease, transform .6s cubic-bezier(.2, .7, .2, 1); transition-delay: var(--d, 0ms); }
+  .reveal.in { opacity: 1; transform: none; }
+  .card { background: #fff; border: 1px solid #e7e5e4; border-radius: 1rem; padding: 1.25rem; transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 14px 34px -20px rgba(28, 25, 23, .35); border-color: #d6d3d1; }
+  .lab-card { border-left: 4px solid var(--tone); }
+  .stage-Measure { --tone: #059669; } .stage-Design { --tone: #0284c7; } .stage-Validate { --tone: #7c3aed; } .stage-Prescribe { --tone: #d97706; }
+  .step { width: 1.75rem; height: 1.75rem; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 600; color: #fff; background: var(--tone); flex: none; }
+  .avatar { width: 64px; height: 64px; border-radius: 9999px; object-fit: cover; background: #e7e5e4; color: #44403c; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 1.05rem; flex: none; box-shadow: inset 0 0 0 3px #fff, 0 0 0 2px var(--tone); }
+  .tag { display: inline-block; font-size: .75rem; padding: .15rem .55rem; border-radius: 9999px; background: #f5f5f4; color: #57534e; margin: .15rem .25rem 0 0; transition: background .2s, color .2s; }
+  .card:hover .tag { background: #ecfdf5; color: #065f46; }
   .second { color: #78716c; font-size: .9em; }
-  .card { background: #fff; border: 1px solid #e7e5e4; border-radius: 1rem; padding: 1.25rem; }
-  .btn { display: inline-flex; align-items: center; gap: .4rem; padding: .55rem 1rem; border-radius: .75rem; background: #1c1917; color: #fff; font-weight: 500; }
-  .btn:disabled { opacity: .5; }
-  .btn-soft { background: #f5f5f4; color: #1c1917; }
-  .btn-soft[aria-pressed="true"] { background: #1c1917; color: #fff; }
-  input[type=text], input[type=email], textarea { width: 100%; border: 1px solid #d6d3d1; border-radius: .6rem; padding: .55rem .7rem; background: #fff; }
-  label.choice { display: flex; gap: .6rem; align-items: flex-start; padding: .5rem .6rem; border: 1px solid #e7e5e4; border-radius: .6rem; background: #fff; cursor: pointer; }
-  label.choice:has(input:checked) { border-color: #1c1917; background: #fafaf9; }
+  .btn { display: inline-flex; align-items: center; gap: .45rem; padding: .6rem 1.05rem; border-radius: .8rem; background: var(--ink); color: #fff; font-weight: 500; transition: transform .15s ease, background .2s, box-shadow .2s; }
+  .btn:hover { transform: translateY(-1px); background: #292524; box-shadow: 0 8px 20px -12px rgba(0,0,0,.5); }
+  .btn:disabled { opacity: .5; transform: none; }
+  .btn-soft { background: #f5f5f4; color: var(--ink); }
+  .btn-soft:hover { background: #e7e5e4; }
+  .btn-soft[aria-pressed="true"] { background: var(--ink); color: #fff; }
+  .btn-accent { background: var(--accent); }
+  .btn-accent:hover { background: #115e59; }
+  input[type=text], input[type=email], textarea { width: 100%; border: 1px solid #d6d3d1; border-radius: .6rem; padding: .55rem .7rem; background: #fff; transition: border-color .2s, box-shadow .2s; }
+  input:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(15, 118, 110, .15); }
+  label.choice { display: flex; gap: .6rem; align-items: flex-start; padding: .55rem .65rem; border: 1px solid #e7e5e4; border-radius: .6rem; background: #fff; cursor: pointer; transition: border-color .2s, background .2s, transform .15s; }
+  label.choice:hover { border-color: #a8a29e; }
+  label.choice:has(input:checked) { border-color: var(--accent); background: #f0fdfa; }
+  /* 今日流程：時間軸 */
+  .timeline li { position: relative; padding-left: 1.75rem; }
+  .timeline li::before { content: ""; position: absolute; left: .5rem; top: 1.35rem; bottom: -.4rem; width: 2px; background: #e7e5e4; }
+  .timeline li:last-child::before { display: none; }
+  .dot { position: absolute; left: .2rem; top: 1.05rem; width: .8rem; height: .8rem; border-radius: 50%; background: #d6d3d1; border: 2px solid #fff; box-shadow: 0 0 0 1px #d6d3d1; }
+  li.now .dot { background: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  li.now .dot::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; background: rgba(15, 118, 110, .35); animation: ping 1.6s cubic-bezier(0, 0, .2, 1) infinite; }
+  li.past { opacity: .55; }
+  .now-tag { font-size: .7rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); background: #ccfbf1; padding: .1rem .5rem; border-radius: 9999px; margin-left: .5rem; }
+  @keyframes ping { 75%, 100% { transform: scale(2.4); opacity: 0; } }
+  .photo { aspect-ratio: 4 / 3; overflow: hidden; border-radius: .75rem; background: #e7e5e4; display: block; }
+  .photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .4s ease; }
+  .photo:hover img { transform: scale(1.04); }
   [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .hero::before, .hero::after, li.now .dot::after { animation: none; }
+    .card:hover, .btn:hover, .photo:hover img { transform: none; }
+  }
 </style>
 </head>
-<body class="bg-stone-50 text-stone-900">
+<body class="text-stone-900">
 <main class="max-w-3xl mx-auto px-4 py-8 space-y-8" id="app">
-  <header class="space-y-2">
-    <p class="text-sm text-stone-500" id="centerLine">Green Health Research Center · NTU College of Bioresources and Agriculture</p>
-    <h1 class="text-2xl sm:text-3xl font-semibold leading-tight" id="welcome">Welcome to the Green Health Research Center</h1>
-    <p class="text-lg" id="orgLine"></p>
-    <p class="text-stone-600" id="dateLine"></p>
-    <p class="text-sm text-amber-700" id="notice" hidden></p>
+  <header class="hero reveal">
+    <p class="eyebrow" id="centerLine">Green Health Research Center · NTU College of Bioresources and Agriculture</p>
+    <h1 class="mt-3 text-3xl sm:text-4xl font-semibold leading-tight grad-text" id="welcome">Welcome to the Green Health Research Center</h1>
+    <p class="mt-3 text-xl font-medium" id="orgLine"></p>
+    <p class="mt-1 text-stone-600" id="dateLine"></p>
+    <p class="mt-3 text-sm text-amber-700" id="notice" hidden></p>
   </header>
 
-  <section id="programmeSec" hidden>
+  <section id="programmeSec" class="reveal" hidden>
     <h2 class="text-lg font-semibold mb-3"><span id="programmeTitle"></span> <span class="second" id="programmeTitle2"></span></h2>
-    <ol class="card divide-y divide-stone-100" id="programme"></ol>
+    <ol class="card timeline divide-y divide-stone-100 !py-2" id="programme"></ol>
   </section>
 
-  <section>
+  <!-- 當天資料：簡報 PDF、合照、相關連結（只在有東西時出現） -->
+  <section id="materialsSec" class="reveal" hidden>
+    <h2 class="text-lg font-semibold mb-3"><span id="materialsTitle"></span> <span class="second" id="materialsTitle2"></span></h2>
+    <div class="card space-y-4">
+      <p id="pdfRow" hidden><a class="btn btn-accent" id="pdfBtn" target="_blank" rel="noopener"><span aria-hidden="true">▤</span> <span id="pdfLabel"></span></a></p>
+      <div id="photosRow" hidden>
+        <p class="text-sm text-stone-500 mb-2" id="photosLabel"></p>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="photoGrid"></div>
+      </div>
+      <div id="linksRow" hidden>
+        <p class="text-sm text-stone-500 mb-1" id="linksLabel"></p>
+        <ul class="space-y-1" id="linkList"></ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="reveal">
     <h2 class="text-lg font-semibold mb-3"><span id="labsTitle"></span> <span class="second" id="labsTitle2"></span></h2>
     <div class="space-y-4" id="labs"></div>
   </section>
 
   <!-- 互動層放最後，不搶戲（工作包 4.7） -->
-  <section class="card space-y-3" id="emailSec">
+  <section class="card space-y-3 reveal" id="emailSec">
     <h2 class="text-lg font-semibold"><span id="emailTitle"></span></h2>
     <p class="text-stone-600 text-sm" id="emailBody"></p>
     <form id="emailForm" class="space-y-2">
@@ -60,7 +119,7 @@
     </details>
   </section>
 
-  <section class="card space-y-4" id="respond">
+  <section class="card space-y-4 reveal" id="respond">
     <h2 class="text-xl font-semibold"><span id="respondTitle"></span></h2>
     <p class="text-stone-600" id="respondIntro"></p>
     <form id="respondForm" class="space-y-5">
@@ -84,14 +143,15 @@
         <input type="text" id="rName" autocomplete="name">
         <input type="email" id="rEmail" autocomplete="email">
       </div>
-      <button class="btn" type="submit" id="respondSend"></button>
+      <button class="btn btn-accent" type="submit" id="respondSend"></button>
       <p class="text-emerald-700" id="respondDone" hidden></p>
       <p class="text-red-700 text-sm" id="respondErr" hidden></p>
     </form>
   </section>
 
-  <footer class="text-xs text-stone-400 pt-4">
-    <p id="footerLine">Green Health Research Center · Landscape Building, Department of Horticulture and Landscape Architecture, National Taiwan University</p>
+  <footer class="text-xs text-stone-400 pt-4 space-y-1 reveal">
+    <p id="footerLine">Green Health Research Center · Landscape Building 3F, Department of Horticulture and Landscape Architecture, National Taiwan University</p>
+    <p><span id="footerContact"></span> <a class="underline decoration-stone-300 hover:decoration-stone-900 hover:text-stone-700" href="mailto:ntughrc@gmail.com">ntughrc@gmail.com</a></p>
   </footer>
 </main>
 
@@ -123,31 +183,64 @@
   const secondary = lang2 === primary ? "" : lang2;
   const T = (k) => (i18n[primary] || i18n.en)[k] || i18n.en[k] || "";
   const T2 = (k) => (secondary ? (i18n[secondary] || {})[k] || "" : "");
+  const bi = (k, sep = " · ") => T(k) + (T2(k) ? sep + T2(k) : "");
   const labName = (lab) => lab["name_" + (primary === "zh" ? "zh" : "en")] || lab.name_en;
   const labName2 = (lab) => (secondary ? lab["name_" + secondary] || (secondary !== "en" ? "" : lab.name_en) : "") || (primary === "zh" ? lab.name_en : "");
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const mediaUrl = (x) => (/^https?:\/\//i.test(x) ? x : `/api/media?key=${encodeURIComponent(x)}`);
 
   function showNotice(msg) { $("notice").textContent = msg; $("notice").hidden = false; }
 
   document.documentElement.lang = primary === "zh" ? "zh-Hant" : "en";
-  $("centerLine").textContent = T("center") + (T2("center") ? " · " + T2("center") : "");
+  $("centerLine").textContent = bi("center");
   $("welcome").textContent = T("welcome");
   if (T2("welcome")) $("welcome").insertAdjacentHTML("beforeend", `<span class="block text-lg font-normal text-stone-500 mt-1">${esc(T2("welcome"))}</span>`);
   if (visit) {
     $("orgLine").textContent = [visit.org && visit.org.name, visit.org && visit.org.name_local].filter(Boolean).join(" · ");
     $("dateLine").textContent = formatDate(visit.date, visit.start_time);
   }
+  $("footerContact").textContent = bi("center_contact") + ":";
 
-  // 今日流程
+  // 今日流程（時間軸；參訪當天會標出「現在」進行到哪一段）
   if (visit && visit.programme && visit.programme.length) {
     $("programmeSec").hidden = false;
     $("programmeTitle").textContent = T("programme");
     $("programmeTitle2").textContent = T2("programme");
-    $("programme").innerHTML = visit.programme.map((b) => `
-      <li class="flex gap-4 py-3">
+    $("programme").innerHTML = visit.programme.map((b, i) => `
+      <li class="flex gap-4 py-3 reveal" style="--d:${i * 70}ms" data-start="${esc(b.start)}" data-end="${esc(b.end)}">
+        <span class="dot" aria-hidden="true"></span>
         <span class="w-28 flex-none tabular-nums text-stone-500">${esc(b.start)} – ${esc(b.end)}</span>
-        <span><span class="font-medium">${esc(b.title_en)}</span>${b.title_2nd ? `<span class="second block">${esc(b.title_2nd)}</span>` : ""}${b.rooms && b.rooms.length ? `<span class="block text-xs text-stone-400 mt-0.5">${b.rooms.map((r) => "Lab " + esc(r)).join(" → ")}</span>` : ""}</span>
+        <span><span class="font-medium">${esc(b.title_en)}</span><span class="now-tag" hidden>${esc(T("now"))}</span>${b.title_2nd ? `<span class="second block">${esc(b.title_2nd)}</span>` : ""}${b.rooms && b.rooms.length ? `<span class="block text-xs text-stone-400 mt-0.5">${b.rooms.map((r) => "Lab " + esc(r)).join(" → ")}</span>` : ""}</span>
       </li>`).join("");
+    markNow();
+    setInterval(markNow, 30000);
+  }
+  function markNow() {
+    if (!visit || visit.date !== taipeiToday()) return;
+    const now = taipeiNow();
+    for (const li of $("programme").querySelectorAll("li")) {
+      const s = hm(li.dataset.start), e = hm(li.dataset.end);
+      const isNow = s <= now && now < e;
+      li.classList.toggle("now", isNow);
+      li.classList.toggle("past", e <= now);
+      li.querySelector(".now-tag").hidden = !isNow;
+    }
+  }
+
+  // 當天資料：簡報 PDF、合照、相關連結
+  const m = (visit && visit.materials) || { deck_pdf: "", photos: [], links: [] };
+  if (m.deck_pdf || (m.photos && m.photos.length) || (m.links && m.links.length)) {
+    $("materialsSec").hidden = false;
+    $("materialsTitle").textContent = T("materials"); $("materialsTitle2").textContent = T2("materials");
+    if (m.deck_pdf) { $("pdfRow").hidden = false; $("pdfBtn").href = mediaUrl(m.deck_pdf); $("pdfLabel").textContent = bi("slides_pdf"); }
+    if (m.photos && m.photos.length) {
+      $("photosRow").hidden = false; $("photosLabel").textContent = bi("photos");
+      $("photoGrid").innerHTML = m.photos.map((p, i) => `<a class="photo reveal" style="--d:${i * 60}ms" href="${esc(mediaUrl(p))}" target="_blank" rel="noopener"><img src="${esc(mediaUrl(p))}" alt="" loading="lazy"></a>`).join("");
+    }
+    if (m.links && m.links.length) {
+      $("linksRow").hidden = false; $("linksLabel").textContent = bi("links");
+      $("linkList").innerHTML = m.links.map((l) => `<li><a class="underline decoration-stone-300 hover:decoration-stone-900 break-all" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title || l.url)}</a></li>`).join("");
+    }
   }
 
   // 五間研究室的老師卡片：先排今天的動線，其餘放後面
@@ -158,13 +251,18 @@
   const route = steps.map((s) => s.room).filter((r) => r !== "briefing");
   const ordered = [...labsData.labs].sort((a, b) => rank(a.room) - rank(b.room));
   function rank(room) { const i = route.indexOf(room); return i < 0 ? 100 + Number(room) : i; }
-  // 動線第一站：總體介紹（總體簡報）
+  // 動線第一站：總體介紹（總體簡報），預設在 302
   const briefingCard = briefingStep ? `
-      <article class="card" id="briefing-card">
-        <p class="text-xs uppercase tracking-wide text-stone-400">1 · ${esc(T("briefing"))}</p>
-        <h3 class="font-semibold text-lg leading-snug">${esc(T("briefing"))}${T2("briefing") ? ` <span class="second font-normal">${esc(T2("briefing"))}</span>` : ""}</h3>
-        <p class="mt-1 text-stone-600 text-sm">${briefingStep.location ? esc(briefingStep.location) + " · " : ""}${esc(String(briefingStep.minutes))} ${esc(T("minutes"))}${T2("minutes") ? " / " + esc(T2("minutes")) : ""}</p>
-        <p class="mt-1 text-sm text-stone-500">${esc(T("briefing_hint"))}${T2("briefing_hint") ? `<span class="second block">${esc(T2("briefing_hint"))}</span>` : ""}</p>
+      <article class="card lab-card reveal" id="briefing-card" style="--tone:#0f766e">
+        <div class="flex gap-3 items-start">
+          <span class="step">1</span>
+          <div class="min-w-0 flex-1">
+            <p class="text-xs uppercase tracking-wide text-stone-400">${esc(T("briefing"))}${briefingStep.location ? ` · ${esc(briefingStep.location)}` : ""}</p>
+            <h3 class="font-semibold text-lg leading-snug">${esc(T("briefing"))}${T2("briefing") ? ` <span class="second font-normal">${esc(T2("briefing"))}</span>` : ""}</h3>
+            <p class="mt-1 text-stone-600 text-sm">${briefingStep.location ? `Room ${esc(briefingStep.location)} · ` : ""}${esc(String(briefingStep.minutes))} ${esc(T("minutes"))}${T2("minutes") ? " / " + esc(T2("minutes")) : ""}</p>
+            <p class="mt-1 text-sm text-stone-500">${esc(T("briefing_hint"))}${T2("briefing_hint") ? `<span class="second block">${esc(T2("briefing_hint"))}</span>` : ""}</p>
+          </div>
+        </div>
       </article>` : "";
   $("labs").innerHTML = briefingCard + ordered.map((lab, idx) => {
     const onRoute = !route.length || route.includes(lab.room);
@@ -174,13 +272,15 @@
     const oneLine2 = secondary === "zh" ? lab.one_line_zh : "";
     const expertise = primary === "zh" ? lab.expertise_zh || lab.expertise_en : lab.expertise_en;
     const papers = (lab.papers || []).map((p) => `<li><a class="underline decoration-stone-300 hover:decoration-stone-900" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a>${p.venue ? ` <span class="text-stone-400">· ${esc(p.venue)}</span>` : ""}</li>`).join("");
+    const stepNo = briefingStep && onRoute ? (route.indexOf(lab.room) >= 0 ? route.indexOf(lab.room) + 2 : idx + 2) : null;
+    const contact = lead.email ? `<p class="mt-3 text-sm"><span class="text-stone-500">${esc(bi("contact"))}</span> <a class="underline decoration-stone-300 hover:decoration-stone-900" href="mailto:${esc(lead.email)}">${esc(lead.email)}</a></p>` : "";
     return `
-      <article class="card ${onRoute ? "" : "opacity-60"}" id="lab-${lab.room}">
+      <article class="card lab-card stage-${esc(lab.stage || "")} reveal ${onRoute ? "" : "opacity-60"}" id="lab-${lab.room}" style="--d:${(idx + 1) * 60}ms">
         <div class="flex gap-4">
           ${lead.photo || lab.photo ? `<img class="avatar" src="${esc(lead.photo || lab.photo)}" alt="">` : `<div class="avatar">${esc(initials)}</div>`}
           <div class="min-w-0 flex-1">
-            <p class="text-xs uppercase tracking-wide text-stone-400">${briefingStep && onRoute ? `${route.indexOf(lab.room) >= 0 ? route.indexOf(lab.room) + 2 : idx + 2} · ` : ""}Lab ${esc(lab.room)} · ${esc(lab.stage || "")}${lab.stage_zh && primary === "zh" ? " " + esc(lab.stage_zh) : ""}</p>
-            <h3 class="font-semibold text-lg leading-snug">${esc(labName(lab))}${labName2(lab) ? ` <span class="second font-normal">${esc(labName2(lab))}</span>` : ""}</h3>
+            <p class="text-xs uppercase tracking-wide text-stone-400 flex items-center gap-2">${stepNo ? `<span class="step">${stepNo}</span>` : ""}<span>Lab ${esc(lab.room)} · ${esc(lab.stage || "")}${lab.stage_zh && primary === "zh" ? " " + esc(lab.stage_zh) : ""}</span></p>
+            <h3 class="font-semibold text-lg leading-snug mt-1">${esc(labName(lab))}${labName2(lab) ? ` <span class="second font-normal">${esc(labName2(lab))}</span>` : ""}</h3>
             <p class="mt-1"><span class="text-stone-500 text-sm">${esc(T("lead"))}${T2("lead") ? " · " + esc(T2("lead")) : ""}</span> <span class="font-medium">${esc(lead.name_zh || "")} ${esc(lead.name_en || "")}</span>${lead.title_en ? `<span class="block text-sm text-stone-500">${esc(primary === "zh" ? lead.title_zh || lead.title_en : lead.title_en)}</span>` : ""}</p>
           </div>
         </div>
@@ -189,12 +289,13 @@
         ${expertise && expertise.length ? `<p class="mt-2">${expertise.map((e) => `<span class="tag">${esc(e)}</span>`).join("")}</p>` : ""}
         ${(primary === "zh" ? lab.background_zh : lab.background_en) ? `<p class="mt-2 text-sm text-stone-600">${esc(primary === "zh" ? lab.background_zh : lab.background_en)}</p>` : ""}
         ${papers ? `<p class="mt-3 text-sm text-stone-500">${esc(T("papers"))}</p><ul class="text-sm list-disc pl-5 space-y-0.5">${papers}</ul>` : ""}
+        ${contact}
       </article>`;
   }).join("");
 
   // 留信箱（現場）
-  $("emailTitle").textContent = T("leave_email_title") + (T2("leave_email_title") ? " · " + T2("leave_email_title") : "");
-  $("emailBody").textContent = T("leave_email_body") + (T2("leave_email_body") ? "\n" + T2("leave_email_body") : "");
+  $("emailTitle").textContent = bi("leave_email_title");
+  $("emailBody").textContent = bi("leave_email_body", "\n");
   $("emailName").placeholder = T("name_optional");
   $("emailEmail").placeholder = T("email");
   $("emailNote").placeholder = T("note_optional");
@@ -220,8 +321,8 @@
   });
 
   // 訪後三個回應項目（工作包 4.6）
-  $("respondTitle").textContent = T("respond_title") + (T2("respond_title") ? " · " + T2("respond_title") : "");
-  $("respondIntro").textContent = T("respond_intro") + (T2("respond_intro") ? "\n" + T2("respond_intro") : "");
+  $("respondTitle").textContent = bi("respond_title");
+  $("respondIntro").textContent = bi("respond_intro", "\n");
   $("qCoop").textContent = T("cooperate"); $("qCoop2").textContent = T2("cooperate");
   $("qNext").textContent = T("next"); $("qNext2").textContent = T2("next");
   $("qBetter").textContent = T("ask_better"); $("qBetter2").textContent = T2("ask_better");
@@ -268,6 +369,15 @@
   });
   if (location.hash === "#respond" || qs.get("mode") === "respond") setTimeout(() => $("respond").scrollIntoView({ behavior: "smooth" }), 200);
 
+  // 進場動畫：捲到哪、哪裡浮現（不支援 IntersectionObserver 就全部直接顯示）
+  const reveal = document.querySelectorAll(".reveal");
+  if ("IntersectionObserver" in window) {
+    const io = new IntersectionObserver((entries) => { for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }, { rootMargin: "0px 0px -8% 0px", threshold: 0.05 });
+    reveal.forEach((el) => io.observe(el));
+    // 已經在視窗裡的元素在下一幀就進場，避免首屏空白
+    requestAnimationFrame(() => reveal.forEach((el) => { const r = el.getBoundingClientRect(); if (r.top < innerHeight && r.bottom > 0) el.classList.add("in"); }));
+  } else reveal.forEach((el) => el.classList.add("in"));
+
   async function post(url, body) {
     try {
       const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -281,6 +391,9 @@
     const zh = `${d.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$1年$2月$3日")}`;
     return `${en}${t ? " · " + t : ""}${primary === "zh" || secondary === "zh" ? " · " + zh : ""}`;
   }
+  function hm(s) { const [h, mm] = String(s || "0:0").split(":").map(Number); return h * 60 + (mm || 0); }
+  function taipeiToday() { return new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); }
+  function taipeiNow() { const d = new Date(Date.now() + 8 * 3600e3); return d.getUTCHours() * 60 + d.getUTCMinutes(); }
 })();
 </script>
 </body>

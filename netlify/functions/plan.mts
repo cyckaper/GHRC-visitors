@@ -35,11 +35,13 @@ export default async (req: Request) => {
       programme = photoIdx >= 0 ? [...programme.slice(0, photoIdx), { ...block, start: programme[photoIdx].start, end: programme[photoIdx].start }, ...programme.slice(photoIdx)] : [...programme, block];
       warnings.push("AI 排程漏了「綜合討論」，已補上一個區塊，請調整它與前後區塊的時間。");
     }
+    // 總體介紹的地點沿用主辦端填的（預設 302），AI 不決定地點
+    const briefingLocation = visit.itinerary.find((s) => s.room === "briefing")?.location || "";
     const merged: Visit = {
       ...visit,
       programme,
       // 動線第一步固定是總體介紹；AI 沒排就依 briefing 區塊長度補上
-      itinerary: ensureBriefingFirst(plan.itinerary.map((s) => ({ room: s.room, minutes: s.minutes, focus: s.focus })), briefingBlockMinutes(plan.programme) || 20),
+      itinerary: ensureBriefingFirst(plan.itinerary.map((s) => ({ room: s.room, minutes: s.minutes, focus: s.focus, ...(s.room === "briefing" ? { location: briefingLocation } : {}) })), briefingBlockMinutes(plan.programme) || 20),
       slides,
       text_edits: plan.text_edits,
       cover_text: plan.cover_text,

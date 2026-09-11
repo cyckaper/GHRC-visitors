@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """slim-master：把 396 MB 的母簡報瘦身成 < 30 MB 的 slim master（CLAUDE.md「動工前必讀」）。
 
-  python3 scripts/slim-master.py "GHRC 介紹簡報2026-9.pptx" --out assets/master/slim-master.pptx \
+  python3 scripts/slim-master.py "GHRC 介紹簡報2026-9.pptx" --out public/assets/master/slim-master.pptx \
       --video-link 19=https://youtu.be/xxxx --video-link 35=https://drive.google.com/…
 
 做的事：
@@ -293,7 +293,7 @@ def rezip(root, out):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("src")
-    ap.add_argument("--out", default="assets/master/slim-master.pptx")
+    ap.add_argument("--out", default="public/assets/master/slim-master.pptx")
     ap.add_argument("--max-edge", type=int, default=2000)
     ap.add_argument("--jpeg-quality", type=int, default=85)
     ap.add_argument("--image-threshold", type=int, default=3_000_000, help="超過幾 bytes 的圖片才處理")

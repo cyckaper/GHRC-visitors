@@ -1,7 +1,7 @@
 import { fail, json, nowISO, readJSON, requireAdmin, siteUrl } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
-import { briefingBlockMinutes, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, toCSV } from "../../lib/visit.mjs";
+import { briefingBlockMinutes, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, toCSV } from "../../lib/visit.mjs";
 
 /**
  * GET  /api/visits?id=X&public=1   來賓端可見子集（不需授權）
@@ -77,6 +77,7 @@ export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   v.itinerary = ensureBriefingFirst(v.itinerary, briefingBlockMinutes(v.programme) || 20);
   v.slides = Array.isArray(input.slides) ? [...new Set(input.slides.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n > 0))] : [];
   v.text_edits = Array.isArray(input.text_edits) ? input.text_edits : [];
+  v.materials = sanitizeMaterials((input as any).materials);
   v.language = (["en", "zh", "ko", "ja"] as const).includes(v.language) ? v.language : "en";
   v.status = (["draft", "confirmed", "done"] as const).includes(v.status) ? v.status : "draft";
   v.deck = input.deck || {};

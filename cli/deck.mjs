@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * 產出當次參訪的簡報檔（CLAUDE.md「v1 切法：web 出規格，CLI 出檔案」）。
+ * 產出當次參訪的簡報檔（本機 CLI；後台 admin.html 也能直接在瀏覽器產出同樣的檔案，核心在 public/lib/pptx.mjs）。
  *
- *   npm run deck -- --visit=2026-10-07-uwa            讀 data/visits/2026-10-07-uwa.json ＋ assets/master/slim-master.pptx → dist/
+ *   npm run deck -- --visit=2026-10-07-uwa            讀 data/visits/2026-10-07-uwa.json ＋ public/assets/master/slim-master.pptx → dist/
  *   npm run deck -- --spec=path/to/visit.json [--master=…] [--out=dist] [--lang=ko] [--no-pdf] [--site=https://visit.healsdesign.org]
  *   npm run deck -- --inspect [--master=…]             列出母簡報每一頁的標題與媒體大小
  *   npm run deck -- --dump [--master=…]                寫 data/master-text.json（給 /api/plan 產生第 1–3 頁的 text_edits 用）
@@ -18,11 +18,13 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import QRCode from "qrcode";
-import { Deck } from "./lib/pptx.mjs";
+import { Deck, buildDeck as buildDeckCore, inspectDeck } from "./lib/pptx.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const ASK_TITLE = { en: "Which part would you most like to see?", zh: "您最想看哪一部分？", ko: "어느 부분을 가장 보고 싶으십니까?", ja: "どの部分を最もご覧になりたいですか。" };
-const QR_CAPTION = { en: "Today's slides, papers and contacts", zh: "當天簡報、論文與老師聯絡方式", ko: "오늘 발표 자료 · 논문 · 연락처", ja: "本日のスライド・論文・連絡先" };
+/** slim master 的位置：public/ 底下讓瀏覽器也抓得到；舊位置 assets/master/ 仍相容。 */
+export const MASTER_CANDIDATES = ["public/assets/master/slim-master.pptx", "assets/master/slim-master.pptx"];
+
+export { inspectDeck };
 
 export function parseArgs(argv) {
   const o = { _: [] };
@@ -38,139 +40,14 @@ async function readJson(p) {
   return JSON.parse(await fs.readFile(p, "utf8"));
 }
 
-function roleN(slidesIndex, role) {
-  return slidesIndex?.slides?.find((s) => s.role === role)?.n;
-}
+/** Node 端的 QR 產生器（瀏覽器端在 admin.html 用 qrcodejs 的 canvas）。 */
+export const qrPng = (url) => QRCode.toBuffer(url, { type: "png", width: 1024, margin: 1, errorCorrectionLevel: "M" });
 
 /**
- * 核心：spec ＋ 母簡報 → { pptx: Buffer, report }
- * @param {object} spec  visits 表的一筆（visit_id、slides、language、text_edits、programme、page_url、deck.*）
- * @param {Buffer} masterBuf
- * @param {object} opts  { slidesIndex, lang, site, translate(texts, lang) → string[], log }
+ * spec ＋ 母簡報 → { pptx: Uint8Array, report, dump }。同 public/lib/pptx.mjs 的 buildDeck，補上 Node 端的 QR 與 SITE_URL。
  */
 export async function buildDeck(spec, masterBuf, opts = {}) {
-  const log = opts.log || (() => {});
-  const slidesIndex = opts.slidesIndex || null;
-  const deck = await Deck.load(masterBuf);
-  const all = await deck.slides();
-  const byN = new Map(all.map((s) => [s.n, s.path]));
-  const report = { visit_id: spec.visit_id, master_slides: all.length, chosen: [], edits: { applied: 0, missed: [] }, warnings: [] };
-
-  // 1. 選頁
-  const wanted = Array.isArray(spec.slides) && spec.slides.length ? spec.slides.map(Number) : all.map((s) => s.n);
-  const chosen = [];
-  for (const n of wanted) {
-    if (byN.has(n)) chosen.push(n);
-    else report.warnings.push(`spec 選了不存在的第 ${n} 頁（母簡報只有 ${all.length} 頁）`);
-  }
-  if (!chosen.length) throw new Error("沒有任何可用的頁");
-  report.chosen = chosen;
-
-  // 2. 複製「您最想看哪一部分」頁（預設從組織架構頁複製：五位老師照片並列）與 QR 頁（從謝謝頁複製）
-  const askFrom = spec.deck?.ask_clone_from ?? roleN(slidesIndex, "organisation") ?? 5;
-  const qrFrom = spec.deck?.qr_clone_from ?? roleN(slidesIndex, "closing") ?? all.length;
-  const askSrc = byN.get(Number(askFrom));
-  const qrSrc = byN.get(Number(qrFrom)) || all[all.length - 1].path;
-  const askPath = askSrc ? await deck.cloneSlide(askSrc) : null;
-  if (!askSrc) report.warnings.push(`找不到可複製成「您最想看哪一部分」的第 ${askFrom} 頁，略過`);
-  const qrPath = await deck.cloneSlide(qrSrc);
-
-  // 3. 重排
-  const order = [...chosen.map((n) => byN.get(n)), askPath, qrPath].filter(Boolean);
-  await deck.setSlideOrder(order);
-
-  // 4. 逐字取代（母簡報頁碼 → path）
-  const edits = Array.isArray(spec.text_edits) ? spec.text_edits : [];
-  const byPage = new Map();
-  for (const e of edits) {
-    if (!e || !e.find) continue;
-    const p = byN.get(Number(e.slide));
-    if (!p || !order.includes(p)) {
-      report.edits.missed.push({ ...e, reason: "該頁不在輸出裡" });
-      continue;
-    }
-    byPage.set(p, [...(byPage.get(p) || []), e]);
-  }
-  for (const [p, list] of byPage) {
-    for (const e of list) {
-      const n = await deck.editText(p, [e]);
-      if (n) report.edits.applied += n;
-      else report.edits.missed.push({ ...e, reason: "母簡報裡找不到這段文字" });
-    }
-  }
-
-  // 5. 今日流程表（第 2 頁若是表格）：時間、英文、第二語言、頁碼
-  const progN = roleN(slidesIndex, "programme") ?? 2;
-  const progPath = byN.get(progN);
-  if (progPath && order.includes(progPath) && Array.isArray(spec.programme) && spec.programme.length) {
-    const cols = spec.deck?.programme_columns || ["time", "title_en", "title_2nd", "slides_range"];
-    const rows = spec.programme.map((b) => cols.map((c) => (c === "time" ? `${b.start} – ${b.end}` : String(b[c] ?? ""))));
-    const ok = await deck.fillTable(progPath, rows);
-    report.programme_table = ok ? "filled" : "no table on programme slide（用 text_edits）";
-  }
-
-  // 6. 第二語言
-  const lang = opts.lang || spec.language || "zh";
-  report.language = lang;
-  if (lang === "en") {
-    for (const p of order) await deck.swapCjk(p, null, "en");
-  } else if (lang === "ko" || lang === "ja") {
-    const texts = new Set();
-    for (const p of order) for (const t of await deck.cjkRuns(p)) texts.add(t);
-    const list = [...texts];
-    const cache = opts.translationCache || new Map();
-    const missing = list.filter((t) => !cache.has(t));
-    if (missing.length) {
-      if (!opts.translate) throw new Error(`需要翻譯 ${missing.length} 段中文成 ${lang}，但沒有翻譯器（設定 ANTHROPIC_API_KEY 或 AI_MOCK=1）`);
-      log(`翻譯 ${missing.length} 段中文 → ${lang}`);
-      const out = await opts.translate(missing, lang);
-      missing.forEach((t, i) => cache.set(t, out[i]));
-    }
-    for (const p of order) await deck.swapCjk(p, cache, lang);
-    report.translated = list.length;
-  }
-
-  // 7. 「您最想看哪一部分」頁標題
-  if (askPath) {
-    const lines = lang === "en" ? [ASK_TITLE.en] : [ASK_TITLE.en, ASK_TITLE[lang] || ASK_TITLE.zh];
-    await deck.setTitle(askPath, lines);
-  }
-
-  // 8. QR 頁
-  const site = (opts.site || process.env.SITE_URL || "https://visit.healsdesign.org").replace(/\/$/, "");
-  const url = spec.page_url || `${site}/${spec.visit_id}`;
-  const png = await QRCode.toBuffer(url, { type: "png", width: 1024, margin: 1, errorCorrectionLevel: "M" });
-  const { cx, cy } = await deck.slideSize();
-  const side = Math.round(cy * 0.42);
-  const margin = Math.round(cx * 0.05);
-  const x = cx - side - margin;
-  const y = Math.round((cy - side) / 2) - Math.round(cy * 0.05);
-  await deck.addPicture(qrPath, png, { x, y, cx: side, cy: side }, "Visit QR");
-  const captionLines = [url.replace(/^https?:\/\//, ""), lang === "en" ? QR_CAPTION.en : `${QR_CAPTION.en} · ${QR_CAPTION[lang] || QR_CAPTION.zh}`];
-  await deck.addTextBox(qrPath, captionLines, { x: x - Math.round(side * 0.25), y: y + side + Math.round(cy * 0.02), cx: Math.round(side * 1.5), cy: Math.round(cy * 0.12) }, { size: 1400, align: "ctr" });
-  report.page_url = url;
-
-  // 9. 清孤兒、驗證
-  report.removed_parts = (await deck.clean()).length;
-  const v = await deck.validate();
-  report.validation = v;
-  if (v.errors.length) throw new Error(`產出的檔案沒過驗證：\n- ${v.errors.join("\n- ")}`);
-  report.output_slides = v.slideCount;
-  const dump = [];
-  for (const s of await deck.slides()) dump.push({ n: s.n, title: await deck.title(s.path), paragraphs: await deck.paragraphs(s.path) });
-  return { pptx: await deck.save(), report, dump };
-}
-
-export async function inspectDeck(masterBuf) {
-  const deck = await Deck.load(masterBuf);
-  const slides = [];
-  for (const s of await deck.slides()) {
-    const rels = await deck.rels(s.path);
-    const media = [];
-    for (const r of rels) if (r.part && r.part.startsWith("ppt/media/")) media.push({ part: r.part, bytes: (await deck.bytes(r.part)).length, type: r.type.split("/").pop() });
-    slides.push({ n: s.n, path: s.path, title: await deck.title(s.path), paragraphs: await deck.paragraphs(s.path), media });
-  }
-  return { slide_count: slides.length, slides };
+  return buildDeckCore(spec, masterBuf, { site: process.env.SITE_URL, qrPng, ...opts });
 }
 
 export function toPdf(pptxPath, outDir) {
@@ -183,9 +60,18 @@ export function toPdf(pptxPath, outDir) {
   return existsSync(pdf) ? { ok: true, pdf } : { ok: false, error: "LibreOffice 沒有產出 PDF" };
 }
 
+function findMaster(arg) {
+  if (arg) return path.resolve(ROOT, String(arg));
+  for (const rel of MASTER_CANDIDATES) {
+    const p = path.resolve(ROOT, rel);
+    if (existsSync(p)) return p;
+  }
+  return path.resolve(ROOT, MASTER_CANDIDATES[0]);
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const masterPath = path.resolve(ROOT, args.master || "assets/master/slim-master.pptx");
+  const masterPath = findMaster(args.master);
   const outDir = path.resolve(ROOT, args.out || "dist");
 
   if (args.validate) {
@@ -196,7 +82,7 @@ async function main() {
   }
 
   if (!existsSync(masterPath)) {
-    console.error(`找不到母簡報：${masterPath}\n先用 python3 scripts/slim-master.py <396MB母檔.pptx> --out assets/master/slim-master.pptx 產出 slim master（見 CLAUDE.md）。`);
+    console.error(`找不到母簡報：${masterPath}\n先用 python3 scripts/slim-master.py <396MB母檔.pptx> 產出 slim master（預設寫到 public/assets/master/slim-master.pptx，見 CLAUDE.md）。`);
     process.exit(2);
   }
   const masterBuf = await fs.readFile(masterPath);
@@ -236,7 +122,7 @@ async function main() {
     translate = (texts, target) => ai.translateTexts(texts, target);
   }
 
-  const { pptx, report, dump } = await buildDeck(spec, masterBuf, { slidesIndex, lang, site: args.site, translate, translationCache: cache, log: (m) => console.log(m) });
+  const { pptx, report, dump } = await buildDeck(spec, masterBuf, { slidesIndex, lang, site: args.site || process.env.SITE_URL, translate, translationCache: cache, log: (m) => console.log(m) });
   if (cache.size && (lang === "ko" || lang === "ja")) {
     await fs.mkdir(path.dirname(cachePath), { recursive: true });
     await fs.writeFile(cachePath, JSON.stringify(Object.fromEntries(cache), null, 2));

@@ -99,7 +99,10 @@ test("plan → programme, itinerary, slides (always-slides present), then save",
   assert.equal(mins(planned.programme.find((b) => b.kind === "briefing")), 20);
   assert.equal(mins(disc), 10);
   assert.equal(planned.itinerary[0].minutes, 20);
+  assert.equal(planned.itinerary[0].location, "302", "the briefing is in 302 by default");
   assert.ok(planned.itinerary.slice(1).every((s) => s.minutes === 11));
+  const p2 = await api("/api/plan", { method: "POST", headers: admin, body: JSON.stringify({ visit: { ...visit, itinerary: [{ room: "briefing", minutes: 20, location: "304" }] } }) });
+  assert.equal(p2.body.visit.itinerary[0].location, "304", "an organiser-chosen briefing room survives the AI plan");
   assert.ok(planned.itinerary[0].minutes > 0);
   assert.equal(planned.itinerary.reduce((s, x) => s + x.minutes, 0) <= 90, true);
   const saved = await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(planned) });
@@ -181,6 +184,63 @@ test("signbook: photo stored, OCR entries returned, then saved as responses", as
   assert.equal(save.body.saved, 1);
 });
 
+test("materials: upload photo and PDF, public media, links; the thanks letter only promises what the page has", async () => {
+  const before = await api("/api/letter", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, kind: "thanks", sender: "director" }) });
+  assert.equal(before.status, 200, JSON.stringify(before.body));
+  assert.ok(!/PDF|photo/i.test(before.body.draft.body), "nothing uploaded yet → the letter must not promise slides or photos");
+  assert.ok(before.body.draft.body.includes(`https://visit.example.test/${visitId}`));
+
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+  const up = await api("/api/materials", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "upload", kind: "photo", name: "合照 group.JPG", data: `data:image/png;base64,${png.toString("base64")}` }) });
+  assert.equal(up.status, 200, JSON.stringify(up.body));
+  assert.match(up.body.key, new RegExp(`^materials/${visitId}/\\d+-group\\.png$`));
+  assert.deepEqual(up.body.materials.photos, [up.body.key]);
+  const pdfBytes = Buffer.from("%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF");
+  const pdf = await api("/api/materials", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "upload", kind: "pdf", name: "GHRC deck.pdf", data: `data:application/pdf;base64,${pdfBytes.toString("base64")}` }) });
+  assert.equal(pdf.status, 200, JSON.stringify(pdf.body));
+  assert.ok(pdf.body.materials.deck_pdf.endsWith("-GHRC-deck.pdf"));
+  const wrongKind = await api("/api/materials", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "upload", kind: "pdf", name: "x.png", data: `data:image/png;base64,${png.toString("base64")}` }) });
+  assert.equal(wrongKind.status, 400);
+  // 公開媒體：合照與 PDF 不用 token；簽名簿照片仍要
+  const pub = await api(`/api/media?key=${encodeURIComponent(up.body.key)}`);
+  assert.equal(pub.status, 200);
+  assert.equal(pub.headers.get("content-type"), "image/png");
+  assert.ok((pub.headers.get("cache-control") || "").includes("public"));
+  assert.equal((await api(`/api/media?key=materials/${visitId}/../secret`)).status, 400);
+  // 連結
+  const saved = await api("/api/materials", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "save", materials: { ...pdf.body.materials, links: [{ title: "Lab 303 papers", url: "https://scholar.example/303" }, { title: "bad", url: "javascript:x" }] } }) });
+  assert.equal(saved.status, 200);
+  assert.deepEqual(saved.body.materials.links, [{ title: "Lab 303 papers", url: "https://scholar.example/303" }]);
+  // 來賓端看得到，且只有 key／連結
+  const pubVisit = await api(`/api/visits?id=${visitId}&public=1`);
+  assert.equal(pubVisit.body.visit.materials.deck_pdf, pdf.body.materials.deck_pdf);
+  assert.deepEqual(pubVisit.body.visit.materials.photos, [up.body.key]);
+  assert.equal(pubVisit.body.visit.materials.links.length, 1);
+  // 存檔（visits POST）不會把 materials 洗掉，也不吃壞值
+  const v = await api(`/api/visits?id=${visitId}`, { headers: admin });
+  const resaved = await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ ...v.body.visit, materials: { ...v.body.visit.materials, photos: [...v.body.visit.materials.photos, "not-a-key"] } }) });
+  assert.deepEqual(resaved.body.visit.materials.photos, [up.body.key]);
+  // 移除照片會刪檔
+  const rm = await api("/api/materials", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "remove", key: up.body.key }) });
+  assert.deepEqual(rm.body.materials.photos, []);
+  assert.equal((await api(`/api/media?key=${encodeURIComponent(up.body.key)}`)).status, 404);
+  // 再放一張，讓後面的感謝信測得到「合照」
+  const again = await api("/api/materials", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "upload", kind: "photo", name: "photo2.png", data: png.toString("base64"), media_type: "image/png" }) });
+  assert.equal(again.status, 200, JSON.stringify(again.body));
+});
+
+test("translate: mock translations are cached server-side", async () => {
+  const r1 = await api("/api/translate", { method: "POST", headers: admin, body: JSON.stringify({ texts: ["健康景觀智能室", "療癒環境規劃室"], target: "ko" }) });
+  assert.equal(r1.status, 200, JSON.stringify(r1.body));
+  assert.deepEqual(r1.body.translations, ["[ko] 健康景觀智能室", "[ko] 療癒環境規劃室"]);
+  assert.equal(r1.body.translated, 2);
+  const r2 = await api("/api/translate", { method: "POST", headers: admin, body: JSON.stringify({ texts: ["療癒環境規劃室", "景觀環境模擬室"], target: "ko" }) });
+  assert.equal(r2.body.translated, 1);
+  assert.equal(r2.body.from_cache, 1);
+  assert.equal((await api("/api/translate", { method: "POST", headers: admin, body: JSON.stringify({ texts: ["x"], target: "fr" }) })).status, 400);
+  assert.equal((await api("/api/translate", { method: "POST", body: JSON.stringify({ texts: ["x"], target: "ko" }) })).status, 401);
+});
+
 test("dictation: multipart audio → transcript → extraction → save", async () => {
   const form = new FormData();
   form.append("visit_id", visitId);
@@ -206,6 +266,8 @@ test("thanks letter: recipients = list + onsite, wording is the 請益 question,
   assert.ok(d.body.draft.body.includes("A single sentence is plenty."));
   assert.ok(d.body.draft.body.includes("#respond"));
   assert.ok(!/satisf|rate us|rating/i.test(d.body.draft.body));
+  assert.ok(/slides \(PDF\)/.test(d.body.draft.body) && /photos/.test(d.body.draft.body) && /links/.test(d.body.draft.body), "after uploading, the letter may mention the PDF, photos and links");
+  assert.ok(!/contact details/.test(d.body.draft.body), "no teacher emails in labs.json yet → no promise of contact details");
   const send = await api("/api/letter", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "send", subject: d.body.draft.subject, body: d.body.draft.body, recipients: rec.body.recipients }) });
   assert.equal(send.status, 200);
   assert.equal(send.body.sent, false);

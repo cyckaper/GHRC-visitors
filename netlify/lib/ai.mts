@@ -5,7 +5,7 @@ import { env } from "./http.mts";
 import { isMock } from "./data.mts";
 import type { DictationExtract, ResponseRow, SignbookEntry, TimelineSignal, Visit } from "./types.mts";
 import type { Extracted } from "./files.mts";
-import { allocateProgramme } from "../../lib/visit.mjs";
+import { allocateProgramme, pageContents } from "../../lib/visit.mjs";
 
 /**
  * 所有 AI 呼叫集中在這裡（工作包第 5 章）。
@@ -18,6 +18,17 @@ const TEACHERS = ["張俊彥", "林寶秀", "陳惠美", "張伯茹", "鄭佳昆
 const ROOMS = ["301", "302", "303", "304", "305"] as const;
 const LANGS = ["en", "zh", "ko", "ja"] as const;
 const ORG_TYPES = ["government", "university", "enterprise", "school", "ngo", "other"] as const;
+
+/**
+ * 中心事實：所有提示詞共用。避免 AI 把來信裡的其他單位（例如智慧溫室）寫成中心的、給步行鞋履之類的提醒、
+ * 或在信裡感謝中心自己的老師（第一場試跑的感謝信與確認信都出過這些錯）。
+ */
+export const CENTER_FACTS = `中心事實（所有輸出都要遵守）：
+- 綠色健康研究中心（GHRC）只有五間研究室：301 健康景觀智能室（張俊彥）、302 療癒環境規劃室（林寶秀）、303 景觀環境模擬室（陳惠美）、304 全景影院體驗室（張伯茹）、305 IVR 研究室（鄭佳昆）。全部在臺大園藝系造園館三樓，彼此相鄰，全程室內；總體介紹預設在 302。
+- 來信、名單或行程裡出現的其他地點與單位（例如智慧溫室、其他系所或中心）不是本中心的，不能寫成「我們的」研究室、團隊或設施；若非提不可，只能說是來賓當天另外參訪的單位，不替他們發言。
+- 不要給步行、鞋履、天氣、館舍之間移動之類的提醒（全程室內、同一層樓）。
+- 信件不感謝中心自己的人（主任、對口老師、同仁），感謝對象只有來賓與對方單位的窗口；也不替中心的人邀功。
+- 不放中心總預算數字；HEALS Design 是 301 專屬方法論，不是中心層級的方法論。`;
 
 function model(): string {
   return env("CLAUDE_MODEL") || "claude-opus-5";
@@ -110,7 +121,7 @@ export async function extractVisit(emailText: string, today: string, attachments
   }
   if (binaries.length) text += `\n\n另有 ${binaries.length} 個附件（PDF／照片）已附在前面，裡面的名單也要讀出。`;
   content.push({ type: "text", text });
-  return structured(ExtractedSchema, `${EXTRACT_SYSTEM}\n今天是 ${today}。`, content, 12000);
+  return structured(ExtractedSchema, `${EXTRACT_SYSTEM}\n\n${CENTER_FACTS}\n今天是 ${today}。`, content, 12000);
 }
 
 // ───────────────────────── 2. 排程與選頁 ─────────────────────────
@@ -154,7 +165,10 @@ const PLAN_SYSTEM = `你替 GHRC 排一次參訪的行程並從母簡報挑頁�
 - slides_range 用「01 – 12」這種格式描述該區塊對應的**輸出後**頁碼範圍（輸出後頁碼 = 選用頁在 slides 陣列裡的序號，從 1 起算），非簡報區塊填「—」。
 - cover_text：封面要替換的三段文字：org_line（單位名稱，英文為主，可加當地語）、guest_lines（主要來賓一到三行：姓名 職稱）、date_line（例如「7 October 2026 · 2026年10月7日」）。
 - text_edits：只有在提供母簡報文字（master_text）時才填。針對第 1、2、3 頁，逐一給出 find（母簡報裡**逐字**存在的文字段落）與 replace（新文字），用來改單位名稱、流程表的時間／說明／頁碼、Contents 的章節列表。沒有 master_text 就給空陣列。
-- rationale：用中文兩三句說明為什麼這樣排。`;
+- rationale：用中文兩三句說明為什麼這樣排。
+- 總體介紹的地點由主辦端決定（見 briefing_location，預設 302），不用寫進輸出。
+
+${CENTER_FACTS}`;
 
 export async function planVisit(visit: Visit, slidesIndex: any, labs: any, masterText: any | null): Promise<Plan> {
   if (isMock()) return mockPlan(visit, slidesIndex);
@@ -163,6 +177,7 @@ export async function planVisit(visit: Visit, slidesIndex: any, labs: any, maste
       org: visit.org, guests: visit.guests, headcount: visit.headcount, date: visit.date, start_time: visit.start_time,
       duration_minutes: visit.duration_minutes, purpose: visit.purpose, interests: visit.interests, language: visit.language, contact_teacher: visit.contact_teacher,
     },
+    briefing_location: visit.itinerary?.find((s) => s.room === "briefing")?.location || "302",
     slide_index: slidesIndex.slides,
     labs: (labs.labs || []).map((l: any) => ({ room: l.room, name_en: l.name_en, lead: l.lead?.name_zh, one_line_en: l.one_line_en })),
     master_text: masterText ? { slides: (masterText.slides || []).filter((s: any) => s.n <= 3) } : null,
@@ -217,16 +232,26 @@ export async function draftLetter(ctx: LetterContext): Promise<{ subject: string
   const pageUrl = v.page_url || `${ctx.siteUrl}/${v.visit_id}`;
   const respondUrl = `${pageUrl}#respond`;
   const wanted = (ctx.labs.labs || []).filter((l: any) => ctx.mostWantedRooms.includes(l.room));
-  if (isMock()) return mockLetter(ctx, pageUrl, respondUrl);
+  const contents = pageContents(v, ctx.labs);
+  const briefingLocation = v.itinerary?.find((s) => s.room === "briefing")?.location || "302";
+  if (isMock()) return mockLetter(ctx, pageUrl, respondUrl, contents);
   const system =
     ctx.kind === "confirmation"
-      ? `你替 GHRC 草擬參訪確認信。語氣：同行學者之間的誠懇與簡潔，不是服務業。用來賓的語言寫（language=zh 用繁體中文；en 用英文；ko／ja 用英文為主並在開頭與結尾附一句該語言問候）。內容：確認日期時間與地點（臺大園藝系造園館三樓）、當天流程（附 programme）、專屬網頁連結（訪前可先看五間研究室的老師背景）、對口老師。不要問來賓任何問題。署名用提供的 sender。回傳 subject 與純文字 body。`
+      ? `你替 GHRC 草擬參訪確認信。語氣：同行學者之間的誠懇與簡潔，不是服務業。用來賓的語言寫（language=zh 用繁體中文；en 用英文；ko／ja 用英文為主並在開頭與結尾附一句該語言問候）。
+內容：確認日期時間與地點（臺大園藝系造園館三樓；總體介紹在 briefing_location 那一間，之後依序走訪研究室）、當天流程（附 programme）、專屬網頁連結（訪前可先看五間研究室的老師背景）、對口老師。
+不要問來賓任何問題；不要加交通、步行、穿著、天氣之類的提醒；不要提到中心以外的地點或單位。署名用提供的 sender。回傳 subject 與純文字 body。
+
+${CENTER_FACTS}`
       : `你替 GHRC 草擬參訪後的感謝信。語氣：同行學者之間的請益與感謝，不是滿意度調查。用來賓的語言寫（language=zh 用繁體中文；en 用英文；ko／ja 用英文為主並在開頭與結尾附一句該語言問候）。
-內容順序：1) 感謝來訪，點到當天他們最感興趣的研究室（most_wanted_labs）；2) 專屬網頁連結，說明裡面有當天簡報 PDF、合照，以及那幾間研究室的論文與老師聯絡方式；3) 然後**原封不動**放入提供的 response_block（三個回應項目，含連結），不要改寫其中任何一句；4) 一兩句收尾；5) 署名 sender。
-寄給名單上每一個人，所以不要用只對主要來賓說話的口吻；稱呼用通用的「各位」／"Dear colleagues"，或以單位為對象。回傳 subject 與純文字 body。`;
+內容順序：1) 感謝來訪，點到當天他們最感興趣的研究室（most_wanted_labs；沒有就不點名）；2) 專屬網頁連結，**只能說頁面上實際有的東西**——逐項對應 page_contents，清單以外的一律不要承諾（例如清單沒有「簡報 PDF」就不要提 PDF，沒有「合照」就不要提照片，沒有「老師的聯絡方式」就不要說裡面有聯絡方式）；3) 然後**原封不動**放入提供的 response_block（三個回應項目，含連結），不要改寫其中任何一句；4) 一兩句收尾；5) 署名 sender。
+寄給名單上每一個人，所以不要用只對主要來賓說話的口吻；稱呼用通用的「各位」／"Dear colleagues"，或以單位為對象。不要感謝中心自己的老師或同仁。回傳 subject 與純文字 body。
+
+${CENTER_FACTS}`;
   const payload = {
-    visit: { org: v.org, guests: v.guests.map((g) => ({ name: g.name, title: g.title })), date: v.date, start_time: v.start_time, programme: v.programme, language: v.language, contact_teacher: v.contact_teacher, purpose: v.purpose },
+    visit: { org: v.org, guests: v.guests.map((g) => ({ name: g.name, title: g.title })), date: v.date, start_time: v.start_time, programme: v.programme, itinerary: v.itinerary, language: v.language, contact_teacher: v.contact_teacher, purpose: v.purpose },
+    briefing_location: briefingLocation,
     page_url: pageUrl,
+    page_contents: ctx.kind === "thanks" ? contents.map((c) => c.zh) : undefined,
     most_wanted_labs: wanted.map((l: any) => ({ room: l.room, name_en: l.name_en, lead: `${l.lead.name_zh} ${l.lead.name_en}` })),
     response_block: ctx.kind === "thanks" ? responseBlock(v.language, ctx.i18n, respondUrl) : undefined,
     sender: senderBlock(ctx),
@@ -290,7 +315,7 @@ export async function extractDictation(transcript: string, visit: Visit): Promis
   if (isMock()) return mockDictation(transcript);
   return structured(
     DictationSchema,
-    `主持人在參訪結束後口述了三十秒。抽取：who_came（誰來，一句）、most_wanted_rooms（來賓在「最想看哪一部分」那一問點名的研究室，房號）、questions（來賓問了什麼，逐條）、cooperation（有沒有透露合作意願，一句；沒有就空字串）、follow_ups（要做的後續事項，例如寄名片、寄論文）、other（其他值得留下的話）。只抽口述裡有的，不要補。房號對應：301 張俊彥智能室、302 林寶秀規劃室、303 陳惠美模擬室、304 張伯茹全景影院、305 鄭佳昆 IVR。`,
+    `主持人在參訪結束後口述了三十秒。抽取：who_came（誰來，一句）、most_wanted_rooms（來賓在「最想看哪一部分」那一問點名的研究室，房號）、questions（來賓問了什麼，逐條）、cooperation（有沒有透露合作意願，一句；沒有就空字串）、follow_ups（要做的後續事項，例如寄名片、寄論文）、other（其他值得留下的話）。只抽口述裡有的，不要補。房號對應：301 張俊彥智能室、302 林寶秀規劃室、303 陳惠美模擬室、304 張伯茹全景影院、305 鄭佳昆 IVR 研究室。`,
     `本次參訪：${visit.org?.name || ""}，${visit.date}。\n\n口述逐字稿：\n${transcript}`,
   );
 }
@@ -301,7 +326,7 @@ export async function summarizeVisit(visit: Visit, responses: ResponseRow[], tim
   if (isMock()) return mockSummary(visit, responses, timeline);
   const payload = { visit: { ...visit, letters: undefined }, responses, timeline };
   return plain(
-    `替 GHRC 寫一頁參訪摘要（繁體中文，Markdown，300 字內）。段落固定：誰來（單位、主要來賓、人數）；看了哪幾間各多久（用 timeline）；最想看什麼（口述抽取）；問了哪些問題；想合作誰（responses 的 cooperate_rooms 與口述）；收到什麼建議（responses 的 suggestion，不具名的不要試圖猜是誰）；待辦。沒有資料的段落寫「（無）」。不要評分、不要用滿意度用語。`,
+    `替 GHRC 寫一頁參訪摘要（繁體中文，Markdown，300 字內）。段落固定：誰來（單位、主要來賓、人數）；看了哪幾間各多久（用 timeline）；最想看什麼（口述抽取）；問了哪些問題；想合作誰（responses 的 cooperate_rooms 與口述）；收到什麼建議（responses 的 suggestion，不具名的不要試圖猜是誰）；待辦。沒有資料的段落寫「（無）」。不要評分、不要用滿意度用語。\n\n${CENTER_FACTS}`,
     JSON.stringify(payload),
   );
 }
@@ -421,17 +446,22 @@ function span(x: { start: string; end: string }): number {
   return hm(x.end) - hm(x.start);
 }
 
-function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string): { subject: string; body: string } {
+function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, contents: { key: string; zh: string }[]): { subject: string; body: string } {
   const v = ctx.visit;
+  const location = v.itinerary?.find((s) => s.room === "briefing")?.location || "302";
   if (ctx.kind === "confirmation") {
     return {
       subject: `(AI_MOCK) Your visit to the Green Health Research Center, ${v.date}`,
-      body: `Dear colleagues,\n\nWe look forward to welcoming ${v.org?.name || "you"} on ${v.date} at ${v.start_time}.\n\nProgramme and the laboratories you will see: ${pageUrl}\n\n${senderBlock(ctx)}`,
+      body: `Dear colleagues,\n\nWe look forward to welcoming ${v.org?.name || "you"} on ${v.date} at ${v.start_time}. We begin with a short overview in Room ${location}, Landscape Building, 3rd floor, and then walk through the laboratories next door.\n\nProgramme and the laboratories you will see: ${pageUrl}\n\n${senderBlock(ctx)}`,
     };
   }
+  // 只提頁面上真的有的東西（page_contents），跟真提示詞同一條規則
+  const keys = new Set(contents.map((c) => c.key));
+  const items = [keys.has("deck_pdf") && "the slides (PDF)", keys.has("photos") && "the photos from the day", keys.has("links") && "the links we promised", keys.has("papers") && "the papers of the laboratories", keys.has("contacts") && "the contact details of the laboratory leads"].filter(Boolean) as string[];
+  const pageLine = items.length ? `${items.join(", ").replace(/^./, (c) => c.toUpperCase())} are on your visit page: ${pageUrl}` : `The programme and the laboratories you saw, with their leads, are on your visit page: ${pageUrl}`;
   return {
     subject: `(AI_MOCK) Thank you for visiting the Green Health Research Center`,
-    body: `Dear colleagues,\n\nThank you for visiting us on ${v.date}. Today's slides, photos and the papers of the laboratories you were most interested in are here: ${pageUrl}\n\n${responseBlock(v.language, ctx.i18n, respondUrl)}\n\nWith thanks,\n${senderBlock(ctx)}`,
+    body: `Dear colleagues,\n\nThank you for visiting us on ${v.date}. ${pageLine}\n\n${responseBlock(v.language, ctx.i18n, respondUrl)}\n\nWith thanks,\n${senderBlock(ctx)}`,
   };
 }
 
