@@ -340,7 +340,8 @@
   });
   $("token").addEventListener("keydown", (e) => { if (e.key === "Enter") $("tokenSave").click(); });
   $("logout").onclick = async () => { forgetLegacy(); await api("/api/session", { method: "DELETE" }); $("token").value = ""; setAuth(false); $("backendInfo").textContent = ""; $("token").focus(); };
-  function setAuth(ok) { $("authBox").hidden = ok; $("authOk").hidden = !ok; }
+  function setAuth(ok) { state.authed = !!ok; $("authBox").hidden = ok; $("authOk").hidden = !ok; }
+  const goLogin = () => { window.scrollTo({ top: 0, behavior: "smooth" }); $("token").focus(); };
   // Netlify 的預覽／分支部署用自己的 Blobs（netlify/lib/store.mts 刻意這樣，測試資料不會混進正式資料）
   const isPreviewSite = /--/.test(location.hostname) && /\.netlify\.app$/.test(location.hostname);
   if (isPreviewSite) $("previewBadge").hidden = false;
@@ -353,7 +354,10 @@
       r = await fetch(path, { ...opts, headers, credentials: "same-origin", body: opts.body && !(opts.body instanceof FormData) ? JSON.stringify(opts.body) : opts.body });
     } catch (e) { return { ok: false, error: "連不上伺服器：" + e }; }
     const text = await r.text();
-    try { return JSON.parse(text); } catch (e) { return { ok: false, error: `${r.status} ${text.slice(0, 200)}` }; }
+    let out;
+    try { out = JSON.parse(text); } catch (e) { out = { ok: false, error: `${r.status} ${text.slice(0, 200)}` }; }
+    if (r.status === 401) setAuth(false);
+    return out;
   }
   function flash(msg, cls = "ok") { const f = $("flash"); f.textContent = msg; f.className = "text-sm " + cls; f.hidden = false; clearTimeout(flash.t); flash.t = setTimeout(() => (f.hidden = true), 6000); }
   async function busy(btn, fn) { const t = btn.textContent; btn.disabled = true; btn.textContent = "…"; try { return await fn(); } finally { btn.disabled = false; btn.textContent = t; } }
@@ -478,8 +482,11 @@
       $("slidesInfo").textContent = "";
       deckNeedsVisit(true);
       $("deckStatus").className = "text-sm err";
-      $("deckStatus").innerHTML = `還沒有任何參訪${isPreviewSite ? "（預覽站的資料是獨立的，正式站的參訪不會出現在這裡）" : ""}。 <button type="button" class="underline" id="deckGoPre">到「訪前」建一場</button>`;
-      $("deckGoPre").onclick = () => showTab("pre");
+      $("deckStatus").innerHTML = state.authed
+        ? `還沒有任何參訪${isPreviewSite ? "（預覽站的資料是獨立的，正式站的參訪不會出現在這裡）" : ""}。 <button type="button" class="underline" id="deckGoPre">到「訪前」建一場</button>`
+        : `這台裝置還沒登入，所以看不到參訪，也不能儲存或產檔（登入是綁裝置的，換手機要再登入一次）。 <button type="button" class="underline" id="deckGoLogin">到最上面登入</button>`;
+      const pre = $("deckGoPre"); if (pre) pre.onclick = () => showTab("pre");
+      const login = $("deckGoLogin"); if (login) login.onclick = goLogin;
       checkMaster();
       return;
     }
@@ -703,6 +710,7 @@
       row.innerHTML = `<span class="muted">上傳母簡報 ${i + 1}/${total}…</span>`;
       const r = await fetch(`/api/master?upload=${id}&part=${i}&total=${total}`, { method: "POST", headers: { ...(token() ? { authorization: `Bearer ${token()}` } : {}), "content-type": "application/octet-stream" }, credentials: "same-origin", body: bytes.slice(i * PART, (i + 1) * PART) });
       const j = await r.json().catch(() => ({}));
+      if (r.status === 401) { setAuth(false); throw new Error("這台裝置還沒登入：請到頁面最上方貼 ADMIN_TOKEN 登入後再上傳"); }
       if (!r.ok || !j.ok) throw new Error(j.error || `第 ${i + 1} 塊上傳失敗（${r.status}）`);
     }
     const c = await api(`/api/master?upload=${id}&commit=1&total=${total}&name=${encodeURIComponent(name)}`, { method: "POST" });
@@ -904,7 +912,7 @@
   async function loadMaterials() {
     let id = $("wrapVisitSelect").value;
     if (!id && !(state.visits || []).length) { await loadVisits(); id = $("wrapVisitSelect").value; }
-    if (!id) return mnote("請先在上面選一場參訪（還沒有任何參訪就先到「訪前」建一場）。", "err");
+    if (!id) return mnote(state.authed ? "請先在上面選一場參訪（還沒有任何參訪就先到「訪前」建一場）。" : "這台裝置還沒登入：請到頁面最上方貼 ADMIN_TOKEN 登入。", "err");
     const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
     if (!r.ok) { mnote(`讀不到這場參訪：${r.error}`, "err"); return flash(r.error, "err"); }
     mnote("");
