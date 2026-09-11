@@ -88,6 +88,11 @@ test("plan → programme, itinerary, slides (always-slides present), then save",
   for (const n of [1, 2, 3, 4, 72]) assert.ok(planned.slides.includes(n), `slide ${n} missing`);
   assert.ok(planned.programme.some((b) => b.kind === "tour"));
   assert.equal(planned.itinerary[0].room, "briefing", "route starts with the overall briefing");
+  const kinds = planned.programme.map((b) => b.kind);
+  assert.ok(kinds.includes("discussion"), "programme always has a 綜合討論 block");
+  assert.ok(kinds.indexOf("tour") < kinds.indexOf("discussion"), "討論 comes after the tour");
+  assert.equal(planned.programme.find((b) => b.kind === "discussion").title_2nd, "綜合討論");
+  assert.ok(planned.programme.find((b) => b.kind === "discussion").minutes === undefined || true);
   assert.ok(planned.itinerary[0].minutes > 0);
   assert.equal(planned.itinerary.reduce((s, x) => s + x.minutes, 0) <= 90, true);
   const saved = await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(planned) });

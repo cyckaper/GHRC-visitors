@@ -4,26 +4,139 @@
   "date": "2026-01-01",
   "start_time": "10:00",
   "duration_minutes": 90,
-  "org": { "name": "Example University", "name_local": "", "type": "university", "country": "Australia" },
-  "guests": [{ "name": "Jane Doe", "title": "Professor", "email": "", "role": "lead" }],
+  "org": {
+    "name": "Example University",
+    "name_local": "",
+    "type": "university",
+    "country": "Australia"
+  },
+  "guests": [
+    {
+      "name": "Jane Doe",
+      "title": "Professor",
+      "email": "",
+      "role": "lead"
+    }
+  ],
   "headcount": 3,
   "contact_teacher": "張俊彥",
   "purpose": "Research collaboration",
-  "interests": ["green infrastructure", "health landscape"],
+  "interests": [
+    "green infrastructure",
+    "health landscape"
+  ],
   "language": "en",
   "programme": [
-    { "start": "10:00", "end": "10:25", "kind": "briefing", "title_en": "Center overview and the laboratories", "title_2nd": "", "rooms": [], "slides_range": "01 – 14" },
-    { "start": "10:25", "end": "11:05", "kind": "tour", "title_en": "Laboratory tour, Rooms 301 to 305", "title_2nd": "", "rooms": ["301", "302", "303", "304", "305"], "slides_range": "—" },
-    { "start": "11:05", "end": "11:25", "kind": "discussion", "title_en": "Discussion", "title_2nd": "", "rooms": [], "slides_range": "—" },
-    { "start": "11:25", "end": "11:30", "kind": "photo", "title_en": "Group photo in the panoramic cinema", "title_2nd": "", "rooms": ["304"], "slides_range": "—" }
+    {
+      "start": "10:00",
+      "end": "10:25",
+      "kind": "briefing",
+      "title_en": "Center overview and the laboratories",
+      "title_2nd": "",
+      "rooms": [],
+      "slides_range": "01 – 14"
+    },
+    {
+      "start": "10:25",
+      "end": "11:05",
+      "kind": "tour",
+      "title_en": "Laboratory tour, Rooms 301 to 305",
+      "title_2nd": "",
+      "rooms": [
+        "301",
+        "302",
+        "303",
+        "304",
+        "305"
+      ],
+      "slides_range": "—"
+    },
+    {
+      "start": "11:05",
+      "end": "11:25",
+      "kind": "discussion",
+      "title_en": "General discussion",
+      "title_2nd": "綜合討論",
+      "rooms": [],
+      "slides_range": "—"
+    },
+    {
+      "start": "11:25",
+      "end": "11:30",
+      "kind": "photo",
+      "title_en": "Group photo in the panoramic cinema",
+      "title_2nd": "",
+      "rooms": [
+        "304"
+      ],
+      "slides_range": "—"
+    }
   ],
-  "itinerary": [{ "room": "301", "minutes": 8 }, { "room": "302", "minutes": 8 }, { "room": "303", "minutes": 8 }, { "room": "304", "minutes": 8 }, { "room": "305", "minutes": 8 }],
-  "slides": [1, 2, 3, 4, 5, 13, 15, 16, 18, 21, 22, 29, 30, 43, 49, 62, 72],
+  "itinerary": [
+    {
+      "room": "301",
+      "minutes": 8
+    },
+    {
+      "room": "302",
+      "minutes": 8
+    },
+    {
+      "room": "303",
+      "minutes": 8
+    },
+    {
+      "room": "304",
+      "minutes": 8
+    },
+    {
+      "room": "305",
+      "minutes": 8
+    }
+  ],
+  "slides": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    13,
+    15,
+    16,
+    18,
+    21,
+    22,
+    29,
+    30,
+    43,
+    49,
+    62,
+    72
+  ],
   "text_edits": [
-    { "slide": 1, "find": "（母簡報封面上的單位名稱原文）", "replace": "Example University" }
+    {
+      "slide": 1,
+      "find": "（母簡報封面上的單位名稱原文）",
+      "replace": "Example University"
+    }
   ],
-  "cover_text": { "org_line": "Example University", "guest_lines": ["Jane Doe, Professor"], "date_line": "1 January 2026" },
+  "cover_text": {
+    "org_line": "Example University",
+    "guest_lines": [
+      "Jane Doe, Professor"
+    ],
+    "date_line": "1 January 2026"
+  },
   "page_url": "https://visit.healsdesign.org/2026-01-01-example",
-  "deck": { "ask_clone_from": 5, "qr_clone_from": 72, "programme_columns": ["time", "title_en", "title_2nd", "slides_range"] },
+  "deck": {
+    "ask_clone_from": 5,
+    "qr_clone_from": 72,
+    "programme_columns": [
+      "time",
+      "title_en",
+      "title_2nd",
+      "slides_range"
+    ]
+  },
   "status": "confirmed"
 }

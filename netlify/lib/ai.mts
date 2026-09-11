@@ -146,7 +146,7 @@ const PLAN_SYSTEM = `你替 GHRC 排一次參訪的行程並從母簡報挑頁�
 - 不放中心總預算數字；HEALS Design 是 301 專屬方法論。
 
 行程規則：
-- 從 start_time 開始，總長 = duration_minutes，區塊順序通常是 briefing（總體簡報）→ tour（依序參訪研究室）→ discussion（座談）→ photo（合照，5 分鐘，可省略）。時間短就縮短 briefing 與 tour。
+- 從 start_time 開始，總長 = duration_minutes，區塊順序固定是 briefing（總體簡報）→ tour（依序參訪研究室）→ discussion（**綜合討論，一定要有**，至少 10 分鐘；title_en 用 "General discussion"，title_2nd 用「綜合討論」或對應語言）→ photo（合照，5 分鐘，可省略）。時間短就縮短 briefing 與 tour，不要省掉綜合討論。
 - itinerary 是現場動線。**第一步固定是 room="briefing"（總體介紹，在簡報室）**，minutes = briefing 區塊長度、focus 寫這場總體簡報要強調什麼；之後才是 tour 區塊內各房間的順序與分鐘數，預設 301→302→303→304→305，依興趣可調整或省略房間；房間分鐘數總和 = tour 區塊長度。
 - title_2nd 用來賓的第二語言（language）；language=en 時 title_2nd 留空。
 - slides_range 用「01 – 12」這種格式描述該區塊對應的**輸出後**頁碼範圍（輸出後頁碼 = 選用頁在 slides 陣列裡的序號，從 1 起算），非簡報區塊填「—」。
@@ -360,8 +360,10 @@ function mockExtract(text: string): ExtractedVisit {
 function mockPlan(visit: Visit, slidesIndex: any): Plan {
   const all: any[] = slidesIndex.slides || [];
   const total = Number(visit.duration_minutes) || 90;
+  const photo = total >= 45 ? 5 : 0;
+  const discussion = Math.max(10, Math.round(total * 0.15)); // 綜合討論一定要有
   const briefing = Math.max(10, Math.round(total * 0.3));
-  const tour = Math.max(15, Math.round(total * 0.45));
+  const tour = Math.max(10, total - briefing - discussion - photo);
   const labSteps = (visit.itinerary || []).map((s) => String(s.room)).filter((r) => r !== "briefing");
   const rooms = (labSteps.length ? labSteps : ["301", "302", "303", "304", "305"]) as any[];
   const perRoom = Math.max(3, Math.floor(tour / rooms.length));
@@ -391,9 +393,8 @@ function mockPlan(visit: Visit, slidesIndex: any): Plan {
   };
   add("briefing", briefing, "Center overview and the laboratories", "中心簡介與研究室概覽", [], `01 – ${String(slides.length).padStart(2, "0")}`);
   add("tour", tour, `Laboratory tour, Rooms ${rooms[0]} to ${rooms[rooms.length - 1]}`, `研究室參訪 ${rooms[0]}–${rooms[rooms.length - 1]}`, rooms, "—");
-  const rest = total - briefing - tour;
-  if (rest > 5) add("discussion", rest - 5, "Discussion", "座談", [], "—");
-  add("photo", 5, "Group photo in the panoramic cinema", "全景影院合照", ["304"], "—");
+  add("discussion", discussion, "General discussion", "綜合討論", [], "—");
+  if (photo) add("photo", photo, "Group photo in the panoramic cinema", "全景影院合照", ["304"], "—");
   const lead = visit.guests?.find((g) => g.role === "lead") || visit.guests?.[0];
   return {
     programme: b,
