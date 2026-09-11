@@ -99,6 +99,7 @@ Netlify 環境變數（沿用寄信那組 Google OAuth 也可以，但 refresh t
 真的要指定既有資料夾，refresh token 得改用全權限的 `https://www.googleapis.com/auth/drive`——那是受限範圍，發布前要送 Google 審查，不建議。
 
 用中心自己的 Google 帳號授權，不要用服務帳戶——服務帳戶沒有 Drive 儲存配額，上傳會被拒。
+**帳號選定後就不要換**：`drive.file` 只看得到自己建立的檔案，換一個帳號授權等於從空的開始，先前那個「GHRC 參訪」資料夾不會再被認出來。
 
 ## 7. 產出當次簡報
 
