@@ -178,23 +178,32 @@
       showNotice("Could not load the visit. 無法載入參訪資料。");
     }
   }
+  // 雙語：英文永遠是主語；一般中英對照，非英語區來的（ko／ja）改英韓、英日（與簡報的既有標準一致）
   const lang2 = (visit && visit.language) || qs.get("lang") || "en";
-  const primary = lang2 === "zh" ? "zh" : "en";
-  const secondary = lang2 === primary ? "" : lang2;
+  const primary = "en";
+  const secondary = lang2 === "ko" || lang2 === "ja" ? lang2 : "zh";
   const T = (k) => (i18n[primary] || i18n.en)[k] || i18n.en[k] || "";
   const T2 = (k) => (secondary ? (i18n[secondary] || {})[k] || "" : "");
   const bi = (k, sep = " · ") => T(k) + (T2(k) ? sep + T2(k) : "");
   const labName = (lab) => lab["name_" + (primary === "zh" ? "zh" : "en")] || lab.name_en;
-  const labName2 = (lab) => (secondary ? lab["name_" + secondary] || (secondary !== "en" ? "" : lab.name_en) : "") || (primary === "zh" ? lab.name_en : "");
+  const labName2 = (lab) => lab["name_" + secondary] || "";
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const mediaUrl = (x) => (/^https?:\/\//i.test(x) ? x : `/api/media?key=${encodeURIComponent(x)}`);
+  // 頁面階段：訪前（將參訪，不放留信箱與感謝表單）、當天（留信箱、備援按鍵）、訪後（過去式、三個回應項目）。
+  // 感謝信的 #respond 連結一律當訪後；?phase=before|today|after 可強制（預覽用）。
+  const today = taipeiToday();
+  const phase = ["before", "today", "after"].includes(qs.get("phase")) ? qs.get("phase") : location.hash === "#respond" ? "after" : !visit || !visit.date ? "today" : visit.date > today ? "before" : visit.date < today ? "after" : "today";
 
   function showNotice(msg) { $("notice").textContent = msg; $("notice").hidden = false; }
 
-  document.documentElement.lang = primary === "zh" ? "zh-Hant" : "en";
+  document.documentElement.lang = "en";
+  document.body.dataset.phase = phase;
   $("centerLine").textContent = bi("center");
-  $("welcome").textContent = T("welcome");
-  if (T2("welcome")) $("welcome").insertAdjacentHTML("beforeend", `<span class="block text-lg font-normal text-stone-500 mt-1">${esc(T2("welcome"))}</span>`);
+  const welcomeKey = phase === "after" ? "welcome_after" : "welcome";
+  $("welcome").textContent = T(welcomeKey);
+  if (T2(welcomeKey)) $("welcome").insertAdjacentHTML("beforeend", `<span class="block text-lg font-normal text-stone-500 mt-1">${esc(T2(welcomeKey))}</span>`);
+  $("emailSec").hidden = phase !== "today";
+  $("respond").hidden = phase === "before";
   if (visit) {
     $("orgLine").textContent = [visit.org && visit.org.name, visit.org && visit.org.name_local].filter(Boolean).join(" · ");
     $("dateLine").textContent = formatDate(visit.date, visit.start_time);
@@ -204,13 +213,14 @@
   // 今日流程（時間軸；參訪當天會標出「現在」進行到哪一段）
   if (visit && visit.programme && visit.programme.length) {
     $("programmeSec").hidden = false;
-    $("programmeTitle").textContent = T("programme");
-    $("programmeTitle2").textContent = T2("programme");
+    const programmeKey = phase === "before" ? "programme_before" : phase === "after" ? "programme_after" : "programme";
+    $("programmeTitle").textContent = T(programmeKey);
+    $("programmeTitle2").textContent = T2(programmeKey);
     $("programme").innerHTML = visit.programme.map((b, i) => `
       <li class="flex gap-4 py-3 reveal" style="--d:${i * 70}ms" data-start="${esc(b.start)}" data-end="${esc(b.end)}">
         <span class="dot" aria-hidden="true"></span>
         <span class="w-28 flex-none tabular-nums text-stone-500">${esc(b.start)} – ${esc(b.end)}</span>
-        <span><span class="font-medium">${esc(b.title_en)}</span><span class="now-tag" hidden>${esc(T("now"))}</span>${b.title_2nd ? `<span class="second block">${esc(b.title_2nd)}</span>` : ""}${b.rooms && b.rooms.length ? `<span class="block text-xs text-stone-400 mt-0.5">${b.rooms.map((r) => "Lab " + esc(r)).join(" → ")}</span>` : ""}</span>
+        <span><span class="font-medium">${esc(b.title_en)}</span><span class="now-tag" hidden>${esc(T("now"))}</span>${(b.title_2nd || T2("kind_" + (b.kind || "other"))) ? `<span class="second block">${esc(b.title_2nd || T2("kind_" + (b.kind || "other")))}</span>` : ""}${b.rooms && b.rooms.length ? `<span class="block text-xs text-stone-400 mt-0.5">${b.rooms.map((r) => "Lab " + esc(r)).join(" → ")}</span>` : ""}</span>
       </li>`).join("");
     markNow();
     setInterval(markNow, 30000);
@@ -243,9 +253,10 @@
     }
   }
 
-  // 五間研究室的老師卡片：先排今天的動線，其餘放後面
-  $("labsTitle").textContent = T("labs");
-  $("labsTitle2").textContent = T2("labs");
+  // 五間研究室的老師卡片：先排今天的動線，其餘放後面；標題依階段用「將參訪／今天參訪／參訪過」
+  const labsKey = !visit ? "labs_generic" : phase === "before" ? "labs" : phase === "after" ? "labs_after" : "labs_today";
+  $("labsTitle").textContent = T(labsKey);
+  $("labsTitle2").textContent = T2(labsKey);
   const steps = visit && visit.itinerary ? visit.itinerary.map((s) => ({ ...s, room: String(s.room) })) : [];
   const briefingStep = steps.find((s) => s.room === "briefing");
   const route = steps.map((s) => s.room).filter((r) => r !== "briefing");
@@ -268,9 +279,9 @@
     const onRoute = !route.length || route.includes(lab.room);
     const lead = lab.lead || {};
     const initials = (lead.name_en || lead.name_zh || "?").split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
-    const oneLine = primary === "zh" ? lab.one_line_zh || lab.one_line_en : lab.one_line_en;
-    const oneLine2 = secondary === "zh" ? lab.one_line_zh : "";
-    const expertise = primary === "zh" ? lab.expertise_zh || lab.expertise_en : lab.expertise_en;
+    const oneLine = lab.one_line_en;
+    const oneLine2 = secondary === "zh" ? lab.one_line_zh || "" : "";
+    const expertise = lab.expertise_en;
     const papers = (lab.papers || []).map((p) => `<li><a class="underline decoration-stone-300 hover:decoration-stone-900" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a>${p.venue ? ` <span class="text-stone-400">· ${esc(p.venue)}</span>` : ""}</li>`).join("");
     const stepNo = briefingStep && onRoute ? (route.indexOf(lab.room) >= 0 ? route.indexOf(lab.room) + 2 : idx + 2) : null;
     const contact = lead.email ? `<p class="mt-3 text-sm"><span class="text-stone-500">${esc(bi("contact"))}</span> <a class="underline decoration-stone-300 hover:decoration-stone-900" href="mailto:${esc(lead.email)}">${esc(lead.email)}</a></p>` : "";
@@ -279,15 +290,16 @@
         <div class="flex gap-4">
           ${lead.photo || lab.photo ? `<img class="avatar" src="${esc(lead.photo || lab.photo)}" alt="">` : `<div class="avatar">${esc(initials)}</div>`}
           <div class="min-w-0 flex-1">
-            <p class="text-xs uppercase tracking-wide text-stone-400 flex items-center gap-2">${stepNo ? `<span class="step">${stepNo}</span>` : ""}<span>Lab ${esc(lab.room)} · ${esc(lab.stage || "")}${lab.stage_zh && primary === "zh" ? " " + esc(lab.stage_zh) : ""}</span></p>
+            <p class="text-xs uppercase tracking-wide text-stone-400 flex items-center gap-2">${stepNo ? `<span class="step">${stepNo}</span>` : ""}<span>Lab ${esc(lab.room)} · ${esc(lab.stage || "")}${lab.stage_zh && secondary === "zh" ? " " + esc(lab.stage_zh) : ""}</span></p>
             <h3 class="font-semibold text-lg leading-snug mt-1">${esc(labName(lab))}${labName2(lab) ? ` <span class="second font-normal">${esc(labName2(lab))}</span>` : ""}</h3>
-            <p class="mt-1"><span class="text-stone-500 text-sm">${esc(T("lead"))}${T2("lead") ? " · " + esc(T2("lead")) : ""}</span> <span class="font-medium">${esc(lead.name_zh || "")} ${esc(lead.name_en || "")}</span>${lead.title_en ? `<span class="block text-sm text-stone-500">${esc(primary === "zh" ? lead.title_zh || lead.title_en : lead.title_en)}</span>` : ""}</p>
+            <p class="mt-1"><span class="text-stone-500 text-sm">${esc(T("lead"))}${T2("lead") ? " · " + esc(T2("lead")) : ""}</span> <span class="font-medium">${esc(lead.name_zh || "")} ${esc(lead.name_en || "")}</span>${lead.title_en ? `<span class="block text-sm text-stone-500">${esc(lead.title_en)}${secondary === "zh" && lead.title_zh ? ` <span class="second">${esc(lead.title_zh)}</span>` : ""}</span>` : ""}</p>
           </div>
         </div>
         <p class="mt-3">${esc(oneLine)}</p>
         ${oneLine2 ? `<p class="second mt-1">${esc(oneLine2)}</p>` : ""}
         ${expertise && expertise.length ? `<p class="mt-2">${expertise.map((e) => `<span class="tag">${esc(e)}</span>`).join("")}</p>` : ""}
-        ${(primary === "zh" ? lab.background_zh : lab.background_en) ? `<p class="mt-2 text-sm text-stone-600">${esc(primary === "zh" ? lab.background_zh : lab.background_en)}</p>` : ""}
+        ${lab.background_en ? `<p class="mt-2 text-sm text-stone-600">${esc(lab.background_en)}</p>` : ""}
+        ${secondary === "zh" && lab.background_zh ? `<p class="mt-1 text-sm second">${esc(lab.background_zh)}</p>` : ""}
         ${papers ? `<p class="mt-3 text-sm text-stone-500">${esc(T("papers"))}</p><ul class="text-sm list-disc pl-5 space-y-0.5">${papers}</ul>` : ""}
         ${contact}
       </article>`;
@@ -389,7 +401,7 @@
     const dt = new Date(`${d}T${t || "00:00"}:00+08:00`);
     const en = dt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Taipei" });
     const zh = `${d.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$1年$2月$3日")}`;
-    return `${en}${t ? " · " + t : ""}${primary === "zh" || secondary === "zh" ? " · " + zh : ""}`;
+    return `${en}${t ? " · " + t : ""}${secondary === "zh" ? " · " + zh : ""}`;
   }
   function hm(s) { const [h, mm] = String(s || "0:0").split(":").map(Number); return h * 60 + (mm || 0); }
   function taipeiToday() { return new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); }

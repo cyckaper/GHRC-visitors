@@ -40,7 +40,18 @@
     "contact": "Contact",
     "now": "Now",
     "center_contact": "Contact the center",
-    "open": "Open"
+    "open": "Open",
+    "kind_briefing": "Center overview",
+    "kind_tour": "Laboratory tour",
+    "kind_discussion": "General discussion",
+    "kind_photo": "Group photo",
+    "kind_other": "",
+    "labs_generic": "The five laboratories",
+    "labs_today": "Today's laboratories",
+    "labs_after": "The laboratories you visited",
+    "programme_before": "Programme for your visit",
+    "programme_after": "Programme of the day",
+    "welcome_after": "Thank you for visiting the Green Health Research Center"
   },
   "zh": {
     "welcome": "歡迎蒞臨綠色健康研究中心",
@@ -82,7 +93,18 @@
     "contact": "聯絡",
     "now": "現在",
     "center_contact": "聯絡中心",
-    "open": "開啟"
+    "open": "開啟",
+    "kind_briefing": "總體介紹",
+    "kind_tour": "研究室參訪",
+    "kind_discussion": "綜合討論",
+    "kind_photo": "合照",
+    "kind_other": "",
+    "labs_generic": "五間研究室",
+    "labs_today": "今天參訪的研究室",
+    "labs_after": "您參訪過的研究室",
+    "programme_before": "參訪流程",
+    "programme_after": "當天流程",
+    "welcome_after": "感謝蒞臨綠色健康研究中心"
   },
   "ko": {
     "welcome": "녹색건강연구센터에 오신 것을 환영합니다",
@@ -124,7 +146,18 @@
     "contact": "연락처",
     "now": "현재",
     "center_contact": "센터 연락처",
-    "open": "열기"
+    "open": "열기",
+    "kind_briefing": "센터 개요",
+    "kind_tour": "실험실 견학",
+    "kind_discussion": "종합 토론",
+    "kind_photo": "기념 촬영",
+    "kind_other": "",
+    "labs_generic": "다섯 개 실험실",
+    "labs_today": "오늘 견학하시는 실험실",
+    "labs_after": "견학하신 실험실",
+    "programme_before": "방문 일정",
+    "programme_after": "당일 일정",
+    "welcome_after": "녹색건강연구센터를 방문해 주셔서 감사합니다"
   },
   "ja": {
     "welcome": "緑色健康研究センターへようこそ",
@@ -166,6 +199,17 @@
     "contact": "連絡先",
     "now": "現在",
     "center_contact": "センター連絡先",
-    "open": "開く"
+    "open": "開く",
+    "kind_briefing": "センター概要",
+    "kind_tour": "研究室見学",
+    "kind_discussion": "総合討論",
+    "kind_photo": "記念撮影",
+    "kind_other": "",
+    "labs_generic": "五つの研究室",
+    "labs_today": "本日ご見学の研究室",
+    "labs_after": "ご見学いただいた研究室",
+    "programme_before": "ご訪問のプログラム",
+    "programme_after": "当日のプログラム",
+    "welcome_after": "緑色健康研究センターにご来訪いただきありがとうございました"
   }
 }

@@ -229,6 +229,39 @@ test("materials: upload photo and PDF, public media, links; the thanks letter on
   assert.equal(again.status, 200, JSON.stringify(again.body));
 });
 
+test("master deck: chunked upload, manifest, chunk download, replace, delete", async () => {
+  const rawPost = (id, i, total, body) => fetch(`${base}/api/master?upload=${id}&part=${i}&total=${total}`, { method: "POST", headers: { authorization: "Bearer test-token", "content-type": "application/octet-stream" }, body });
+  const part0 = Buffer.concat([Buffer.from("PK\x03\x04"), Buffer.alloc(3000, 1)]);
+  const part1 = Buffer.alloc(2000, 2);
+  assert.equal((await api("/api/master")).status, 401, "needs the admin token");
+  assert.equal((await api("/api/master", { headers: admin })).body.master, null, "nothing uploaded yet");
+  assert.equal((await rawPost("up-one", 0, 2, part0)).status, 200);
+  const early = await api("/api/master?upload=up-one&commit=1&total=2&name=slim.pptx", { method: "POST", headers: admin });
+  assert.equal(early.status, 400, "commit before every part is there fails");
+  assert.equal((await rawPost("up-one", 1, 2, part1)).status, 200);
+  assert.equal((await rawPost("up-bad", 0, 1, Buffer.from("not a zip at all"))).status, 400, "first part must look like a zip");
+  const c = await api("/api/master?upload=up-one&commit=1&total=2&name=%E6%AF%8D%E7%B0%A1%E5%A0%B1%2Fslim.pptx", { method: "POST", headers: admin });
+  assert.equal(c.status, 200, JSON.stringify(c.body));
+  assert.equal(c.body.master.parts, 2);
+  assert.equal(c.body.master.size, 5004);
+  assert.equal(c.body.master.name, "slim.pptx", "path segments stripped from the name");
+  const m = await api("/api/master", { headers: admin });
+  assert.equal(m.body.master.upload_id, "up-one");
+  const p1 = await fetch(`${base}/api/master?part=1`, { headers: admin });
+  assert.equal(p1.status, 200);
+  assert.equal((await p1.arrayBuffer()).byteLength, 2000);
+  assert.equal((await api("/api/master?part=2", { headers: admin })).status, 400);
+  // 換新版：舊分塊被清掉
+  assert.equal((await rawPost("up-two", 0, 1, part0)).status, 200);
+  const c2 = await api("/api/master?upload=up-two&commit=1&total=1&name=v2.pptx", { method: "POST", headers: admin });
+  assert.equal(c2.body.master.upload_id, "up-two");
+  assert.equal((await fetch(`${base}/api/master?part=0`, { headers: admin })).status, 200);
+  const d = await api("/api/master", { method: "DELETE", headers: admin });
+  assert.equal(d.status, 200);
+  assert.equal((await api("/api/master", { headers: admin })).body.master, null);
+  assert.equal((await api("/api/master?part=0", { headers: admin })).status, 404);
+});
+
 test("translate: mock translations are cached server-side", async () => {
   const r1 = await api("/api/translate", { method: "POST", headers: admin, body: JSON.stringify({ texts: ["健康景觀智能室", "療癒環境規劃室"], target: "ko" }) });
   assert.equal(r1.status, 200, JSON.stringify(r1.body));
