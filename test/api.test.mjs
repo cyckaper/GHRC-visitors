@@ -62,6 +62,23 @@ test("extract → visit draft keeps every email on the list", async () => {
   assert.equal(v.language, "en");
 });
 
+test("extract accepts uploaded list files: csv + docx text is read, .doc is reported unsupported", async () => {
+  const JSZip = (await import("jszip")).default;
+  const zip = new JSZip();
+  zip.file("word/document.xml", `<w:document xmlns:w="w"><w:body><w:tbl><w:tr><w:tc><w:p><w:r><w:t>Kim Lee</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>kim.lee@uwa.edu.au</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>`);
+  const docx = Buffer.from(await zip.generateAsync({ type: "uint8array" })).toString("base64");
+  const csv = Buffer.from("name,email\nJane Doe,jane.doe@uwa.edu.au\n").toString("base64");
+  const r = await api("/api/extract", { method: "POST", headers: admin, body: JSON.stringify({ email_text: "", files: [{ name: "list.csv", type: "text/csv", data: csv }, { name: "list.docx", type: "", data: `data:application/octet-stream;base64,${docx}` }, { name: "old.doc", type: "application/msword", data: Buffer.from("x").toString("base64") }] }) });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.files_read.map((f) => f.name), ["list.csv", "list.docx"]);
+  assert.equal(r.body.warnings.length, 1);
+  assert.ok(r.body.warnings[0].includes("old.doc"));
+  const emails = r.body.visit.guests.map((g) => g.email).sort();
+  assert.deepEqual(emails, ["jane.doe@uwa.edu.au", "kim.lee@uwa.edu.au"]);
+  const empty = await api("/api/extract", { method: "POST", headers: admin, body: JSON.stringify({ email_text: "", files: [] }) });
+  assert.equal(empty.status, 400);
+});
+
 test("plan → programme, itinerary, slides (always-slides present), then save", async () => {
   const ex = await api("/api/extract", { method: "POST", headers: admin, body: JSON.stringify({ email_text: EMAIL }) });
   const visit = { ...ex.body.visit, code: "uwa", start_time: "10:00", duration_minutes: 90 };

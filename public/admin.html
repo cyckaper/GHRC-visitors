@@ -58,9 +58,14 @@
     </div>
 
     <div class="card space-y-3">
-      <h2 class="font-semibold">1. 貼上 email 往來，AI 抽取背景</h2>
+      <h2 class="font-semibold">1. 貼上 email 往來或上傳名單檔，AI 抽取背景</h2>
       <p class="muted">單位、人名、職稱、人數、隨行名單與聯絡方式、對口老師、來訪目的、興趣、日期時間。結果只顯示給你確認，不會自動存檔。</p>
-      <textarea id="emailText" rows="8" placeholder="把 email 往來（含轉寄、簽名檔）整段貼進來……"></textarea>
+      <textarea id="emailText" rows="8" placeholder="把 email 往來（含轉寄、簽名檔）整段貼進來……（也可以只上傳名單檔）"></textarea>
+      <div class="flex flex-wrap items-center gap-2">
+        <input type="file" id="listFiles" multiple accept=".docx,.xlsx,.xlsm,.pptx,.csv,.tsv,.txt,.md,.pdf,.jpg,.jpeg,.png,.webp">
+        <span class="muted">名單檔：Word（.docx）、Excel（.xlsx）、CSV／文字、PDF、名單照片，最多 8 個共 5 MB；.doc／.xls 請先另存新格式</span>
+      </div>
+      <ul id="listFilesInfo" class="text-sm text-stone-600 list-disc pl-5"></ul>
       <button class="btn" id="extractBtn">AI 抽取</button>
       <ul class="text-sm text-amber-700 list-disc pl-5" id="uncertainties"></ul>
     </div>
@@ -365,9 +370,17 @@
   }
 
   // ── 訪前：AI ──
+  $("listFiles").onchange = () => { $("listFilesInfo").innerHTML = [...$("listFiles").files].map((f) => `<li>${esc(f.name)} <span class="muted">${(f.size / 1024).toFixed(0)} KB</span></li>`).join(""); };
+  const readFileB64 = (file) => new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(String(fr.result).replace(/^data:[^,]*,/, "")); fr.onerror = () => reject(fr.error); fr.readAsDataURL(file); });
   $("extractBtn").onclick = () => busy($("extractBtn"), async () => {
-    const r = await api("/api/extract", { method: "POST", body: { email_text: $("emailText").value } });
+    const picked = [...$("listFiles").files];
+    if (picked.length > 8) return flash("一次最多 8 個檔案", "err");
+    if (picked.reduce((s, f) => s + f.size, 0) > 5 * 1024 * 1024) return flash("檔案總量超過 5 MB，請分批或改貼文字", "err");
+    const files = [];
+    for (const f of picked) files.push({ name: f.name, type: f.type, data: await readFileB64(f) });
+    const r = await api("/api/extract", { method: "POST", body: { email_text: $("emailText").value, files } });
     if (!r.ok) return flash(r.error, "err");
+    $("listFilesInfo").innerHTML = (r.files_read || []).map((f) => `<li>${esc(f.name)} <span class="ok">已讀（${f.kind === "text" ? `${f.chars} 字` : f.kind === "document" ? "PDF 交給 AI 直接讀" : "照片交給 AI 直接讀"}）</span></li>`).join("") + (r.warnings || []).map((w) => `<li class="err">${esc(w)}</li>`).join("");
     state.saved = false; $("preVisitSelect").value = "";
     fillForm({ ...emptyVisit(), ...r.visit, visit_id: "" });
     flash("抽取完成，請逐項確認（尤其是名單的 email）");

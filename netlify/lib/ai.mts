@@ -4,6 +4,7 @@ import { z } from "zod";
 import { env } from "./http.mts";
 import { isMock } from "./data.mts";
 import type { DictationExtract, ResponseRow, SignbookEntry, TimelineSignal, Visit } from "./types.mts";
+import type { Extracted } from "./files.mts";
 
 /**
  * 所有 AI 呼叫集中在這裡（工作包第 5 章）。
@@ -81,12 +82,12 @@ export const ExtractedSchema = z.object({
   candidate_dates: z.array(z.string()),
   uncertainties: z.array(z.string()),
 });
-export type Extracted = z.infer<typeof ExtractedSchema>;
+export type ExtractedVisit = z.infer<typeof ExtractedSchema>;
 
-const EXTRACT_SYSTEM = `你是臺大生農學院綠色健康研究中心（GHRC）的參訪承辦助理。從主辦端貼上的 email 往來（可能中英夾雜、含轉寄與簽名檔）抽出參訪資料。
+const EXTRACT_SYSTEM = `你是臺大生農學院綠色健康研究中心（GHRC）的參訪承辦助理。從主辦端貼上的 email 往來（可能中英夾雜、含轉寄與簽名檔）與上傳的相關檔案（名單 Word／Excel／CSV 轉出的文字、PDF、名單照片）抽出參訪資料。
 
 規則：
-- guests：來訪方**每一位**被點名的人都要列出，含職稱與 email（隨行者的 email 是訪後信寄送的關鍵，不要只留主要窗口）。主要來賓 role=lead，其餘 member。affiliation 填該人的單位（可能與 org 不同）。
+- guests：來訪方**每一位**被點名的人都要列出，含職稱與 email（隨行者的 email 是訪後信寄送的關鍵，不要只留主要窗口）。**名單檔（<file> 區塊、PDF、照片）裡的每一列都是一個人**，表格欄位常見順序是姓名／職稱／單位／email，請對應好；沒有 email 的人也要列，email 留空。主要來賓 role=lead，其餘 member。affiliation 填該人的單位（可能與 org 不同）。
 - org：來訪單位的正式名稱（英文為主，name_local 放當地語言名稱）；type 取 government／university／enterprise／school／ngo／other；country 用英文國名。
 - headcount：預計人數；不知道就用 guests 人數。
 - date：**已確定**的參訪日期（YYYY-MM-DD）；未定則留空字串，把候選日期放 candidate_dates。start_time 用 HH:MM（台北時間），未提到留空。duration_minutes 可用時間（分鐘），未提到給 0。
@@ -95,9 +96,20 @@ const EXTRACT_SYSTEM = `你是臺大生農學院綠色健康研究中心（GHRC�
 - language：來賓的第二語言層：台灣／華語團 zh、韓國 ko、日本 ja，其餘 en。
 - 不要編造。不知道的欄位留空字串／空陣列／0，並在 uncertainties 用中文列出需要人工確認的事項。`;
 
-export async function extractVisit(emailText: string, today: string): Promise<Extracted> {
-  if (isMock()) return mockExtract(emailText);
-  return structured(ExtractedSchema, `${EXTRACT_SYSTEM}\n今天是 ${today}。`, `以下是 email 往來：\n\n<email>\n${emailText}\n</email>`);
+export async function extractVisit(emailText: string, today: string, attachments: Extracted[] = []): Promise<ExtractedVisit> {
+  const texts = attachments.filter((a): a is Extract<Extracted, { kind: "text" }> => a.kind === "text");
+  const binaries = attachments.filter((a) => a.kind === "document" || a.kind === "image");
+  let text = emailText.trim() ? `以下是 email 往來：\n\n<email>\n${emailText}\n</email>` : "（沒有 email 內文，資料在附件裡）";
+  for (const t of texts) text += `\n\n<file name="${t.name.replace(/"/g, "'")}">\n${t.text}\n</file>`;
+  if (isMock()) return mockExtract(text);
+  const content: Anthropic.ContentBlockParam[] = [];
+  for (const b of binaries) {
+    if (b.kind === "document") content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: b.data }, title: b.name });
+    else if (b.kind === "image") content.push({ type: "image", source: { type: "base64", media_type: b.media_type, data: b.data } });
+  }
+  if (binaries.length) text += `\n\n另有 ${binaries.length} 個附件（PDF／照片）已附在前面，裡面的名單也要讀出。`;
+  content.push({ type: "text", text });
+  return structured(ExtractedSchema, `${EXTRACT_SYSTEM}\n今天是 ${today}。`, content, 12000);
 }
 
 // ───────────────────────── 2. 排程與選頁 ─────────────────────────
@@ -318,9 +330,9 @@ export async function translateTexts(texts: string[], target: "ko" | "ja" | "en"
 
 // ───────────────────────── mock ─────────────────────────
 
-function mockExtract(text: string): Extracted {
+function mockExtract(text: string): ExtractedVisit {
   const emails = [...new Set((text.match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) || []).map((e) => e.toLowerCase()))];
-  const guests: Extracted["guests"] = emails.map((email, i) => {
+  const guests: ExtractedVisit["guests"] = emails.map((email, i) => {
     const local = email.split("@")[0];
     const name = local.replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
     return { name, title: i === 0 ? "Principal guest" : "Member", email, role: i === 0 ? "lead" : "member", affiliation: "" };
