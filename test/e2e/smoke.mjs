@@ -153,6 +153,11 @@ try {
   await page.waitForFunction(() => document.querySelectorAll("#recipients input").length === 2);
   check(true, "thanks letter drafted with the 請益 wording and 2 recipients");
 
+  // ── 來賓端：首頁（沒有參訪代碼）一律從訪前開始 ──
+  await page.goto(`${base}/`);
+  await page.waitForSelector("#lab-303");
+  check((await page.textContent("#labsTitle")).includes("will visit") && (await page.isHidden("#respond")) && (await page.isHidden("#emailSec")), "landing page without a visit starts in the pre-visit state");
+
   // ── 來賓端（日期在未來 → 訪前措辭） ──
   await page.goto(`${base}/2026-10-07-uwa`);
   await page.waitForSelector("#lab-303");

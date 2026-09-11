@@ -190,9 +190,9 @@
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const mediaUrl = (x) => (/^https?:\/\//i.test(x) ? x : `/api/media?key=${encodeURIComponent(x)}`);
   // 頁面階段：訪前（將參訪，不放留信箱與感謝表單）、當天（留信箱、備援按鍵）、訪後（過去式、三個回應項目）。
-  // 感謝信的 #respond 連結一律當訪後；?phase=before|today|after 可強制（預覽用）。
+  // 沒有參訪代碼的首頁一律從訪前開始；感謝信的 #respond 連結一律當訪後；?phase=before|today|after 可強制（預覽用）。
   const today = taipeiToday();
-  const phase = ["before", "today", "after"].includes(qs.get("phase")) ? qs.get("phase") : location.hash === "#respond" ? "after" : !visit || !visit.date ? "today" : visit.date > today ? "before" : visit.date < today ? "after" : "today";
+  const phase = ["before", "today", "after"].includes(qs.get("phase")) ? qs.get("phase") : location.hash === "#respond" && visit ? "after" : !visit || !visit.date ? "before" : visit.date > today ? "before" : visit.date < today ? "after" : "today";
 
   function showNotice(msg) { $("notice").textContent = msg; $("notice").hidden = false; }
 
@@ -254,7 +254,7 @@
   }
 
   // 五間研究室的老師卡片：先排今天的動線，其餘放後面；標題依階段用「將參訪／今天參訪／參訪過」
-  const labsKey = !visit ? "labs_generic" : phase === "before" ? "labs" : phase === "after" ? "labs_after" : "labs_today";
+  const labsKey = phase === "before" ? "labs" : phase === "after" ? "labs_after" : visit ? "labs_today" : "labs_generic";
   $("labsTitle").textContent = T(labsKey);
   $("labsTitle2").textContent = T2(labsKey);
   const steps = visit && visit.itinerary ? visit.itinerary.map((s) => ({ ...s, room: String(s.room) })) : [];
