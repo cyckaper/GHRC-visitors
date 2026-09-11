@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { buildDeck, inspectDeck } from "../cli/deck.mjs";
-import { Deck } from "../cli/lib/pptx.mjs";
+import { Deck, slimDeck, hasEmbeddedMedia } from "../cli/lib/pptx.mjs";
 
 const FIXTURE = "test/fixtures/generated/master-fixture.pptx";
 if (!existsSync(FIXTURE)) spawnSync("python3", ["scripts/make-fixture.py", FIXTURE], { stdio: "inherit" });
@@ -111,6 +111,43 @@ test("build: refuses Korean without a translator", { skip: !available && "fixtur
 function readFileSyncBuf() {
   return readFile(FIXTURE);
 }
+
+test("slimDeck (browser-side slimming): strips the video with a link, renames a resized image to .jpeg and retargets rels, stays valid", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
+  const src = await readFile(FIXTURE);
+  assert.equal(await hasEmbeddedMedia(src), true);
+  // 假縮圖：回一張很小的 PNG 當 JPEG（測試只看改名與 rels），大圖門檻 3 MB
+  const tiny = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+  const resized = [];
+  const { pptx, report } = await slimDeck(src, { videoLinks: { 7: "https://youtu.be/demo" }, resizeImage: async (bytes, ext) => { resized.push(ext); return { bytes: new Uint8Array(tiny), ext: "jpeg" }; } });
+  await writeFile(path.join(outDir, "slim-js.pptx"), pptx);
+  assert.equal(report.videos_removed, 1);
+  assert.equal(report.images_resized, 1);
+  assert.deepEqual(resized, ["png"]);
+  assert.ok(pptx.length < 1_000_000, `slim output is ${pptx.length} bytes`);
+  const deck = await Deck.load(pptx);
+  const files = deck.files();
+  assert.ok(!files.some((f) => /\.(mp4|m4v|mov)$/i.test(f)), "video removed");
+  assert.ok(files.includes("ppt/media/image3.jpeg") && !files.includes("ppt/media/image3.png"), "big png renamed to jpeg");
+  assert.equal(await hasEmbeddedMedia(pptx), false);
+  const slides = await deck.slides();
+  assert.equal(slides.length, 10, "every slide kept");
+  const s7 = await deck.text(slides[6].path);
+  assert.ok(!/videoFile|p14:media|ppaction:\/\/media|<p:timing>/.test(s7), "media markup gone");
+  assert.ok(s7.includes("youtu.be/demo"), "video link text added");
+  const rels7 = await deck.rels(slides[6].path);
+  assert.ok(rels7.some((x) => x.external && x.target === "https://youtu.be/demo"), "hyperlink rel added");
+  assert.ok(rels7.some((x) => x.part === "ppt/media/image2.png"), "poster frame kept");
+  const rels8 = await deck.rels(slides[7].path);
+  assert.ok(rels8.some((x) => x.part === "ppt/media/image3.jpeg"), "slide rels retargeted to the jpeg");
+  const v = await deck.validate();
+  assert.deepEqual(v.errors, []);
+  // 沒有縮圖函式：只抽影片；再拿去產檔也要能用
+  const onlyVideo = await slimDeck(src, {});
+  assert.equal(onlyVideo.report.images_resized, 0);
+  assert.ok((await Deck.load(onlyVideo.pptx)).files().includes("ppt/media/image3.png"));
+  const built = await buildDeck({ ...spec, language: "zh", slides: [1, 2, 7, 10], text_edits: [] }, pptx, { slidesIndex, lang: "zh" });
+  assert.deepEqual(built.report.validation.errors, []);
+});
 
 test("slim-master: strips the video (with link), downscales the big image, keeps the deck valid", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
   const out = path.join(outDir, "slim.pptx");

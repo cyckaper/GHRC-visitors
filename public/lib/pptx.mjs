@@ -23,7 +23,11 @@ const REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships";
 const CT_NS = "http://schemas.openxmlformats.org/package/2006/content-types";
 const REL_SLIDE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
 const REL_IMAGE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+const REL_HYPERLINK = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
 const HAN = /\p{Script=Han}/u;
+const EMU_PER_INCH = 914400;
+/** 內嵌影片／音訊的副檔名（scripts/slim-master.py 同一份清單）。 */
+export const MEDIA_EXT = new Set(["mp4", "m4v", "mov", "avi", "wmv", "mpg", "mpeg", "webm", "mkv", "asf", "m4a", "mp3", "wav", "wma", "aac"]);
 
 export const DEFAULT_SITE = "https://visit.healsdesign.org";
 export const EA_FONT = { ko: "Malgun Gothic", ja: "Yu Gothic", zh: "Microsoft JhengHei", en: "" };
@@ -340,10 +344,11 @@ export class Deck {
     this.set(path, xml.replace(/<\/p:spTree>/, `${pic}</p:spTree>`));
   }
 
-  async addTextBox(path, lines, { x, y, cx, cy }, { size = 1800, lang = "en-US", align = "l" } = {}) {
+  async addTextBox(path, lines, { x, y, cx, cy }, { size = 1800, lang = "en-US", align = "l", hlinkRId = "" } = {}) {
     const xml = await this.text(path);
     const id = nextShapeId(xml);
-    const paras = lines.map((l) => `<a:p><a:pPr algn="${align}"/><a:r><a:rPr lang="${lang}" sz="${size}" dirty="0"/><a:t>${esc(l)}</a:t></a:r></a:p>`).join("");
+    const rPr = hlinkRId ? `<a:rPr lang="${lang}" sz="${size}" dirty="0"><a:hlinkClick r:id="${hlinkRId}"/></a:rPr>` : `<a:rPr lang="${lang}" sz="${size}" dirty="0"/>`;
+    const paras = lines.map((l) => `<a:p><a:pPr algn="${align}"/><a:r>${rPr}<a:t>${esc(l)}</a:t></a:r></a:p>`).join("");
     const sp = `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="TextBox ${id}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr wrap="square" rtlCol="0"><a:spAutoFit/></a:bodyPr><a:lstStyle/>${paras}</p:txBody></p:sp>`;
     this.set(path, xml.replace(/<\/p:spTree>/, `${sp}</p:spTree>`));
   }
@@ -444,10 +449,120 @@ export class Deck {
     return { errors, warnings, slideCount: slides.length };
   }
 
-  /** 回傳 Uint8Array（Node 可直接 fs.writeFile；瀏覽器包成 Blob 下載）。 */
-  async save() {
-    return this.zip.generateAsync({ type: "uint8array", compression: "DEFLATE", compressionOptions: { level: 6 } });
+  /** 回傳 Uint8Array（Node 可直接 fs.writeFile；瀏覽器包成 Blob 下載）。onProgress(percent) 可選。 */
+  async save(onProgress) {
+    return this.zip.generateAsync({ type: "uint8array", compression: "DEFLATE", compressionOptions: { level: 6 } }, onProgress ? (meta) => onProgress(meta.percent) : undefined);
   }
+}
+
+/** 只看 zip 目錄：母簡報裡有沒有內嵌影片／音訊（要不要先瘦身）。 */
+export async function hasEmbeddedMedia(buf) {
+  const deck = await Deck.load(buf);
+  return deck.files().some((f) => f.startsWith("ppt/media/") && MEDIA_EXT.has((f.split(".").pop() || "").toLowerCase()));
+}
+
+/** 把所有 rels 裡指到 oldPart 的 Target 改成 newPart（同目錄改名）。 */
+async function retarget(deck, oldPart, newPart) {
+  const oldName = oldPart.split("/").pop();
+  const newName = newPart.split("/").pop();
+  const re = new RegExp(`(Target="[^"]*?)${oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`, "g");
+  for (const f of deck.files()) {
+    if (!f.endsWith(".rels")) continue;
+    const text = await deck.text(f);
+    if (!text.includes(oldName)) continue;
+    const next = text.replace(re, `$1${newName}"`);
+    if (next !== text) deck.set(f, next);
+  }
+}
+
+/**
+ * 瘦身（scripts/slim-master.py 的同一套規則，給瀏覽器用）：
+ *   1. 抽掉內嵌影片／音訊：留海報影格當靜態圖，加一行「▶ Video」文字（videoLinks[頁次] 有給連結就做成超連結）
+ *   2. 超過 imageThreshold 的點陣圖交給 resizeImage(bytes, ext, maxEdge) → {bytes, ext}（瀏覽器用 canvas；回 null 表示不動）
+ *   3. 清掉沒被引用的 media、驗證、重新壓縮
+ * @returns {Promise<{ pptx: Uint8Array, report: { before, after, slides, videos_removed, images_resized, removed_parts, warnings } }>}
+ */
+export async function slimDeck(buf, { maxEdge = 2000, imageThreshold = 3_000_000, resizeImage = null, videoLinks = {}, log = () => {} } = {}) {
+  const deck = await Deck.load(buf);
+  const report = { before: buf.byteLength ?? buf.length, after: 0, slides: 0, videos_removed: 0, images_resized: 0, removed_parts: 0, warnings: [] };
+  const slides = await deck.slides();
+  report.slides = slides.length;
+
+  // 1. 影片／音訊
+  for (const s of slides) {
+    if (!s.path) continue;
+    const media = (await deck.rels(s.path)).filter((r) => {
+      const typ = (r.type || "").split("/").pop();
+      const ext = ((r.target || "").split("?")[0].split(".").pop() || "").toLowerCase();
+      return ["video", "audio", "media"].includes(typ) || (!r.external && MEDIA_EXT.has(ext));
+    });
+    if (!media.length) continue;
+    log(`第 ${s.n} 頁：抽掉 ${media.length} 個影片／音訊物件`);
+    let xml = await deck.text(s.path);
+    const labels = [];
+    xml = xml.replace(/<p:pic>[\s\S]*?<\/p:pic>/g, (pic) => {
+      if (!/<a:videoFile\b|<a:audioFile\b|p14:media\b|ppaction:\/\/media/.test(pic)) return pic;
+      let out = pic.replace(/<a:videoFile\b[^>]*\/>|<a:audioFile\b[^>]*\/>|<a:quickTimeFile\b[^>]*\/>/g, "");
+      out = out.replace(/<p:extLst>(?:(?!<\/p:extLst>)[\s\S])*p14:media(?:(?!<\/p:extLst>)[\s\S])*<\/p:extLst>/g, "");
+      out = out.replace(/<a:hlinkClick\b[^>]*ppaction:\/\/media[^>]*\/>/g, "");
+      const m = /<a:off x="(\d+)" y="(\d+)"\/><a:ext cx="(\d+)" cy="(\d+)"\/>/.exec(out);
+      if (m) labels.push({ x: +m[1], y: +m[2] + +m[4] + Math.round(EMU_PER_INCH * 0.08), cx: +m[3], cy: Math.round(EMU_PER_INCH * 0.45) });
+      return out;
+    });
+    // 自動播放的 timing（只針對含媒體節點的）
+    xml = xml.replace(/<p:timing>(?:(?!<\/p:timing>)[\s\S])*(?:<p:video\b|<p:audio\b|p14:media)(?:(?!<\/p:timing>)[\s\S])*<\/p:timing>/g, "");
+    deck.set(s.path, xml);
+    for (const r of media) await deck.removeRel(s.path, r.id);
+    const link = videoLinks[s.n] || videoLinks[String(s.n)] || "";
+    for (const box of labels) {
+      if (link) {
+        const rid = await deck.addRel(s.path, REL_HYPERLINK, link, true);
+        await deck.addTextBox(s.path, [`▶ Video · 影片：${link}`], box, { size: 1400, hlinkRId: rid });
+      } else await deck.addTextBox(s.path, ["▶ Video · 影片（另附連結）"], box, { size: 1400 });
+    }
+    // 同一支影片通常有兩條關聯（videoFile 的 r:link 與 p14:media 的 r:embed），算「幾支」要看不同的檔
+    report.videos_removed += new Set(media.map((r) => r.part || r.target)).size;
+  }
+
+  // 2. 大圖
+  if (resizeImage) {
+    for (const part of deck.files()) {
+      const m = /^ppt\/media\/([^/]+)\.(png|jpe?g|tiff?|bmp|gif)$/i.exec(part);
+      if (!m) continue;
+      const bytes = await deck.bytes(part);
+      if (bytes.length <= imageThreshold) continue;
+      log(`縮圖 ${part}（${(bytes.length / 1e6).toFixed(1)} MB）`);
+      let out = null;
+      try {
+        out = await resizeImage(bytes, m[2].toLowerCase(), maxEdge);
+      } catch (e) {
+        report.warnings.push(`縮圖失敗，維持原檔：${part}（${e.message || e}）`);
+        continue;
+      }
+      if (!out || !out.bytes || out.bytes.length >= bytes.length) {
+        report.warnings.push(`${part} 壓不小，維持原檔`);
+        continue;
+      }
+      const ext = out.ext === "png" ? "png" : "jpeg";
+      const newPart = `ppt/media/${m[1]}.${ext}`;
+      if (newPart !== part) {
+        deck.remove(part);
+        await retarget(deck, part, newPart);
+        await deck.ensureDefault(ext, ext === "png" ? "image/png" : "image/jpeg");
+      }
+      deck.set(newPart, out.bytes);
+      report.images_resized++;
+    }
+  }
+
+  // 3. 清孤兒、驗證、重壓
+  report.removed_parts = (await deck.clean()).length;
+  const v = await deck.validate();
+  if (v.errors.length) throw new Error(`瘦身後的檔案沒過驗證：\n- ${v.errors.join("\n- ")}`);
+  log("重新壓縮…");
+  const pptx = await deck.save((pct) => log(`重新壓縮 ${Math.round(pct)}%`));
+  report.after = pptx.length;
+  return { pptx, report };
 }
 
 function roleN(slidesIndex, role) {

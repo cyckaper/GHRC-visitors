@@ -88,22 +88,36 @@ try {
   await page.waitForSelector("#afterSave:not([hidden])");
   const link = await page.textContent("#pageLink");
   check(link === `${base}/2026-10-07-uwa`, `saved visit has page url ${link}`);
-  check((await page.locator("#downloadSpec").count()) === 1 && (await page.isVisible("#deckBtn")), "pptx button is the primary action; spec JSON is tucked away");
+  check((await page.locator("#downloadSpec").count()) === 0 && (await page.isVisible("#deckBtn")), "pptx button is the primary action; no spec JSON download");
 
-  // 直接在瀏覽器產 .pptx：站台沒有 slim master → 從電腦選檔（這裡用合成母簡報）→ 下載 → 結構驗證
+  // 直接在瀏覽器產 .pptx：站台沒有母簡報 → 按「產生簡報」直接跳選檔（這裡用合成母簡報）→ 下載 → 結構驗證
   if (fixtureAvailable) {
-    await page.waitForFunction(() => !/檢查中/.test(document.getElementById("masterInfo").textContent));
-    check(await page.isVisible("#masterPick"), "no slim master on the site → the admin is asked to pick one from disk");
-    await page.setInputFiles("#masterFile", FIXTURE);
-    await page.waitForFunction(() => /已選/.test(document.getElementById("masterInfo").textContent));
-    const [download] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), page.click("#deckBtn")]);
-    check(download.suggestedFilename() === "GHRC_2026-10-07-uwa.pptx", `browser produced ${download.suggestedFilename()}`);
+    await page.waitForFunction(() => /還沒放上站台/.test(document.getElementById("masterRow").textContent));
+    const [chooser] = await Promise.all([page.waitForEvent("filechooser"), page.click("#deckBtn")]);
+    const [download] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), chooser.setFiles(FIXTURE)]);
+    check(download.suggestedFilename() === "GHRC_2026-10-07-uwa.pptx", `one click → file picker → ${download.suggestedFilename()} downloaded`);
     const pptxPath = path.join(tmp, "browser.pptx");
     await download.saveAs(pptxPath);
     const built = await Deck.load(await readFile(pptxPath));
     const v = await built.validate();
     check(v.errors.length === 0 && v.slideCount === 6, `browser-built deck is valid with ${v.slideCount} slides (4 always-slides + ask + QR)${v.errors.length ? ": " + v.errors.join("; ") : ""}`);
     await page.waitForFunction(() => /已下載/.test(document.getElementById("deckInfo").textContent));
+    // 把這份母簡報存到站台（分塊上傳），重新載入後不必選檔就能產
+    await page.click("#saveMasterBtn");
+    await page.waitForFunction(() => /移除/.test(document.getElementById("masterRow").textContent), null, { timeout: 60000 });
+    const storedMb = parseFloat((/([\d.]+) MB/.exec(await page.textContent("#masterRow")) || [])[1] || "99");
+    check(storedMb < 3, `master was slimmed in the browser before storing (${storedMb} MB, fixture is 11.3 MB with a video)`);
+    check(/瘦身：抽掉 1 個影片/.test(await page.textContent("#deckReport")), "slim report shown: 1 video stripped");
+    await page.reload();
+    await page.waitForFunction(() => document.getElementById("backendInfo").textContent.includes("file"));
+    await page.selectOption("#preVisitSelect", "2026-10-07-uwa");
+    await page.waitForSelector("#afterSave:not([hidden])");
+    await page.waitForFunction(() => /移除/.test(document.getElementById("masterRow").textContent));
+    const [download2] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), page.click("#deckBtn")]);
+    const pptxPath2 = path.join(tmp, "browser2.pptx");
+    await download2.saveAs(pptxPath2);
+    const v2 = await (await Deck.load(await readFile(pptxPath2))).validate();
+    check(v2.errors.length === 0 && v2.slideCount === 6, "deck built from the master stored on the site (chunked download, no file picker)");
   } else console.log("skip - browser deck build (python-pptx fixture unavailable)");
   await page.click("#confirmLetterBtn");
   await page.waitForFunction(() => document.getElementById("confirmBody").value.length > 0);
@@ -139,20 +153,39 @@ try {
   await page.waitForFunction(() => document.querySelectorAll("#recipients input").length === 2);
   check(true, "thanks letter drafted with the 請益 wording and 2 recipients");
 
-  // ── 來賓端 ──
+  // ── 來賓端（日期在未來 → 訪前措辭） ──
   await page.goto(`${base}/2026-10-07-uwa`);
   await page.waitForSelector("#lab-303");
+  check((await page.textContent("#labsTitle")).includes("will visit") && (await page.isHidden("#respond")) && (await page.isHidden("#emailSec")), "before the visit: future tense, no thank-you form, no on-site email box");
+  check((await page.textContent("#lab-301")).includes("seven-workstation"), "301 describes a seven-workstation array");
   check((await page.locator("#labs article").count()) === 6, "guest page shows the briefing step plus five lab cards");
   check((await page.textContent("#labs article:first-child")).includes("Center overview"), "briefing card comes first");
   check((await page.textContent("#lab-303")).includes("陳惠美") && !(await page.textContent("#lab-303")).includes("鄭佳昆"), "303 lists only 陳惠美");
   check((await page.textContent("#lab-305")).includes("IVR Research Lab") && !(await page.textContent("#lab-305")).includes("outside"), "305 is the IVR Research Lab");
   check((await page.textContent("#briefing-card")).includes("302"), "guest page shows the briefing in 302");
+  check((await page.textContent("#lab-303")).includes("Landscape Simulation Lab") && (await page.textContent("#lab-303")).includes("景觀環境模擬室"), "English visit is still bilingual: English first, Chinese second");
+  check((await page.textContent("#programme li:first-child")).includes("總體介紹"), "programme block gets the Chinese label when the plan left title_2nd empty");
   check((await page.locator("#programme li").count()) > 0, "programme rendered");
   await page.waitForSelector("#materialsSec:not([hidden])");
   check((await page.locator("#photoGrid img").count()) === 1 && (await page.textContent("#linkList")).includes("Lab 303 papers"), "visit page shows the uploaded photo and the link");
   check((await page.getAttribute("#photoGrid img", "src")).startsWith("/api/media?key=materials%2F"), "photo comes from the public media endpoint");
-  await page.waitForFunction(() => document.querySelector("#respond").classList.contains("in") || document.querySelector("#respond").getBoundingClientRect().top > innerHeight);
-  check(await page.isVisible("#lab-303"), "reveal animation leaves cards visible");
+  await page.locator("#lab-303").scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => document.querySelector("#lab-303").classList.contains("in"));
+  check(await page.isVisible("#lab-303"), "reveal animation runs when a card scrolls into view and leaves it visible");
+
+  // 當天：留信箱與備援按鍵出現
+  await page.goto(`${base}/2026-10-07-uwa?phase=today`);
+  await page.waitForSelector("#emailSec:not([hidden])");
+  check((await page.textContent("#labsTitle")).includes("Today"), "on the day: today's laboratories");
+  await page.fill("#emailEmail", "walkin@example.org");
+  await page.click("#emailSend");
+  await page.waitForSelector("#emailDone:not([hidden])");
+  check(true, "onsite email captured");
+
+  // 訪後（感謝信的 #respond 連結）：過去式，三個回應項目
+  await page.goto(`${base}/2026-10-07-uwa#respond`);
+  await page.waitForSelector("#respond:not([hidden])");
+  check((await page.textContent("#labsTitle")).includes("visited") && (await page.textContent("#welcome")).includes("Thank you") && (await page.isHidden("#emailSec")), "after the visit: past tense, thank-you heading, no on-site email box");
   check((await page.textContent("#qBetter")) === "From your perspective, what should we be doing better?", "open-suggestion wording is the 請益 question");
   await page.check("#anonymous");
   check(await page.isHidden("#identity"), "identity fields hidden when anonymous");
@@ -163,11 +196,6 @@ try {
   const rows = JSON.parse(await readFile(path.join(tmp, "responses.json"), "utf8"));
   const anon = rows.find((r) => r.suggestion === "Room 302 was hard to follow.");
   check(anon && anon.anonymous && anon.name === "" && anon.email === "" && anon.submitted_at.length === 10, "anonymous response stored without identity");
-
-  await page.fill("#emailEmail", "walkin@example.org");
-  await page.click("#emailSend");
-  await page.waitForSelector("#emailDone:not([hidden])");
-  check(true, "onsite email captured");
 
   check(errors.length === 0, `no page errors (${errors.join(" | ")})`);
   console.log("\nSMOKE OK");

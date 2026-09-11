@@ -137,11 +137,10 @@
               <button class="btn btn-soft" id="downloadIcs">下載收工提醒 .ics</button>
               <button class="btn btn-soft" id="openWrapup">開收工頁</button>
             </div>
-            <p class="muted">母簡報：<span id="masterInfo">檢查中…</span></p>
-            <p class="muted" id="deckInfo" hidden></p>
-            <label class="flex flex-wrap items-center gap-2 text-sm" id="masterPick" hidden><span class="muted">從電腦選 slim-master.pptx：</span><input type="file" id="masterFile" class="!w-auto" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"></label>
+            <p class="text-sm" id="deckInfo" hidden></p>
             <ul class="text-sm text-stone-600 list-disc pl-5" id="deckReport"></ul>
-            <details class="muted"><summary>進階：本機 CLI 產檔</summary><p class="mt-1">把 <a href="#" id="downloadSpec" class="underline">這份參訪的 JSON</a> 存到 <code>data/visits/</code>，本機執行 <code id="deckCmd"></code>（可另出 PDF）。</p></details>
+            <p class="text-sm flex flex-wrap items-center gap-2" id="masterRow"></p>
+            <input type="file" id="masterFile" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" hidden>
           </div>
         </div>
         <div class="space-y-2">
@@ -487,33 +486,88 @@
     $("afterSave").hidden = false;
     $("pageLink").textContent = v.page_url; $("pageLink").href = v.page_url;
     $("qr").innerHTML = ""; if (window.QRCode) new QRCode($("qr"), { text: v.page_url, width: 128, height: 128 });
-    $("deckCmd").textContent = `npm run deck -- --visit=${v.visit_id}`;
     $("saveInfo").textContent = `更新：${(v.updated_at || "").replace("T", " ").slice(0, 16)}`;
     $("deckReport").innerHTML = "";
   }
   $("copyLink").onclick = () => copy(state.visit.page_url);
-  $("downloadSpec").onclick = (e) => { e.preventDefault(); download(`${state.visit.visit_id}.json`, JSON.stringify(state.visit, null, 2)); };
 
   // ── 產生簡報：在瀏覽器裡子集化母簡報（核心 /lib/pptx.mjs 與本機 CLI 同一份），直接下載 .pptx ──
+  // 母簡報來源：1) 站台媒體庫（「上傳母簡報」一次，分塊存進 Blobs，/api/master）2) commit 在 public/assets/master/ 的靜態檔 3) 現場從電腦選檔
   const MASTER_URL = "/assets/master/slim-master.pptx";
   const PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  const PART = 4 * 1024 * 1024;
+  const mb = (n) => `${(n / 1e6).toFixed(1)} MB`;
   async function checkMaster() {
-    state.masterOnSite = false;
-    try {
-      const r = await fetch(MASTER_URL, { method: "HEAD", cache: "no-store" });
-      const type = r.headers.get("content-type") || "";
-      const size = Number(r.headers.get("content-length") || 0);
-      // 站台對不存在的路徑會回 index.html（200），所以要看型別，不能只看狀態碼
-      state.masterOnSite = r.ok && !/text\/html/i.test(type) && (size === 0 || size > 100000);
-      $("masterInfo").textContent = state.masterOnSite ? `站台上的 slim master（${size ? (size / 1e6).toFixed(1) + " MB" : "已就緒"}）` : "站台上還沒有 slim master，請先從電腦選檔再按「產生簡報」";
-    } catch (e) { $("masterInfo").textContent = "無法確認站台上的母簡報，請從電腦選檔"; }
-    $("masterPick").hidden = state.masterOnSite;
+    state.master = null; state.masterOnSite = false;
+    const r = await api("/api/master");
+    if (r.ok) state.master = r.master || null;
+    if (!state.master) {
+      try {
+        const h = await fetch(MASTER_URL, { method: "HEAD", cache: "no-store" });
+        // 站台對不存在的路徑會回 index.html（200），所以看型別不看狀態碼
+        state.masterOnSite = h.ok && !/text\/html/i.test(h.headers.get("content-type") || "");
+      } catch (e) { state.masterOnSite = false; }
+    }
+    renderMasterRow();
   }
-  $("masterFile").onchange = async () => {
-    const file = $("masterFile").files[0]; if (!file) return;
-    state.masterBytes = new Uint8Array(await file.arrayBuffer());
-    $("masterInfo").textContent = `已選 ${file.name}（${(file.size / 1e6).toFixed(1)} MB，只留在這個分頁）`;
-  };
+  function renderMasterRow() {
+    const row = $("masterRow");
+    if (state.master) row.innerHTML = `<span class="muted">母簡報 ${esc(state.master.name)} · ${mb(state.master.size)} · ${esc((state.master.uploaded_at || "").slice(0, 10))}</span><label class="underline cursor-pointer">更換<input type="file" id="masterUpload" accept=".pptx" hidden></label><button type="button" class="underline" id="masterRemove">移除</button>`;
+    else if (state.masterOnSite) row.innerHTML = `<span class="muted">母簡報：站台上的 slim-master.pptx</span>`;
+    else row.innerHTML = `<span class="muted">母簡報還沒放上站台（只要做一次；可直接選原始母簡報，會先在瀏覽器裡瘦身）</span><label class="btn btn-soft cursor-pointer">上傳母簡報 .pptx<input type="file" id="masterUpload" accept=".pptx" hidden></label>`;
+    const up = $("masterUpload"); if (up) up.onchange = () => { const f = up.files[0]; if (f) uploadMaster(f); };
+    const rm = $("masterRemove"); if (rm) rm.onclick = async () => { if (!confirm("移除站台上的母簡報？")) return; const r = await api("/api/master", { method: "DELETE" }); if (!r.ok) return flash(r.error, "err"); state.masterBytes = null; await checkMaster(); };
+  }
+  async function uploadMaster(file) {
+    const info = $("deckInfo"); info.hidden = false;
+    try {
+      const { bytes, report } = await slimIfNeeded(new Uint8Array(await file.arrayBuffer()), (m) => { info.textContent = m; });
+      await uploadMasterBytes(bytes, file.name.replace(/\.pptx$/i, "") + (report ? "-slim.pptx" : ".pptx"));
+      info.textContent = report ? slimSummary(report) : "";
+      info.hidden = !report;
+      flash("母簡報已放上站台，以後直接按「產生簡報」");
+    } catch (e) { info.textContent = `上傳失敗：${e.message || e}`; flash(String(e.message || e), "err"); renderMasterRow(); }
+  }
+  /** 太大或含影片的母簡報先在瀏覽器裡瘦身（同 scripts/slim-master.py 的規則）：抽影片留海報、大圖縮到 2000px、清孤兒。 */
+  async function slimIfNeeded(bytes, log) {
+    const core = await deckCore();
+    if (bytes.length < 60 * 1024 * 1024 && !(await core.hasEmbeddedMedia(bytes))) return { bytes, report: null };
+    log(`母簡報 ${mb(bytes.length)}，瘦身中（抽影片、縮圖），大檔約需一兩分鐘…`);
+    let out = await core.slimDeck(bytes, { resizeImage, log });
+    if (out.pptx.length > 60 * 1024 * 1024) out = await core.slimDeck(out.pptx, { resizeImage, log, imageThreshold: 1_000_000, maxEdge: 1600 });
+    return { bytes: out.pptx, report: out.report };
+  }
+  const slimSummary = (r) => `母簡報已瘦身：抽掉 ${r.videos_removed} 個影片／音訊、縮小 ${r.images_resized} 張圖，${mb(r.before)} → ${mb(r.after)}${r.warnings.length ? `；${r.warnings.join("；")}` : ""}`;
+  /** 瀏覽器版縮圖：長邊縮到 maxEdge，有透明留 PNG，其餘轉 JPEG 85。 */
+  async function resizeImage(bytes, ext, maxEdge) {
+    const type = ext === "png" ? "image/png" : ext === "gif" ? "image/gif" : ext === "bmp" ? "image/bmp" : /tif/.test(ext) ? "image/tiff" : "image/jpeg";
+    const bmp = await createImageBitmap(new Blob([bytes], { type }));
+    const scale = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * scale)), h = Math.max(1, Math.round(bmp.height * scale));
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    const ctx = c.getContext("2d"); ctx.drawImage(bmp, 0, 0, w, h); bmp.close();
+    let alpha = false;
+    if (ext === "png" || ext === "gif") { const d = ctx.getImageData(0, 0, w, h).data; const step = Math.max(4, Math.floor(d.length / 4 / 20000) * 4); for (let i = 3; i < d.length; i += step) if (d[i] < 255) { alpha = true; break; } }
+    const blob = await new Promise((r) => c.toBlob(r, alpha ? "image/png" : "image/jpeg", 0.85));
+    if (!blob) return null;
+    return { bytes: new Uint8Array(await blob.arrayBuffer()), ext: alpha ? "png" : "jpeg" };
+  }
+  async function uploadMasterBytes(bytes, name) {
+    if (!(bytes[0] === 0x50 && bytes[1] === 0x4b)) throw new Error("這不是 .pptx 檔");
+    const total = Math.ceil(bytes.length / PART);
+    if (total > 64) throw new Error(`母簡報 ${mb(bytes.length)} 太大，請先瘦身（刪影片、壓縮圖片）到 30 MB 左右`);
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const row = $("masterRow");
+    for (let i = 0; i < total; i++) {
+      row.innerHTML = `<span class="muted">上傳母簡報 ${i + 1}/${total}…</span>`;
+      const r = await fetch(`/api/master?upload=${id}&part=${i}&total=${total}`, { method: "POST", headers: { authorization: `Bearer ${token()}`, "content-type": "application/octet-stream" }, body: bytes.slice(i * PART, (i + 1) * PART) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.error || `第 ${i + 1} 塊上傳失敗（${r.status}）`);
+    }
+    const c = await api(`/api/master?upload=${id}&commit=1&total=${total}&name=${encodeURIComponent(name)}`, { method: "POST" });
+    if (!c.ok) throw new Error(c.error || "上傳沒有完成");
+    state.master = c.master; state.masterOnSite = false; state.masterBytes = bytes; renderMasterRow();
+  }
   function loadScript(src) { return new Promise((resolve, reject) => { const el = document.createElement("script"); el.src = src; el.onload = resolve; el.onerror = () => reject(new Error("載入失敗：" + src)); document.head.appendChild(el); }); }
   async function deckCore() {
     if (!window.JSZip) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js");
@@ -523,15 +577,24 @@
   }
   async function masterBytes(log) {
     if (state.masterBytes) return state.masterBytes;
+    if (state.master) {
+      const parts = [];
+      for (let i = 0; i < state.master.parts; i++) {
+        log(`下載母簡報 ${i + 1}/${state.master.parts}…`);
+        const r = await fetch(`/api/master?part=${i}`, { headers: { authorization: `Bearer ${token()}` } });
+        if (!r.ok) throw new Error(`母簡報第 ${i + 1} 塊抓不到（${r.status}）`);
+        parts.push(new Uint8Array(await r.arrayBuffer()));
+      }
+      const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
+      state.masterBytes = out; return out;
+    }
     if (state.masterOnSite) {
       log("下載母簡報…");
       const r = await fetch(MASTER_URL);
       if (!r.ok || /text\/html/i.test(r.headers.get("content-type") || "")) throw new Error("抓不到站台上的母簡報");
-      state.masterBytes = new Uint8Array(await r.arrayBuffer());
-      return state.masterBytes;
+      state.masterBytes = new Uint8Array(await r.arrayBuffer()); return state.masterBytes;
     }
-    $("masterPick").hidden = false; $("masterFile").focus();
-    throw new Error("站台上沒有 slim master：請先從電腦選 slim-master.pptx，再按「產生簡報」");
+    return null;
   }
   /** QR 圖：用頁面已載入的 qrcodejs 畫到 canvas；沒有就回 null（QR 頁只放網址文字）。 */
   async function qrPng(url) {
@@ -558,28 +621,49 @@
     }
     return out;
   }
-  $("deckBtn").onclick = () => busy($("deckBtn"), async () => {
-    const info = $("deckInfo"); info.hidden = false; const log = (m) => { info.textContent = m; };
-    $("deckReport").innerHTML = "";
+  // 按「產生簡報」：站台有母簡報就直接產；沒有就先跳選檔視窗（要在同一個點擊裡同步呼叫），選完立刻產
+  $("deckBtn").onclick = () => {
+    if (!state.saved) return flash("先儲存這次參訪", "err");
+    if (!state.masterBytes && !state.master && !state.masterOnSite) { state.buildAfterPick = true; $("masterFile").value = ""; $("masterFile").click(); return; }
+    buildDeck();
+  };
+  $("masterFile").onchange = async () => {
+    const f = $("masterFile").files[0]; if (!f) return;
+    const info = $("deckInfo"); info.hidden = false;
     try {
-      if (!state.saved) throw new Error("先儲存這次參訪");
-      const spec = readForm(); spec.visit_id = state.visit.visit_id; spec.page_url = state.visit.page_url;
-      const lang = spec.language || "zh";
-      const core = await deckCore();
-      const master = await masterBytes(log);
-      log("組裝簡報…");
-      const { pptx, report } = await core.buildDeck(spec, master, { slidesIndex: state.slides, lang, site: location.origin, qrPng, translate: lang === "ko" || lang === "ja" ? (texts, target) => translateTexts(texts, target, log) : null, log });
-      const name = `GHRC_${spec.visit_id}.pptx`;
-      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([pptx], { type: PPTX_MIME })); a.download = name; a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-      log(`已下載 ${name}：${report.output_slides} 頁，${(pptx.length / 1e6).toFixed(1)} MB${report.translated ? `，翻譯 ${report.translated} 段` : ""}。PDF 請用 PowerPoint 另存，再到「收工」放上專頁。`);
-      const lines = [...report.warnings, ...report.edits.missed.map((m) => `第 ${m.slide} 頁找不到「${(m.find || "").slice(0, 40)}」`)];
-      if (report.programme_table && report.programme_table !== "filled") lines.push(`第 2 頁流程表：${report.programme_table}`);
-      $("deckReport").innerHTML = lines.map((l) => `<li>${esc(l)}</li>`).join("");
-      state.visit.deck = { ...(state.visit.deck || {}), generated_at: new Date().toISOString(), slides: report.output_slides };
-      api("/api/visits", { method: "POST", body: { ...state.visit } });
-    } catch (e) { log(`產檔失敗：${e.message || e}`); flash(String(e.message || e), "err"); }
-  });
+      const { bytes, report } = await slimIfNeeded(new Uint8Array(await f.arrayBuffer()), (m) => { info.textContent = m; });
+      state.masterBytes = bytes; state.masterName = f.name.replace(/\.pptx$/i, "") + (report ? "-slim.pptx" : ".pptx"); state.slimReport = report;
+    } catch (e) { info.textContent = `母簡報無法使用：${e.message || e}`; flash(String(e.message || e), "err"); state.buildAfterPick = false; return; }
+    if (state.buildAfterPick) { state.buildAfterPick = false; buildDeck({ offerSave: true }); }
+  };
+  function buildDeck({ offerSave = false } = {}) {
+    return busy($("deckBtn"), async () => {
+      const info = $("deckInfo"); info.hidden = false; const log = (m) => { info.textContent = m; };
+      $("deckReport").innerHTML = "";
+      try {
+        const spec = readForm(); spec.visit_id = state.visit.visit_id; spec.page_url = state.visit.page_url;
+        const lang = spec.language || "zh";
+        const core = await deckCore();
+        const master = await masterBytes(log);
+        if (!master) throw new Error("沒有母簡報");
+        log("組裝簡報…");
+        const { pptx, report } = await core.buildDeck(spec, master, { slidesIndex: state.slides, lang, site: location.origin, qrPng, translate: lang === "ko" || lang === "ja" ? (texts, target) => translateTexts(texts, target, log) : null, log });
+        const name = `GHRC_${spec.visit_id}.pptx`;
+        const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([pptx], { type: PPTX_MIME })); a.download = name; a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+        info.textContent = `已下載 ${name}（${report.output_slides} 頁，${mb(pptx.length)}${report.translated ? `，翻譯 ${report.translated} 段` : ""}）`;
+        if (offerSave) {
+          info.insertAdjacentHTML("beforeend", ` <button type="button" class="underline" id="saveMasterBtn">把這份母簡報存到站台，以後直接按</button>`);
+          $("saveMasterBtn").onclick = () => busy($("saveMasterBtn"), async () => { try { await uploadMasterBytes(state.masterBytes, state.masterName || "slim-master.pptx"); $("saveMasterBtn").remove(); flash("母簡報已放上站台"); } catch (e) { flash(String(e.message || e), "err"); } });
+        }
+        const lines = [...(offerSave && state.slimReport ? [slimSummary(state.slimReport)] : []), ...report.warnings, ...report.edits.missed.map((m) => `第 ${m.slide} 頁找不到「${(m.find || "").slice(0, 40)}」`)];
+        if (report.programme_table && report.programme_table !== "filled") lines.push(`第 2 頁流程表：${report.programme_table}`);
+        $("deckReport").innerHTML = lines.map((l) => `<li>${esc(l)}</li>`).join("");
+        state.visit.deck = { ...(state.visit.deck || {}), generated_at: new Date().toISOString(), slides: report.output_slides };
+        api("/api/visits", { method: "POST", body: { ...state.visit } });
+      } catch (e) { info.textContent = `產檔失敗：${e.message || e}`; flash(String(e.message || e), "err"); }
+    });
+  }
   $("downloadIcs").onclick = () => download(`${state.visit.visit_id}-wrapup.ics`, ics(state.visit), "text/calendar");
   $("openWrapup").onclick = () => { $("wrapVisitSelect").value = state.visit.visit_id; showTab("wrapup"); };
   $("confirmLetterBtn").onclick = () => busy($("confirmLetterBtn"), async () => {
