@@ -60,6 +60,18 @@ export interface Visit {
   text_edits: TextEdit[];
   cover_text?: { org_line: string; guest_lines: string[]; date_line: string };
   page_url: string;
+  /** 訪前功課（/api/research）：AI 查過的公開資料與可能的參訪目的，給主辦端看的，不對外。 */
+  background?: {
+    org_profile: string;
+    people: { name: string; note: string }[];
+    purposes: string[];
+    rooms: { room: string; why: string }[];
+    prepare: string[];
+    unknowns: string[];
+    sources: { title: string; url: string }[];
+    searched?: boolean;
+    researched_at?: string;
+  };
   materials: Materials;
   // skip=true：這場不用簡報，只口頭介紹（後台「簡報」分頁勾的）
   deck: { skip?: boolean; slides?: number; spec_path?: string; pptx_url?: string; pdf_url?: string; generated_at?: string };

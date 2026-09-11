@@ -81,6 +81,12 @@ try {
   check((await page.inputValue("#date")) === "2026-10-07", "extract fills the date");
   check((await page.locator("#guestTable tbody tr").count()) === 2, "extract lists both guests");
   await page.fill("#code", "uwa");
+
+  // 訪前功課：AI 查背景 → 可能的參訪目的要出現在訪前分頁，而且要跟著參訪一起存
+  await page.click("#researchBtn");
+  await page.waitForFunction(() => document.querySelectorAll("#background li").length > 0);
+  check((await page.textContent("#background")).includes("可能的參訪目的"), "the background card lists the likely purposes of the visit");
+
   await page.click("#planBtn");
   await page.waitForFunction(() => document.querySelectorAll("#programmeTable tbody tr").length > 0);
   check((await page.locator("#programmeTable tbody tr select").evaluateAll((els) => els.map((e) => e.options[e.selectedIndex].text))).includes("綜合討論"), "programme table shows a 綜合討論 block");
@@ -92,6 +98,7 @@ try {
   await page.waitForSelector("#afterSave:not([hidden])");
   const link = await page.textContent("#pageLink");
   check(link === `${base}/2026-10-07-uwa`, `saved visit has page url ${link}`);
+  check((await page.textContent("#background")).includes("可能的參訪目的"), "the background survives the save");
   check((await page.textContent("#deckState")).includes("已選"), "the pre-visit tab only reports how many slides are picked");
 
   // ── 簡報分頁：選頁、不用簡報、產檔 ──

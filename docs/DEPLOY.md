@@ -19,7 +19,8 @@
 | `GMAIL_CLIENT_ID`、`GMAIL_CLIENT_SECRET`、`GMAIL_REFRESH_TOKEN`、`GMAIL_SENDER` | 選 | 訪後信一鍵寄出（§3）。沒設定時後台會給 mailto 與複製 |
 | `DICTATION_LANGUAGE` | 選 | Whisper 的語言提示，預設 `zh` |
 
-4. Deploy。部署後：`https://visit.healsdesign.org/admin.html` 用 `ADMIN_TOKEN` 登入。**一台裝置只要登入一次**：伺服器會發一個 HttpOnly cookie（180 天，每次打開後台自動續期），換手機或換瀏覽器才要再貼一次；按「登出」就清掉。
+4. Deploy。部署後：`https://visit.healsdesign.org/admin.html` 用 `ADMIN_TOKEN` 登入。
+   「訪前」的 **AI 查訪客背景** 會用 Claude 的伺服器端網路搜尋（每次查幾個網頁，另外計費）；帳號沒開網路搜尋也不會壞，只會退回「只讀來信」的研判並在畫面上標明。**一台裝置只要登入一次**：伺服器會發一個 HttpOnly cookie（180 天，每次打開後台自動續期），換手機或換瀏覽器才要再貼一次；按「登出」就清掉。
 
 **資料在哪**：預設在 Netlify Blobs（store `ghrc-visit`：`visits/`、`responses/`、`timeline/`、`slideperf/`、`media/`）。後台「資料」分頁可匯出四張表的 CSV。Deploy Preview 與分支部署用 deploy-scoped store，不會混進正式資料。
 
