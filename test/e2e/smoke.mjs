@@ -115,6 +115,12 @@ try {
   await page.waitForSelector("#deckWork:not([hidden])");
   await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-slide]:checked").length > 0);
 
+  // 一載入就直接點「簡報」分頁（boot 可能還沒跑完）也要看得到選項，不能一片空白
+  await page.reload();
+  await page.click('[data-tab="deck"]');
+  await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-slide]").length > 0, null, { timeout: 20000 });
+  check(true, "the slide options are there even when the deck tab is opened before the page finished booting");
+
   // 直接在瀏覽器產 .pptx：站台沒有母簡報 → 按「產生簡報」直接跳選檔（這裡用合成母簡報）→ 下載 → 結構驗證
   if (fixtureAvailable) {
     await page.waitForFunction(() => /還沒放上站台/.test(document.getElementById("masterRow").textContent));

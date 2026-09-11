@@ -320,9 +320,12 @@
   const legacyToken = () => { try { return localStorage.getItem(LEGACY_KEY) || ""; } catch (e) { return ""; } };
   const forgetLegacy = () => { try { localStorage.removeItem(LEGACY_KEY); } catch (e) {} };
   const token = () => $("token").value.trim() || legacyToken();
+  const noSessionEndpoint = (r) => /^(404|405)\b/.test(String(r && r.error || ""));
   async function signIn(given) {
     const r = await api("/api/session", { method: "POST", body: { token: given } });
-    if (r.ok) { forgetLegacy(); $("token").value = ""; }
+    if (r.ok) { forgetLegacy(); $("token").value = ""; return r; }
+    // 站台上還沒有 /api/session（正在部署或舊版）：退回舊做法，至少進得去
+    if (noSessionEndpoint(r)) { try { localStorage.setItem(LEGACY_KEY, given); } catch (e) {} return { ok: true, legacy: true }; }
     return r;
   }
   $("tokenSave").onclick = () => busy($("tokenSave"), async () => {
@@ -330,7 +333,7 @@
     if (!given) return flash("請貼上 ADMIN_TOKEN", "err");
     const r = await signIn(given);
     if (!r.ok) return flash(r.error, "err");
-    flash(`已登入，這台裝置 ${r.days || 180} 天內不用再登入`);
+    flash(r.legacy ? "已登入" : `已登入，這台裝置 ${r.days || 180} 天內不用再登入`);
     await boot();
   });
   $("token").addEventListener("keydown", (e) => { if (e.key === "Enter") $("tokenSave").click(); });
@@ -364,9 +367,17 @@
   }
 
   // ── boot ──
+  /** 頁次索引與老師資料：訪前與簡報兩個分頁都要用，誰先要就誰載（只載一次）。 */
+  function ensureIndexes() {
+    if (!state.indexes) {
+      state.indexes = Promise.all([fetch("/data/slides.json").then((r) => r.json()), fetch("/data/labs.json").then((r) => r.json())])
+        .then(([slides, labs]) => { state.slides = slides; state.labs = labs; })
+        .catch((e) => { state.indexes = null; throw e; });
+    }
+    return state.indexes;
+  }
   async function boot() {
-    const [slides, labs] = await Promise.all([fetch("/data/slides.json").then((r) => r.json()), fetch("/data/labs.json").then((r) => r.json())]);
-    state.slides = slides; state.labs = labs;
+    await ensureIndexes();
     renderItinerary();
     await loadVisits();
     fillForm(state.visit || emptyVisit());
@@ -450,6 +461,7 @@
   $("deckVisitSelect").addEventListener("change", loadDeckTab);
   const dnote = (msg, cls = "muted") => { const el = $("deckStatus"); el.textContent = msg || ""; el.className = "text-sm " + cls; };
   async function loadDeckTab() {
+    try { await ensureIndexes(); } catch (e) { $("slideGrid").innerHTML = ""; return dnote(`頁次索引載入失敗（${e.message || e}），請重新整理頁面。`, "err"); }
     let id = $("deckVisitSelect").value;
     if (!id && !(state.visits || []).length) { await loadVisits(); id = $("deckVisitSelect").value; }
     if (!id) { state.deckVisit = null; $("deckWork").hidden = true; return dnote("還沒有參訪，先到「訪前」建一場。", "err"); }
@@ -502,7 +514,9 @@
   }
   function renderSlideGrid(selected = []) {
     const set = new Set(selected);
-    $("slideGrid").innerHTML = slideGroups().map((g) => {
+    const groups = slideGroups();
+    if (!groups.length) { $("slideGrid").innerHTML = `<p class="err text-sm">頁次索引還沒載入（/data/slides.json）。重新整理頁面再試一次。</p>`; updateSlideCount(); return; }
+    $("slideGrid").innerHTML = groups.map((g) => {
       const ns = g.items.map((s) => s.n);
       const range = ns.length > 1 ? `${String(ns[0]).padStart(2, "0")}–${String(ns[ns.length - 1]).padStart(2, "0")}` : String(ns[0]).padStart(2, "0");
       return `<fieldset class="card !p-3 !rounded-lg" data-group="${g.id}">
@@ -1009,7 +1023,7 @@ $("driveInfo").innerHTML = d?.backed_up_at
     const legacy = legacyToken();
     if (legacy) await signIn(legacy);
     const s = await api("/api/session");
-    if (s.ok) return boot();
+    if (s.ok || (noSessionEndpoint(s) && token())) return boot();
     setAuth(false);
     $("token").focus();
   })();
