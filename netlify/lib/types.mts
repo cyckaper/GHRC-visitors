@@ -26,7 +26,14 @@ export interface ItineraryStep {
   room: string; // "briefing"（總體介紹，固定第一步）或 301–305
   minutes: number;
   focus?: string;
-  location?: string; // briefing 的地點（例如 304 或 簡報室），選填
+  location?: string; // briefing 的地點，預設 302（lib/visit.mjs DEFAULT_BRIEFING_LOCATION）
+}
+
+/** 專屬頁面的「當天資料」：deck_pdf／photos 是媒體庫 key（materials/<visit_id>/<file>）或 https 連結。 */
+export interface Materials {
+  deck_pdf: string;
+  photos: string[];
+  links: { title: string; url: string }[];
 }
 
 export interface TextEdit {
@@ -53,6 +60,7 @@ export interface Visit {
   text_edits: TextEdit[];
   cover_text?: { org_line: string; guest_lines: string[]; date_line: string };
   page_url: string;
+  materials: Materials;
   deck: { spec_path?: string; pptx_url?: string; pdf_url?: string; generated_at?: string };
   signbook: { photo_key?: string; transcript?: string; entries?: SignbookEntry[]; read_at?: string };
   dictation: { audio_key?: string; transcript?: string; extracted?: DictationExtract; recorded_at?: string };

@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, readdir } from "node:fs/promises";
+import { mkdir, readFile, writeFile, readdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { createSign } from "node:crypto";
 import { env } from "./http.mts";
@@ -24,6 +24,7 @@ export interface Store {
   appendSlidePerformance(rows: SlidePerf[]): Promise<void>;
   putMedia(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
   getMedia(key: string): Promise<{ bytes: Uint8Array; contentType: string } | null>;
+  deleteMedia(key: string): Promise<void>;
 }
 
 let cached: Store | null = null;
@@ -82,6 +83,10 @@ function fileMedia() {
       } catch {
         return null;
       }
+    },
+    async deleteMedia(key: string) {
+      const file = path.join(storeDir(), "media", key);
+      await Promise.allSettled([unlink(file), unlink(`${file}.meta.json`)]);
     },
   };
 }
@@ -155,6 +160,10 @@ function blobsMedia() {
       const r = await s.getWithMetadata(`media/${key}`, { type: "arrayBuffer" });
       if (!r || !r.data) return null;
       return { bytes: new Uint8Array(r.data as ArrayBuffer), contentType: String((r.metadata as any)?.contentType || "application/octet-stream") };
+    },
+    async deleteMedia(key: string) {
+      const s = await blobStore();
+      await s.delete(`media/${key}`);
     },
   };
 }
@@ -336,7 +345,7 @@ function parseJSON<T>(s: string, fallback: T): T {
   }
 }
 
-function sheetsStore(media: { putMedia: Store["putMedia"]; getMedia: Store["getMedia"] }): Store {
+function sheetsStore(media: { putMedia: Store["putMedia"]; getMedia: Store["getMedia"]; deleteMedia: Store["deleteMedia"] }): Store {
   const responseRow = (r: ResponseRow) => SHEETS.responses.map(([k]) => cell((r as any)[k]));
   const timelineRow = (t: TimelineSignal) => SHEETS.timeline.map(([k]) => cell((t as any)[k]));
   const perfRow = (p: SlidePerf) => SHEETS.slide_performance.map(([k]) => cell((p as any)[k]));

@@ -33,7 +33,7 @@ GHRC 參訪系統。臺大生農學院綠色健康研究中心（GHRC）每年�
 
 1. 抽掉 5 支 mp4，改成「海報影格 ＋ 影片連結／QR」的版面（影片放 Drive 或 YouTube 不公開連結）
 2. image3.png、image43.png、image31.png、image44.png 降階為長邊 2000px 的 JPEG
-3. 目標 **< 30 MB**，放進 `assets/master/`
+3. 目標 **< 30 MB**，放進 `public/assets/master/slim-master.pptx`（進 git；Netlify 公開發佈，後台產檔直接從這個網址抓）
 
 這一步不只是為了讓 repo 塞得下。396 MB 的簡報寄不出去、開得很慢、現場容易當機，
 slim master 本身就是對日常簡報的改善，客製化產出的檔案也才寄得出去。
@@ -58,27 +58,28 @@ unzip slim-master.pptx → 編輯 ppt/presentation.xml 的 <p:sldIdLst> 決定�
 用 `defusedxml.minidom` 或 JS 的 XML 解析器處理，**不要用 ElementTree round-trip**（會改寫
 namespace prefix 而毀檔）。刪頁後務必清理孤兒 media，否則檔案大小不會降。
 
-### 建議的 v1 切法：web 出規格，CLI 出檔案
+### v1 切法：規格與產檔都在瀏覽器，CLI 備援
 
 ```
-Web app（Netlify）           產出 visit spec（JSON）：選哪些頁、議程時間、語言、標題
-        ↓
-CLI（同 repo，本機 node）     讀 spec ＋ slim master → 產出 pptx
+admin.html（Netlify 靜態頁）   排好行程、選頁、語言 → 按「產生簡報 .pptx」
+        ↓  瀏覽器裡執行 public/lib/pptx.mjs（JSZip ＋ 原生 DOMParser）
+slim master（public/assets/master/ 或從電腦選檔）→ 子集化 → 直接下載 GHRC_<visit_id>.pptx
 ```
 
-理由：pptx 子集化要解壓幾十 MB、改檔、重壓，塞進 Netlify Function 會撞逾時與記憶體。
-v1 先讓網頁決定「要什麼」，本機一行指令產檔，穩定且零限制。
-v2 若要全自動，改用 **Netlify Background Function**（15 分鐘上限）或外部小服務，不要用一般 function。
+理由：pptx 子集化要解壓幾十 MB、改檔、重壓，塞進 Netlify Function 會撞 6 MB 請求上限、逾時與記憶體；
+放在瀏覽器裡跑就沒有這些限制，主辦端也不必開終端機。同一份核心給本機 CLI 用（多出 PDF 轉檔）：
 
 ```bash
-npm run deck -- --visit=2026-10-07-uwa      # 讀 data/visits/*.json，輸出 dist/
+npm run deck -- --visit=2026-10-07-uwa      # 讀 data/visits/*.json ＋ public/assets/master/slim-master.pptx，輸出 dist/（＋PDF）
 ```
+
+第二語言（ko／ja）的翻譯走 `/api/translate`（Claude；伺服器端快取），瀏覽器一次送 25 段避開 function 逾時。
 
 ### 前端沿用既有慣例
 
 單檔 HTML、Tailwind CDN、無建置步驟，與 healsdesign.org 系列一致。兩個頁面：
 
-- `admin.html` — 主辦端：貼 email、確認抽取結果、排議程、選頁、產 spec、寄訪後信
+- `admin.html` — 主辦端：貼 email、確認抽取結果、排議程、選頁、直接產 .pptx、放當天資料、寄訪後信
 - `index.html` — 來賓端：當次專頁（流程、五間老師卡片、留信箱）
 
 API 金鑰一律走 Netlify Function，**絕不出現在前端**。
@@ -123,9 +124,11 @@ API 金鑰一律走 Netlify Function，**絕不出現在前端**。
 | 302 | Healing Environment Planning Lab 療癒環境規劃室 | 林寶秀 Bau-Show Lin |
 | 303 | Landscape Simulation Lab 景觀環境模擬室 | 陳惠美 Hui-Mei Chen |
 | 304 | Panoramic Cinema Lab 全景影院體驗室 | 張伯茹 Po-Ju Chang |
-| 305 | 304 外部空間，IVR 研究 | 鄭佳昆 Chia-Kuen Cheng |
+| 305 | IVR Research Lab IVR 研究室（沉浸式虛擬實境） | 鄭佳昆 Chia-Kuen Cheng |
 
-> 本系統所有標示（老師卡片、選頁區塊標題、負責人索引、提示詞）**303 只列陳惠美**（明確指示）。母簡報投影片裡的文字本系統不改寫。
+> 本系統所有標示（老師卡片、選頁區塊標題、負責人索引、提示詞）**303 只列陳惠美**、**305 就叫 IVR Research Lab**（不寫「304 外部空間」）（明確指示）。母簡報投影片裡的文字本系統不改寫。
+>
+> **中心只有這五間。** 來信裡出現的其他單位（例如智慧溫室）不是中心的，所有文字都不能寫成「我們的」；全程在造園館三樓室內，不給步行、鞋履之類的提醒；信件不感謝中心自己的老師。這些寫在 `netlify/lib/ai.mts` 的 `CENTER_FACTS`，每一個提示詞都帶。
 
 ---
 
@@ -194,7 +197,7 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
 
 ### 2. 客製化雙語簡報
 
-輸入 = 訪客背景 ＋ 可用分鐘數 ＋ 對方語言。輸出 = spec JSON ＋ pptx。
+輸入 = 訪客背景 ＋ 可用分鐘數 ＋ 對方語言。輸出 = pptx（後台直接下載；規格就是 visits 表那一筆）。
 
 - 依單位類型與興趣挑頁（政府偏政策與場域落地、大學偏研究與學生交流、企業偏應用與委託研究、
   學生團偏影片與體驗），並參考 `slide_performance` 的歷史
@@ -283,11 +286,11 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 **已完成（P1–P4 最小可用系統 ＋ P5 捷徑 ＋ P6 產檔 ＋ P7 摘要／彙整）**
 
-- `public/admin.html`：訪前（貼信或上傳名單檔抽取 → 確認 → 排行程選頁 → 儲存 → QR／spec／.ics／確認信）、收工（簽名簿照片讀字、三十秒口述錄音轉文字抽取、或打字）、訪後信（草擬、全名單收件人、寄出或 mailto）、資料（列表、回覆、動線、摘要、跨場次彙整、CSV）。
-- `public/index.html`：專屬網址 `/<visit_id>`；流程、五間老師卡片（303 只列陳惠美）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。
-- `netlify/functions/*.mts`：`visits` `extract` `plan` `letter` `respond` `timeline` `signbook` `transcribe` `summary` `media`；共用在 `netlify/lib/`（store／ai／http／data／types／files）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
+- `public/admin.html`：訪前（貼信或上傳名單檔抽取 → 確認 → 排行程選頁 → 儲存 → QR／**產生簡報 .pptx**／.ics／確認信）、收工（簽名簿照片讀字、三十秒口述錄音轉文字抽取、或打字、**當天資料**：簡報 PDF、合照、相關連結放上專頁）、訪後信（草擬、全名單收件人、寄出或 mailto）、資料（列表、回覆、動線、摘要、跨場次彙整、CSV）。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
+- `public/index.html`：專屬網址 `/<visit_id>`；流程（參訪當天標出「現在」）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
+- `netlify/functions/*.mts`：`visits` `extract` `plan` `letter` `respond` `timeline` `signbook` `transcribe` `summary` `media` `materials` `translate`；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
-- `cli/deck.mjs` ＋ `cli/lib/pptx.mjs`：母簡報子集化（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證、PDF）。`--inspect`、`--dump`、`--validate`。
+- `public/lib/pptx.mjs`：母簡報子集化核心（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證），零 Node 相依，瀏覽器與 CLI 共用；`cli/lib/pptx.mjs` 只是注入 jszip／xmldom 的 Node 入口；`cli/deck.mjs` 加上 QR（qrcode 套件）與 PDF（LibreOffice）。`--inspect`、`--dump`、`--validate`。
 - `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-shortcuts.mjs`：研究室電腦捷徑與 NFC 網址。
 - 測試：`npm test`（單元、API 走本機 dev server、產檔與瘦身走合成簡報）、`npm run test:e2e`（Chromium）。`AI_MOCK=1` 讓所有 AI 呼叫回固定範例。CI：`.github/workflows/ci.yml` 在每個 PR 與 main 的 push 跑同一套（typecheck → npm test → e2e）。
 
@@ -295,7 +298,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 - Claude API 的真實輸出（抽取、排程、信件、簽名簿讀字、摘要）——結構化輸出用 zod schema 綁住，但提示詞品質要用真信件調。
 - Whisper、Gmail API、Google Sheets 後端、Netlify Blobs——都照官方 API 寫，沒有實際呼叫過。
-- 真母簡報：`slim-master.py` 與 `deck` 只在 `scripts/make-fixture.py` 的合成簡報上測過。真檔的第 2 頁若不是表格，流程要靠 `text_edits`；先 `--dump` 再 commit `data/master-text.json`。
+- 真母簡報：`slim-master.py` 與產檔核心只在 `scripts/make-fixture.py` 的合成簡報上測過（Node 與 Chromium 兩邊都測）。真檔的第 2 頁若不是表格，流程要靠 `text_edits`；先 `--dump` 再 commit `data/master-text.json`。slim master 尚未產出，所以後台目前是「從電腦選 slim-master.pptx」的路徑。
 - PDF 輸出：沙箱裡 LibreOffice 不完整，沒跑到；本機有 LibreOffice 即可。
 
 **約定**
@@ -303,7 +306,9 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - API 路徑 `/api/<name>` 由 `netlify.toml` 轉到 `/.netlify/functions/<name>`；函式不設 `config.path`。
 - 主辦端 API 用 `Authorization: Bearer ADMIN_TOKEN`；現場訊號用 `SIGNAL_KEY`；`respond` 與 `visits?public=1` 公開。
 - 老師卡片內容 `public/data/labs.json` 的 `confirmed=false` 表示尚待老師確認；照片 `photo` 為 null 時顯示縮寫。
-- **現場動線第一站固定是總體介紹**：`itinerary[0].room === "briefing"`（可填 `location`，例如 304），之後才是 301–305；`lib/visit.mjs ensureBriefingFirst` 在存檔與排程時強制。現場訊號 `room=briefing` 代表簡報室（開總體簡報＝整場起點）。
+- **現場動線第一站固定是總體介紹，地點預設 302**：`itinerary[0].room === "briefing"`，`location` 空白就是 302（`lib/visit.mjs DEFAULT_BRIEFING_LOCATION`），之後才是 301–305；`ensureBriefingFirst` 在存檔與排程時強制，AI 排程不決定地點。現場訊號 `room=briefing` 代表簡報室（開總體簡報＝整場起點）。
+- **當天資料** `visit.materials = { deck_pdf, photos[], links[] }`：值是媒體庫 key（`materials/<visit_id>/<file>`）或 https 連結，`sanitizeMaterials` 只留這兩種。上傳走 `/api/materials`（單檔 4.5 MB 以內；更大的 PDF 貼雲端連結）。**訪後信只能承諾頁面上真的有的東西**：`lib/visit.mjs pageContents()` 算出清單交給提示詞（mock 信也照同一份清單）。PDF 由 PowerPoint 另存，再到「收工」放上去。
+- 產檔在瀏覽器：`admin.html` 先 HEAD `/assets/master/slim-master.pptx`（站台對不存在的路徑會回 index.html，所以看 content-type 不看狀態碼），沒有就請主辦端從電腦選檔；JSZip 由 cdnjs 載入、QR 用頁面已有的 qrcodejs 畫 canvas（沒有就只放網址文字）。
 - 今日流程固定含三個區塊：總體簡報（briefing）→ 研究室參訪（tour）→ **綜合討論（discussion）**，合照可省略；`plan.mts` 在 AI 漏掉綜合討論時自動補上並回傳 `warnings`。**時間分配預設**（`lib/visit.mjs allocateProgramme`）：總體介紹 20 分、每間研究室 20 分、合照 5 分，剩下的時間全部給綜合討論；總時間不夠時先縮研究室（每間至少 5）、再縮總體介紹（至少 10），綜合討論至少 10。預設總長 150 分。
 - 後台「選用頁次」依 `public/data/slides.json` 的 `groups` 分區塊（章節／研究室）：區塊方框整區選、「只選這區」、全選／全不選；必選頁永遠保留。每一頁必須恰好屬於一個區塊。
 - 開放建議欄位措辭在 `public/data/i18n.json`（`ask_better`、`one_sentence`、`anonymous`），ko／ja 譯文請母語者校閱。

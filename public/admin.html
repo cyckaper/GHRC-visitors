@@ -34,8 +34,14 @@
   <header class="flex flex-wrap items-center gap-3">
     <h1 class="text-xl font-semibold mr-auto">GHRC 參訪 · 主辦端</h1>
     <span class="muted" id="backendInfo"></span>
-    <input type="text" id="token" placeholder="ADMIN_TOKEN" class="!w-48" autocomplete="off">
-    <button class="btn btn-soft" id="tokenSave">登入</button>
+    <span id="authBox" class="flex items-center gap-2">
+      <input type="password" id="token" placeholder="ADMIN_TOKEN" class="!w-48" autocomplete="off">
+      <button class="btn btn-soft" id="tokenSave">登入</button>
+    </span>
+    <span id="authOk" class="flex items-center gap-2" hidden>
+      <span class="ok text-sm">已登入 ✓</span>
+      <button class="btn btn-soft" id="logout" type="button">登出</button>
+    </span>
   </header>
 
   <nav class="flex flex-wrap gap-1" role="tablist">
@@ -105,7 +111,7 @@
         <table id="programmeTable"><thead><tr><th>開始</th><th>結束</th><th>類型</th><th>英文</th><th>第二語言</th><th>頁碼</th><th></th></tr></thead><tbody></tbody></table>
       </div>
       <div>
-        <label class="f">現場動線（第一站固定是總體介紹；預設總體介紹 20 分、每間 20 分，剩下的時間排進綜合討論；研究室留 0 表示不去）</label>
+        <label class="f">現場動線（第一站固定是總體介紹，地點預設 302；預設總體介紹 20 分、每間 20 分，剩下的時間排進綜合討論；研究室留 0 表示不去）</label>
         <div class="flex flex-wrap gap-2" id="itinerary"></div>
       </div>
       <div>
@@ -126,12 +132,16 @@
           <div class="space-y-2 min-w-0">
             <p><a id="pageLink" class="underline break-all" target="_blank" rel="noopener"></a></p>
             <div class="flex flex-wrap gap-2">
+              <button class="btn" id="deckBtn">產生簡報 .pptx</button>
               <button class="btn btn-soft" id="copyLink">複製網址</button>
-              <button class="btn btn-soft" id="downloadSpec">下載 spec JSON（產簡報用）</button>
               <button class="btn btn-soft" id="downloadIcs">下載收工提醒 .ics</button>
               <button class="btn btn-soft" id="openWrapup">開收工頁</button>
             </div>
-            <p class="muted">產簡報：把 spec 存到 <code>data/visits/</code>，本機執行 <code id="deckCmd"></code></p>
+            <p class="muted">母簡報：<span id="masterInfo">檢查中…</span></p>
+            <p class="muted" id="deckInfo" hidden></p>
+            <label class="flex flex-wrap items-center gap-2 text-sm" id="masterPick" hidden><span class="muted">從電腦選 slim-master.pptx：</span><input type="file" id="masterFile" class="!w-auto" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"></label>
+            <ul class="text-sm text-stone-600 list-disc pl-5" id="deckReport"></ul>
+            <details class="muted"><summary>進階：本機 CLI 產檔</summary><p class="mt-1">把 <a href="#" id="downloadSpec" class="underline">這份參訪的 JSON</a> 存到 <code>data/visits/</code>，本機執行 <code id="deckCmd"></code>（可另出 PDF）。</p></details>
           </div>
         </div>
         <div class="space-y-2">
@@ -189,6 +199,28 @@
         <div class="sm:col-span-2"><button class="btn" id="dictationSave">確認並存入回饋</button> <span class="muted" id="dictationInfo"></span></div>
       </div>
     </div>
+    <div class="card space-y-3">
+      <h2 class="font-semibold">動作三｜當天資料放上專屬頁面</h2>
+      <p class="muted">感謝信只會承諾頁面上真的有的東西。先把簡報 PDF、合照、相關連結放上來，再草擬感謝信。專頁：<a id="materialsPageLink" class="underline break-all" target="_blank" rel="noopener"></a></p>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div class="space-y-2">
+          <label class="f">簡報 PDF（從 PowerPoint 另存；4.5 MB 以內直接上傳，更大的貼雲端連結）</label>
+          <input type="file" id="pdfFile" accept="application/pdf,.pdf">
+          <div class="flex gap-2"><input type="text" id="pdfLink" placeholder="或貼 Drive／OneDrive 連結 https://…"><button class="btn btn-soft" id="pdfLinkSave" type="button">存連結</button></div>
+          <p class="text-sm" id="pdfInfo"></p>
+        </div>
+        <div class="space-y-2">
+          <label class="f">現場合照（可多張，會自動縮到長邊 1600px）</label>
+          <input type="file" id="photoFiles" accept="image/*" multiple>
+          <div class="flex flex-wrap gap-2" id="photoList"></div>
+        </div>
+      </div>
+      <div class="space-y-2">
+        <div class="flex items-center justify-between"><label class="f">相關連結（論文、雲端資料夾、影片……）</label><button class="btn btn-soft" id="linkAdd" type="button">＋ 一筆</button></div>
+        <table id="linkTable"><thead><tr><th>標題</th><th>網址</th><th></th></tr></thead><tbody></tbody></table>
+        <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="materialsSave">儲存連結</button><span class="muted" id="materialsInfo"></span></div>
+      </div>
+    </div>
   </section>
 
   <!-- ───────── 訪後信 ───────── -->
@@ -200,7 +232,7 @@
       </div>
       <div class="flex flex-wrap gap-2"><button class="btn" id="thanksBtn">AI 草擬感謝信</button><span class="muted" id="thanksInfo"></span></div>
       <input type="text" id="thanksSubject" placeholder="主旨">
-      <textarea id="thanksBody" rows="16" placeholder="感謝信草稿：專頁連結、他最想看的研究室的論文與老師聯絡方式、三個回應項目（含請益語氣的開放建議欄位、可不具名）"></textarea>
+      <textarea id="thanksBody" rows="16" placeholder="感謝信草稿：專頁連結（只提頁面上真的有的東西：PDF、合照、連結要先在「收工」放上去）、三個回應項目（含請益語氣的開放建議欄位、可不具名）"></textarea>
       <p class="muted">三個回應項目的措辭固定為請益語氣，且回覆頁支援真匿名；請保留信裡的那一段。</p>
     </div>
     <div class="card space-y-3">
@@ -249,10 +281,13 @@
   const ROOMS = ["301", "302", "303", "304", "305"];
   const state = { visits: [], visit: null, slides: null, labs: null, thanksRecipients: [], signbookEntries: [], recBlob: null, saved: false };
 
-  // ── token ──
+  // ── token：存在這台瀏覽器；登入成功後收起輸入框，只留「已登入」與登出 ──
   try { $("token").value = localStorage.getItem("ghrc-admin-token") || ""; } catch (e) {}
   $("tokenSave").onclick = () => { try { localStorage.setItem("ghrc-admin-token", $("token").value.trim()); } catch (e) {} boot(); };
+  $("token").addEventListener("keydown", (e) => { if (e.key === "Enter") $("tokenSave").click(); });
+  $("logout").onclick = () => { try { localStorage.removeItem("ghrc-admin-token"); } catch (e) {} $("token").value = ""; setAuth(false); $("backendInfo").textContent = ""; $("token").focus(); };
   const token = () => $("token").value.trim();
+  function setAuth(ok) { $("authBox").hidden = ok; $("authOk").hidden = !ok; }
 
   async function api(path, opts = {}) {
     const headers = { authorization: `Bearer ${token()}`, ...(opts.body && !(opts.body instanceof FormData) ? { "content-type": "application/json" } : {}), ...(opts.headers || {}) };
@@ -275,6 +310,7 @@
     for (const t of ["pre", "wrapup", "post", "data"]) $("tab-" + t).hidden = t !== name;
     if (name === "data") loadDataTab();
     if (name === "post") loadRecipients();
+    if (name === "wrapup") loadMaterials();
   }
 
   // ── boot ──
@@ -284,12 +320,14 @@
     renderItinerary(); renderSlideGrid();
     await loadVisits();
     fillForm(state.visit || emptyVisit());
+    checkMaster();
     const m = /wrapup=([\w-]+)/.exec(location.hash);
     if (m) { showTab("wrapup"); $("wrapVisitSelect").value = m[1]; }
   }
   async function loadVisits() {
     const r = await api("/api/visits");
-    if (!r.ok) { $("backendInfo").textContent = r.error; flash(r.error, "err"); return; }
+    if (!r.ok) { setAuth(false); $("backendInfo").textContent = r.error; flash(r.error, "err"); return; }
+    setAuth(true);
     state.visits = r.visits;
     $("backendInfo").textContent = `資料層：${r.backend} · ${r.visits.length} 場`;
     const opts = r.visits.map((v) => `<option value="${esc(v.visit_id)}">${esc(v.date)} ${esc(v.org)}（${esc(v.status)}）</option>`).join("");
@@ -299,7 +337,7 @@
     for (const id of ["wrapVisitSelect", "postVisitSelect"]) { $(id).innerHTML = opts || `<option value="">（尚無參訪）</option>`; if (pick) $(id).value = pick.visit_id; }
   }
   function emptyVisit() {
-    return { visit_id: "", date: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10), start_time: "10:00", duration_minutes: 150, org: { name: "", name_local: "", type: "university", country: "" }, guests: [], headcount: 0, contact_teacher: "張俊彥", purpose: "", interests: [], language: "en", programme: [], itinerary: [{ room: "briefing", minutes: 20, location: "" }, ...ROOMS.map((room) => ({ room, minutes: 20 }))], slides: [], text_edits: [], letters: {}, deck: {}, signbook: {}, dictation: {}, status: "draft" };
+    return { visit_id: "", date: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10), start_time: "10:00", duration_minutes: 150, org: { name: "", name_local: "", type: "university", country: "" }, guests: [], headcount: 0, contact_teacher: "張俊彥", purpose: "", interests: [], language: "en", programme: [], itinerary: [{ room: "briefing", minutes: 20, location: "302" }, ...ROOMS.map((room) => ({ room, minutes: 20 }))], slides: [], text_edits: [], materials: { deck_pdf: "", photos: [], links: [] }, letters: {}, deck: {}, signbook: {}, dictation: {}, status: "draft" };
   }
 
   // ── 訪前：表單 ──
@@ -346,9 +384,9 @@
   function renderItinerary(it) {
     const by = new Map((it || []).map((s, i) => [String(s.room), { ...s, order: i }]));
     // 第一站固定是總體介紹（總體簡報）；分鐘數預設取今日流程 briefing 區塊的長度
-    const briefing = by.get("briefing") || { minutes: briefingMinutesFromProgramme() || 20, location: "" };
+    const briefing = by.get("briefing") || { minutes: briefingMinutesFromProgramme() || 20, location: "302" };
     const rooms = [...ROOMS].sort((a, b) => (by.has(a) ? by.get(a).order : 99) - (by.has(b) ? by.get(b).order : 99));
-    const first = `<label class="card !p-2 !rounded-lg flex items-center gap-2 border-stone-900"><span class="muted">1.</span><span class="font-medium">總體介紹</span><input type="text" class="!w-28" placeholder="地點，如 304" value="${esc(briefing.location || "")}" data-briefing-location><input type="number" min="1" class="!w-16" value="${briefing.minutes || 20}" data-room="briefing"> 分</label>`;
+    const first = `<label class="card !p-2 !rounded-lg flex items-center gap-2 border-stone-900"><span class="muted">1.</span><span class="font-medium">總體介紹</span><input type="text" class="!w-28" placeholder="地點，預設 302" value="${esc(briefing.location || "302")}" data-briefing-location><input type="number" min="1" class="!w-16" value="${briefing.minutes || 20}" data-room="briefing"> 分</label>`;
     $("itinerary").innerHTML = first + rooms.map((room, i) => { const s = by.get(room); const lab = (state.labs?.labs || []).find((l) => l.room === room); return `<label class="card !p-2 !rounded-lg flex items-center gap-2"><span class="muted">${i + 2}.</span><span class="font-medium">${room}</span><span class="muted">${esc(lab?.lead?.name_zh || "")}</span><input type="number" min="0" class="!w-16" value="${s ? s.minutes : 0}" data-room="${room}"> 分</label>`; }).join("");
   }
   function briefingMinutesFromProgramme() {
@@ -451,9 +489,97 @@
     $("qr").innerHTML = ""; if (window.QRCode) new QRCode($("qr"), { text: v.page_url, width: 128, height: 128 });
     $("deckCmd").textContent = `npm run deck -- --visit=${v.visit_id}`;
     $("saveInfo").textContent = `更新：${(v.updated_at || "").replace("T", " ").slice(0, 16)}`;
+    $("deckReport").innerHTML = "";
   }
   $("copyLink").onclick = () => copy(state.visit.page_url);
-  $("downloadSpec").onclick = () => download(`${state.visit.visit_id}.json`, JSON.stringify(state.visit, null, 2));
+  $("downloadSpec").onclick = (e) => { e.preventDefault(); download(`${state.visit.visit_id}.json`, JSON.stringify(state.visit, null, 2)); };
+
+  // ── 產生簡報：在瀏覽器裡子集化母簡報（核心 /lib/pptx.mjs 與本機 CLI 同一份），直接下載 .pptx ──
+  const MASTER_URL = "/assets/master/slim-master.pptx";
+  const PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  async function checkMaster() {
+    state.masterOnSite = false;
+    try {
+      const r = await fetch(MASTER_URL, { method: "HEAD", cache: "no-store" });
+      const type = r.headers.get("content-type") || "";
+      const size = Number(r.headers.get("content-length") || 0);
+      // 站台對不存在的路徑會回 index.html（200），所以要看型別，不能只看狀態碼
+      state.masterOnSite = r.ok && !/text\/html/i.test(type) && (size === 0 || size > 100000);
+      $("masterInfo").textContent = state.masterOnSite ? `站台上的 slim master（${size ? (size / 1e6).toFixed(1) + " MB" : "已就緒"}）` : "站台上還沒有 slim master，請先從電腦選檔再按「產生簡報」";
+    } catch (e) { $("masterInfo").textContent = "無法確認站台上的母簡報，請從電腦選檔"; }
+    $("masterPick").hidden = state.masterOnSite;
+  }
+  $("masterFile").onchange = async () => {
+    const file = $("masterFile").files[0]; if (!file) return;
+    state.masterBytes = new Uint8Array(await file.arrayBuffer());
+    $("masterInfo").textContent = `已選 ${file.name}（${(file.size / 1e6).toFixed(1)} MB，只留在這個分頁）`;
+  };
+  function loadScript(src) { return new Promise((resolve, reject) => { const el = document.createElement("script"); el.src = src; el.onload = resolve; el.onerror = () => reject(new Error("載入失敗：" + src)); document.head.appendChild(el); }); }
+  async function deckCore() {
+    if (!window.JSZip) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js");
+    const core = await import("/lib/pptx.mjs");
+    core.configure({ JSZip: window.JSZip, DOMParser: window.DOMParser });
+    return core;
+  }
+  async function masterBytes(log) {
+    if (state.masterBytes) return state.masterBytes;
+    if (state.masterOnSite) {
+      log("下載母簡報…");
+      const r = await fetch(MASTER_URL);
+      if (!r.ok || /text\/html/i.test(r.headers.get("content-type") || "")) throw new Error("抓不到站台上的母簡報");
+      state.masterBytes = new Uint8Array(await r.arrayBuffer());
+      return state.masterBytes;
+    }
+    $("masterPick").hidden = false; $("masterFile").focus();
+    throw new Error("站台上沒有 slim master：請先從電腦選 slim-master.pptx，再按「產生簡報」");
+  }
+  /** QR 圖：用頁面已載入的 qrcodejs 畫到 canvas；沒有就回 null（QR 頁只放網址文字）。 */
+  async function qrPng(url) {
+    if (!window.QRCode || !window.QRCode.CorrectLevel) return null;
+    const box = document.createElement("div"); box.style.position = "fixed"; box.style.left = "-9999px"; document.body.appendChild(box);
+    try {
+      new QRCode(box, { text: url, width: 1024, height: 1024, correctLevel: QRCode.CorrectLevel.M });
+      const canvas = box.querySelector("canvas");
+      if (!canvas) return null;
+      const b64 = canvas.toDataURL("image/png").split(",")[1];
+      const bin = atob(b64); const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    } finally { box.remove(); }
+  }
+  /** 第二語言翻譯：走 /api/translate（伺服器端快取），一次 25 段避開 function 逾時。 */
+  async function translateTexts(texts, target, log) {
+    const out = [];
+    for (let i = 0; i < texts.length; i += 25) {
+      log(`翻譯 ${Math.min(i + 25, texts.length)}/${texts.length} 段 → ${target}`);
+      const r = await api("/api/translate", { method: "POST", body: { texts: texts.slice(i, i + 25), target } });
+      if (!r.ok) throw new Error(r.error || "翻譯失敗");
+      out.push(...r.translations);
+    }
+    return out;
+  }
+  $("deckBtn").onclick = () => busy($("deckBtn"), async () => {
+    const info = $("deckInfo"); info.hidden = false; const log = (m) => { info.textContent = m; };
+    $("deckReport").innerHTML = "";
+    try {
+      if (!state.saved) throw new Error("先儲存這次參訪");
+      const spec = readForm(); spec.visit_id = state.visit.visit_id; spec.page_url = state.visit.page_url;
+      const lang = spec.language || "zh";
+      const core = await deckCore();
+      const master = await masterBytes(log);
+      log("組裝簡報…");
+      const { pptx, report } = await core.buildDeck(spec, master, { slidesIndex: state.slides, lang, site: location.origin, qrPng, translate: lang === "ko" || lang === "ja" ? (texts, target) => translateTexts(texts, target, log) : null, log });
+      const name = `GHRC_${spec.visit_id}.pptx`;
+      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([pptx], { type: PPTX_MIME })); a.download = name; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+      log(`已下載 ${name}：${report.output_slides} 頁，${(pptx.length / 1e6).toFixed(1)} MB${report.translated ? `，翻譯 ${report.translated} 段` : ""}。PDF 請用 PowerPoint 另存，再到「收工」放上專頁。`);
+      const lines = [...report.warnings, ...report.edits.missed.map((m) => `第 ${m.slide} 頁找不到「${(m.find || "").slice(0, 40)}」`)];
+      if (report.programme_table && report.programme_table !== "filled") lines.push(`第 2 頁流程表：${report.programme_table}`);
+      $("deckReport").innerHTML = lines.map((l) => `<li>${esc(l)}</li>`).join("");
+      state.visit.deck = { ...(state.visit.deck || {}), generated_at: new Date().toISOString(), slides: report.output_slides };
+      api("/api/visits", { method: "POST", body: { ...state.visit } });
+    } catch (e) { log(`產檔失敗：${e.message || e}`); flash(String(e.message || e), "err"); }
+  });
   $("downloadIcs").onclick = () => download(`${state.visit.visit_id}-wrapup.ics`, ics(state.visit), "text/calendar");
   $("openWrapup").onclick = () => { $("wrapVisitSelect").value = state.visit.visit_id; showTab("wrapup"); };
   $("confirmLetterBtn").onclick = () => busy($("confirmLetterBtn"), async () => {
@@ -521,6 +647,57 @@
     const r = await api("/api/transcribe", { method: "POST", body: { visit_id: $("wrapVisitSelect").value, action: "save", extracted } });
     if (!r.ok) return flash(r.error, "err"); $("dictationInfo").textContent = "已存入"; flash("口述已存入回饋");
   });
+
+  // ── 收工：當天資料（專屬頁面的 PDF、合照、連結） ──
+  $("wrapVisitSelect").addEventListener("change", loadMaterials);
+  const mediaUrl = (x) => (/^https?:\/\//i.test(x) ? x : `/api/media?key=${encodeURIComponent(x)}`);
+  async function loadMaterials() {
+    const id = $("wrapVisitSelect").value; if (!id) return;
+    const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
+    if (!r.ok) return;
+    state.wrapVisit = r.visit;
+    $("materialsPageLink").textContent = r.visit.page_url; $("materialsPageLink").href = r.visit.page_url;
+    renderMaterials(r.visit.materials || { deck_pdf: "", photos: [], links: [] });
+  }
+  function renderMaterials(m) {
+    state.materials = { deck_pdf: m.deck_pdf || "", photos: m.photos || [], links: m.links || [] };
+    $("pdfInfo").innerHTML = state.materials.deck_pdf ? `<span class="ok">已放上：</span><a class="underline break-all" target="_blank" rel="noopener" href="${esc(mediaUrl(state.materials.deck_pdf))}">${esc(state.materials.deck_pdf.replace(/^materials\/[^/]+\//, ""))}</a> <button type="button" class="muted underline" data-remove-pdf>移除</button>` : `<span class="muted">尚未放上簡報 PDF</span>`;
+    $("pdfLink").value = /^https?:\/\//i.test(state.materials.deck_pdf) ? state.materials.deck_pdf : "";
+    $("photoList").innerHTML = state.materials.photos.map((p) => `<span class="relative inline-block"><img src="${esc(mediaUrl(p))}" alt="" class="h-20 rounded-lg object-cover"><button type="button" class="absolute -top-2 -right-2 bg-white rounded-full border px-1.5 text-xs" data-remove-photo="${esc(p)}">✕</button></span>`).join("") || `<span class="muted">尚無合照</span>`;
+    $("linkTable").tBodies[0].innerHTML = state.materials.links.map(linkRow).join("");
+  }
+  const linkRow = (l = {}) => `<tr><td><input type="text" value="${esc(l.title)}" placeholder="例如：Lab 303 近期論文"></td><td><input type="text" value="${esc(l.url)}" placeholder="https://…"></td><td><button type="button" class="muted" onclick="this.closest('tr').remove()">✕</button></td></tr>`;
+  $("linkAdd").onclick = () => $("linkTable").tBodies[0].insertAdjacentHTML("beforeend", linkRow());
+  const readLinks = () => [...$("linkTable").tBodies[0].rows].map((tr) => ({ title: tr.cells[0].firstChild.value.trim(), url: tr.cells[1].firstChild.value.trim() })).filter((l) => l.url);
+  async function saveMaterials(next) {
+    const r = await api("/api/materials", { method: "POST", body: { visit_id: $("wrapVisitSelect").value, action: "save", materials: next } });
+    if (!r.ok) return flash(r.error, "err");
+    renderMaterials(r.materials); $("materialsInfo").textContent = "已儲存"; flash("當天資料已更新到專頁");
+  }
+  $("materialsSave").onclick = () => busy($("materialsSave"), () => saveMaterials({ ...state.materials, links: readLinks() }));
+  $("pdfLinkSave").onclick = () => busy($("pdfLinkSave"), async () => { const url = $("pdfLink").value.trim(); if (!/^https?:\/\//i.test(url)) return flash("請貼完整的 https:// 連結", "err"); await saveMaterials({ ...state.materials, links: readLinks(), deck_pdf: url }); });
+  $("pdfInfo").addEventListener("click", async (e) => { if (!e.target.closest("[data-remove-pdf]")) return; await saveMaterials({ ...state.materials, links: readLinks(), deck_pdf: "" }); });
+  $("photoList").addEventListener("click", async (e) => { const b = e.target.closest("[data-remove-photo]"); if (!b) return; await saveMaterials({ ...state.materials, links: readLinks(), photos: state.materials.photos.filter((p) => p !== b.dataset.removePhoto) }); });
+  async function uploadMaterial(kind, name, data) {
+    const r = await api("/api/materials", { method: "POST", body: { visit_id: $("wrapVisitSelect").value, action: "upload", kind, name, data } });
+    if (!r.ok) throw new Error(r.error || "上傳失敗");
+    renderMaterials(r.materials);
+  }
+  $("pdfFile").onchange = async () => {
+    const f = $("pdfFile").files[0]; if (!f) return;
+    if (f.size > 4.5 * 1024 * 1024) { $("pdfFile").value = ""; return flash("PDF 超過 4.5 MB：請放到雲端再貼連結", "err"); }
+    $("pdfInfo").textContent = "上傳中…";
+    try { await uploadMaterial("pdf", f.name, await readFileDataUrl(f)); flash("簡報 PDF 已放上專頁"); } catch (e) { flash(String(e.message || e), "err"); renderMaterials(state.materials); }
+    $("pdfFile").value = "";
+  };
+  $("photoFiles").onchange = async () => {
+    const files = [...$("photoFiles").files]; if (!files.length) return;
+    for (const f of files) {
+      try { await uploadMaterial("photo", f.name, await downscale(f, 1600, 0.85)); } catch (e) { flash(`${f.name}：${e.message || e}`, "err"); }
+    }
+    $("photoFiles").value = ""; flash(`已放上 ${files.length} 張合照`);
+  };
+  const readFileDataUrl = (file) => new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(String(fr.result)); fr.onerror = () => reject(fr.error); fr.readAsDataURL(file); });
 
   // ── 訪後信 ──
   $("postVisitSelect").onchange = loadRecipients;

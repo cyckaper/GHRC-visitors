@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { reconcileTimeline, plannedEntries } from "../lib/timeline.mjs";
-import { makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme } from "../lib/visit.mjs";
+import { makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -60,6 +60,32 @@ test("the route always starts with a briefing step", () => {
   assert.equal(added[0].minutes, 25);
   assert.equal(briefingBlockMinutes(visit.programme), 20);
   assert.equal(briefingBlockMinutes([]), null);
+});
+
+test("the briefing is in 302 unless the organiser says otherwise", () => {
+  assert.equal(DEFAULT_BRIEFING_LOCATION, "302");
+  assert.equal(emptyVisit().itinerary[0].location, "302");
+  assert.equal(ensureBriefingFirst([{ room: "301", minutes: 8 }])[0].location, "302");
+  assert.equal(ensureBriefingFirst([{ room: "briefing", minutes: 20, location: "" }])[0].location, "302");
+  assert.equal(ensureBriefingFirst([{ room: "briefing", minutes: 20, location: "304" }])[0].location, "304", "an explicit location is kept");
+});
+
+test("materials: only media keys or https links survive; the page-contents list only names what is really there", () => {
+  const m = sanitizeMaterials({ deck_pdf: "materials/2026-11-17-new/1-slides.pdf", photos: ["javascript:alert(1)", "https://drive.example/photo.jpg", "materials/2026-11-17-new/2-photo.jpg"], links: [{ title: "", url: "https://x.example/paper" }, { title: "ftp", url: "ftp://no" }, { title: "Lab 303 papers", url: "https://x.example/303" }] });
+  assert.equal(m.deck_pdf, "materials/2026-11-17-new/1-slides.pdf");
+  assert.deepEqual(m.photos, ["https://drive.example/photo.jpg", "materials/2026-11-17-new/2-photo.jpg"]);
+  assert.deepEqual(m.links.map((l) => l.title), ["x.example/paper", "Lab 303 papers"]);
+  assert.deepEqual(sanitizeMaterials(undefined), { deck_pdf: "", photos: [], links: [] });
+  assert.equal(sanitizeMaterials({ deck_pdf: "http://insecure.example/x.pdf" }).deck_pdf, "http://insecure.example/x.pdf");
+  assert.equal(sanitizeMaterials({ deck_pdf: "../etc/passwd" }).deck_pdf, "");
+
+  const labs = { labs: [{ room: "301", lead: { email: "" }, papers: [] }, { room: "303", lead: { email: "hm@ntu.example" }, papers: [{ title: "p", url: "https://x" }] }] };
+  const bare = pageContents({ itinerary: [{ room: "briefing" }, { room: "301" }] }, labs).map((c) => c.key);
+  assert.deepEqual(bare, ["programme", "respond"], "301 only: no papers, no contacts, nothing uploaded");
+  const full = pageContents({ materials: m, itinerary: [{ room: "briefing" }, { room: "301" }, { room: "303" }] }, labs).map((c) => c.key);
+  assert.deepEqual(full, ["programme", "deck_pdf", "photos", "links", "papers", "contacts", "respond"]);
+  const p = publicVisit({ ...visit, materials: { deck_pdf: "materials/2026-10-07-uwa/a.pdf", photos: ["bad"], links: [] } });
+  assert.deepEqual(p.materials, { deck_pdf: "materials/2026-10-07-uwa/a.pdf", photos: [], links: [] });
 });
 
 test("no signals → the schedule itself, source schedule", () => {

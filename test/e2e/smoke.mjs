@@ -3,11 +3,18 @@
  * 用 file 後端（暫存目錄）與 AI_MOCK。playwright 優先用專案的，沒有就找全域安裝。
  *   node test/e2e/smoke.mjs
  */
-import { mkdtemp, readFile } from "node:fs/promises";
-import { execSync } from "node:child_process";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { execSync, spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { Deck } from "../../cli/lib/pptx.mjs";
+
+// 瀏覽器產檔用的合成母簡報（同 deck 測試；沒有 python-pptx 就跳過那一段）
+const FIXTURE = "test/fixtures/generated/master-fixture.pptx";
+if (!existsSync(FIXTURE)) spawnSync("python3", ["scripts/make-fixture.py", FIXTURE], { stdio: "inherit" });
+const fixtureAvailable = existsSync(FIXTURE);
 
 async function loadPlaywright() {
   try {
@@ -39,6 +46,8 @@ page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
 page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource/i.test(m.text())) errors.push(`console: ${m.text()}`); });
 // CDN 資源在沙箱裡可能抓不到：擋掉外部請求，頁面仍須正常運作
 await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+// 只有產簡報用的 JSZip 改由本機 node_modules 供應（後註冊的 route 先比對）
+await page.route(/cdnjs\.cloudflare\.com\/ajax\/libs\/jszip\//, (route) => route.fulfill({ path: "node_modules/jszip/dist/jszip.min.js", contentType: "text/javascript" }));
 
 const check = (cond, msg) => { if (!cond) throw new Error(`FAIL: ${msg}`); console.log(`ok - ${msg}`); };
 
@@ -48,6 +57,7 @@ try {
   await page.fill("#token", "e2e-token");
   await page.click("#tokenSave");
   await page.waitForFunction(() => document.getElementById("backendInfo").textContent.includes("file"));
+  check(await page.isHidden("#token") && await page.isVisible("#authOk"), "token field is put away after login");
   await page.fill("#emailText", `Dear Prof. Chang,\n\nWe would like to visit on 2026-10-07 at 10:00. My colleague Jane Doe <jane@uwa.edu.au> joins me.\n\nSimon Kilbane, University of Western Australia\nsimon@uwa.edu.au`);
   await page.click("#extractBtn");
   await page.waitForFunction(() => document.getElementById("orgName").value.length > 0);
@@ -73,10 +83,28 @@ try {
   check(before > 0, "restored a selection for the rest of the flow");
   check((await page.textContent("#itinerary label:first-child")).includes("總體介紹"), "route starts with the overall briefing");
   check((await page.inputValue('#itinerary input[data-room="briefing"]')) !== "0", "briefing has minutes");
+  check((await page.inputValue("#itinerary [data-briefing-location]")) === "302", "briefing room defaults to 302");
   await page.click("#saveBtn");
   await page.waitForSelector("#afterSave:not([hidden])");
   const link = await page.textContent("#pageLink");
   check(link === `${base}/2026-10-07-uwa`, `saved visit has page url ${link}`);
+  check((await page.locator("#downloadSpec").count()) === 1 && (await page.isVisible("#deckBtn")), "pptx button is the primary action; spec JSON is tucked away");
+
+  // 直接在瀏覽器產 .pptx：站台沒有 slim master → 從電腦選檔（這裡用合成母簡報）→ 下載 → 結構驗證
+  if (fixtureAvailable) {
+    await page.waitForFunction(() => !/檢查中/.test(document.getElementById("masterInfo").textContent));
+    check(await page.isVisible("#masterPick"), "no slim master on the site → the admin is asked to pick one from disk");
+    await page.setInputFiles("#masterFile", FIXTURE);
+    await page.waitForFunction(() => /已選/.test(document.getElementById("masterInfo").textContent));
+    const [download] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), page.click("#deckBtn")]);
+    check(download.suggestedFilename() === "GHRC_2026-10-07-uwa.pptx", `browser produced ${download.suggestedFilename()}`);
+    const pptxPath = path.join(tmp, "browser.pptx");
+    await download.saveAs(pptxPath);
+    const built = await Deck.load(await readFile(pptxPath));
+    const v = await built.validate();
+    check(v.errors.length === 0 && v.slideCount === 6, `browser-built deck is valid with ${v.slideCount} slides (4 always-slides + ask + QR)${v.errors.length ? ": " + v.errors.join("; ") : ""}`);
+    await page.waitForFunction(() => /已下載/.test(document.getElementById("deckInfo").textContent));
+  } else console.log("skip - browser deck build (python-pptx fixture unavailable)");
   await page.click("#confirmLetterBtn");
   await page.waitForFunction(() => document.getElementById("confirmBody").value.length > 0);
   check(true, "confirmation letter drafted");
@@ -90,6 +118,18 @@ try {
   check((await page.inputValue("#dRooms")) === "303", "dictation extraction finds room 303");
   await page.click("#dictationSave");
   await page.waitForFunction(() => document.getElementById("dictationInfo").textContent.includes("已存入"));
+
+  // 動作三：合照與連結放上專屬頁面
+  const pngPath = path.join(tmp, "group.png");
+  await writeFile(pngPath, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64"));
+  await page.setInputFiles("#photoFiles", pngPath);
+  await page.waitForSelector("#photoList img");
+  await page.click("#linkAdd");
+  await page.fill("#linkTable tbody tr:last-child td:nth-child(1) input", "Lab 303 papers");
+  await page.fill("#linkTable tbody tr:last-child td:nth-child(2) input", "https://scholar.example/303");
+  await page.click("#materialsSave");
+  await page.waitForFunction(() => document.getElementById("materialsInfo").textContent.includes("已儲存"));
+  check(true, "photo uploaded and link saved for the visit page");
 
   // 訪後信分頁
   await page.click('[data-tab="post"]');
@@ -105,7 +145,14 @@ try {
   check((await page.locator("#labs article").count()) === 6, "guest page shows the briefing step plus five lab cards");
   check((await page.textContent("#labs article:first-child")).includes("Center overview"), "briefing card comes first");
   check((await page.textContent("#lab-303")).includes("陳惠美") && !(await page.textContent("#lab-303")).includes("鄭佳昆"), "303 lists only 陳惠美");
+  check((await page.textContent("#lab-305")).includes("IVR Research Lab") && !(await page.textContent("#lab-305")).includes("outside"), "305 is the IVR Research Lab");
+  check((await page.textContent("#briefing-card")).includes("302"), "guest page shows the briefing in 302");
   check((await page.locator("#programme li").count()) > 0, "programme rendered");
+  await page.waitForSelector("#materialsSec:not([hidden])");
+  check((await page.locator("#photoGrid img").count()) === 1 && (await page.textContent("#linkList")).includes("Lab 303 papers"), "visit page shows the uploaded photo and the link");
+  check((await page.getAttribute("#photoGrid img", "src")).startsWith("/api/media?key=materials%2F"), "photo comes from the public media endpoint");
+  await page.waitForFunction(() => document.querySelector("#respond").classList.contains("in") || document.querySelector("#respond").getBoundingClientRect().top > innerHeight);
+  check(await page.isVisible("#lab-303"), "reveal animation leaves cards visible");
   check((await page.textContent("#qBetter")) === "From your perspective, what should we be doing better?", "open-suggestion wording is the 請益 question");
   await page.check("#anonymous");
   check(await page.isHidden("#identity"), "identity fields hidden when anonymous");

@@ -32,7 +32,15 @@
     "already_sent": "Your reply has been sent.",
     "briefing": "Center overview and the laboratories",
     "briefing_hint": "The visit opens with a short overview before the laboratory tour.",
-    "minutes": "min"
+    "minutes": "min",
+    "materials": "Materials from the visit",
+    "slides_pdf": "Slides (PDF)",
+    "photos": "Photos",
+    "links": "Links",
+    "contact": "Contact",
+    "now": "Now",
+    "center_contact": "Contact the center",
+    "open": "Open"
   },
   "zh": {
     "welcome": "歡迎蒞臨綠色健康研究中心",
@@ -66,7 +74,15 @@
     "already_sent": "您的回覆已送出。",
     "briefing": "總體介紹",
     "briefing_hint": "參訪先由一場總體介紹開始，再依序走訪研究室。",
-    "minutes": "分鐘"
+    "minutes": "分鐘",
+    "materials": "當天資料",
+    "slides_pdf": "簡報 PDF",
+    "photos": "現場合照",
+    "links": "相關連結",
+    "contact": "聯絡",
+    "now": "現在",
+    "center_contact": "聯絡中心",
+    "open": "開啟"
   },
   "ko": {
     "welcome": "녹색건강연구센터에 오신 것을 환영합니다",
@@ -100,7 +116,15 @@
     "already_sent": "답변이 전송되었습니다.",
     "briefing": "센터 개요",
     "briefing_hint": "실험실 견학 전에 짧은 센터 개요로 시작합니다.",
-    "minutes": "분"
+    "minutes": "분",
+    "materials": "방문 자료",
+    "slides_pdf": "발표 자료 (PDF)",
+    "photos": "사진",
+    "links": "관련 링크",
+    "contact": "연락처",
+    "now": "현재",
+    "center_contact": "센터 연락처",
+    "open": "열기"
   },
   "ja": {
     "welcome": "緑色健康研究センターへようこそ",
@@ -134,6 +158,14 @@
     "already_sent": "回答は送信済みです。",
     "briefing": "センター概要",
     "briefing_hint": "研究室見学の前に、短いセンター概要から始まります。",
-    "minutes": "分"
+    "minutes": "分",
+    "materials": "当日の資料",
+    "slides_pdf": "スライド（PDF）",
+    "photos": "写真",
+    "links": "関連リンク",
+    "contact": "連絡先",
+    "now": "現在",
+    "center_contact": "センター連絡先",
+    "open": "開く"
   }
 }
