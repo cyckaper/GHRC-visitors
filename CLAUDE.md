@@ -233,6 +233,8 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
   後台「資料」分頁選一場按「備份到 Google Drive」；一次一個檔（避開 function 逾時），同名覆蓋所以可重複按。
   授權沿用寄信那組 Google OAuth（`GOOGLE_*` 優先，沒有就用 `GMAIL_*`），refresh token 要含 `drive.file`；
   用中心自己的帳號而不是服務帳戶（服務帳戶沒有 Drive 配額）。站台的 Blobs 仍是主要資料層，Drive 是另存的檔案庫。
+  **`GOOGLE_DRIVE_FOLDER_ID` 通常留空**：`drive.file` 只看得到程式自己建立的檔案，指定別人建的資料夾會存取不到，
+  留空時 `ensureFolder("GHRC 參訪", "root")` 會自己在雲端硬碟根目錄建一個並沿用（設定步驟見 `docs/DEPLOY.md` 6.5）。
 - 每場產出一頁摘要
 - `slide_performance` 累積後，功能 2 的挑頁改為「同類單位過去選過什麼、哪幾頁引發提問、
   哪幾頁在回饋中被提到」
