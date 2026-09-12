@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { reconcileTimeline, plannedEntries } from "../lib/timeline.mjs";
-import { makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
+import { makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -86,6 +86,66 @@ test("materials: only media keys or https links survive; the page-contents list 
   assert.deepEqual(full, ["programme", "deck_pdf", "photos", "links", "papers", "contacts", "respond"]);
   const p = publicVisit({ ...visit, materials: { deck_pdf: "materials/2026-10-07-uwa/a.pdf", photos: ["bad"], links: [] } });
   assert.deepEqual(p.materials, { deck_pdf: "materials/2026-10-07-uwa/a.pdf", photos: [], links: [] });
+});
+
+test("AI 排的分鐘數一律照預設重算：每間研究室 20 分，流程時間跟著串回去", () => {
+  // AI 排了五間但每間只給 12 分、總體介紹 15 分——分鐘數不歸 AI 決定
+  const aiPlan = {
+    start_time: "10:00",
+    duration_minutes: 150,
+    programme: [
+      { kind: "briefing", start: "10:00", end: "10:15", title_en: "Overview" },
+      { kind: "tour", start: "10:15", end: "11:15", title_en: "Laboratories" },
+      { kind: "discussion", start: "11:15", end: "11:45", title_en: "General discussion" },
+      { kind: "photo", start: "11:45", end: "11:50", title_en: "Group photo" },
+    ],
+    itinerary: [
+      { room: "briefing", minutes: 15, location: "302" },
+      ...["301", "302", "303", "304", "305"].map((room) => ({ room, minutes: 12 })),
+    ],
+  };
+  const r = applyProgrammeTimes(aiPlan);
+  assert.equal(r.changed, true);
+  assert.deepEqual(r.itinerary.map((s) => s.minutes), [20, 20, 20, 20, 20, 20], "總體介紹與每間研究室都回到 20 分");
+  assert.equal(r.itinerary[0].location, "302", "地點不會被重算弄丟");
+  assert.deepEqual(r.programme.map((b) => [b.start, b.end]), [
+    ["10:00", "10:20"], // 總體介紹 20
+    ["10:20", "12:00"], // 五間 × 20
+    ["12:00", "12:25"], // 綜合討論拿剩下的 25
+    ["12:25", "12:30"], // 合照 5
+  ]);
+
+  // 時間不夠時先縮研究室（規則本身），流程時間照樣串得回去
+  const short = applyProgrammeTimes({ ...aiPlan, duration_minutes: 60 });
+  assert.ok(short.alloc.perRoom < 20 && short.alloc.perRoom >= 5, `每間 ${short.alloc.perRoom} 分`);
+  assert.equal(short.programme[0].start, "10:00");
+  assert.equal(new Set(short.itinerary.slice(1).map((s) => s.minutes)).size, 1, "縮的時候每間一樣長");
+
+  // 只去兩間的話，那兩間仍是 20 分
+  const two = applyProgrammeTimes({ ...aiPlan, itinerary: [{ room: "briefing", minutes: 15 }, { room: "301", minutes: 12 }, { room: "303", minutes: 12 }] });
+  assert.deepEqual(two.itinerary.map((s) => s.minutes), [20, 20, 20]);
+});
+
+test("名片併進名單：同一個人只補空欄位，不覆寫已確認的資料，也不會把主賓降級", () => {
+  const existing = [{ name: "王小明", title: "", email: "ming@x.edu.tw", affiliation: "X 大學", role: "lead" }];
+  const r = mergeGuests(existing, [
+    { name: "王小明", title: "教授", email: "MING@X.EDU.TW", phone: "02-1234" }, // 同 email（大小寫不同）
+    { name: "李小華", title: "研究員", affiliation: "X 大學", email: "hua@x.edu.tw" }, // 新的人
+    { name: "", email: "" }, // 什麼都沒讀到的一列要丟掉
+  ]);
+  assert.equal(r.added, 1);
+  assert.equal(r.merged, 1);
+  assert.equal(r.guests.length, 2);
+  assert.equal(r.guests[0].role, "lead", "主賓身分不會被名片改掉");
+  assert.equal(r.guests[0].title, "教授", "空的欄位會被補上");
+  assert.equal(r.guests[0].phone, "02-1234");
+  assert.equal(r.guests[0].email, "ming@x.edu.tw", "已經有的 email 不會被覆寫成大寫");
+  assert.equal(r.guests[1].role, "member");
+
+  // 沒有 email 時用「姓名＋單位」判斷同一個人
+  const again = mergeGuests(r.guests, [{ name: "李小華", title: "研究員", affiliation: "X 大學", email: "hua@x.edu.tw" }]);
+  assert.equal(again.added, 0, "同一張名片再讀一次不會多一個人");
+  assert.deepEqual(mergeGuests([{ name: "陳大文", affiliation: "Y 所" }], [{ name: "陳大文", affiliation: "Y 所", phone: "09" }]).guests.length, 1);
 });
 
 test("no signals → the schedule itself, source schedule", () => {

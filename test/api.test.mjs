@@ -44,6 +44,23 @@ simon.kilbane@uwa.edu.au`;
 
 let visitId = "";
 
+/**
+ * 跑得久的 AI（讀信、排行程）都在背景函式裡做，POST 只開一個工作、回 202。
+ * 測試裡的 SITE_URL 指向站台網址，觸發打不到這台 dev server，所以照前端的順序自己跑一遍：
+ * 觸發 → 叫背景函式做事 → 輪詢拿結果。
+ */
+async function runJob(name, body) {
+  const started = await api(`/api/${name}`, { method: "POST", headers: admin, body: JSON.stringify(body) });
+  if (started.status !== 202) return started; // 檔案太大、沒東西可讀之類的，當場就擋下來
+  const ran = await api(`/api/${name}-background`, { method: "POST", headers: admin, body: JSON.stringify({ job_id: started.body.job_id }) });
+  assert.equal(ran.status, 200, JSON.stringify(ran.body));
+  const job = await api(`/api/${name}?job=${started.body.job_id}`, { headers: admin });
+  assert.equal(job.body.status, "done", JSON.stringify(job.body));
+  return { status: 200, body: { ok: true, ...job.body.result } };
+}
+const extract = (body) => runJob("extract", body);
+const plan = (visit) => runJob("plan", { visit });
+
 test("admin endpoints reject a missing or wrong token", async () => {
   assert.equal((await api("/api/visits")).status, 401);
   assert.equal((await api("/api/visits", { headers: { authorization: "Bearer nope" } })).status, 401);
@@ -51,7 +68,7 @@ test("admin endpoints reject a missing or wrong token", async () => {
 });
 
 test("extract → visit draft keeps every email on the list", async () => {
-  const r = await api("/api/extract", { method: "POST", headers: admin, body: JSON.stringify({ email_text: EMAIL }) });
+  const r = await extract({ email_text: EMAIL });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   const v = r.body.visit;
   assert.equal(v.date, "2026-10-07");
@@ -68,21 +85,56 @@ test("extract accepts uploaded list files: csv + docx text is read, .doc is repo
   zip.file("word/document.xml", `<w:document xmlns:w="w"><w:body><w:tbl><w:tr><w:tc><w:p><w:r><w:t>Kim Lee</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>kim.lee@uwa.edu.au</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>`);
   const docx = Buffer.from(await zip.generateAsync({ type: "uint8array" })).toString("base64");
   const csv = Buffer.from("name,email\nJane Doe,jane.doe@uwa.edu.au\n").toString("base64");
-  const r = await api("/api/extract", { method: "POST", headers: admin, body: JSON.stringify({ email_text: "", files: [{ name: "list.csv", type: "text/csv", data: csv }, { name: "list.docx", type: "", data: `data:application/octet-stream;base64,${docx}` }, { name: "old.doc", type: "application/msword", data: Buffer.from("x").toString("base64") }] }) });
+  const r = await extract({ email_text: "", files: [{ name: "list.csv", type: "text/csv", data: csv }, { name: "list.docx", type: "", data: `data:application/octet-stream;base64,${docx}` }, { name: "old.doc", type: "application/msword", data: Buffer.from("x").toString("base64") }] });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.deepEqual(r.body.files_read.map((f) => f.name), ["list.csv", "list.docx"]);
   assert.equal(r.body.warnings.length, 1);
   assert.ok(r.body.warnings[0].includes("old.doc"));
   const emails = r.body.visit.guests.map((g) => g.email).sort();
   assert.deepEqual(emails, ["jane.doe@uwa.edu.au", "kim.lee@uwa.edu.au"]);
-  const empty = await api("/api/extract", { method: "POST", headers: admin, body: JSON.stringify({ email_text: "", files: [] }) });
+  const empty = await extract({ email_text: "", files: [] });
   assert.equal(empty.status, 400);
 });
 
+test("extract 跑在背景：一般函式 10 秒不夠，所以回 202 加工作編號，前端輪詢", async () => {
+  const started = await api("/api/extract", { method: "POST", headers: admin, body: JSON.stringify({ email_text: EMAIL }) });
+  assert.equal(started.status, 202, JSON.stringify(started.body));
+  assert.ok(started.body.job_id, "回一個工作編號給前端輪詢");
+  const pending = await api(`/api/extract?job=${started.body.job_id}`, { headers: admin });
+  assert.equal(pending.body.status, "running");
+  assert.equal(pending.body.input, undefined, "輪詢不會把信件內容與附件再送回前端");
+  assert.equal((await api(`/api/extract?job=${started.body.job_id}`)).status, 401, "查進度也要 token");
+  assert.equal((await api("/api/extract?job=zzzzzzzz", { headers: admin })).status, 404, "過期或不存在的工作說找不到");
+  assert.equal((await api("/api/extract-background", { method: "POST", body: JSON.stringify({ job_id: started.body.job_id }) })).status, 401, "background needs the token too");
+
+  // 背景函式才是真的做事的那一支：輸入自己從 job 讀，觸發只帶 job_id
+  const ran = await api("/api/extract-background", { method: "POST", headers: admin, body: JSON.stringify({ job_id: started.body.job_id }) });
+  assert.equal(ran.status, 200, JSON.stringify(ran.body));
+  const done = await api(`/api/extract?job=${started.body.job_id}`, { headers: admin });
+  assert.equal(done.body.status, "done");
+  assert.ok(done.body.result.visit.guests.length, "結果留在工作上，前端輪到就拿得到");
+  assert.equal(done.body.result.visit.date, "2026-10-07");
+});
+
+test("plan 也跑在背景：提示詞帶整份頁次索引，10 秒同樣不夠", async () => {
+  assert.equal((await api("/api/plan", { method: "POST", body: JSON.stringify({ visit: {} }) })).status, 401, "needs the admin token");
+  assert.equal((await api("/api/plan", { method: "POST", headers: admin, body: "{}" })).status, 400, "需要 visit");
+  const started = await api("/api/plan", { method: "POST", headers: admin, body: JSON.stringify({ visit: { org: { name: "UWA" }, date: "2026-10-07", start_time: "10:00", duration_minutes: 90 } }) });
+  assert.equal(started.status, 202, JSON.stringify(started.body));
+  assert.equal((await api(`/api/plan?job=${started.body.job_id}`, { headers: admin })).body.status, "running");
+  assert.equal((await api("/api/plan-background", { method: "POST", headers: admin, body: "{}" })).status, 400, "background needs a job_id");
+  assert.equal((await api("/api/plan-background", { method: "POST", body: JSON.stringify({ job_id: started.body.job_id }) })).status, 401, "background needs the token too");
+  assert.equal((await api("/api/plan-background", { method: "POST", headers: admin, body: JSON.stringify({ job_id: started.body.job_id }) })).status, 200);
+  const done = await api(`/api/plan?job=${started.body.job_id}`, { headers: admin });
+  assert.equal(done.body.status, "done");
+  assert.equal(done.body.input, undefined, "輪詢不會把整筆參訪再送回前端");
+  assert.ok(done.body.result.visit.programme.length, "行程留在工作上，前端輪到就拿得到");
+});
+
 test("plan → programme, itinerary, slides (always-slides present), then save", async () => {
-  const ex = await api("/api/extract", { method: "POST", headers: admin, body: JSON.stringify({ email_text: EMAIL }) });
+  const ex = await extract({ email_text: EMAIL });
   const visit = { ...ex.body.visit, code: "uwa", start_time: "10:00", duration_minutes: 90 };
-  const p = await api("/api/plan", { method: "POST", headers: admin, body: JSON.stringify({ visit }) });
+  const p = await plan(visit);
   assert.equal(p.status, 200, JSON.stringify(p.body));
   const planned = p.body.visit;
   for (const n of [1, 2, 3, 4, 72]) assert.ok(planned.slides.includes(n), `slide ${n} missing`);
@@ -101,7 +153,7 @@ test("plan → programme, itinerary, slides (always-slides present), then save",
   assert.equal(planned.itinerary[0].minutes, 20);
   assert.equal(planned.itinerary[0].location, "302", "the briefing is in 302 by default");
   assert.ok(planned.itinerary.slice(1).every((s) => s.minutes === 11));
-  const p2 = await api("/api/plan", { method: "POST", headers: admin, body: JSON.stringify({ visit: { ...visit, itinerary: [{ room: "briefing", minutes: 20, location: "304" }] } }) });
+  const p2 = await plan({ ...visit, itinerary: [{ room: "briefing", minutes: 20, location: "304" }] });
   assert.equal(p2.body.visit.itinerary[0].location, "304", "an organiser-chosen briefing room survives the AI plan");
   assert.ok(planned.itinerary[0].minutes > 0);
   assert.equal(planned.itinerary.reduce((s, x) => s + x.minutes, 0) <= 90, true);
@@ -355,24 +407,64 @@ test("drive auto-backup: the background sync endpoint needs the token and stands
   assert.equal((await api("/api/respond", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visit_id: visitId, anonymous: true, suggestion: "auto-backup should not break this" }) })).status, 200);
 });
 
-test("research: 訪前功課回傳可能的參訪目的，不自動落庫", async () => {
-  assert.equal((await api("/api/research", { method: "POST", body: JSON.stringify({ visit: { org: { name: "X" } } }) })).status, 401, "needs the admin token");
-  const empty = await api("/api/research", { method: "POST", headers: admin, body: JSON.stringify({ visit: { org: { name: "" }, guests: [] } }) });
-  assert.equal(empty.status, 400, "nothing to look up");
+test("cards: 名片讀成名單，確認後才併進 guests，原圖留著", async () => {
+  const cardPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+  const post = (body) => api("/api/cards", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  assert.equal((await api("/api/cards", { method: "POST", body: JSON.stringify({ visit_id: visitId, image: cardPng }) })).status, 401, "needs the admin token");
+  assert.equal((await post({ visit_id: "2026-01-01-nope", image: cardPng })).status, 404);
+  assert.equal((await post({ visit_id: visitId })).status, 400, "needs an image");
 
-  const r = await api("/api/research", {
-    method: "POST",
-    headers: admin,
-    body: JSON.stringify({ visit: { org: { name: "University of Western Australia", type: "university", country: "Australia" }, guests: [{ name: "Simon Kilbane", title: "Programme Director" }], purpose: "landscape and health" } }),
-  });
-  assert.equal(r.status, 200, JSON.stringify(r.body));
-  const b = r.body.background;
+  const before = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit.guests.length;
+  const read = await post({ visit_id: visitId, image: `data:image/png;base64,${cardPng}` });
+  assert.equal(read.status, 200, JSON.stringify(read.body));
+  assert.match(read.body.photo_key, new RegExp(`^cards/${visitId}/\\d+\\.png$`), "原圖存進媒體庫");
+  assert.ok(read.body.people.length, "讀出人");
+  // 讀完不會自己動名單
+  assert.equal((await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit.guests.length, before, "讀名片不會自己改名單");
+
+  const person = { name: "陳大文", title: "Professor", affiliation: "Example University", email: "Card@Example.edu", phone: "02-1234" };
+  const saved = await post({ visit_id: visitId, action: "save", guests: [person], photo_key: read.body.photo_key });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  assert.equal(saved.body.added, 1);
+  const after = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit;
+  const added = after.guests.find((g) => g.email === "card@example.edu");
+  assert.ok(added, "名片上的人進了名單（email 轉小寫）");
+  assert.equal(added.phone, "02-1234", "電話留得住（normalizeVisit 不能把它吃掉）");
+  assert.equal(after.cards.length, 1, "名片原圖記在這一場");
+
+  // 同一張再存一次不會多一個人
+  const again = await post({ visit_id: visitId, action: "save", guests: [person], photo_key: read.body.photo_key });
+  assert.equal(again.body.added, 0);
+  assert.equal((await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit.guests.length, after.guests.length);
+
+  // 訪後信的收件人會包含名片上的人
+  const rec = await api("/api/letter", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "recipients" }) });
+  assert.ok(rec.body.recipients.some((r) => r.email === "card@example.edu"), "名片上的人會收到訪後信");
+
+  const removed = await post({ visit_id: visitId, action: "remove", key: read.body.photo_key });
+  assert.equal(removed.body.cards.length, 0);
+  assert.equal((await api(`/api/media?key=${encodeURIComponent(read.body.photo_key)}`, { headers: admin })).status, 404, "原圖刪掉了");
+});
+
+test("research: 查網路要一兩分鐘，所以觸發背景函式，前端輪詢結果", async () => {
+  assert.equal((await api("/api/research", { method: "POST", body: JSON.stringify({ visit_id: visitId }) })).status, 401, "needs the admin token");
+  assert.equal((await api("/api/research", { method: "POST", headers: admin, body: JSON.stringify({}) })).status, 400, "needs a saved visit");
+  assert.equal((await api("/api/research", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: "2026-01-01-nope" }) })).status, 404);
+
+  const started = await api("/api/research", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId }) });
+  assert.equal(started.status, 202, JSON.stringify(started.body));
+  assert.equal(started.body.background.status, "running", "狀態記在參訪上，重新整理也看得到");
+  assert.equal((await api(`/api/research?id=${visitId}`, { headers: admin })).body.background.status, "running");
+
+  // 背景函式才是真的做事的那一支
+  assert.equal((await api("/api/research-background", { method: "POST", body: JSON.stringify({ visit_id: visitId }) })).status, 401, "background needs the token too");
+  const done = await api("/api/research-background", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId }) });
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  const b = (await api(`/api/research?id=${visitId}`, { headers: admin })).body.background;
+  assert.equal(b.status, "done");
   assert.ok(b.purposes.length, "可能的參訪目的");
   assert.ok(b.rooms.every((x) => ["301", "302", "303", "304", "305"].includes(x.room)), "只會指到中心的五間研究室");
-  assert.ok(b.researched_at, "有時間戳");
-  // 研究結果不會自己寫進參訪：要主辦端按儲存
-  const after = await api(`/api/visits?id=${visitId}`, { headers: admin });
-  assert.equal(after.body.visit.background, undefined, "research 不自動落庫");
+  assert.ok(b.researched_at);
 });
 
 test("session: 貼一次 ADMIN_TOKEN 就換到 cookie，之後這台瀏覽器不必再授權", async () => {

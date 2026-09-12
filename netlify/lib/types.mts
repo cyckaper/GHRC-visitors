@@ -10,6 +10,8 @@ export interface Guest {
   email: string;
   role: "lead" | "member";
   affiliation?: string;
+  /** 名片上讀到的電話（/api/cards）；手打的名單通常沒有。 */
+  phone?: string;
 }
 
 export interface ProgrammeBlock {
@@ -70,8 +72,14 @@ export interface Visit {
     unknowns: string[];
     sources: { title: string; url: string }[];
     searched?: boolean;
+    /** running：背景還在查；done：查完；error：查失敗（error 有原因）。 */
+    status?: "running" | "done" | "error";
+    started_at?: string;
+    error?: string;
     researched_at?: string;
   };
+  /** 訪客名片原圖（/api/cards）：讀錯時回頭核對用，Drive 備份會一起帶走。 */
+  cards?: { key: string; names: string[]; read_at: string }[];
   materials: Materials;
   // skip=true：這場不用簡報，只口頭介紹（後台「簡報」分頁勾的）
   deck: { skip?: boolean; slides?: number; spec_path?: string; pptx_url?: string; pdf_url?: string; generated_at?: string };

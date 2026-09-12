@@ -77,18 +77,20 @@ try {
   await page.click('[data-tab="pre"]');
   await page.fill("#emailText", `Dear Prof. Chang,\n\nWe would like to visit on 2026-10-07 at 10:00. My colleague Jane Doe <jane@uwa.edu.au> joins me.\n\nSimon Kilbane, University of Western Australia\nsimon@uwa.edu.au`);
   await page.click("#extractBtn");
-  await page.waitForFunction(() => document.getElementById("orgName").value.length > 0);
+  // 讀信也跑在背景（一封長信＋附件常常超過一般函式的 10 秒，會變成 504）：按下去先說在讀，輪詢到結果才填表
+  await page.waitForFunction(() => /讀信中/.test(document.getElementById("extractInfo").textContent));
+  check(true, "AI 抽取 runs in the background instead of holding the request open");
+  await page.waitForFunction(() => document.getElementById("orgName").value.length > 0, null, { timeout: 90000 });
+  check((await page.textContent("#extractInfo")) === "", "…and the progress line clears once the form is filled");
   check((await page.inputValue("#date")) === "2026-10-07", "extract fills the date");
   check((await page.locator("#guestTable tbody tr").count()) === 2, "extract lists both guests");
   await page.fill("#code", "uwa");
 
-  // 訪前功課：AI 查背景 → 可能的參訪目的要出現在訪前分頁，而且要跟著參訪一起存
-  await page.click("#researchBtn");
-  await page.waitForFunction(() => document.querySelectorAll("#background li").length > 0);
-  check((await page.textContent("#background")).includes("可能的參訪目的"), "the background card lists the likely purposes of the visit");
-
   await page.click("#planBtn");
-  await page.waitForFunction(() => document.querySelectorAll("#programmeTable tbody tr").length > 0);
+  // 排行程也跑在背景（提示詞帶整份頁次索引，10 秒同樣不夠）
+  await page.waitForFunction(() => /排行程中/.test(document.getElementById("planInfo").textContent));
+  check(true, "排行程 runs in the background too");
+  await page.waitForFunction(() => document.querySelectorAll("#programmeTable tbody tr").length > 0, null, { timeout: 90000 });
   check((await page.locator("#programmeTable tbody tr select").evaluateAll((els) => els.map((e) => e.options[e.selectedIndex].text))).includes("綜合討論"), "programme table shows a 綜合討論 block");
   check((await page.locator("#tab-pre #slideGrid").count()) === 0, "the pre-visit tab no longer carries the slide picker");
   check((await page.textContent("#itinerary label:first-child")).includes("總體介紹"), "route starts with the overall briefing");
@@ -98,8 +100,14 @@ try {
   await page.waitForSelector("#afterSave:not([hidden])");
   const link = await page.textContent("#pageLink");
   check(link === `${base}/2026-10-07-uwa`, `saved visit has page url ${link}`);
-  check((await page.textContent("#background")).includes("可能的參訪目的"), "the background survives the save");
   check((await page.textContent("#deckState")).includes("已選"), "the pre-visit tab only reports how many slides are picked");
+
+  // 訪前功課：查網路跑在背景（一般函式 10 秒不夠），觸發後輪詢，查完才出現在訪前分頁
+  await page.click("#researchBtn");
+  await page.waitForFunction(() => /查資料中/.test(document.getElementById("background").textContent));
+  check(true, "researching the visitors runs in the background instead of holding the request open");
+  await page.waitForFunction(() => document.querySelectorAll("#background li").length > 0, null, { timeout: 90000 });
+  check((await page.textContent("#background")).includes("可能的參訪目的"), "the background card lists the likely purposes of the visit once it finishes");
 
   // ── 簡報分頁：選頁、不用簡報、產檔 ──
   await page.click("#openDeck");
@@ -223,6 +231,19 @@ try {
   await page.waitForFunction(() => document.getElementById("thanksBody").value.includes("what should we be doing better"));
   await page.waitForFunction(() => document.querySelectorAll("#recipients input").length === 2);
   check(true, "thanks letter drafted with the 請益 wording and 2 recipients");
+
+  // ── 資料分頁：拍名片 → AI 讀 → 確認後併進這場的名單 ──
+  await page.click('[data-tab="data"]');
+  await page.selectOption("#cardVisitSelect", "2026-10-07-uwa");
+  await page.waitForFunction(() => document.getElementById("cardStatus").textContent.includes("名單目前"));
+  const guestsBefore = Number(/名單目前 (\d+) 人/.exec(await page.textContent("#cardStatus"))[1]);
+  await page.setInputFiles("#cardFiles", pngPath);
+  await page.waitForSelector("#cardTable:not([hidden]) tbody tr");
+  check((await page.locator("#cardTable tbody tr").count()) >= 1, "a photographed card is read into an editable row");
+  await page.click("#cardSave");
+  await page.waitForFunction(() => /加了 \d+ 人/.test(document.getElementById("cardSaveInfo").textContent));
+  await page.waitForFunction((n) => new RegExp(`名單目前 ${n + 1} 人`).test(document.getElementById("cardStatus").textContent), guestsBefore);
+  check((await page.locator("#cardList img").count()) === 1, "the card photo is kept with the visit and the person is on the guest list");
 
   // ── 來賓端：首頁（沒有參訪代碼）一律從訪前開始 ──
   await page.goto(`${base}/`);

@@ -154,6 +154,11 @@ export function plan(visit: Visit): DriveItem[] {
     return out;
   };
   (m.photos || []).filter((p) => !/^https?:/i.test(p)).forEach((p) => items.push({ key: p, name: unique(originalName(p)) }));
+  // 名片用名片主人的名字當檔名（同名的加序號）；名字沒讀到就只叫「名片」
+  for (const c of (visit as any).cards || []) {
+    const who = (c.names || []).filter(Boolean).join("、").slice(0, 60);
+    items.push({ key: c.key, name: unique(`名片${who ? `-${who}` : ""}.${ext(c.key) || "jpg"}`) });
+  }
   return items;
 }
 

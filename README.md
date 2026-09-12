@@ -13,6 +13,7 @@
 | 簡報 | 承辦 | 選用頁次 →「產生簡報 .pptx」直接下載當次簡報（瀏覽器裡子集化母簡報；韓／日文版自動翻譯）。**有些參訪不用簡報，只口頭介紹**：勾「這場不用簡報」就整個跳過。母簡報第一次用「上傳母簡報」放上站台即可。備援：`npm run deck -- --visit=<visit_id>`（可另出 PDF） | `admin.html`「簡報」／本機 CLI |
 | 現場 | 老師／主持人 | 開簡報的桌面捷徑、門口 NFC 貼紙自動送動線訊號；總體簡報最後一頁問「您最想看哪一部分」 | `scripts/make-shortcuts.mjs` |
 | 收工 | 主持人 | 拍一張簽名簿（AI 讀字）＋ 三十秒口述（轉文字、抽取），一分鐘；再把簡報 PDF、合照、相關連結放上專屬頁面 | `admin.html`「收工」（.ics 提醒直達） |
+| 現場 | 承辦 | 拿到名片就拍一張 → AI 讀出姓名／職稱／單位／email／電話 → 確認後併進這場的名單（訪後信就寄得到他）；原圖留著可回頭核對 | `admin.html`「資料」 |
 | 訪後 | 承辦 | AI 草擬感謝信 → 寄給**名單上每一個人**；信裡三個回應項目（含請益語氣的開放建議欄位，可**真匿名**） | `admin.html`「訪後信」→ 來賓端 `#respond` |
 | 長期 | 中心 | 一頁摘要、跨場次建議彙整、CSV 匯出、slide_performance；**每場自動備份到中心的 Google Drive**（資料有變動就同步，另有每晚補漏） | `admin.html`「資料」 |
 
@@ -22,8 +23,9 @@
 public/            單檔 HTML（Tailwind CDN，無建置）：index.html 來賓端、admin.html 主辦端、data/*.json
 public/lib/        pptx.mjs：母簡報子集化核心（瀏覽器與 CLI 共用，零 Node 相依）
 public/assets/master/  （選用）slim-master.pptx 靜態檔；平常改用後台「上傳母簡報」存進 Blobs，不必進 git
-netlify/functions/ API（.mts）：visits extract plan letter respond timeline signbook transcribe summary media materials translate master drive drive-sync-background drive-cron
-netlify/lib/       函式共用：store（file／blobs／sheets）、ai（Claude、Whisper、mock）、http、data、types
+netlify/functions/ API（.mts）：visits extract plan letter respond timeline signbook cards transcribe summary media materials translate master session drive
+                   跑得久的 AI 走背景函式（一般函式只有 10 秒）：extract-background plan-background research-background；另有 drive-sync-background drive-cron
+netlify/lib/       函式共用：store（file／blobs／sheets）、ai（Claude、Whisper、mock）、http、data、types、jobs（背景工作）
 lib/               純 JS 共用：visit（id、匿名化、寄送清單、ICS）、timeline（動線推補）
 cli/               npm run deck：同一份核心的本機入口 → pptx（＋PDF）
 scripts/           slim-master.py（母簡報瘦身）、make-shortcuts.mjs（現場捷徑）、make-fixture.py（測試用合成簡報）、dev-server.mjs

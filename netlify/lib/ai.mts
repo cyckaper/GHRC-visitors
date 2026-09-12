@@ -396,6 +396,48 @@ const DictationSchema = z.object({
   other: z.string(),
 });
 
+/** 名片照片 → 名單。一張照片可能同時拍到好幾張名片，所以回傳陣列。 */
+const CardSchema = z.object({
+  people: z.array(
+    z.object({
+      name: z.string(),
+      title: z.string(),
+      affiliation: z.string(),
+      email: z.string(),
+      phone: z.string(),
+    }),
+  ),
+  note: z.string(),
+});
+export type CardRead = z.infer<typeof CardSchema>;
+
+export async function readCard(imageBase64: string, mediaType: string): Promise<CardRead> {
+  if (isMock())
+    return {
+      people: [{ name: "（AI_MOCK）陳大文", title: "Professor", affiliation: "Example University", email: "mock@example.edu", phone: "+886 2 1234 5678" }],
+      note: "（AI_MOCK）名片讀取範例",
+    };
+  return structured(
+    CardSchema,
+    `讀這張照片裡的名片，抽出人的聯絡資料（照片裡可能不只一張名片，每一張都要抽）。
+
+- name：名片上的姓名。中英文都有時，name 用中文全名（沒有中文才用英文）。
+- title：職稱，照名片上的寫法（中英文都有就用中文）。
+- affiliation：單位／公司，含系所或部門。
+- email、phone：照名片上的字抄，不要改格式、不要自己補網域；名片上沒有就留空字串。
+- 看不清楚、被裁掉、有疑慮的字**一律留空**，不要猜——名單的 email 之後要拿來寄信，猜錯比留空更糟。
+- note：一句話說這張照片的狀況（幾張名片、哪裡看不清楚）；沒事就留空字串。
+- 這是來訪者的名片，不是中心自己的人。
+
+${CENTER_FACTS}`,
+    [
+      { type: "image", source: { type: "base64", media_type: mediaType as any, data: imageBase64 } },
+      { type: "text", text: "把這張照片裡的名片讀成名單。" },
+    ],
+    4000,
+  );
+}
+
 export async function transcribeAudio(bytes: Uint8Array, mime: string, language = "zh"): Promise<string> {
   if (isMock()) return "（AI_MOCK）今天部長來，他最想看 303 的模擬，問了兩個問題，一個是這套能不能用在長照機構，一個是問經費從哪裡來，他的參事會後有來要惠美的名片。";
   const key = env("OPENAI_API_KEY");
