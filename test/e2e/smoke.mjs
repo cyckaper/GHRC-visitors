@@ -82,11 +82,6 @@ try {
   check((await page.locator("#guestTable tbody tr").count()) === 2, "extract lists both guests");
   await page.fill("#code", "uwa");
 
-  // 訪前功課：AI 查背景 → 可能的參訪目的要出現在訪前分頁，而且要跟著參訪一起存
-  await page.click("#researchBtn");
-  await page.waitForFunction(() => document.querySelectorAll("#background li").length > 0);
-  check((await page.textContent("#background")).includes("可能的參訪目的"), "the background card lists the likely purposes of the visit");
-
   await page.click("#planBtn");
   await page.waitForFunction(() => document.querySelectorAll("#programmeTable tbody tr").length > 0);
   check((await page.locator("#programmeTable tbody tr select").evaluateAll((els) => els.map((e) => e.options[e.selectedIndex].text))).includes("綜合討論"), "programme table shows a 綜合討論 block");
@@ -98,8 +93,14 @@ try {
   await page.waitForSelector("#afterSave:not([hidden])");
   const link = await page.textContent("#pageLink");
   check(link === `${base}/2026-10-07-uwa`, `saved visit has page url ${link}`);
-  check((await page.textContent("#background")).includes("可能的參訪目的"), "the background survives the save");
   check((await page.textContent("#deckState")).includes("已選"), "the pre-visit tab only reports how many slides are picked");
+
+  // 訪前功課：查網路跑在背景（一般函式 10 秒不夠），觸發後輪詢，查完才出現在訪前分頁
+  await page.click("#researchBtn");
+  await page.waitForFunction(() => /查資料中/.test(document.getElementById("background").textContent));
+  check(true, "researching the visitors runs in the background instead of holding the request open");
+  await page.waitForFunction(() => document.querySelectorAll("#background li").length > 0, null, { timeout: 90000 });
+  check((await page.textContent("#background")).includes("可能的參訪目的"), "the background card lists the likely purposes of the visit once it finishes");
 
   // ── 簡報分頁：選頁、不用簡報、產檔 ──
   await page.click("#openDeck");

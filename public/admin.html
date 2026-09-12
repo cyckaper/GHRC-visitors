@@ -109,7 +109,7 @@
         <button class="btn btn-soft" id="researchBtn" type="button">AI 查訪客背景</button>
         <span class="muted" id="researchInfo"></span>
       </div>
-      <p class="muted">用網路查這個單位與名單上的人的公開專業資料，整理出<b>可能的參訪目的</b>、可能最想看哪幾間、可以先準備什麼。只給主辦端看，不會出現在來賓專頁或信裡；按下面的「儲存」才會存進這一場。</p>
+      <p class="muted">用網路查這個單位與名單上的人的公開專業資料，整理出<b>可能的參訪目的</b>、可能最想看哪幾間、可以先準備什麼。只給主辦端看，不會出現在來賓專頁或信裡。<b>要先把這一場存檔</b>——查網路要一兩分鐘，跑在背景，查完自己會出現（這一頁留著就好，也可以先去做別的，回來再看）。</p>
       <div id="background" class="space-y-3"></div>
     </div>
 
@@ -624,6 +624,12 @@
   const ROOM_LABEL = { 301: "301 智能室", 302: "302 規劃室", 303: "303 模擬室", 304: "304 全景影院", 305: "305 IVR" };
   function renderBackground(b) {
     const box = $("background");
+    if (b && b.status === "running") {
+      box.innerHTML = `<p class="muted">查資料中……跑在背景，大約一兩分鐘。</p>`;
+      $("researchInfo").textContent = "查資料中…";
+      if (state.visit?.visit_id) pollBackground(state.visit.visit_id);
+      return;
+    }
     if (!b || !b.org_profile) { box.innerHTML = ""; $("researchInfo").textContent = ""; return; }
     const list = (items, fn) => (items || []).map((x) => `<li>${fn(x)}</li>`).join("");
     box.innerHTML = `
@@ -637,15 +643,35 @@
     $("researchInfo").textContent = b.researched_at ? `${b.searched ? "查過網路" : "未查網路"} · ${b.researched_at.slice(0, 16).replace("T", " ")}` : "";
   }
   $("researchBtn").onclick = () => busy($("researchBtn"), async () => {
-    const v = readForm();
-    if (!v.org.name && !v.guests.length) return flash("先填單位名稱或名單，才查得到東西", "err");
-    $("background").innerHTML = `<p class="muted">查資料中……（要讀幾個網頁，大約半分鐘到一分鐘）</p>`;
-    const r = await api("/api/research", { method: "POST", body: { visit: v } });
-    if (!r.ok) { $("background").innerHTML = ""; return flash(r.error, "err"); }
-    state.visit = { ...state.visit, ...v, background: r.background };
-    renderBackground(r.background);
-    flash("背景研判完成，請自己再判斷一次；按「儲存」才會存進這一場");
+    const id = state.saved ? state.visit.visit_id : "";
+    if (!id) return flash("先按「儲存」建立這一場，再查背景（查網路要一兩分鐘，跑在背景，結果會寫回這一場）", "err");
+    const r = await api("/api/research", { method: "POST", body: { visit_id: id } });
+    if (!r.ok) return flash(r.error, "err");
+    $("researchInfo").textContent = "查資料中…";
+    $("background").innerHTML = `<p class="muted">查資料中……跑在背景，大約一兩分鐘。這一頁留著就好，也可以先去做別的，回來再按一次「AI 查訪客背景」看結果。</p>`;
+    pollBackground(id);
   });
+  /** 背景查完才會有 researched_at；每 5 秒問一次，最多等 4 分鐘。 */
+  async function pollBackground(id) {
+    clearTimeout(pollBackground.t);
+    for (let i = 0; i < 48; i++) {
+      await new Promise((r) => { pollBackground.t = setTimeout(r, 5000); });
+      if ($("preVisitSelect").value && $("preVisitSelect").value !== id) return; // 換去看別場就停
+      const r = await api(`/api/research?id=${encodeURIComponent(id)}`);
+      if (!r.ok) continue;
+      const b = r.background;
+      if (!b || b.status === "running") continue;
+      if (state.visit) state.visit.background = b;
+      if (b.status === "error") {
+        $("background").innerHTML = "";
+        $("researchInfo").textContent = "";
+        return flash(`查背景失敗：${b.error || "未知原因"}`, "err");
+      }
+      renderBackground(b);
+      return flash("背景研判完成，請自己再判斷一次");
+    }
+    $("researchInfo").textContent = "等太久了，請再按一次看看";
+  }
 
   // ── 訪前：AI ──
   $("listFiles").onchange = () => { $("listFilesInfo").innerHTML = [...$("listFiles").files].map((f) => `<li>${esc(f.name)} <span class="muted">${(f.size / 1024).toFixed(0)} KB</span></li>`).join(""); };

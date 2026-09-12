@@ -394,24 +394,25 @@ test("cards: 名片讀成名單，確認後才併進 guests，原圖留著", asy
   assert.equal((await api(`/api/media?key=${encodeURIComponent(read.body.photo_key)}`, { headers: admin })).status, 404, "原圖刪掉了");
 });
 
-test("research: 訪前功課回傳可能的參訪目的，不自動落庫", async () => {
-  assert.equal((await api("/api/research", { method: "POST", body: JSON.stringify({ visit: { org: { name: "X" } } }) })).status, 401, "needs the admin token");
-  const empty = await api("/api/research", { method: "POST", headers: admin, body: JSON.stringify({ visit: { org: { name: "" }, guests: [] } }) });
-  assert.equal(empty.status, 400, "nothing to look up");
+test("research: 查網路要一兩分鐘，所以觸發背景函式，前端輪詢結果", async () => {
+  assert.equal((await api("/api/research", { method: "POST", body: JSON.stringify({ visit_id: visitId }) })).status, 401, "needs the admin token");
+  assert.equal((await api("/api/research", { method: "POST", headers: admin, body: JSON.stringify({}) })).status, 400, "needs a saved visit");
+  assert.equal((await api("/api/research", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: "2026-01-01-nope" }) })).status, 404);
 
-  const r = await api("/api/research", {
-    method: "POST",
-    headers: admin,
-    body: JSON.stringify({ visit: { org: { name: "University of Western Australia", type: "university", country: "Australia" }, guests: [{ name: "Simon Kilbane", title: "Programme Director" }], purpose: "landscape and health" } }),
-  });
-  assert.equal(r.status, 200, JSON.stringify(r.body));
-  const b = r.body.background;
+  const started = await api("/api/research", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId }) });
+  assert.equal(started.status, 202, JSON.stringify(started.body));
+  assert.equal(started.body.background.status, "running", "狀態記在參訪上，重新整理也看得到");
+  assert.equal((await api(`/api/research?id=${visitId}`, { headers: admin })).body.background.status, "running");
+
+  // 背景函式才是真的做事的那一支
+  assert.equal((await api("/api/research-background", { method: "POST", body: JSON.stringify({ visit_id: visitId }) })).status, 401, "background needs the token too");
+  const done = await api("/api/research-background", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId }) });
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  const b = (await api(`/api/research?id=${visitId}`, { headers: admin })).body.background;
+  assert.equal(b.status, "done");
   assert.ok(b.purposes.length, "可能的參訪目的");
   assert.ok(b.rooms.every((x) => ["301", "302", "303", "304", "305"].includes(x.room)), "只會指到中心的五間研究室");
-  assert.ok(b.researched_at, "有時間戳");
-  // 研究結果不會自己寫進參訪：要主辦端按儲存
-  const after = await api(`/api/visits?id=${visitId}`, { headers: admin });
-  assert.equal(after.body.visit.background, undefined, "research 不自動落庫");
+  assert.ok(b.researched_at);
 });
 
 test("session: 貼一次 ADMIN_TOKEN 就換到 cookie，之後這台瀏覽器不必再授權", async () => {

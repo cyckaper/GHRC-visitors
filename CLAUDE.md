@@ -197,7 +197,9 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
 
 > 隨行名單的 email 是功能 3 取得代表性的關鍵，抽取時要特別留住，不要只留主要窗口一人。
 
-**訪前功課（`/api/research`）**：抽取之後再查一次**公開的專業資料**（單位的性質與業務、來賓的職稱與領域、近期公開計畫或報導），整理成一頁研判：單位側寫、名單上的人、**可能的參訪目的**（最可能的放前面，附依據）、可能最想看哪幾間（301–305）、可以先準備什麼、還要確認什麼、讀過的網址。用 Claude 的伺服器端網路搜尋工具；帳號沒開搜尋時退回「只讀來信」並在畫面上標明。只查公開的專業資訊，不查私人生活；查不到就說查不到，不編。結果只給主辦端看（不進來賓專頁、不進信件），跟抽取一樣**要按儲存才寫進 `visit.background`**。
+**訪前功課（`/api/research`）**：抽取之後再查一次**公開的專業資料**（單位的性質與業務、來賓的職稱與領域、近期公開計畫或報導），整理成一頁研判：單位側寫、名單上的人、**可能的參訪目的**（最可能的放前面，附依據）、可能最想看哪幾間（301–305）、可以先準備什麼、還要確認什麼、讀過的網址。用 Claude 的伺服器端網路搜尋工具；帳號沒開搜尋時退回「只讀來信」並在畫面上標明。只查公開的專業資訊，不查私人生活；查不到就說查不到，不編。結果只給主辦端看，不進來賓專頁、不進信件。
+
+> **查網路要一兩分鐘，一般函式只有 10 秒**（實際踩過：畫面回 504 Inactivity Timeout）。所以 `/api/research` 只負責觸發與查詢，真正的工作在背景函式 `research-background`（15 分鐘上限），結果寫回 `visit.background`（`status` running／done／error），前端每 5 秒輪詢 `GET /api/research?id=`。**因此這一場要先存檔才查得了背景**——背景函式只能靠 store 溝通。
 
 ### 2. 客製化雙語簡報
 
@@ -304,7 +306,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 - `public/admin.html`：訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → 排行程 → 儲存 → QR／.ics／確認信）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、收工（簽名簿照片讀字、三十秒口述錄音轉文字抽取、或打字、**當天資料**：簡報 PDF、合照、相關連結放上專頁）、訪後信（草擬、全名單收件人、寄出或 mailto）、資料（**訪客名片拍照讀名單**、列表、回覆、動線、摘要、跨場次彙整、CSV）。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
 - `public/index.html`：專屬網址 `/<visit_id>`；全頁英文為主、第二語言為輔（預設中文，ko／ja 來賓用韓／日文）；流程（參訪當天標出「現在」）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
-- `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `timeline` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `session`（登入） `drive` `drive-sync-background`（自動備份）`drive-cron`（每晚補漏，`export const config = { schedule }`）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
+- `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `timeline` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `session`（登入） `research-background`（訪前功課，查網路要一兩分鐘）`drive` `drive-sync-background`（自動備份）`drive-cron`（每晚補漏，`export const config = { schedule }`）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
 - `public/lib/pptx.mjs`：母簡報子集化核心（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證），零 Node 相依，瀏覽器與 CLI 共用；`cli/lib/pptx.mjs` 只是注入 jszip／xmldom 的 Node 入口；`cli/deck.mjs` 加上 QR（qrcode 套件）與 PDF（LibreOffice）。`--inspect`、`--dump`、`--validate`。
 - `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-shortcuts.mjs`：研究室電腦捷徑與 NFC 網址。

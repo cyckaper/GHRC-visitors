@@ -1,27 +1,51 @@
-import { fail, json, nowISO, readJSON, requireAdmin, siteUrl } from "../lib/http.mts";
-import { researchVisitor } from "../lib/ai.mts";
-import type { Visit } from "../lib/types.mts";
-import { normalizeVisit } from "./visits.mts";
+import { env, fail, json, nowISO, readJSON, requireAdmin, siteUrl } from "../lib/http.mts";
+import { getStore } from "../lib/store.mts";
 
 /**
- * POST /api/research {visit} → {background}
+ * 訪前功課的**觸發與查詢**。真正的工作在 research-background.mts。
  *
- * 訪前功課：用網路搜尋查來訪單位與名單上的人的**公開專業資料**，整理出可能的參訪目的、
- * 可能想看的研究室、可以先準備什麼、還查不到什麼，附上讀過的網址。
- * 結果只回傳給主辦端確認（跟抽取一樣不自動落庫），按「儲存」才會寫進 visit.background。
+ * POST /api/research {visit_id}  → 202，背景開始查（查網路要一兩分鐘，一般函式只有 10 秒，撐不住）
+ * GET  /api/research?id=<visit_id> → { background }（前端每幾秒問一次，查完就會有 researched_at）
+ *
+ * 結果寫進 visit.background：狀態 running／done／error 都在裡面，重新整理也看得到進度。
  */
 export default async (req: Request) => {
-  if (req.method !== "POST") return fail(405, "method not allowed");
   const denied = requireAdmin(req);
   if (denied) return denied;
-  const body = await readJSON<{ visit?: Partial<Visit> }>(req);
-  if (!body?.visit) return fail(400, "需要 visit");
-  const visit = normalizeVisit(body.visit, siteUrl(req));
-  if (!visit.org?.name && !(visit.guests || []).length) return fail(400, "至少要有單位名稱或一個名單上的人，才查得到東西");
-  try {
-    const background = await researchVisitor(visit);
-    return json({ ok: true, background: { ...background, researched_at: nowISO() } });
-  } catch (e: any) {
-    return fail(502, `查不到背景：${e?.message || e}`);
+  const store = getStore();
+
+  if (req.method === "GET") {
+    const id = new URL(req.url).searchParams.get("id") || "";
+    const visit = await store.getVisit(id);
+    if (!visit) return fail(404, "找不到這次參訪");
+    return json({ ok: true, background: (visit as any).background || null });
   }
+
+  if (req.method !== "POST") return fail(405, "method not allowed");
+  const body = await readJSON<{ visit_id?: string }>(req);
+  const id = String(body?.visit_id || "");
+  if (!id) return fail(400, "需要 visit_id（先把這一場存檔，背景查完會寫回這一場）");
+  const visit = await store.getVisit(id);
+  if (!visit) return fail(404, "找不到這次參訪");
+  if (!visit.org?.name && !(visit.guests || []).length) return fail(400, "至少要有單位名稱或一個名單上的人，才查得到東西");
+
+  const prev = (visit as any).background || null;
+  if (prev?.status === "running" && Date.now() - (Date.parse(prev.started_at || "") || 0) < 5 * 60000) {
+    return json({ ok: true, running: true, background: prev }, { status: 202 });
+  }
+  (visit as any).background = { ...(prev || {}), status: "running", started_at: nowISO() };
+  await store.putVisit(visit);
+
+  const admin = env("ADMIN_TOKEN");
+  try {
+    await fetch(`${siteUrl(req)}/.netlify/functions/research-background`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${admin}`, "content-type": "application/json" },
+      body: JSON.stringify({ visit_id: id }),
+      signal: AbortSignal.timeout(3000),
+    });
+  } catch {
+    /* 背景函式回 202 就走，這裡不等它；真的沒被叫到的話前端輪詢會停在 running，使用者可以再按一次 */
+  }
+  return json({ ok: true, running: true, background: (visit as any).background }, { status: 202 });
 };

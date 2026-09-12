@@ -72,6 +72,10 @@ export interface Visit {
     unknowns: string[];
     sources: { title: string; url: string }[];
     searched?: boolean;
+    /** running：背景還在查；done：查完；error：查失敗（error 有原因）。 */
+    status?: "running" | "done" | "error";
+    started_at?: string;
+    error?: string;
     researched_at?: string;
   };
   /** 訪客名片原圖（/api/cards）：讀錯時回頭核對用，Drive 備份會一起帶走。 */
