@@ -109,7 +109,7 @@
         <button class="btn btn-soft" id="researchBtn" type="button">AI 查訪客背景</button>
         <span class="muted" id="researchInfo"></span>
       </div>
-      <p class="muted">用網路查這個單位與名單上的人的公開專業資料，整理出<b>可能的參訪目的</b>、可能最想看哪幾間、可以先準備什麼。只給主辦端看，不會出現在來賓專頁或信裡。<b>要先把這一場存檔</b>——查網路要一兩分鐘，跑在背景，查完自己會出現（這一頁留著就好，也可以先去做別的，回來再看）。</p>
+      <p class="muted">用網路查這個單位與名單上的人的公開專業資料，整理出<b>可能的參訪目的</b>、可能最想看哪幾間、可以先準備什麼。只給主辦端看，不會出現在來賓專頁或信裡。查完自己會出現在下面，不必再按一次。</p>
       <div id="background" class="space-y-3"></div>
     </div>
 
@@ -138,9 +138,10 @@
       </div>
       <div id="afterSave" hidden class="space-y-4">
         <div class="flex flex-wrap gap-6 items-start">
-          <div id="qr"></div>
+          <div><div id="qr"></div><p class="muted mt-1 max-w-[128px] leading-snug">同一個網址的 QR</p></div>
           <div class="space-y-2 min-w-0">
-            <p><a id="pageLink" class="underline break-all" target="_blank" rel="noopener"></a></p>
+            <div><div class="f mb-0">來賓專頁</div><a id="pageLink" class="underline break-all" target="_blank" rel="noopener"></a></div>
+            <p class="muted">這一場專屬的頁面：當天的流程、五間老師卡片，來賓可以在上面留 email。<b>QR 是拿來印或投影的</b>——放在門口或簡報最後一頁，來賓自己掃就打得開，不必個別傳網址。產生簡報時也會自動加一頁一樣的 QR。</p>
             <div class="flex flex-wrap gap-2">
               <button class="btn" id="openDeck">選頁與產生簡報</button>
               <button class="btn btn-soft" id="copyLink">複製網址</button>
@@ -401,18 +402,19 @@
     const seq = (jobSeq[path] = (jobSeq[path] || 0) + 1);
     const stop = (msg) => { note(msg); flash(msg, "err"); return null; };
     let misses = 0;
-    for (let i = 0; i < 100; i++) { // 三秒問一次，最多等五分鐘
-      await new Promise((r) => setTimeout(r, 3000));
-      if (seq !== jobSeq[path]) return null; // 又按了一次，這一輪作廢
+    const until = Date.now() + 15 * 60000; // 等滿背景函式的上限：AI 慢的時候不能叫人再按一次
+    for (let i = 0; Date.now() < until; i++) {
+      await new Promise((r) => setTimeout(r, i < 20 ? 3000 : i < 60 ? 5000 : 10000)); // 先問密一點，久了就放鬆
+      if (seq !== jobSeq[path]) return null; // 同一支又按了一次，這一輪作廢
       const r = await api(`${path}?job=${encodeURIComponent(jobId)}`);
-      if (!r.ok) { if (++misses < 3) continue; return stop(r.error || "查不到進度，請再按一次"); }
+      if (!r.ok) { if (++misses < 3) continue; return stop(r.error || "查不到進度了，請再按一次"); }
       misses = 0;
       if (r.status === "running") continue;
       if (r.status !== "done") return stop(r.error || "跑不出來，請再按一次");
       note("");
       return r.result || {};
     }
-    return stop("等太久了，請再按一次看看");
+    return stop("等了十五分鐘還沒跑完，AI 那邊大概卡住了，請再按一次");
   }
   /** POST 觸發 → 輪詢 → 結果。回 null 表示沒跑成（訊息已經顯示過）。 */
   async function runJob(path, body, note, working) {
@@ -663,7 +665,7 @@
   function renderBackground(b) {
     const box = $("background");
     if (b && b.status === "running") {
-      box.innerHTML = `<p class="muted">查資料中……跑在背景，大約一兩分鐘。</p>`;
+      box.innerHTML = `<p class="muted">查資料中……AI 要讀幾個網頁，大約一到三分鐘，查完會直接出現在這裡。</p>`;
       $("researchInfo").textContent = "查資料中…";
       if (state.visit?.visit_id) pollBackground(state.visit.visit_id);
       return;
@@ -681,19 +683,25 @@
     $("researchInfo").textContent = b.researched_at ? `${b.searched ? "查過網路" : "未查網路"} · ${b.researched_at.slice(0, 16).replace("T", " ")}` : "";
   }
   $("researchBtn").onclick = () => busy($("researchBtn"), async () => {
-    const id = state.saved ? state.visit.visit_id : "";
-    if (!id) return flash("先按「儲存」建立這一場，再查背景（查網路要一兩分鐘，跑在背景，結果會寫回這一場）", "err");
-    const r = await api("/api/research", { method: "POST", body: { visit_id: id } });
-    if (!r.ok) return flash(r.error, "err");
-    $("researchInfo").textContent = "查資料中…";
-    $("background").innerHTML = `<p class="muted">查資料中……跑在背景，大約一兩分鐘。這一頁留著就好，也可以先去做別的，回來再按一次「AI 查訪客背景」看結果。</p>`;
-    pollBackground(id);
+    const v = readForm();
+    if (!v.org?.name && !(v.guests || []).length) return flash("至少要有單位名稱或一個名單上的人，才查得到東西", "err");
+    $("background").innerHTML = `<p class="muted">查資料中……AI 要讀幾個網頁，大約一到三分鐘，查完會直接出現在這裡。</p>`;
+    // 還沒存檔也查得了：存過的就順便寫回那一場，沒存的結果留在畫面上，按「儲存」時一起存進去
+    const b = await runJob("/api/research", state.saved ? { visit_id: state.visit.visit_id } : { visit: v }, noteInto("researchInfo"), "查資料中……");
+    if (!b) { $("background").innerHTML = ""; return; }
+    if (state.visit) state.visit.background = b;
+    renderBackground(b);
+    flash("背景研判完成，請自己再判斷一次");
   });
-  /** 背景查完才會有 researched_at；每 5 秒問一次，最多等 4 分鐘。 */
+  /**
+   * 存過檔的那一場，狀態也記在參訪上：重新整理或換台機器打開，還在查的話這裡接回去看。
+   * （沒存檔的那一筆只在這個畫面上，重新整理就要重查。）
+   */
   async function pollBackground(id) {
     clearTimeout(pollBackground.t);
-    for (let i = 0; i < 48; i++) {
-      await new Promise((r) => { pollBackground.t = setTimeout(r, 5000); });
+    const until = Date.now() + 15 * 60000;
+    for (let i = 0; Date.now() < until; i++) {
+      await new Promise((r) => { pollBackground.t = setTimeout(r, i < 12 ? 5000 : 10000); });
       if ($("preVisitSelect").value && $("preVisitSelect").value !== id) return; // 換去看別場就停
       const r = await api(`/api/research?id=${encodeURIComponent(id)}`);
       if (!r.ok) continue;
@@ -708,7 +716,7 @@
       renderBackground(b);
       return flash("背景研判完成，請自己再判斷一次");
     }
-    $("researchInfo").textContent = "等太久了，請再按一次看看";
+    $("researchInfo").textContent = "等了十五分鐘還沒查完，請再按一次";
   }
 
   // ── 訪前：AI ──
@@ -722,7 +730,7 @@
     for (const f of picked) files.push({ name: f.name, type: f.type, data: await readFileB64(f) });
     const r = await api("/api/extract", { method: "POST", body: { email_text: $("emailText").value, files } });
     if (!r.ok || !r.job_id) return flash(r.error || "抽取沒有開始，請再按一次", "err");
-    $("extractInfo").textContent = "AI 讀信中……跑在背景，大約一兩分鐘。";
+    $("extractInfo").textContent = "AI 讀信中……大約一兩分鐘，讀完會自己填進下面的欄位。";
     pollExtract(r.job_id);
   });
   async function pollExtract(jobId) {
@@ -736,7 +744,7 @@
   $("planBtn").onclick = () => busy($("planBtn"), async () => {
     const r = await api("/api/plan", { method: "POST", body: { visit: readForm() } });
     if (!r.ok || !r.job_id) return flash(r.error || "排程沒有開始，請再按一次", "err");
-    $("planInfo").textContent = "AI 排行程中……跑在背景，大約一兩分鐘。";
+    $("planInfo").textContent = "AI 排行程中……大約一兩分鐘。";
     pollPlan(r.job_id);
   });
   async function pollPlan(jobId) {
@@ -897,7 +905,7 @@
     for (let i = 0; i < texts.length; i += 25) {
       const done = Math.min(i + 25, texts.length);
       log(`翻譯 ${done}/${texts.length} 段 → ${target}`);
-      const r = await runJob("/api/translate", { texts: texts.slice(i, i + 25), target }, log, `翻譯 ${done}/${texts.length} 段 → ${target}（跑在背景，稍等）`);
+      const r = await runJob("/api/translate", { texts: texts.slice(i, i + 25), target }, log, `翻譯 ${done}/${texts.length} 段 → ${target}……`);
       if (!r) throw new Error("翻譯失敗");
       out.push(...r.translations);
     }
@@ -952,7 +960,7 @@
   $("openWrapup").onclick = () => { $("wrapVisitSelect").value = state.visit.visit_id; showTab("wrapup"); };
   $("confirmLetterBtn").onclick = () => busy($("confirmLetterBtn"), async () => {
     const note = noteInto("confirmLetterInfo");
-    const r = await runJob("/api/letter", { visit_id: state.visit.visit_id, kind: "confirmation", sender: "contact" }, note, "AI 草擬中……跑在背景，大約一分鐘。");
+    const r = await runJob("/api/letter", { visit_id: state.visit.visit_id, kind: "confirmation", sender: "contact" }, note, "AI 草擬中……大約一分鐘。");
     if (!r) return;
     $("confirmSubject").value = r.draft.subject; $("confirmBody").value = r.draft.body;
   });
@@ -977,7 +985,7 @@
   };
   $("signbookUpload").onclick = () => busy($("signbookUpload"), async () => {
     const note = noteInto("signbookInfo");
-    const r = await runJob("/api/signbook", { visit_id: $("wrapVisitSelect").value, image: state.signbookDataUrl }, note, "照片已存，AI 讀手寫字中……跑在背景，大約一分鐘。");
+    const r = await runJob("/api/signbook", { visit_id: $("wrapVisitSelect").value, image: state.signbookDataUrl }, note, "照片已存，AI 讀手寫字中……大約一分鐘。");
     if (!r) return;
     $("signbookInfo").textContent = `照片已存：${r.photo_key}`;
     state.signbookEntries = r.entries || []; renderSignbook(); $("signbookTranscript").textContent = r.transcript || ""; $("signbookEntries").hidden = false;
@@ -1024,7 +1032,7 @@
   };
   $("recUpload").onclick = () => busy($("recUpload"), async () => {
     const fd = new FormData(); fd.append("visit_id", $("wrapVisitSelect").value); fd.append("audio", state.recBlob, "dictation.webm");
-    const r = await runJob("/api/transcribe", fd, noteInto("recInfo"), "音檔已存，轉文字與抽取中……跑在背景，大約一分鐘。");
+    const r = await runJob("/api/transcribe", fd, noteInto("recInfo"), "音檔已存，轉文字與抽取中……大約一分鐘。");
     if (!r) return;
     $("transcript").value = r.transcript || "";
     if (r.extracted) fillDictation(r.extracted);
@@ -1032,7 +1040,7 @@
     if (r.warning) flash(r.warning, "err"); // 逐字稿有了、抽取沒成：下面自己改
   });
   $("extractDictationBtn").onclick = () => busy($("extractDictationBtn"), async () => {
-    const r = await runJob("/api/transcribe", { visit_id: $("wrapVisitSelect").value, transcript: $("transcript").value }, noteInto("recInfo"), "抽取中……跑在背景。");
+    const r = await runJob("/api/transcribe", { visit_id: $("wrapVisitSelect").value, transcript: $("transcript").value }, noteInto("recInfo"), "抽取中……大約半分鐘。");
     if (!r) return;
     if (r.extracted) fillDictation(r.extracted);
     if (r.warning) flash(r.warning, "err");
@@ -1135,7 +1143,7 @@
     $("recipients").innerHTML = state.thanksRecipients.length ? state.thanksRecipients.map((r, i) => `<label class="flex gap-2 items-center"><input type="checkbox" checked data-i="${i}"><span>${esc(r.name)} <span class="muted">${esc(r.email)} · ${r.from === "list" ? "名單" : "現場留信箱"}</span></span></label>`).join("") : `<p class="muted">名單上沒有 email。請回「訪前」補上隨行名單的聯絡方式。</p>`;
   }
   $("thanksBtn").onclick = () => busy($("thanksBtn"), async () => {
-    const r = await runJob("/api/letter", { visit_id: $("postVisitSelect").value, kind: "thanks", sender: $("sender").value }, noteInto("thanksInfo"), "AI 草擬中……跑在背景，大約一分鐘。");
+    const r = await runJob("/api/letter", { visit_id: $("postVisitSelect").value, kind: "thanks", sender: $("sender").value }, noteInto("thanksInfo"), "AI 草擬中……大約一分鐘。");
     if (!r) return;
     $("thanksSubject").value = r.draft.subject; $("thanksBody").value = r.draft.body; state.thanksRecipients = r.recipients; renderRecipients();
   });
@@ -1174,7 +1182,7 @@ $("driveInfo").innerHTML = d?.backed_up_at
   const fmtT = (iso) => new Date(iso).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Taipei" });
   $("summaryBtn").onclick = () => busy($("summaryBtn"), async () => {
     const note = noteInto("summary");
-    const r = await runJob("/api/summary", { visit_id: state.detailId }, note, "AI 寫摘要中……跑在背景，大約一分鐘。");
+    const r = await runJob("/api/summary", { visit_id: state.detailId }, note, "AI 寫摘要中……大約一分鐘。");
     if (r) $("summary").textContent = r.summary;
   });
   // 長期檔案另存 Google Drive：一次一個檔（避開 function 逾時），中心的 Drive 帳號一場一個資料夾
@@ -1245,7 +1253,7 @@ $("driveInfo").innerHTML = d?.backed_up_at
       cnote(`讀名片 ${i + 1}／${files.length}：${f.name}…`);
       try {
         const image = await photoData(f, 2000);
-        const r = await runJob("/api/cards", { visit_id: id, image }, cnote, `讀名片 ${i + 1}／${files.length}：${f.name}……跑在背景。`);
+        const r = await runJob("/api/cards", { visit_id: id, image }, cnote, `讀名片 ${i + 1}／${files.length}：${f.name}……`);
         if (!r) throw new Error("讀名片失敗");
         state.cardPending.push({ photo_key: r.photo_key, people: (r.people || []).map((p) => ({ name: p.name || "", title: p.title || "", affiliation: p.affiliation || "", email: p.email || "", phone: p.phone || "" })) });
         renderCardRows();
@@ -1291,7 +1299,7 @@ $("driveInfo").innerHTML = d?.backed_up_at
 
   $("digestBtn").onclick = () => busy($("digestBtn"), async () => {
     const note = noteInto("digest");
-    const r = await runJob("/api/summary", { digest: true }, note, "AI 彙整中……跑在背景，大約一分鐘。");
+    const r = await runJob("/api/summary", { digest: true }, note, "AI 彙整中……大約一分鐘。");
     if (r) $("digest").textContent = r.digest;
   });
 

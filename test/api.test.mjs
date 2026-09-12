@@ -455,25 +455,31 @@ test("cards: 名片讀成名單，確認後才併進 guests，原圖留著", asy
   assert.equal((await api(`/api/media?key=${encodeURIComponent(read.body.photo_key)}`, { headers: admin })).status, 404, "原圖刪掉了");
 });
 
-test("research: 查網路要一兩分鐘，所以觸發背景函式，前端輪詢結果", async () => {
+test("research: 查網路要一到三分鐘，所以走背景工作；**還沒存檔也查得了**", async () => {
   assert.equal((await api("/api/research", { method: "POST", body: JSON.stringify({ visit_id: visitId }) })).status, 401, "needs the admin token");
-  assert.equal((await api("/api/research", { method: "POST", headers: admin, body: JSON.stringify({}) })).status, 400, "needs a saved visit");
+  assert.equal((await api("/api/research", { method: "POST", headers: admin, body: JSON.stringify({}) })).status, 400, "沒有單位也沒有名單就查不了");
   assert.equal((await api("/api/research", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: "2026-01-01-nope" }) })).status, 404);
 
+  // 還沒存檔的一筆：要查的東西跟著工作走，結果從輪詢拿得到
+  const draft = await runJob("research", { visit: { org: { name: "University of Western Australia" }, guests: [{ name: "Simon Kilbane" }] } });
+  assert.equal(draft.status, 200, JSON.stringify(draft.body));
+  assert.ok(draft.body.purposes.length, "可能的參訪目的");
+  assert.ok(draft.body.rooms.every((x) => ["301", "302", "303", "304", "305"].includes(x.room)), "只會指到中心的五間研究室");
+
+  // 存過檔的一筆：狀態與結果另外寫回那一場，重新整理接得回去
   const started = await api("/api/research", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId }) });
   assert.equal(started.status, 202, JSON.stringify(started.body));
-  assert.equal(started.body.background.status, "running", "狀態記在參訪上，重新整理也看得到");
-  assert.equal((await api(`/api/research?id=${visitId}`, { headers: admin })).body.background.status, "running");
+  assert.ok(started.body.job_id);
+  assert.equal((await api(`/api/research?id=${visitId}`, { headers: admin })).body.background.status, "running", "狀態記在參訪上，重新整理也看得到");
 
-  // 背景函式才是真的做事的那一支
-  assert.equal((await api("/api/research-background", { method: "POST", body: JSON.stringify({ visit_id: visitId }) })).status, 401, "background needs the token too");
-  const done = await api("/api/research-background", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId }) });
+  assert.equal((await api("/api/research-background", { method: "POST", body: JSON.stringify({ job_id: started.body.job_id }) })).status, 401, "background needs the token too");
+  const done = await api("/api/research-background", { method: "POST", headers: admin, body: JSON.stringify({ job_id: started.body.job_id }) });
   assert.equal(done.status, 200, JSON.stringify(done.body));
   const b = (await api(`/api/research?id=${visitId}`, { headers: admin })).body.background;
   assert.equal(b.status, "done");
   assert.ok(b.purposes.length, "可能的參訪目的");
-  assert.ok(b.rooms.every((x) => ["301", "302", "303", "304", "305"].includes(x.room)), "只會指到中心的五間研究室");
   assert.ok(b.researched_at);
+  assert.deepEqual((await api(`/api/research?job=${started.body.job_id}`, { headers: admin })).body.result.purposes, b.purposes, "輪詢拿到的跟寫回參訪的是同一份");
 });
 
 test("背景工作的規矩：每一支跑得久的 AI 都一樣", async () => {
