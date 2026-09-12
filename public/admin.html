@@ -76,7 +76,7 @@
         <span class="muted">名單檔：Word（.docx）、Excel（.xlsx）、CSV／文字、PDF、名單照片，最多 8 個共 5 MB；.doc／.xls 請先另存新格式</span>
       </div>
       <ul id="listFilesInfo" class="text-sm text-stone-600 list-disc pl-5"></ul>
-      <button class="btn" id="extractBtn">AI 抽取</button>
+      <div class="flex flex-wrap items-center gap-2"><button class="btn" id="extractBtn">AI 抽取</button><span class="muted" id="extractInfo"></span></div>
       <ul class="text-sm text-amber-700 list-disc pl-5" id="uncertainties"></ul>
     </div>
 
@@ -685,12 +685,36 @@
     const files = [];
     for (const f of picked) files.push({ name: f.name, type: f.type, data: await readFileB64(f) });
     const r = await api("/api/extract", { method: "POST", body: { email_text: $("emailText").value, files } });
-    if (!r.ok) return flash(r.error, "err");
-    $("listFilesInfo").innerHTML = (r.files_read || []).map((f) => `<li>${esc(f.name)} <span class="ok">已讀（${f.kind === "text" ? `${f.chars} 字` : f.kind === "document" ? "PDF 交給 AI 直接讀" : "照片交給 AI 直接讀"}）</span></li>`).join("") + (r.warnings || []).map((w) => `<li class="err">${esc(w)}</li>`).join("");
-    state.saved = false; $("preVisitSelect").value = "";
-    fillForm({ ...emptyVisit(), ...r.visit, visit_id: "" });
-    flash("抽取完成，請逐項確認（尤其是名單的 email）");
+    if (!r.ok || !r.job_id) return flash(r.error || "抽取沒有開始，請再按一次", "err");
+    $("extractInfo").textContent = "AI 讀信中……跑在背景，大約一兩分鐘。";
+    pollExtract(r.job_id);
   });
+  /** 抽取跑在背景函式（Claude 讀長信＋附件常常超過一般函式的 10 秒，會變成 504），每 3 秒問一次做完了沒。 */
+  async function pollExtract(jobId) {
+    clearTimeout(pollExtract.t);
+    const seq = (pollExtract.seq = (pollExtract.seq || 0) + 1);
+    let misses = 0;
+    for (let i = 0; i < 100; i++) {
+      await new Promise((r) => { pollExtract.t = setTimeout(r, 3000); });
+      if (seq !== pollExtract.seq) return; // 又按了一次抽取，這一輪作廢
+      const r = await api(`/api/extract?job=${encodeURIComponent(jobId)}`);
+      if (!r.ok) {
+        if (++misses < 3) continue;
+        $("extractInfo").textContent = "";
+        return flash(r.error || "查不到抽取的進度，請再按一次", "err");
+      }
+      misses = 0;
+      if (r.status === "running") continue;
+      $("extractInfo").textContent = "";
+      if (r.status !== "done") return flash(`抽取失敗：${r.error || "未知原因"}`, "err");
+      const out = r.result || {};
+      $("listFilesInfo").innerHTML = (out.files_read || []).map((f) => `<li>${esc(f.name)} <span class="ok">已讀（${f.kind === "text" ? `${f.chars} 字` : f.kind === "document" ? "PDF 交給 AI 直接讀" : "照片交給 AI 直接讀"}）</span></li>`).join("") + (out.warnings || []).map((w) => `<li class="err">${esc(w)}</li>`).join("");
+      state.saved = false; $("preVisitSelect").value = "";
+      fillForm({ ...emptyVisit(), ...out.visit, visit_id: "" });
+      return flash("抽取完成，請逐項確認（尤其是名單的 email）");
+    }
+    $("extractInfo").textContent = "等太久了，請再按一次看看";
+  }
   $("planBtn").onclick = () => busy($("planBtn"), async () => {
     const r = await api("/api/plan", { method: "POST", body: { visit: readForm() } });
     if (!r.ok) return flash(r.error, "err");

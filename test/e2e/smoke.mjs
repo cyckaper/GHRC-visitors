@@ -77,7 +77,11 @@ try {
   await page.click('[data-tab="pre"]');
   await page.fill("#emailText", `Dear Prof. Chang,\n\nWe would like to visit on 2026-10-07 at 10:00. My colleague Jane Doe <jane@uwa.edu.au> joins me.\n\nSimon Kilbane, University of Western Australia\nsimon@uwa.edu.au`);
   await page.click("#extractBtn");
-  await page.waitForFunction(() => document.getElementById("orgName").value.length > 0);
+  // 讀信也跑在背景（一封長信＋附件常常超過一般函式的 10 秒，會變成 504）：按下去先說在讀，輪詢到結果才填表
+  await page.waitForFunction(() => /讀信中/.test(document.getElementById("extractInfo").textContent));
+  check(true, "AI 抽取 runs in the background instead of holding the request open");
+  await page.waitForFunction(() => document.getElementById("orgName").value.length > 0, null, { timeout: 90000 });
+  check((await page.textContent("#extractInfo")) === "", "…and the progress line clears once the form is filled");
   check((await page.inputValue("#date")) === "2026-10-07", "extract fills the date");
   check((await page.locator("#guestTable tbody tr").count()) === 2, "extract lists both guests");
   await page.fill("#code", "uwa");

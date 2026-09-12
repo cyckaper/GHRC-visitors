@@ -1,21 +1,31 @@
-import { fail, json, readJSON, requireAdmin, siteUrl, taipeiToday } from "../lib/http.mts";
-import { extractVisit } from "../lib/ai.mts";
+import { fail, json, readJSON, requireAdmin } from "../lib/http.mts";
 import { extractFile, type Extracted } from "../lib/files.mts";
-import { normalizeVisit } from "./visits.mts";
+import { getJob, publicJob, startJob, triggerBackground } from "../lib/jobs.mts";
 
 const MAX_FILES = 8;
 const MAX_FILE_BYTES = 4.5 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 5 * 1024 * 1024;
 
 /**
- * POST /api/extract {email_text?, files?: [{name, type, data}]} → {extracted, visit, files_read, warnings}
- * files[].data 是 base64（可帶 data: 前綴）。Word／Excel／PowerPoint／CSV／文字在這裡轉純文字，
- * PDF 與照片直接交給 Claude 讀。抽取結果只回傳給人確認，不落庫。
+ * 讀信抽取。Claude 讀一封長信＋附件常常超過一般函式的 10 秒上限（實際踩過 504 Inactivity Timeout），
+ * 所以真正的工作在 extract-background，這裡只負責檢查檔案、開工作、查進度。
+ *
+ * POST /api/extract {email_text?, files?: [{name, type, data}]} → 202 {job_id}
+ * GET  /api/extract?job=<id>                                    → {status, result?: {extracted, visit, files_read, warnings}, error?}
+ *
+ * files[].data 是 base64（可帶 data: 前綴）。Word／Excel／PowerPoint／CSV／文字在這裡就轉成純文字
+ * （轉檔很快，而且轉完再送背景可以少搬一份原始檔），PDF 與照片直接交給 Claude 讀。
+ * 抽取結果只回傳給人確認，不落庫。
  */
 export default async (req: Request) => {
-  if (req.method !== "POST") return fail(405, "method not allowed");
   const denied = requireAdmin(req);
   if (denied) return denied;
+  if (req.method === "GET") {
+    const job = await getJob(new URL(req.url).searchParams.get("job") || "");
+    if (!job) return fail(404, "找不到這個抽取工作（可能已經過期，請再抽一次）");
+    return json({ ok: true, ...publicJob(job) });
+  }
+  if (req.method !== "POST") return fail(405, "method not allowed");
   const body = await readJSON<{ email_text?: string; files?: { name?: string; type?: string; data?: string }[] }>(req);
   const text = String(body?.email_text || "").trim();
   const files = Array.isArray(body?.files) ? body!.files! : [];
@@ -38,27 +48,7 @@ export default async (req: Request) => {
     else attachments.push(out);
   }
   if (text.length < 20 && !attachments.length) return fail(400, warnings.length ? `沒有可讀的資料。${warnings.join("；")}` : "請貼上 email 內容或上傳名單檔");
-  try {
-    const extracted = await extractVisit(text, taipeiToday(), attachments);
-    const visit = normalizeVisit(
-      {
-        org: extracted.org,
-        guests: extracted.guests,
-        headcount: extracted.headcount,
-        date: extracted.date || taipeiToday(),
-        start_time: extracted.start_time || "10:00",
-        duration_minutes: extracted.duration_minutes || 90,
-        contact_teacher: extracted.contact_teacher || "張俊彥",
-        purpose: extracted.purpose,
-        interests: extracted.interests,
-        language: extracted.language,
-        uncertainties: [...extracted.uncertainties, ...(extracted.date ? [] : ["參訪日期未定"]), ...extracted.candidate_dates.map((d) => `候選日期：${d}`)],
-      } as any,
-      siteUrl(req),
-    );
-    const files_read = attachments.map((a) => ({ name: a.name, kind: a.kind, chars: a.kind === "text" ? a.text.length : undefined }));
-    return json({ ok: true, extracted, visit, files_read, warnings });
-  } catch (e: any) {
-    return fail(502, `抽取失敗：${e?.message || e}`);
-  }
+  const job = await startJob("extract", { text, attachments, warnings });
+  await triggerBackground("extract-background", { job_id: job.id }, req);
+  return json({ ok: true, job_id: job.id, status: job.status }, { status: 202 });
 };
