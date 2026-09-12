@@ -68,7 +68,7 @@ export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   const base = emptyVisit() as Visit;
   const v: Visit = { ...base, ...input } as Visit;
   v.org = { ...base.org, ...(input.org || {}) } as Visit["org"];
-  v.guests = Array.isArray(input.guests) ? input.guests.map((g) => ({ name: String(g.name || "").trim(), title: String(g.title || "").trim(), email: String(g.email || "").trim().toLowerCase(), role: (g.role === "lead" ? "lead" : "member") as "lead" | "member", affiliation: g.affiliation ? String(g.affiliation) : "" })).filter((g) => g.name || g.email) : [];
+  v.guests = Array.isArray(input.guests) ? input.guests.map((g) => ({ name: String(g.name || "").trim(), title: String(g.title || "").trim(), email: String(g.email || "").trim().toLowerCase(), role: (g.role === "lead" ? "lead" : "member") as "lead" | "member", affiliation: g.affiliation ? String(g.affiliation) : "", phone: g.phone ? String(g.phone).slice(0, 60) : "" })).filter((g) => g.name || g.email) : [];
   if (v.guests.length && !v.guests.some((g) => g.role === "lead")) v.guests[0].role = "lead";
   v.headcount = Number(input.headcount) || v.guests.length || 0;
   v.duration_minutes = Number(input.duration_minutes) || 90;

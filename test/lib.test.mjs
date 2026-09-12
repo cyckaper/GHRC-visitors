@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { reconcileTimeline, plannedEntries } from "../lib/timeline.mjs";
-import { makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
+import { makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -86,6 +86,28 @@ test("materials: only media keys or https links survive; the page-contents list 
   assert.deepEqual(full, ["programme", "deck_pdf", "photos", "links", "papers", "contacts", "respond"]);
   const p = publicVisit({ ...visit, materials: { deck_pdf: "materials/2026-10-07-uwa/a.pdf", photos: ["bad"], links: [] } });
   assert.deepEqual(p.materials, { deck_pdf: "materials/2026-10-07-uwa/a.pdf", photos: [], links: [] });
+});
+
+test("名片併進名單：同一個人只補空欄位，不覆寫已確認的資料，也不會把主賓降級", () => {
+  const existing = [{ name: "王小明", title: "", email: "ming@x.edu.tw", affiliation: "X 大學", role: "lead" }];
+  const r = mergeGuests(existing, [
+    { name: "王小明", title: "教授", email: "MING@X.EDU.TW", phone: "02-1234" }, // 同 email（大小寫不同）
+    { name: "李小華", title: "研究員", affiliation: "X 大學", email: "hua@x.edu.tw" }, // 新的人
+    { name: "", email: "" }, // 什麼都沒讀到的一列要丟掉
+  ]);
+  assert.equal(r.added, 1);
+  assert.equal(r.merged, 1);
+  assert.equal(r.guests.length, 2);
+  assert.equal(r.guests[0].role, "lead", "主賓身分不會被名片改掉");
+  assert.equal(r.guests[0].title, "教授", "空的欄位會被補上");
+  assert.equal(r.guests[0].phone, "02-1234");
+  assert.equal(r.guests[0].email, "ming@x.edu.tw", "已經有的 email 不會被覆寫成大寫");
+  assert.equal(r.guests[1].role, "member");
+
+  // 沒有 email 時用「姓名＋單位」判斷同一個人
+  const again = mergeGuests(r.guests, [{ name: "李小華", title: "研究員", affiliation: "X 大學", email: "hua@x.edu.tw" }]);
+  assert.equal(again.added, 0, "同一張名片再讀一次不會多一個人");
+  assert.deepEqual(mergeGuests([{ name: "陳大文", affiliation: "Y 所" }], [{ name: "陳大文", affiliation: "Y 所", phone: "09" }]).guests.length, 1);
 });
 
 test("no signals → the schedule itself, source schedule", () => {

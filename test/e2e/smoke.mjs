@@ -224,6 +224,19 @@ try {
   await page.waitForFunction(() => document.querySelectorAll("#recipients input").length === 2);
   check(true, "thanks letter drafted with the 請益 wording and 2 recipients");
 
+  // ── 資料分頁：拍名片 → AI 讀 → 確認後併進這場的名單 ──
+  await page.click('[data-tab="data"]');
+  await page.selectOption("#cardVisitSelect", "2026-10-07-uwa");
+  await page.waitForFunction(() => document.getElementById("cardStatus").textContent.includes("名單目前"));
+  const guestsBefore = Number(/名單目前 (\d+) 人/.exec(await page.textContent("#cardStatus"))[1]);
+  await page.setInputFiles("#cardFiles", pngPath);
+  await page.waitForSelector("#cardTable:not([hidden]) tbody tr");
+  check((await page.locator("#cardTable tbody tr").count()) >= 1, "a photographed card is read into an editable row");
+  await page.click("#cardSave");
+  await page.waitForFunction(() => /加了 \d+ 人/.test(document.getElementById("cardSaveInfo").textContent));
+  await page.waitForFunction((n) => new RegExp(`名單目前 ${n + 1} 人`).test(document.getElementById("cardStatus").textContent), guestsBefore);
+  check((await page.locator("#cardList img").count()) === 1, "the card photo is kept with the visit and the person is on the guest list");
+
   // ── 來賓端：首頁（沒有參訪代碼）一律從訪前開始 ──
   await page.goto(`${base}/`);
   await page.waitForSelector("#lab-303");

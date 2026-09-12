@@ -295,6 +295,21 @@
   <section id="tab-data" class="space-y-5" hidden>
     <div class="card space-y-3">
       <div class="flex flex-wrap items-center gap-2">
+        <h2 class="font-semibold mr-auto">訪客名片</h2>
+        <label class="f mb-0">參訪</label>
+        <select id="cardVisitSelect" class="!w-auto"></select>
+      </div>
+      <p class="muted">現場拿到名片就拍一張（手機會直接開相機，可以連拍幾張）。AI 讀成姓名、職稱、單位、email、電話，<b>你確認後</b>才併進這場的名單——訪後信就會寄給他。原圖留著，讀錯可以回頭核對。</p>
+      <div class="flex flex-wrap gap-2 items-center">
+        <input type="file" id="cardFiles" accept="image/*" capture="environment" multiple>
+        <span class="text-sm" id="cardStatus"></span>
+      </div>
+      <table id="cardTable" hidden><thead><tr><th>加入</th><th>姓名</th><th>職稱</th><th>單位</th><th>email</th><th>電話</th><th></th></tr></thead><tbody></tbody></table>
+      <div class="flex flex-wrap gap-2 items-center" id="cardActions" hidden><button class="btn" id="cardSave">加進這場的名單</button><span class="muted" id="cardSaveInfo"></span></div>
+      <div class="flex flex-wrap gap-3 items-start" id="cardList"></div>
+    </div>
+    <div class="card space-y-3">
+      <div class="flex flex-wrap items-center gap-2">
         <h2 class="font-semibold mr-auto">歷次參訪</h2>
         <a class="btn btn-soft" id="csvVisits" download>visits.csv</a>
         <a class="btn btn-soft" id="csvResponses" download>responses.csv</a>
@@ -380,7 +395,7 @@
     document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
     for (const t of ["pre", "deck", "wrapup", "post", "data"]) $("tab-" + t).hidden = t !== name;
     if (name === "deck") loadDeckTab();
-    if (name === "data") loadDataTab();
+    if (name === "data") { loadDataTab(); loadCards(); }
     if (name === "post") loadRecipients();
     if (name === "wrapup") loadMaterials();
   }
@@ -413,7 +428,7 @@
     $("preVisitSelect").innerHTML = `<option value="">＋ 新增一次參訪</option>${opts}`;
     const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
     const pick = r.visits.find((v) => v.date === today) || r.visits[0];
-    for (const id of ["deckVisitSelect", "wrapVisitSelect", "postVisitSelect"]) { $(id).innerHTML = opts || `<option value="">（尚無參訪）</option>`; if (pick) $(id).value = pick.visit_id; }
+    for (const id of ["deckVisitSelect", "wrapVisitSelect", "postVisitSelect", "cardVisitSelect"]) { $(id).innerHTML = opts || `<option value="">（尚無參訪）</option>`; if (pick) $(id).value = pick.visit_id; }
   }
   function emptyVisit() {
     return { visit_id: "", date: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10), start_time: "10:00", duration_minutes: 150, org: { name: "", name_local: "", type: "university", country: "" }, guests: [], headcount: 0, contact_teacher: "張俊彥", purpose: "", interests: [], language: "en", programme: [], itinerary: [{ room: "briefing", minutes: 20, location: "302" }, ...ROOMS.map((room) => ({ room, minutes: 20 }))], slides: [], text_edits: [], materials: { deck_pdf: "", photos: [], links: [] }, letters: {}, deck: {}, signbook: {}, dictation: {}, status: "draft" };
@@ -1011,8 +1026,8 @@
     else { mnote(`已放上 ${done} 張合照，專頁上就看得到了。`, "ok"); flash(`已放上 ${done} 張合照`); }
   };
   // 縮圖失敗（HEIC、壞檔、記憶體不夠）時退回原檔上傳，不要卡在那裡沒有反應
-  async function photoData(file) {
-    try { return await downscale(file, 1600, 0.85); }
+  async function photoData(file, maxEdge = 1600) {
+    try { return await downscale(file, maxEdge, 0.85); }
     catch (e) {
       if (file.size > 4.5 * 1024 * 1024) throw new Error(`瀏覽器縮不了這張圖（${e.message || e}），而且原檔超過 4.5 MB，請先在相簿匯出成 JPEG`);
       return await readFileDataUrl(file);
@@ -1088,6 +1103,99 @@ $("driveInfo").innerHTML = d?.backed_up_at
     info.innerHTML = `<span class="ok">已備份 ${n} 個檔案</span> <a class="underline" target="_blank" rel="noopener" href="${esc(url)}">在 Drive 開啟</a>`;
     flash("已另存到 Google Drive");
   });
+  // ── 資料：訪客名片（拍一張 → AI 讀 → 人確認 → 併進這場的名單） ──
+  const cnote = (msg, cls = "muted") => { const el = $("cardStatus"); el.textContent = msg || ""; el.className = "text-sm " + cls; };
+  $("cardVisitSelect").addEventListener("change", loadCards);
+  async function loadCards() {
+    const id = $("cardVisitSelect").value;
+    state.cardPending = [];
+    renderCardRows();
+    if (!id) { $("cardList").innerHTML = ""; return cnote(state.authed ? "還沒有參訪，先到「訪前」建一場。" : "這台裝置還沒登入：請到頁面最上方登入。", "err"); }
+    const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
+    if (!r.ok) { $("cardList").innerHTML = ""; return cnote(`讀不到這場參訪：${r.error}`, "err"); }
+    state.cardVisit = r.visit;
+    const cards = r.visit.cards || [];
+    $("cardList").innerHTML = cards
+      .map((c) => `<span class="relative inline-block"><img src="${esc(mediaUrl(c.key))}" alt="名片" class="h-24 rounded-lg border object-cover"><button type="button" class="absolute -top-2 -right-2 bg-white rounded-full border px-1.5 text-xs" data-remove-card="${esc(c.key)}">✕</button><span class="block muted text-center">${esc((c.names || []).join("、") || "名片")}</span></span>`)
+      .join("");
+    cnote(`${r.visit.org?.name || r.visit.visit_id}　名單目前 ${(r.visit.guests || []).length} 人，名片 ${cards.length} 張`);
+  }
+  $("cardList").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-remove-card]");
+    if (!b || !confirm("刪掉這張名片的原圖？（已經加進名單的人不會被刪）")) return;
+    const r = await api("/api/cards", { method: "POST", body: { visit_id: $("cardVisitSelect").value, action: "remove", key: b.dataset.removeCard } });
+    if (!r.ok) return flash(r.error, "err");
+    loadCards();
+  });
+  function renderCardRows() {
+    const rows = (state.cardPending || []).flatMap((g, gi) => (g.people || []).map((p, pi) => ({ ...p, gi, pi })));
+    $("cardTable").tBodies[0].innerHTML = rows
+      .map(
+        (p) => `<tr data-g="${p.gi}" data-p="${p.pi}"><td class="text-center"><input type="checkbox" checked data-take></td>
+        <td><input type="text" value="${esc(p.name)}"></td><td><input type="text" value="${esc(p.title)}"></td><td><input type="text" value="${esc(p.affiliation)}"></td>
+        <td><input type="email" value="${esc(p.email)}"></td><td><input type="text" value="${esc(p.phone)}"></td>
+        <td><button type="button" class="muted" onclick="this.closest('tr').remove()">✕</button></td></tr>`,
+      )
+      .join("");
+    const any = rows.length > 0;
+    $("cardTable").hidden = !any;
+    $("cardActions").hidden = !any;
+  }
+  $("cardFiles").onchange = async () => {
+    const files = [...$("cardFiles").files];
+    if (!files.length) return;
+    const id = $("cardVisitSelect").value;
+    if (!id) return cnote("請先在上面選一場參訪。", "err");
+    state.cardPending = state.cardPending || [];
+    let failed = 0;
+    for (const [i, f] of files.entries()) {
+      cnote(`讀名片 ${i + 1}／${files.length}：${f.name}…`);
+      try {
+        const image = await photoData(f, 2000);
+        const r = await api("/api/cards", { method: "POST", body: { visit_id: id, image } });
+        if (!r.ok) throw new Error(r.error);
+        state.cardPending.push({ photo_key: r.photo_key, people: (r.people || []).map((p) => ({ name: p.name || "", title: p.title || "", affiliation: p.affiliation || "", email: p.email || "", phone: p.phone || "" })) });
+        renderCardRows();
+      } catch (e) {
+        failed += 1;
+        flash(`${f.name}：${e.message || e}`, "err");
+      }
+    }
+    $("cardFiles").value = "";
+    const n = (state.cardPending || []).reduce((s, g) => s + (g.people || []).length, 0);
+    cnote(failed ? `讀出 ${n} 個人，${failed} 張沒讀成功` : `讀出 ${n} 個人，請逐欄確認（尤其是 email）再加進名單`, failed ? "err" : "ok");
+  };
+  $("cardSave").onclick = () => busy($("cardSave"), async () => {
+    const id = $("cardVisitSelect").value;
+    if (!id) return flash("請先選一場參訪", "err");
+    const byGroup = new Map();
+    for (const tr of [...$("cardTable").tBodies[0].rows]) {
+      if (!tr.querySelector("[data-take]").checked) continue;
+      const cells = [...tr.cells].map((td) => td.firstChild);
+      const person = { name: cells[1].value.trim(), title: cells[2].value.trim(), affiliation: cells[3].value.trim(), email: cells[4].value.trim(), phone: cells[5].value.trim() };
+      if (!person.name && !person.email) continue;
+      const key = state.cardPending[Number(tr.dataset.g)]?.photo_key || "";
+      if (!byGroup.has(key)) byGroup.set(key, []);
+      byGroup.get(key).push(person);
+    }
+    if (!byGroup.size) return flash("沒有勾選要加進名單的人", "err");
+    let added = 0;
+    let merged = 0;
+    for (const [photo_key, guests] of byGroup) {
+      const r = await api("/api/cards", { method: "POST", body: { visit_id: id, action: "save", guests, photo_key } });
+      if (!r.ok) return flash(r.error, "err");
+      added += r.added;
+      merged += r.merged;
+    }
+    state.cardPending = [];
+    renderCardRows();
+    $("cardSaveInfo").textContent = `加了 ${added} 人${merged ? `，補了 ${merged} 人的資料` : ""}`;
+    flash(`名單加了 ${added} 人${merged ? `，補了 ${merged} 人的資料` : ""}`);
+    await loadCards();
+    if (state.visit?.visit_id === id) { const v = await api(`/api/visits?id=${encodeURIComponent(id)}`); if (v.ok) fillForm(v.visit); }
+    loadVisits();
+  });
+
   $("digestBtn").onclick = () => busy($("digestBtn"), async () => { const r = await api("/api/summary", { method: "POST", body: { digest: true } }); if (!r.ok) return flash(r.error, "err"); $("digest").textContent = r.digest; });
 
   // 開場：把舊版存在瀏覽器的 token 換成 cookie，然後看 cookie 還在不在

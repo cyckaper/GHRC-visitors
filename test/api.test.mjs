@@ -355,6 +355,45 @@ test("drive auto-backup: the background sync endpoint needs the token and stands
   assert.equal((await api("/api/respond", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visit_id: visitId, anonymous: true, suggestion: "auto-backup should not break this" }) })).status, 200);
 });
 
+test("cards: 名片讀成名單，確認後才併進 guests，原圖留著", async () => {
+  const cardPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+  const post = (body) => api("/api/cards", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  assert.equal((await api("/api/cards", { method: "POST", body: JSON.stringify({ visit_id: visitId, image: cardPng }) })).status, 401, "needs the admin token");
+  assert.equal((await post({ visit_id: "2026-01-01-nope", image: cardPng })).status, 404);
+  assert.equal((await post({ visit_id: visitId })).status, 400, "needs an image");
+
+  const before = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit.guests.length;
+  const read = await post({ visit_id: visitId, image: `data:image/png;base64,${cardPng}` });
+  assert.equal(read.status, 200, JSON.stringify(read.body));
+  assert.match(read.body.photo_key, new RegExp(`^cards/${visitId}/\\d+\\.png$`), "原圖存進媒體庫");
+  assert.ok(read.body.people.length, "讀出人");
+  // 讀完不會自己動名單
+  assert.equal((await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit.guests.length, before, "讀名片不會自己改名單");
+
+  const person = { name: "陳大文", title: "Professor", affiliation: "Example University", email: "Card@Example.edu", phone: "02-1234" };
+  const saved = await post({ visit_id: visitId, action: "save", guests: [person], photo_key: read.body.photo_key });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  assert.equal(saved.body.added, 1);
+  const after = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit;
+  const added = after.guests.find((g) => g.email === "card@example.edu");
+  assert.ok(added, "名片上的人進了名單（email 轉小寫）");
+  assert.equal(added.phone, "02-1234", "電話留得住（normalizeVisit 不能把它吃掉）");
+  assert.equal(after.cards.length, 1, "名片原圖記在這一場");
+
+  // 同一張再存一次不會多一個人
+  const again = await post({ visit_id: visitId, action: "save", guests: [person], photo_key: read.body.photo_key });
+  assert.equal(again.body.added, 0);
+  assert.equal((await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit.guests.length, after.guests.length);
+
+  // 訪後信的收件人會包含名片上的人
+  const rec = await api("/api/letter", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "recipients" }) });
+  assert.ok(rec.body.recipients.some((r) => r.email === "card@example.edu"), "名片上的人會收到訪後信");
+
+  const removed = await post({ visit_id: visitId, action: "remove", key: read.body.photo_key });
+  assert.equal(removed.body.cards.length, 0);
+  assert.equal((await api(`/api/media?key=${encodeURIComponent(read.body.photo_key)}`, { headers: admin })).status, 404, "原圖刪掉了");
+});
+
 test("research: 訪前功課回傳可能的參訪目的，不自動落庫", async () => {
   assert.equal((await api("/api/research", { method: "POST", body: JSON.stringify({ visit: { org: { name: "X" } } }) })).status, 401, "needs the admin token");
   const empty = await api("/api/research", { method: "POST", headers: admin, body: JSON.stringify({ visit: { org: { name: "" }, guests: [] } }) });
