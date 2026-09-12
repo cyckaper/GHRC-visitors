@@ -90,7 +90,7 @@ try {
   await page.fill("#code", "uwa");
   await page.waitForFunction(() => /2026-10-07-uwa$/.test(document.getElementById("pageLink").textContent), null, { timeout: 30000 });
   check(/已存/.test(await page.textContent("#saveInfo")), "it says when it last saved");
-  check((await page.locator("#preVisitSelect option").count()) === 2, "changing the code renames the visit instead of leaving a stray one behind");
+  check((await page.locator("#visitSelect option").count()) === 2, "changing the code renames the visit instead of leaving a stray one behind");
 
   await page.click("#planBtn");
   // 排行程也跑在背景（提示詞帶整份頁次索引，10 秒同樣不夠）
@@ -117,7 +117,7 @@ try {
   // ── 簡報分頁：選頁、不用簡報、產檔 ──
   await page.click("#openDeck");
   await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-slide]").length > 0);
-  check((await page.inputValue("#deckVisitSelect")) === "2026-10-07-uwa", "「選頁與產生簡報」opens the deck tab on this visit");
+  check((await page.inputValue("#visitSelect")) === "2026-10-07-uwa", "「選頁與產生簡報」opens the deck tab on this visit");
   check((await page.locator("#slideGrid input[data-slide]:checked").count()) >= 5, "the plan's slides are waiting in the deck tab");
   check((await page.locator("#slideGrid fieldset[data-group]").count()) >= 10, "slides are grouped into blocks");
   await page.click("#slidesNone");
@@ -175,7 +175,7 @@ try {
     await page.reload();
     await page.waitForFunction(() => /場參訪/.test(document.getElementById("backendInfo").textContent));
     await page.click('[data-tab="deck"]');
-    await page.selectOption("#deckVisitSelect", "2026-10-07-uwa");
+    await page.selectOption("#visitSelect", "2026-10-07-uwa");
     await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-slide]").length > 0);
     await page.waitForFunction(() => /移除/.test(document.getElementById("masterRow").textContent));
     const [download2] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), page.click("#deckBtn")]);
@@ -185,7 +185,7 @@ try {
     check(v2.errors.length === 0 && v2.slideCount === 6, "deck built from the master stored on the site (chunked download, no file picker)");
   } else console.log("skip - browser deck build (python-pptx fixture unavailable)");
   await page.click('[data-tab="pre"]');
-  await page.selectOption("#preVisitSelect", "2026-10-07-uwa");
+  await page.selectOption("#visitSelect", "2026-10-07-uwa");
   await page.waitForSelector("#afterSave:not([hidden])");
   check((await page.textContent("#deckState")).includes("已選"), "the pre-visit tab reports the saved slide count after a reload");
   await page.click("#confirmLetterBtn");
@@ -196,7 +196,7 @@ try {
 
   // 收工分頁：用打字的逐字稿
   await page.click('[data-tab="wrapup"]');
-  await page.selectOption("#wrapVisitSelect", "2026-10-07-uwa");
+  await page.selectOption("#visitSelect", "2026-10-07-uwa");
   await page.fill("#transcript", "今天校長來，最想看 303 的模擬，問了能不能合作。");
   await page.click("#extractDictationBtn");
   await page.waitForSelector("#dictationFields:not([hidden])", { timeout: 60000 });
@@ -233,15 +233,15 @@ try {
 
   // 訪後信分頁
   await page.click('[data-tab="post"]');
-  await page.selectOption("#postVisitSelect", "2026-10-07-uwa");
+  await page.selectOption("#visitSelect", "2026-10-07-uwa");
   await page.click("#thanksBtn");
   await page.waitForFunction(() => document.getElementById("thanksBody").value.includes("what should we be doing better"), null, { timeout: 60000 });
   await page.waitForFunction(() => document.querySelectorAll("#recipients input").length === 2);
   check(true, "thanks letter drafted with the 請益 wording and 2 recipients");
 
-  // ── 資料分頁：拍名片 → AI 讀 → 確認後併進這場的名單 ──
-  await page.click('[data-tab="data"]');
-  await page.selectOption("#cardVisitSelect", "2026-10-07-uwa");
+  // ── 收工分頁的動作二：拍名片 → AI 讀 → 確認後併進這場的名單（拍名片是現場的事，跟簽名簿放一起）──
+  await page.click('[data-tab="wrapup"]');
+  check((await page.locator('#tab-data #cardFiles').count()) === 0 && (await page.locator('#tab-wrapup #cardFiles').count()) === 1, "photographing cards sits with the visit-day steps, not in the archive tab");
   await page.waitForFunction(() => document.getElementById("cardStatus").textContent.includes("名單目前"));
   const guestsBefore = Number(/名單目前 (\d+) 人/.exec(await page.textContent("#cardStatus"))[1]);
   await page.setInputFiles("#cardFiles", pngPath);
@@ -254,14 +254,14 @@ try {
 
   // 建錯的那一場：直接刪掉（不必先想「要不要存」）
   await page.click('[data-tab="pre"]');
-  await page.selectOption("#preVisitSelect", "");
-  const beforeDelete = await page.locator("#preVisitSelect option").count();
+  await page.selectOption("#visitSelect", "");
+  const beforeDelete = await page.locator("#visitSelect option").count();
   await page.fill("#orgName", "Typo Institute");
-  await page.waitForFunction((n) => document.querySelectorAll("#preVisitSelect option").length === n + 1, beforeDelete, { timeout: 30000 });
+  await page.waitForFunction((n) => document.querySelectorAll("#visitSelect option").length === n + 1, beforeDelete, { timeout: 30000 });
   check(true, "typing an organisation name is enough to create the visit");
   page.once("dialog", (d) => d.accept());
   await page.click("#deleteBtn");
-  await page.waitForFunction((n) => document.querySelectorAll("#preVisitSelect option").length === n, beforeDelete, { timeout: 30000 });
+  await page.waitForFunction((n) => document.querySelectorAll("#visitSelect option").length === n, beforeDelete, { timeout: 30000 });
   check(await page.isHidden("#afterSave"), "and deleting it clears the form");
 
   // ── 來賓端：首頁（沒有參訪代碼）一律從訪前開始 ──

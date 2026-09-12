@@ -256,7 +256,8 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
   「以您的專業，中心哪一部分還可以做得更好？」／
   "From your perspective, what should we be doing better?"
   並加一句「一句話就好」，且**可不具名送出**
-- **訪客名片**：現場拿到名片就拍一張（後台「資料」分頁，手機直接開相機，可連拍）。AI 讀出姓名、職稱、單位、email、電話，**人逐欄確認後**才併進這場的名單（`/api/cards`）——訪後信就會寄給他。併入規則 `lib/visit.mjs mergeGuests`：email 相同（不分大小寫）或「姓名＋單位」相同視為同一人，**只補空欄位、不覆寫已確認的資料**，也不會把主賓降級；同一張再存一次是 no-op。看不清楚的字一律留空不猜（email 猜錯比留空更糟）。原圖存 `cards/<visit_id>/<ts>.jpg`（**有個資，`/api/media` 只給 admin**），Drive 備份用名片主人的名字當檔名。
+- **訪客名片**：現場拿到名片就拍一張（後台**「收工」分頁的動作二**——拍名片是現場的事，跟簽名簿、口述放在一起，
+  不在翻舊帳的「資料」分頁；手機直接開相機，可連拍）。AI 讀出姓名、職稱、單位、email、電話，**人逐欄確認後**才併進這場的名單（`/api/cards`）——訪後信就會寄給他。併入規則 `lib/visit.mjs mergeGuests`：email 相同（不分大小寫）或「姓名＋單位」相同視為同一人，**只補空欄位、不覆寫已確認的資料**，也不會把主賓降級；同一張再存一次是 no-op。看不清楚的字一律留空不猜（email 猜錯比留空更糟）。原圖存 `cards/<visit_id>/<ts>.jpg`（**有個資，`/api/media` 只給 admin**），Drive 備份用名片主人的名字當檔名。
 - **簽名簿**：實體本子，主持人拍照上傳，AI 讀手寫字歸檔（原圖保留）
 - **主持人三十秒口述**：參訪結束後由主持人口述，Whisper 轉文字後抽取
   （誰來、最想看哪一間、問了什麼、有無合作意願）。依議程結束時間推播提醒
@@ -335,7 +336,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 **已完成（P1–P4 最小可用系統 ＋ P5 捷徑 ＋ P6 產檔 ＋ P7 摘要／彙整）**
 
-- `public/admin.html`：訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → 排行程 → 儲存 → QR／.ics／確認信）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、收工（簽名簿照片讀字、三十秒口述錄音轉文字抽取、或打字、**當天資料**：簡報 PDF、合照、相關連結放上專頁）、訪後信（草擬、全名單收件人、寄出或 mailto）、資料（**訪客名片拍照讀名單**、列表、回覆、動線、摘要、跨場次彙整、CSV）。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
+- `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → 排行程 → 自動存 → QR／.ics／確認信）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、收工（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁）、訪後信（草擬、全名單收件人、寄出或 mailto）、資料（歷次參訪、回覆、動線、摘要、跨場次彙整、CSV、Drive）。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
 - `public/index.html`：專屬網址 `/<visit_id>`；全頁英文為主、第二語言為輔（預設中文，ko／ja 來賓用韓／日文）；流程（參訪當天標出「現在」）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
 - `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `timeline` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`）`drive` `drive-sync-background`（自動備份）`drive-cron`（每晚補漏，`export const config = { schedule }`）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
@@ -356,6 +357,9 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - 主辦端 API 用 `Authorization: Bearer ADMIN_TOKEN`、`?token=`，或**登入後的 session cookie**；現場訊號用 `SIGNAL_KEY`；`respond` 與 `visits?public=1` 公開。
 - **登入一次就好**：後台貼一次 ADMIN_TOKEN → `/api/session` 發一個 HttpOnly、SameSite=Strict 的 cookie（值是用 ADMIN_TOKEN 簽的 `v1.<到期>.<HMAC>`，**不是 token 本身**），180 天，每次打開後台自動續期。token 不再存 localStorage（iPad Safari 七天沒互動就清掉，所以以前每次都要重登；舊的會在開場自動換成 cookie）。登出走 `DELETE /api/session`。
 - 老師卡片內容 `public/data/labs.json` 的 `confirmed=false` 表示尚待老師確認；照片 `photo` 為 null 時顯示縮寫。
+- **全站一個「這一場」**：後台最上面一個下拉（`#visitSelect`）＋「已存 14:32」＋「刪掉這一場」，
+  五個分頁都在同一場上做事，切分頁時 `reloadTab()` 重載那一頁要的東西。打開後台就停在今天
+  （沒有就最近）那一場，不必自己先選；「＋ 新的一場」是明確的選擇。**不要再讓任何分頁自己長一個參訪下拉。**
 - **沒有「存檔」這個動作**：訪前分頁任何欄位改動都會在 1.2 秒後自己存（`scheduleSave`／`saveVisit`），
   AI 抽取、排行程、查背景做完也各存一次。畫面上只有一行「已存 14:32」與「刪掉這一場」。
   建錯的那一場就刪掉：`DELETE /api/visits?id=`，順手清掉這一場自己的檔案（簽名簿、口述、名片、當天資料）；
