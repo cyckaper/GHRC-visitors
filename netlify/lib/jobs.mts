@@ -1,4 +1,4 @@
-import { env, siteUrl } from "./http.mts";
+import { env, fail, json, readJSON, requireAdmin, siteUrl } from "./http.mts";
 import { getStore } from "./store.mts";
 
 /**
@@ -82,4 +82,47 @@ export async function triggerBackground(name: string, body: unknown, req?: Reque
   } catch {
     /* 背景函式收到就好；真的沒被叫到的話，前端輪詢會停在 running，使用者可以再按一次 */
   }
+}
+
+/**
+ * 一般函式那一支的固定寫法：開一個工作、觸發背景函式、回 202 給前端去輪詢。
+ * `kind` 同時是背景函式的名字（`<kind>-background`）。
+ */
+export async function startBackground(kind: string, input: unknown, req?: Request): Promise<Response> {
+  const job = await startJob(kind, input);
+  await triggerBackground(`${kind}-background`, { job_id: job.id }, req);
+  return json({ ok: true, job_id: job.id, status: job.status }, { status: 202 });
+}
+
+/** `GET /api/<name>?job=<id>`：前端每幾秒問一次。 */
+export async function pollJob(req: Request, label: string): Promise<Response> {
+  const job = await getJob(new URL(req.url).searchParams.get("job") || "");
+  if (!job) return fail(404, `找不到這個${label}工作（可能已經過期，請再按一次）`);
+  return json({ ok: true, ...publicJob(job) });
+}
+
+/**
+ * 背景函式的外殼：擋掉非 POST 與沒授權、把工作的輸入交給 fn、跑完寫回工作。
+ * 每一支背景函式因此只剩「拿到輸入 → 做事 → 回傳結果」。
+ */
+export function backgroundHandler<I = any>(label: string, fn: (input: I, req: Request) => Promise<unknown>) {
+  return async (req: Request): Promise<Response> => {
+    if (req.method !== "POST") return fail(405, "method not allowed");
+    const denied = requireAdmin(req);
+    if (denied) return denied;
+    const body = await readJSON<{ job_id?: string }>(req);
+    const jobId = String(body?.job_id || "");
+    if (!jobId) return fail(400, "需要 job_id");
+    const job = await getJob(jobId);
+    if (!job) return fail(404, `找不到這個${label}工作`);
+    try {
+      const result = await fn((job.input || {}) as I, req);
+      await finishJob(jobId, result);
+      return json({ ok: true });
+    } catch (e: any) {
+      const message = `${label}失敗：${e?.message || e}`;
+      await failJob(jobId, message);
+      return fail(502, message);
+    }
+  };
 }

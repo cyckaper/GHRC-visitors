@@ -184,15 +184,17 @@ try {
   await page.waitForSelector("#afterSave:not([hidden])");
   check((await page.textContent("#deckState")).includes("已選"), "the pre-visit tab reports the saved slide count after a reload");
   await page.click("#confirmLetterBtn");
-  await page.waitForFunction(() => document.getElementById("confirmBody").value.length > 0);
-  check(true, "confirmation letter drafted");
+  // 草擬信件也跑在背景（Claude 寫一整封雙語信同樣超過 10 秒）
+  await page.waitForFunction(() => /草擬中/.test(document.getElementById("confirmLetterInfo").textContent));
+  await page.waitForFunction(() => document.getElementById("confirmBody").value.length > 0, null, { timeout: 60000 });
+  check(true, "confirmation letter drafted in the background");
 
   // 收工分頁：用打字的逐字稿
   await page.click('[data-tab="wrapup"]');
   await page.selectOption("#wrapVisitSelect", "2026-10-07-uwa");
   await page.fill("#transcript", "今天校長來，最想看 303 的模擬，問了能不能合作。");
   await page.click("#extractDictationBtn");
-  await page.waitForSelector("#dictationFields:not([hidden])");
+  await page.waitForSelector("#dictationFields:not([hidden])", { timeout: 60000 });
   check((await page.inputValue("#dRooms")) === "303", "dictation extraction finds room 303");
   await page.click("#dictationSave");
   await page.waitForFunction(() => document.getElementById("dictationInfo").textContent.includes("已存入"));
@@ -228,7 +230,7 @@ try {
   await page.click('[data-tab="post"]');
   await page.selectOption("#postVisitSelect", "2026-10-07-uwa");
   await page.click("#thanksBtn");
-  await page.waitForFunction(() => document.getElementById("thanksBody").value.includes("what should we be doing better"));
+  await page.waitForFunction(() => document.getElementById("thanksBody").value.includes("what should we be doing better"), null, { timeout: 60000 });
   await page.waitForFunction(() => document.querySelectorAll("#recipients input").length === 2);
   check(true, "thanks letter drafted with the 請益 wording and 2 recipients");
 
@@ -238,7 +240,7 @@ try {
   await page.waitForFunction(() => document.getElementById("cardStatus").textContent.includes("名單目前"));
   const guestsBefore = Number(/名單目前 (\d+) 人/.exec(await page.textContent("#cardStatus"))[1]);
   await page.setInputFiles("#cardFiles", pngPath);
-  await page.waitForSelector("#cardTable:not([hidden]) tbody tr");
+  await page.waitForSelector("#cardTable:not([hidden]) tbody tr", { timeout: 60000 });
   check((await page.locator("#cardTable tbody tr").count()) >= 1, "a photographed card is read into an editable row");
   await page.click("#cardSave");
   await page.waitForFunction(() => /加了 \d+ 人/.test(document.getElementById("cardSaveInfo").textContent));

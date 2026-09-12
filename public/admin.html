@@ -154,6 +154,7 @@
           <div class="flex flex-wrap gap-2 items-center">
             <button class="btn" id="confirmLetterBtn">AI 草擬確認信</button>
             <button class="btn btn-soft" id="copyConfirm">複製信件</button>
+            <span class="muted" id="confirmLetterInfo"></span>
           </div>
           <input type="text" id="confirmSubject" placeholder="主旨">
           <textarea id="confirmBody" rows="10" placeholder="確認信草稿會出現在這裡"></textarea>
@@ -387,14 +388,18 @@
   function flash(msg, cls = "ok") { const f = $("flash"); f.textContent = msg; f.className = "text-sm " + cls; f.hidden = false; clearTimeout(flash.t); flash.t = setTimeout(() => (f.hidden = true), 6000); }
   async function busy(btn, fn) { const t = btn.textContent; btn.disabled = true; btn.textContent = "…"; try { return await fn(); } finally { btn.disabled = false; btn.textContent = t; } }
   /**
-   * 跑得久的 AI（讀信、排行程）一律走背景函式：POST 回 202 與 job_id，這裡每 3 秒問一次 GET <path>?job=<id>。
+   * 跑得久的 AI（讀信、排行程、草擬信件、讀名片、摘要、翻譯……）一律走背景函式：
+   * POST 回 202 與 job_id，這裡每 3 秒問一次 GET <path>?job=<id>。
    * Netlify 一般函式只有 10 秒，Claude 常常不只——直接等就會變成 504 Inactivity Timeout。
-   * 做完回傳結果；失敗、等太久或又按了一次都回 null（訊息已經顯示過）。infoId 是進度那一行。
+   *
+   * 做完回傳結果；失敗、等太久或同一支又按了一次都回 null。note 是「寫進度那一行」的函式：
+   * 錯誤也寫在那裡，不是只有頁面最上方——人按完按鈕就在那一區看著。
    */
   const jobSeq = {};
-  async function waitForJob(path, jobId, infoId) {
+  const noteInto = (id) => (msg) => { const el = $(id); if (el) el.textContent = msg; };
+  async function waitForJob(path, jobId, note = () => {}) {
     const seq = (jobSeq[path] = (jobSeq[path] || 0) + 1);
-    const stop = (msg) => { $(infoId).textContent = ""; flash(msg, "err"); return null; };
+    const stop = (msg) => { note(msg); flash(msg, "err"); return null; };
     let misses = 0;
     for (let i = 0; i < 100; i++) { // 三秒問一次，最多等五分鐘
       await new Promise((r) => setTimeout(r, 3000));
@@ -404,11 +409,18 @@
       misses = 0;
       if (r.status === "running") continue;
       if (r.status !== "done") return stop(r.error || "跑不出來，請再按一次");
-      $(infoId).textContent = "";
+      note("");
       return r.result || {};
     }
-    $(infoId).textContent = "等太久了，請再按一次看看";
-    return null;
+    return stop("等太久了，請再按一次看看");
+  }
+  /** POST 觸發 → 輪詢 → 結果。回 null 表示沒跑成（訊息已經顯示過）。 */
+  async function runJob(path, body, note, working) {
+    const r = await api(path, { method: "POST", body });
+    if (!r.ok) { note(r.error || ""); flash(r.error || "沒有開始，請再按一次", "err"); return null; }
+    if (!r.job_id) return r; // 不必等的情形（例如翻譯整批命中快取）
+    note(working);
+    return waitForJob(path, r.job_id, note);
   }
   const download = (name, text, type = "application/json") => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); };
   const copy = async (text) => { try { await navigator.clipboard.writeText(text); flash("已複製"); } catch (e) { flash("無法複製，請手動選取", "err"); } };
@@ -714,7 +726,7 @@
     pollExtract(r.job_id);
   });
   async function pollExtract(jobId) {
-    const out = await waitForJob("/api/extract", jobId, "extractInfo");
+    const out = await waitForJob("/api/extract", jobId, noteInto("extractInfo"));
     if (!out) return;
     $("listFilesInfo").innerHTML = (out.files_read || []).map((f) => `<li>${esc(f.name)} <span class="ok">已讀（${f.kind === "text" ? `${f.chars} 字` : f.kind === "document" ? "PDF 交給 AI 直接讀" : "照片交給 AI 直接讀"}）</span></li>`).join("") + (out.warnings || []).map((w) => `<li class="err">${esc(w)}</li>`).join("");
     state.saved = false; $("preVisitSelect").value = "";
@@ -728,7 +740,7 @@
     pollPlan(r.job_id);
   });
   async function pollPlan(jobId) {
-    const out = await waitForJob("/api/plan", jobId, "planInfo");
+    const out = await waitForJob("/api/plan", jobId, noteInto("planInfo"));
     if (!out) return;
     const v = out.visit; state.visit = { ...state.visit, ...v, visit_id: state.saved ? state.visit.visit_id : "" };
     renderProgramme(v.programme); renderItinerary(v.itinerary); renderDeckState(state.visit);
@@ -876,13 +888,17 @@
       return out;
     } finally { box.remove(); }
   }
-  /** 第二語言翻譯：走 /api/translate（伺服器端快取），一次 25 段避開 function 逾時。 */
+  /**
+   * 第二語言翻譯：走 /api/translate（伺服器端快取），一次 25 段。
+   * 整批都翻過的話當場就回；要叫 Claude 的那幾批走背景函式（一般函式只有 10 秒），這裡輪詢等它。
+   */
   async function translateTexts(texts, target, log) {
     const out = [];
     for (let i = 0; i < texts.length; i += 25) {
-      log(`翻譯 ${Math.min(i + 25, texts.length)}/${texts.length} 段 → ${target}`);
-      const r = await api("/api/translate", { method: "POST", body: { texts: texts.slice(i, i + 25), target } });
-      if (!r.ok) throw new Error(r.error || "翻譯失敗");
+      const done = Math.min(i + 25, texts.length);
+      log(`翻譯 ${done}/${texts.length} 段 → ${target}`);
+      const r = await runJob("/api/translate", { texts: texts.slice(i, i + 25), target }, log, `翻譯 ${done}/${texts.length} 段 → ${target}（跑在背景，稍等）`);
+      if (!r) throw new Error("翻譯失敗");
       out.push(...r.translations);
     }
     return out;
@@ -935,8 +951,9 @@
   $("downloadIcs").onclick = () => download(`${state.visit.visit_id}-wrapup.ics`, ics(state.visit), "text/calendar");
   $("openWrapup").onclick = () => { $("wrapVisitSelect").value = state.visit.visit_id; showTab("wrapup"); };
   $("confirmLetterBtn").onclick = () => busy($("confirmLetterBtn"), async () => {
-    const r = await api("/api/letter", { method: "POST", body: { visit_id: state.visit.visit_id, kind: "confirmation", sender: "contact" } });
-    if (!r.ok) return flash(r.error, "err");
+    const note = noteInto("confirmLetterInfo");
+    const r = await runJob("/api/letter", { visit_id: state.visit.visit_id, kind: "confirmation", sender: "contact" }, note, "AI 草擬中……跑在背景，大約一分鐘。");
+    if (!r) return;
     $("confirmSubject").value = r.draft.subject; $("confirmBody").value = r.draft.body;
   });
   $("copyConfirm").onclick = () => copy(`${$("confirmSubject").value}\n\n${$("confirmBody").value}`);
@@ -959,8 +976,9 @@
     $("signbookPreview").src = state.signbookDataUrl; $("signbookPreview").hidden = false; $("signbookUpload").disabled = false;
   };
   $("signbookUpload").onclick = () => busy($("signbookUpload"), async () => {
-    const r = await api("/api/signbook", { method: "POST", body: { visit_id: $("wrapVisitSelect").value, image: state.signbookDataUrl } });
-    if (!r.ok) { $("signbookInfo").textContent = r.error; return flash(r.error, "err"); }
+    const note = noteInto("signbookInfo");
+    const r = await runJob("/api/signbook", { visit_id: $("wrapVisitSelect").value, image: state.signbookDataUrl }, note, "照片已存，AI 讀手寫字中……跑在背景，大約一分鐘。");
+    if (!r) return;
     $("signbookInfo").textContent = `照片已存：${r.photo_key}`;
     state.signbookEntries = r.entries || []; renderSignbook(); $("signbookTranscript").textContent = r.transcript || ""; $("signbookEntries").hidden = false;
   });
@@ -1006,13 +1024,18 @@
   };
   $("recUpload").onclick = () => busy($("recUpload"), async () => {
     const fd = new FormData(); fd.append("visit_id", $("wrapVisitSelect").value); fd.append("audio", state.recBlob, "dictation.webm");
-    const r = await api("/api/transcribe", { method: "POST", body: fd });
-    if (!r.ok) { $("recInfo").textContent = r.error; if (r.transcript) $("transcript").value = r.transcript; return flash(r.error, "err"); }
-    $("transcript").value = r.transcript; fillDictation(r.extracted); $("recInfo").textContent = r.audio_key ? `音檔已存：${r.audio_key}` : "";
+    const r = await runJob("/api/transcribe", fd, noteInto("recInfo"), "音檔已存，轉文字與抽取中……跑在背景，大約一分鐘。");
+    if (!r) return;
+    $("transcript").value = r.transcript || "";
+    if (r.extracted) fillDictation(r.extracted);
+    $("recInfo").textContent = r.audio_key ? `音檔已存：${r.audio_key}` : "";
+    if (r.warning) flash(r.warning, "err"); // 逐字稿有了、抽取沒成：下面自己改
   });
   $("extractDictationBtn").onclick = () => busy($("extractDictationBtn"), async () => {
-    const r = await api("/api/transcribe", { method: "POST", body: { visit_id: $("wrapVisitSelect").value, transcript: $("transcript").value } });
-    if (!r.ok) return flash(r.error, "err"); fillDictation(r.extracted);
+    const r = await runJob("/api/transcribe", { visit_id: $("wrapVisitSelect").value, transcript: $("transcript").value }, noteInto("recInfo"), "抽取中……跑在背景。");
+    if (!r) return;
+    if (r.extracted) fillDictation(r.extracted);
+    if (r.warning) flash(r.warning, "err");
   });
   function fillDictation(x) { $("dictationFields").hidden = false; $("dWho").value = x.who_came || ""; $("dRooms").value = (x.most_wanted_rooms || []).join(", "); $("dQuestions").value = (x.questions || []).join("\n"); $("dCoop").value = x.cooperation || ""; $("dFollow").value = (x.follow_ups || []).join("\n"); }
   $("dictationSave").onclick = () => busy($("dictationSave"), async () => {
@@ -1112,8 +1135,8 @@
     $("recipients").innerHTML = state.thanksRecipients.length ? state.thanksRecipients.map((r, i) => `<label class="flex gap-2 items-center"><input type="checkbox" checked data-i="${i}"><span>${esc(r.name)} <span class="muted">${esc(r.email)} · ${r.from === "list" ? "名單" : "現場留信箱"}</span></span></label>`).join("") : `<p class="muted">名單上沒有 email。請回「訪前」補上隨行名單的聯絡方式。</p>`;
   }
   $("thanksBtn").onclick = () => busy($("thanksBtn"), async () => {
-    const r = await api("/api/letter", { method: "POST", body: { visit_id: $("postVisitSelect").value, kind: "thanks", sender: $("sender").value } });
-    if (!r.ok) return flash(r.error, "err");
+    const r = await runJob("/api/letter", { visit_id: $("postVisitSelect").value, kind: "thanks", sender: $("sender").value }, noteInto("thanksInfo"), "AI 草擬中……跑在背景，大約一分鐘。");
+    if (!r) return;
     $("thanksSubject").value = r.draft.subject; $("thanksBody").value = r.draft.body; state.thanksRecipients = r.recipients; renderRecipients();
   });
   $("copyThanks").onclick = () => copy(`${$("thanksSubject").value}\n\n${$("thanksBody").value}`);
@@ -1121,10 +1144,12 @@
     const recipients = [...document.querySelectorAll("#recipients input:checked")].map((i) => state.thanksRecipients[Number(i.dataset.i)]);
     if (!recipients.length) return flash("沒有勾選收件人", "err");
     if (!confirm(`寄給 ${recipients.length} 人？`)) return;
-    const r = await api("/api/letter", { method: "POST", body: { visit_id: $("postVisitSelect").value, action: "send", kind: "thanks", sender: $("sender").value, subject: $("thanksSubject").value, body: $("thanksBody").value, recipients } });
-    if (!r.ok && !r.reason) return flash(r.error || "寄送失敗", "err");
-    if (r.sent) { $("sendInfo").innerHTML = `<span class="ok">已寄給 ${r.sent_to.length} 人${r.failed?.length ? `，${r.failed.length} 人失敗` : ""}</span>`; $("mailtoLink").hidden = true; flash("已寄出"); loadVisits(); }
-    else { $("sendInfo").innerHTML = `<span class="err">尚未寄出：Netlify 沒有設定 Gmail（GMAIL_CLIENT_ID／SECRET／REFRESH_TOKEN）。請用右邊的 mailto 或複製信件自行寄送。</span>`; $("mailtoLink").href = r.mailto; $("mailtoLink").hidden = false; }
+    const note = (m) => { $("sendInfo").textContent = m; };
+    const r = await runJob("/api/letter", { visit_id: $("postVisitSelect").value, action: "send", kind: "thanks", sender: $("sender").value, subject: $("thanksSubject").value, body: $("thanksBody").value, recipients }, note, `寄送中……一封一封寄，${recipients.length} 人大約要一分鐘。`);
+    if (!r) return;
+    if (r.sent) { $("sendInfo").innerHTML = `<span class="ok">已寄給 ${r.sent_to.length} 人${r.failed?.length ? `，${r.failed.length} 人失敗：${esc(r.failed.map((f) => f.email).join("、"))}` : ""}</span>`; $("mailtoLink").hidden = true; flash("已寄出"); loadVisits(); }
+    else if (r.reason === "gmail_not_configured") { $("sendInfo").innerHTML = `<span class="err">尚未寄出：Netlify 沒有設定 Gmail（GMAIL_CLIENT_ID／SECRET／REFRESH_TOKEN）。請用右邊的 mailto 或複製信件自行寄送。</span>`; $("mailtoLink").href = r.mailto; $("mailtoLink").hidden = false; }
+    else { $("sendInfo").innerHTML = `<span class="err">一封都沒寄成功：${esc((r.failed || []).map((f) => `${f.email}（${f.error}）`).join("；")) || "未知原因"}</span>`; flash("寄送失敗", "err"); }
   });
 
   // ── 資料 ──
@@ -1147,7 +1172,11 @@ $("driveInfo").innerHTML = d?.backed_up_at
     $("timelineTable").tBodies[0].innerHTML = (tl.timeline || []).map((r) => `<td>${r.room}</td><td>${fmtT(r.enter)}</td><td>${fmtT(r.exit)}</td><td>${r.minutes}</td><td>${esc(r.source)}</td>`).map((s) => `<tr>${s}</tr>`).join("") || `<tr><td colspan="5" class="muted">（尚無排程或訊號）</td></tr>`;
   }
   const fmtT = (iso) => new Date(iso).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Taipei" });
-  $("summaryBtn").onclick = () => busy($("summaryBtn"), async () => { const r = await api("/api/summary", { method: "POST", body: { visit_id: state.detailId } }); if (!r.ok) return flash(r.error, "err"); $("summary").textContent = r.summary; });
+  $("summaryBtn").onclick = () => busy($("summaryBtn"), async () => {
+    const note = noteInto("summary");
+    const r = await runJob("/api/summary", { visit_id: state.detailId }, note, "AI 寫摘要中……跑在背景，大約一分鐘。");
+    if (r) $("summary").textContent = r.summary;
+  });
   // 長期檔案另存 Google Drive：一次一個檔（避開 function 逾時），中心的 Drive 帳號一場一個資料夾
   $("driveBtn").onclick = () => busy($("driveBtn"), async () => {
     const id = state.detailId; if (!id) return;
@@ -1216,8 +1245,8 @@ $("driveInfo").innerHTML = d?.backed_up_at
       cnote(`讀名片 ${i + 1}／${files.length}：${f.name}…`);
       try {
         const image = await photoData(f, 2000);
-        const r = await api("/api/cards", { method: "POST", body: { visit_id: id, image } });
-        if (!r.ok) throw new Error(r.error);
+        const r = await runJob("/api/cards", { visit_id: id, image }, cnote, `讀名片 ${i + 1}／${files.length}：${f.name}……跑在背景。`);
+        if (!r) throw new Error("讀名片失敗");
         state.cardPending.push({ photo_key: r.photo_key, people: (r.people || []).map((p) => ({ name: p.name || "", title: p.title || "", affiliation: p.affiliation || "", email: p.email || "", phone: p.phone || "" })) });
         renderCardRows();
       } catch (e) {
@@ -1260,7 +1289,11 @@ $("driveInfo").innerHTML = d?.backed_up_at
     loadVisits();
   });
 
-  $("digestBtn").onclick = () => busy($("digestBtn"), async () => { const r = await api("/api/summary", { method: "POST", body: { digest: true } }); if (!r.ok) return flash(r.error, "err"); $("digest").textContent = r.digest; });
+  $("digestBtn").onclick = () => busy($("digestBtn"), async () => {
+    const note = noteInto("digest");
+    const r = await runJob("/api/summary", { digest: true }, note, "AI 彙整中……跑在背景，大約一分鐘。");
+    if (r) $("digest").textContent = r.digest;
+  });
 
   // 開場：把舊版存在瀏覽器的 token 換成 cookie，然後看 cookie 還在不在
   (async () => {

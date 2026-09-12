@@ -1,6 +1,6 @@
-import { fail, json, readJSON, requireAdmin } from "../lib/http.mts";
+import { fail, readJSON, requireAdmin } from "../lib/http.mts";
 import { extractFile, type Extracted } from "../lib/files.mts";
-import { getJob, publicJob, startJob, triggerBackground } from "../lib/jobs.mts";
+import { pollJob, startBackground } from "../lib/jobs.mts";
 
 const MAX_FILES = 8;
 const MAX_FILE_BYTES = 4.5 * 1024 * 1024;
@@ -20,11 +20,7 @@ const MAX_TOTAL_BYTES = 5 * 1024 * 1024;
 export default async (req: Request) => {
   const denied = requireAdmin(req);
   if (denied) return denied;
-  if (req.method === "GET") {
-    const job = await getJob(new URL(req.url).searchParams.get("job") || "");
-    if (!job) return fail(404, "找不到這個抽取工作（可能已經過期，請再抽一次）");
-    return json({ ok: true, ...publicJob(job) });
-  }
+  if (req.method === "GET") return pollJob(req, "抽取");
   if (req.method !== "POST") return fail(405, "method not allowed");
   const body = await readJSON<{ email_text?: string; files?: { name?: string; type?: string; data?: string }[] }>(req);
   const text = String(body?.email_text || "").trim();
@@ -48,7 +44,5 @@ export default async (req: Request) => {
     else attachments.push(out);
   }
   if (text.length < 20 && !attachments.length) return fail(400, warnings.length ? `沒有可讀的資料。${warnings.join("；")}` : "請貼上 email 內容或上傳名單檔");
-  const job = await startJob("extract", { text, attachments, warnings });
-  await triggerBackground("extract-background", { job_id: job.id }, req);
-  return json({ ok: true, job_id: job.id, status: job.status }, { status: 202 });
+  return startBackground("extract", { text, attachments, warnings }, req);
 };
