@@ -49,14 +49,17 @@ let visitId = "";
  * 測試裡的 SITE_URL 指向站台網址，觸發打不到這台 dev server，所以照前端的順序自己跑一遍：
  * 觸發 → 叫背景函式做事 → 輪詢拿結果。
  */
-async function runJob(name, body) {
-  const started = await api(`/api/${name}`, { method: "POST", headers: admin, body: JSON.stringify(body) });
-  if (started.status !== 202) return started; // 檔案太大、沒東西可讀之類的，當場就擋下來
+async function runJob(name, body, init = {}) {
+  const isForm = typeof FormData !== "undefined" && body instanceof FormData;
+  const started = await api(`/api/${name}`, { method: "POST", headers: init.headers || (isForm ? { authorization: "Bearer test-token" } : admin), body: isForm ? body : JSON.stringify(body) });
+  // 202 才是「開了一個工作」；當場就回的（擋下來的錯誤、翻譯整批命中快取、沒設定 Gmail）照原樣傳回去
+  if (started.status !== 202) return started;
   const ran = await api(`/api/${name}-background`, { method: "POST", headers: admin, body: JSON.stringify({ job_id: started.body.job_id }) });
   assert.equal(ran.status, 200, JSON.stringify(ran.body));
   const job = await api(`/api/${name}?job=${started.body.job_id}`, { headers: admin });
   assert.equal(job.body.status, "done", JSON.stringify(job.body));
-  return { status: 200, body: { ok: true, ...job.body.result } };
+  const { ok, job_id, status, ...extra } = started.body; // 觸發時就知道的東西（photo_key、audio_key）
+  return { status: 200, body: { ok: true, ...extra, ...job.body.result } };
 }
 const extract = (body) => runJob("extract", body);
 const plan = (visit) => runJob("plan", { visit });
@@ -174,7 +177,7 @@ test("public visit view exists without a token and leaks nothing personal", asyn
 });
 
 test("confirmation letter draft is stored on the visit", async () => {
-  const r = await api("/api/letter", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, kind: "confirmation", sender: "director" }) });
+  const r = await runJob("letter", { visit_id: visitId, kind: "confirmation", sender: "director" });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.ok(r.body.draft.body.includes("https://visit.example.test/2026-10-07-uwa"));
   const v = await api(`/api/visits?id=${visitId}`, { headers: admin });
@@ -224,7 +227,7 @@ test("respond: anonymous suggestion is stored with no identity; named onsite ema
 
 test("signbook: photo stored, OCR entries returned, then saved as responses", async () => {
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
-  const r = await api("/api/signbook", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, image: `data:image/png;base64,${png.toString("base64")}` }) });
+  const r = await runJob("signbook", { visit_id: visitId, image: `data:image/png;base64,${png.toString("base64")}` });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.ok(r.body.photo_key.startsWith(`signbook/${visitId}/`));
   assert.ok(r.body.entries.length >= 1);
@@ -237,7 +240,7 @@ test("signbook: photo stored, OCR entries returned, then saved as responses", as
 });
 
 test("materials: upload photo and PDF, public media, links; the thanks letter only promises what the page has", async () => {
-  const before = await api("/api/letter", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, kind: "thanks", sender: "director" }) });
+  const before = await runJob("letter", { visit_id: visitId, kind: "thanks", sender: "director" });
   assert.equal(before.status, 200, JSON.stringify(before.body));
   assert.ok(!/PDF|photo/i.test(before.body.draft.body), "nothing uploaded yet → the letter must not promise slides or photos");
   assert.ok(before.body.draft.body.includes(`https://visit.example.test/${visitId}`));
@@ -315,13 +318,18 @@ test("master deck: chunked upload, manifest, chunk download, replace, delete", a
 });
 
 test("translate: mock translations are cached server-side", async () => {
-  const r1 = await api("/api/translate", { method: "POST", headers: admin, body: JSON.stringify({ texts: ["健康景觀智能室", "療癒環境規劃室"], target: "ko" }) });
+  const r1 = await runJob("translate", { texts: ["健康景觀智能室", "療癒環境規劃室"], target: "ko" });
   assert.equal(r1.status, 200, JSON.stringify(r1.body));
   assert.deepEqual(r1.body.translations, ["[ko] 健康景觀智能室", "[ko] 療癒環境規劃室"]);
   assert.equal(r1.body.translated, 2);
-  const r2 = await api("/api/translate", { method: "POST", headers: admin, body: JSON.stringify({ texts: ["療癒環境規劃室", "景觀環境模擬室"], target: "ko" }) });
+  const r2 = await runJob("translate", { texts: ["療癒環境規劃室", "景觀環境模擬室"], target: "ko" });
   assert.equal(r2.body.translated, 1);
   assert.equal(r2.body.from_cache, 1);
+  // 整批都翻過就不必等背景函式，當場回（產簡報時一批一批來，不能每批都空等三秒）
+  const cached = await api("/api/translate", { method: "POST", headers: admin, body: JSON.stringify({ texts: ["健康景觀智能室", "療癒環境規劃室"], target: "ko" }) });
+  assert.equal(cached.status, 200, JSON.stringify(cached.body));
+  assert.equal(cached.body.from_cache, 2);
+  assert.equal(cached.body.job_id, undefined, "沒有要叫 Claude 就不開工作");
   assert.equal((await api("/api/translate", { method: "POST", headers: admin, body: JSON.stringify({ texts: ["x"], target: "fr" }) })).status, 400);
   assert.equal((await api("/api/translate", { method: "POST", body: JSON.stringify({ texts: ["x"], target: "ko" }) })).status, 401);
 });
@@ -330,12 +338,13 @@ test("dictation: multipart audio → transcript → extraction → save", async 
   const form = new FormData();
   form.append("visit_id", visitId);
   form.append("audio", new Blob([new Uint8Array([1, 2, 3, 4])], { type: "audio/webm" }), "d.webm");
-  const r = await fetch(`${base}/api/transcribe`, { method: "POST", headers: { authorization: "Bearer test-token" }, body: form });
-  const body = await r.json();
+  const r = await runJob("transcribe", form);
+  const body = r.body;
   assert.equal(r.status, 200, JSON.stringify(body));
+  assert.ok(body.audio_key.startsWith(`dictation/${visitId}/`), "音檔先存下來，轉文字才在背景跑");
   assert.ok(body.transcript.includes("303"));
   assert.deepEqual(body.extracted.most_wanted_rooms, ["303"]);
-  const typed = await api("/api/transcribe", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, transcript: "今天校長來，最想看 304，問了能不能合作。" }) });
+  const typed = await runJob("transcribe", { visit_id: visitId, transcript: "今天校長來，最想看 304，問了能不能合作。" });
   assert.equal(typed.status, 200);
   assert.deepEqual(typed.body.extracted.most_wanted_rooms, ["304"]);
   const save = await api("/api/transcribe", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "save" }) });
@@ -345,7 +354,7 @@ test("dictation: multipart audio → transcript → extraction → save", async 
 test("thanks letter: recipients = list + onsite, wording is the 請益 question, send without Gmail reports sent:false", async () => {
   const rec = await api("/api/letter", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "recipients" }) });
   assert.deepEqual(rec.body.recipients.map((r) => r.email).sort(), ["jane.doe@uwa.edu.au", "kim.lee@uwa.edu.au", "simon.kilbane@uwa.edu.au", "walkin@example.org"]);
-  const d = await api("/api/letter", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, kind: "thanks", sender: "contact" }) });
+  const d = await runJob("letter", { visit_id: visitId, kind: "thanks", sender: "contact" });
   assert.equal(d.status, 200, JSON.stringify(d.body));
   assert.ok(d.body.draft.body.includes("From your perspective, what should we be doing better?"));
   assert.ok(d.body.draft.body.includes("A single sentence is plenty."));
@@ -353,7 +362,7 @@ test("thanks letter: recipients = list + onsite, wording is the 請益 question,
   assert.ok(!/satisf|rate us|rating/i.test(d.body.draft.body));
   assert.ok(/slides \(PDF\)/.test(d.body.draft.body) && /photos/.test(d.body.draft.body) && /links/.test(d.body.draft.body), "after uploading, the letter may mention the PDF, photos and links");
   assert.ok(!/contact details/.test(d.body.draft.body), "no teacher emails in labs.json yet → no promise of contact details");
-  const send = await api("/api/letter", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "send", subject: d.body.draft.subject, body: d.body.draft.body, recipients: rec.body.recipients }) });
+  const send = await runJob("letter", { visit_id: visitId, action: "send", subject: d.body.draft.subject, body: d.body.draft.body, recipients: rec.body.recipients });
   assert.equal(send.status, 200);
   assert.equal(send.body.sent, false);
   assert.equal(send.body.reason, "gmail_not_configured");
@@ -361,13 +370,13 @@ test("thanks letter: recipients = list + onsite, wording is the 請益 question,
 });
 
 test("summary writes visit.summary and slide_performance rows; digest lists suggestions; exports work", async () => {
-  const s = await api("/api/summary", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId }) });
+  const s = await runJob("summary", { visit_id: visitId });
   assert.equal(s.status, 200, JSON.stringify(s.body));
   assert.ok(s.body.summary.includes("2026-10-07"));
   const perf = JSON.parse(await readFile(path.join(tmp, "slide_performance.json"), "utf8"));
   assert.ok(perf.length > 0);
   assert.ok(perf.every((p) => p.visit_id === visitId && p.used));
-  const dg = await api("/api/summary", { method: "POST", headers: admin, body: JSON.stringify({ digest: true }) });
+  const dg = await runJob("summary", { digest: true });
   assert.equal(dg.body.count, 1);
   const csv = await api("/api/visits?export=csv&table=responses", { headers: admin });
   assert.equal(csv.status, 200);
@@ -409,7 +418,7 @@ test("drive auto-backup: the background sync endpoint needs the token and stands
 
 test("cards: 名片讀成名單，確認後才併進 guests，原圖留著", async () => {
   const cardPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
-  const post = (body) => api("/api/cards", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const post = (body) => runJob("cards", body);
   assert.equal((await api("/api/cards", { method: "POST", body: JSON.stringify({ visit_id: visitId, image: cardPng }) })).status, 401, "needs the admin token");
   assert.equal((await post({ visit_id: "2026-01-01-nope", image: cardPng })).status, 404);
   assert.equal((await post({ visit_id: visitId })).status, 400, "needs an image");
@@ -465,6 +474,24 @@ test("research: 查網路要一兩分鐘，所以觸發背景函式，前端輪�
   assert.ok(b.purposes.length, "可能的參訪目的");
   assert.ok(b.rooms.every((x) => ["301", "302", "303", "304", "305"].includes(x.room)), "只會指到中心的五間研究室");
   assert.ok(b.researched_at);
+});
+
+test("背景工作的規矩：每一支跑得久的 AI 都一樣", async () => {
+  const started = await api("/api/summary", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId }) });
+  assert.equal(started.status, 202, JSON.stringify(started.body));
+  const id = started.body.job_id;
+  const pending = await api(`/api/summary?job=${id}`, { headers: admin });
+  assert.equal(pending.body.status, "running");
+  assert.equal(pending.body.input, undefined, "輪詢不會把輸入（信件全文、名片原圖的位置）再送回前端");
+
+  // 六支新改的＋原本兩支，查進度與背景函式的規矩一致
+  for (const name of ["extract", "plan", "letter", "summary", "signbook", "transcribe", "cards", "translate"]) {
+    assert.equal((await api(`/api/${name}?job=${id}`)).status, 401, `${name}：查進度要 token`);
+    assert.equal((await api(`/api/${name}?job=zzzzzzzz`, { headers: admin })).status, 404, `${name}：過期或不存在的工作回 404`);
+    assert.equal((await api(`/api/${name}-background`, { method: "POST", body: "{}" })).status, 401, `${name}-background：要 token`);
+    assert.equal((await api(`/api/${name}-background`, { method: "POST", headers: admin, body: "{}" })).status, 400, `${name}-background：需要 job_id`);
+    assert.equal((await api(`/api/${name}-background`, { method: "POST", headers: admin, body: JSON.stringify({ job_id: "zzzzzzzz" }) })).status, 404, `${name}-background：工作不在就不做事`);
+  }
 });
 
 test("session: 貼一次 ADMIN_TOKEN 就換到 cookie，之後這台瀏覽器不必再授權", async () => {

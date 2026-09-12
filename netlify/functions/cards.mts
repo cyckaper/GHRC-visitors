@@ -1,22 +1,25 @@
 import { fail, json, nowISO, readJSON, requireAdmin } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
-import { readCard } from "../lib/ai.mts";
+import { pollJob, startBackground } from "../lib/jobs.mts";
 import { mergeGuests } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
 
 /**
  * 訪客名片（後台「資料」分頁）：現場拍一張名片，AI 讀成名單。
+ * 照片先存下來，讀名片交給 cards-background（一般函式只有 10 秒）。
  *
- * POST /api/cards {visit_id, image: dataURL|base64, media_type}            → 存原圖、讀出 people，回傳給人確認（**不會自己寫進名單**）
- * POST /api/cards {visit_id, action:"save", guests:[...], photo_key}       → 確認後併進 visit.guests（email 或姓名＋單位相同就只補空欄位）
- * POST /api/cards {visit_id, action:"remove", key}                         → 刪掉這張名片原圖
+ * GET  /api/cards?job=<id>                                                → 進度與結果（people）
+ * POST /api/cards {visit_id, image: dataURL|base64, media_type}           → 202 {job_id, photo_key}；**不會自己寫進名單**
+ * POST /api/cards {visit_id, action:"save", guests:[...], photo_key}      → 確認後併進 visit.guests（email 或姓名＋單位相同就只補空欄位）
+ * POST /api/cards {visit_id, action:"remove", key}                        → 刪掉這張名片原圖
  *
  * 名片原圖留著（跟簽名簿一樣）：讀錯時可以回頭核對，Drive 備份也會一起帶走。
  */
 export default async (req: Request) => {
-  if (req.method !== "POST") return fail(405, "method not allowed");
   const denied = requireAdmin(req);
   if (denied) return denied;
+  if (req.method === "GET") return pollJob(req, "名片");
+  if (req.method !== "POST") return fail(405, "method not allowed");
   const body = await readJSON<any>(req);
   if (!body?.visit_id) return fail(400, "需要 visit_id");
   const store = getStore();
@@ -64,10 +67,7 @@ export default async (req: Request) => {
   const ext = mediaType.includes("png") ? "png" : mediaType.includes("webp") ? "webp" : "jpg";
   const key = `cards/${visit.visit_id}/${Date.now()}.${ext}`;
   await store.putMedia(key, new Uint8Array(bytes), mediaType);
-  try {
-    const read = await readCard(b64, mediaType);
-    return json({ ok: true, photo_key: key, ...read });
-  } catch (e: any) {
-    return fail(502, `照片已存（${key}），但讀名片失敗：${e?.message || e}`, { photo_key: key });
-  }
+  const started = await startBackground("cards", { visit_id: visit.visit_id, photo_key: key, media_type: mediaType }, req);
+  const out = await started.json();
+  return json({ ...out, photo_key: key }, { status: started.status });
 };

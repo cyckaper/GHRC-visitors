@@ -1,20 +1,24 @@
-import { env, fail, json, nowISO, readJSON, requireAdmin } from "../lib/http.mts";
+import { fail, json, nowISO, readJSON, requireAdmin } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
-import { extractDictation, transcribeAudio } from "../lib/ai.mts";
+import { pollJob, startBackground } from "../lib/jobs.mts";
 import { sanitizeResponse } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
 
 /**
- * 主持人三十秒口述（工作包 4.3 動作二）。
- *  POST multipart: audio=<file>, visit_id                        → 存音檔、Whisper 轉文字、抽取欄位（存在 visit.dictation）
+ * 主持人三十秒口述（工作包 4.3 動作二）。音檔先存下來，Whisper 轉文字與抽取交給
+ * transcribe-background——兩件事加起來一般函式的 10 秒撐不住。
+ *
+ *  GET  /api/transcribe?job=<id>                                  → 進度與結果
+ *  POST multipart: audio=<file>, visit_id                         → 202 {job_id, audio_key}
  *  POST JSON {visit_id, audio_base64, mime}                       → 同上
  *  POST JSON {visit_id, transcript}                               → 不錄音，直接用打字的逐字稿抽取
  *  POST JSON {visit_id, action:"save", extracted:{...}}           → 確認後寫一筆 responses（來源 dictation）
  */
 export default async (req: Request) => {
-  if (req.method !== "POST") return fail(405, "method not allowed");
   const denied = requireAdmin(req);
   if (denied) return denied;
+  if (req.method === "GET") return pollJob(req, "口述");
+  if (req.method !== "POST") return fail(405, "method not allowed");
   const store = getStore();
   const ct = req.headers.get("content-type") || "";
 
@@ -65,29 +69,13 @@ export default async (req: Request) => {
     const ext = audio.mime.includes("mp4") || audio.mime.includes("m4a") ? "m4a" : audio.mime.includes("ogg") ? "ogg" : audio.mime.includes("wav") ? "wav" : "webm";
     audioKey = `dictation/${visit.visit_id}/${Date.now()}.${ext}`;
     await store.putMedia(audioKey, audio.bytes, audio.mime);
-    if (!transcript) {
-      try {
-        transcript = await transcribeAudio(audio.bytes, audio.mime, env("DICTATION_LANGUAGE") || "zh");
-      } catch (e: any) {
-        visit.dictation = { ...visit.dictation, audio_key: audioKey, recorded_at: nowISO() };
-        visit.updated_at = nowISO();
-        await store.putVisit(visit);
-        return fail(502, `音檔已存（${audioKey}），但轉文字失敗：${e?.message || e}。可改在下方直接輸入逐字稿。`, { audio_key: audioKey });
-      }
-    }
-  }
-  if (!transcript.trim()) return fail(400, "需要音檔或逐字稿");
-  try {
-    const extracted = await extractDictation(transcript, visit);
-    visit.dictation = { audio_key: audioKey, transcript, extracted, recorded_at: visit.dictation?.recorded_at || nowISO() };
+    // 音檔先掛到這一場：後面轉文字失敗也不會弄丟它
+    visit.dictation = { ...visit.dictation, audio_key: audioKey, recorded_at: visit.dictation?.recorded_at || nowISO() };
     visit.updated_at = nowISO();
     await store.putVisit(visit);
-    await triggerDriveSync(visit.visit_id);
-    return json({ ok: true, audio_key: audioKey, transcript, extracted });
-  } catch (e: any) {
-    visit.dictation = { ...visit.dictation, audio_key: audioKey, transcript, recorded_at: visit.dictation?.recorded_at || nowISO() };
-    visit.updated_at = nowISO();
-    await store.putVisit(visit);
-    return fail(502, `逐字稿已存，但抽取失敗：${e?.message || e}`, { transcript });
   }
+  if (!audio && !transcript.trim()) return fail(400, "需要音檔或逐字稿");
+  const started = await startBackground("transcribe", { visit_id: visit.visit_id, audio_key: audio ? audioKey : "", mime: audio?.mime || "", transcript }, req);
+  const out = await started.json();
+  return json({ ...out, audio_key: audioKey }, { status: started.status });
 };

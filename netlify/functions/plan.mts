@@ -1,5 +1,5 @@
-import { fail, json, readJSON, requireAdmin } from "../lib/http.mts";
-import { getJob, publicJob, startJob, triggerBackground } from "../lib/jobs.mts";
+import { fail, readJSON, requireAdmin } from "../lib/http.mts";
+import { pollJob, startBackground } from "../lib/jobs.mts";
 import type { Visit } from "../lib/types.mts";
 
 /**
@@ -14,15 +14,9 @@ import type { Visit } from "../lib/types.mts";
 export default async (req: Request) => {
   const denied = requireAdmin(req);
   if (denied) return denied;
-  if (req.method === "GET") {
-    const job = await getJob(new URL(req.url).searchParams.get("job") || "");
-    if (!job) return fail(404, "找不到這個排程工作（可能已經過期，請再排一次）");
-    return json({ ok: true, ...publicJob(job) });
-  }
+  if (req.method === "GET") return pollJob(req, "排程");
   if (req.method !== "POST") return fail(405, "method not allowed");
   const body = await readJSON<{ visit?: Partial<Visit> }>(req);
   if (!body?.visit) return fail(400, "需要 visit");
-  const job = await startJob("plan", { visit: body.visit });
-  await triggerBackground("plan-background", { job_id: job.id }, req);
-  return json({ ok: true, job_id: job.id, status: job.status }, { status: 202 });
+  return startBackground("plan", { visit: body.visit }, req);
 };
