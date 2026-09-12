@@ -356,6 +356,15 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - 主辦端 API 用 `Authorization: Bearer ADMIN_TOKEN`、`?token=`，或**登入後的 session cookie**；現場訊號用 `SIGNAL_KEY`；`respond` 與 `visits?public=1` 公開。
 - **登入一次就好**：後台貼一次 ADMIN_TOKEN → `/api/session` 發一個 HttpOnly、SameSite=Strict 的 cookie（值是用 ADMIN_TOKEN 簽的 `v1.<到期>.<HMAC>`，**不是 token 本身**），180 天，每次打開後台自動續期。token 不再存 localStorage（iPad Safari 七天沒互動就清掉，所以以前每次都要重登；舊的會在開場自動換成 cookie）。登出走 `DELETE /api/session`。
 - 老師卡片內容 `public/data/labs.json` 的 `confirmed=false` 表示尚待老師確認；照片 `photo` 為 null 時顯示縮寫。
+- **沒有「存檔」這個動作**：訪前分頁任何欄位改動都會在 1.2 秒後自己存（`scheduleSave`／`saveVisit`），
+  AI 抽取、排行程、查背景做完也各存一次。畫面上只有一行「已存 14:32」與「刪掉這一場」。
+  建錯的那一場就刪掉：`DELETE /api/visits?id=`，順手清掉這一場自己的檔案（簽名簿、口述、名片、當天資料）；
+  **已經有來賓回覆、或感謝信已經寄出去的不給刪**（那不是我們的東西），Drive 上的備份也不動。
+- **網址（`visit_id` ＝ 日期 ＋ 代碼）在用出去之前跟著欄位走**：日期或網址代碼改了就換一個 visit_id，
+  舊的那一筆刪掉（`POST /api/visits` 回 `renamed_from`）。一旦「用出去了」就固定，不再跟著改（回 `url_fixed`）——
+  判斷標準 `isUnused()`：有人回覆、感謝信寄出、放了當天資料、有簽名簿／口述／名片、已備份到 Drive，其中之一就算用出去了。
+  這樣先打錯日期再改也不會留下怪網址，而印出去的 QR 不會突然失效。
+- 「產生簡報」直接用畫面上現在勾的頁，產完一起存回去——不必先按「儲存選頁」。
 - **現場動線第一站固定是總體介紹，地點預設 302**：`itinerary[0].room === "briefing"`，`location` 空白就是 302（`lib/visit.mjs DEFAULT_BRIEFING_LOCATION`），之後才是 301–305；`ensureBriefingFirst` 在存檔與排程時強制，AI 排程不決定地點。現場訊號 `room=briefing` 代表簡報室（開總體簡報＝整場起點）。
 - **當天資料** `visit.materials = { deck_pdf, photos[], links[] }`：值是媒體庫 key（`materials/<visit_id>/<file>`）或 https 連結，`sanitizeMaterials` 只留這兩種。上傳走 `/api/materials`（單檔 4.5 MB 以內；更大的 PDF 貼雲端連結）。合照先在瀏覽器縮到長邊 1600px，**縮不動就原檔上傳**（HEIC、壞檔、記憶體不夠都算），進度與錯誤顯示在「動作三」那張卡片上（`#materialsStatus`），不是只在頁面最上方 —— 上傳失敗時人在頁面中段，看不到頂端的提示。**訪後信只能承諾頁面上真的有的東西**：`lib/visit.mjs pageContents()` 算出清單交給提示詞（mock 信也照同一份清單）。PDF 由 PowerPoint 另存，再到「收工」放上去。
 - 產檔在瀏覽器：`admin.html` 先問 `/api/master`（後台上傳的母簡報，4 MB 分塊存在媒體庫 `master/<upload_id>/part-i` ＋ `master/manifest.json`），再 HEAD `/assets/master/slim-master.pptx`（站台對不存在的路徑會回 index.html，所以看 content-type 不看狀態碼）；兩者都沒有時，「產生簡報」在同一個點擊裡同步開檔案選擇視窗，選完立刻產，並提供「把這份母簡報存到站台」。選檔或上傳時若檔案含影片或超過 60 MB，先在瀏覽器裡瘦身（`public/lib/pptx.mjs slimDeck`：抽影片留海報＋「▶ Video」、超過 3 MB 的圖用 canvas 縮到 2000px、清孤兒；規則同 `scripts/slim-master.py`），所以可以直接選 396 MB 的原始母簡報。JSZip 由 cdnjs 載入、QR 用頁面已有的 qrcodejs 畫 canvas（沒有就只放網址文字）。存檔後區塊不放操作說明，只有一行進度與必要時的警告。

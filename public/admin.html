@@ -36,7 +36,7 @@
   <header class="flex flex-wrap items-center gap-3">
     <h1 class="text-xl font-semibold mr-auto">GHRC 參訪 · 主辦端</h1>
     <span class="muted" id="backendInfo"></span>
-    <span id="previewBadge" class="text-sm px-2 py-0.5 rounded-lg bg-amber-100 text-amber-900" hidden>預覽站 · 資料獨立沙箱，看不到正式站的參訪</span>
+    <span id="previewBadge" class="text-sm px-2 py-0.5 rounded-lg bg-amber-100 text-amber-900" hidden>這是預覽站：資料跟正式站分開，看不到正式站的參訪</span>
     <span id="authBox" class="flex items-center gap-2">
       <input type="password" id="token" placeholder="ADMIN_TOKEN" class="!w-48" autocomplete="off">
       <button class="btn btn-soft" id="tokenSave">登入</button>
@@ -62,14 +62,14 @@
     <div class="card space-y-3">
       <div class="flex flex-wrap items-center gap-2">
         <label class="f mb-0">參訪</label>
-        <select id="preVisitSelect" class="!w-auto"><option value="">（新的一場，還沒存檔）</option></select>
+        <select id="preVisitSelect" class="!w-auto"><option value="">＋ 新的一場</option></select>
         <span class="muted" id="preStatus"></span>
       </div>
     </div>
 
     <div class="card space-y-3">
       <h2 class="font-semibold">1. 貼上 email 往來或上傳名單檔，AI 抽取背景</h2>
-      <p class="muted">單位、人名、職稱、人數、隨行名單與聯絡方式、對口老師、來訪目的、興趣、日期時間。結果只顯示給你確認，不會自動存檔。</p>
+      <p class="muted">單位、人名、職稱、人數、隨行名單與聯絡方式、對口老師、來訪目的、興趣、日期時間。抽出來的東西會填進下面的欄位，你逐項看過再改。</p>
       <textarea id="emailText" rows="8" placeholder="把 email 往來（含轉寄、簽名檔）整段貼進來……（也可以只上傳名單檔）"></textarea>
       <div class="flex flex-wrap items-center gap-2">
         <input type="file" id="listFiles" multiple accept=".docx,.xlsx,.xlsm,.pptx,.csv,.tsv,.txt,.md,.pdf,.jpg,.jpeg,.png,.webp">
@@ -93,7 +93,7 @@
         <div><label class="f">總分鐘</label><input type="number" id="duration" min="15" step="5"></div>
         <div><label class="f">人數</label><input type="number" id="headcount" min="0"></div>
         <div><label class="f">對口老師</label><select id="contactTeacher"><option>張俊彥</option><option>林寶秀</option><option>陳惠美</option><option>張伯茹</option><option>鄭佳昆</option></select></div>
-        <div><label class="f">網址代碼（存檔後不可改）</label><input type="text" id="code" placeholder="例如 uwa"></div>
+        <div><label class="f">網址代碼</label><input type="text" id="code" placeholder="例如 uwa"><p class="muted mt-1">來賓專頁網址的後半段；寄出信或有人回覆之後就固定了。</p></div>
         <div class="sm:col-span-3"><label class="f">來訪目的</label><input type="text" id="purpose"></div>
         <div class="sm:col-span-3"><label class="f">興趣關鍵字（逗號分隔）</label><input type="text" id="interests"></div>
       </div>
@@ -105,7 +105,7 @@
 
     <div class="card space-y-3">
       <div class="flex flex-wrap items-center gap-2">
-        <h2 class="font-semibold">2.5 訪客背景研判</h2>
+        <h2 class="font-semibold">3. 訪客背景研判</h2>
         <button class="btn btn-soft" id="researchBtn" type="button">AI 查訪客背景</button>
         <span class="muted" id="researchInfo"></span>
       </div>
@@ -114,7 +114,7 @@
     </div>
 
     <div class="card space-y-4">
-      <h2 class="font-semibold">3. 行程</h2>
+      <h2 class="font-semibold">4. 行程</h2>
       <div class="flex flex-wrap gap-2 items-center">
         <button class="btn" id="planBtn">AI 排行程與選頁</button>
         <span class="muted">選頁與產檔在「簡報」分頁</span>
@@ -133,8 +133,8 @@
 
     <div class="card space-y-4">
       <div class="flex flex-wrap gap-2 items-center">
-        <button class="btn" id="saveBtn">儲存</button>
         <span class="muted" id="saveInfo"></span>
+        <button class="btn btn-soft" id="deleteBtn" hidden>刪掉這一場</button>
       </div>
       <div id="afterSave" hidden class="space-y-4">
         <div class="flex flex-wrap gap-6 items-start">
@@ -184,13 +184,13 @@
         <div class="flex flex-wrap items-center justify-between gap-2"><h2 class="font-semibold">選用頁次 <span id="slideCount" class="muted font-normal"></span></h2><span class="muted">依區塊勾選：區塊標題的方框整區選；「只選這區」會清掉其他區塊；必選頁（封面、流程、架構、核心宣稱、謝謝）永遠保留</span></div>
         <div class="flex flex-wrap gap-2"><button type="button" class="btn btn-soft" id="slidesAll">全選</button><button type="button" class="btn btn-soft" id="slidesNone">全不選（保留必選頁）</button></div>
         <div class="space-y-2" id="slideGrid"></div>
-        <p class="muted" id="deckNeedsVisit" hidden>這裡列的是母簡報的頁次，先看先勾都可以；要<b>儲存選頁</b>或<b>產生 .pptx</b>，得先有一場參訪（到「訪前」建一場並儲存）。</p>
+        <p class="muted" id="deckNeedsVisit" hidden>這裡列的是母簡報的頁次，先看先勾都可以；要存選頁或產生 .pptx，得先到「訪前」填一場參訪（填了單位名稱就會自己建一場）。</p>
         <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="slidesSave">儲存選頁</button><span class="muted" id="slidesInfo"></span></div>
       </div>
 
       <div class="card space-y-3">
         <h2 class="font-semibold">產生簡報</h2>
-        <p class="muted">用這一場存檔的行程與選頁，從母簡報子集化，直接下載 .pptx。改了選頁請先按「儲存選頁」。</p>
+        <p class="muted">從母簡報挑出勾選的那幾頁，改好第 1–3 頁與第二語言，直接下載 .pptx。按下去會先把選頁存起來。</p>
         <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="deckBtn">產生簡報 .pptx</button></div>
         <p class="text-sm" id="deckInfo" hidden></p>
         <ul class="text-sm text-stone-600 list-disc pl-5" id="deckReport"></ul>
@@ -217,7 +217,7 @@
         <label class="f">AI 讀到的留言（可修改；署名看不清就留空）</label>
         <table id="signbookTable"><thead><tr><th>留言</th><th>署名</th><th></th></tr></thead><tbody></tbody></table>
         <div class="flex gap-2"><button class="btn btn-soft" id="signbookAdd" type="button">＋ 一則</button><button class="btn" id="signbookSave">存入回饋</button></div>
-        <details class="muted"><summary>整頁轉錄</summary><pre class="wrap" id="signbookTranscript"></pre></details>
+        <details class="muted"><summary>整頁的字（AI 讀出來的原文）</summary><pre class="wrap" id="signbookTranscript"></pre></details>
       </div>
     </div>
     <div class="card space-y-3">
@@ -252,7 +252,7 @@
         <div class="space-y-2">
           <label class="f">簡報 PDF（從 PowerPoint 另存；4.5 MB 以內直接上傳，更大的貼雲端連結）</label>
           <input type="file" id="pdfFile" accept="application/pdf,.pdf">
-          <div class="flex gap-2"><input type="text" id="pdfLink" placeholder="或貼 Drive／OneDrive 連結 https://…"><button class="btn btn-soft" id="pdfLinkSave" type="button">存連結</button></div>
+          <div class="flex gap-2"><input type="text" id="pdfLink" placeholder="或貼 Drive／OneDrive 連結 https://…"><button class="btn btn-soft" id="pdfLinkSave" type="button">存這個 PDF 連結</button></div>
           <p class="text-sm" id="pdfInfo"></p>
         </div>
         <div class="space-y-2">
@@ -264,7 +264,7 @@
       <div class="space-y-2">
         <div class="flex items-center justify-between"><label class="f">相關連結（論文、雲端資料夾、影片……）</label><button class="btn btn-soft" id="linkAdd" type="button">＋ 一筆</button></div>
         <table id="linkTable"><thead><tr><th>標題</th><th>網址</th><th></th></tr></thead><tbody></tbody></table>
-        <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="materialsSave">儲存連結</button><span class="muted" id="materialsInfo"></span></div>
+        <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="materialsSave">儲存相關連結</button><span class="muted" id="materialsInfo"></span></div>
       </div>
     </div>
   </section>
@@ -324,9 +324,9 @@
       <div class="flex flex-wrap gap-2 items-center"><h2 class="font-semibold mr-auto" id="detailTitle"></h2><button class="btn" id="summaryBtn">AI 產一頁摘要</button><button class="btn btn-soft" id="driveBtn">立即備份到 Drive</button></div>
       <p class="text-sm" id="driveInfo"></p>
       <pre class="wrap text-sm" id="summary"></pre>
-      <h3 class="font-medium">回覆（responses）</h3>
+      <h3 class="font-medium">來賓回覆</h3>
       <table id="responsesTable"><thead><tr><th>來源</th><th>姓名</th><th>email</th><th>最想看</th><th>想合作</th><th>希望我們</th><th>簽名簿／建議／備註</th><th>時間</th></tr></thead><tbody></tbody></table>
-      <h3 class="font-medium">動線（timeline，推補後）</h3>
+      <h3 class="font-medium">現場動線（沒有訊號的時段用行程推補）</h3>
       <table id="timelineTable"><thead><tr><th>空間</th><th>進入</th><th>離開</th><th>分鐘</th><th>來源</th></tr></thead><tbody></tbody></table>
     </div>
     <div class="card space-y-3">
@@ -461,7 +461,8 @@
     if (!r.ok) { setAuth(false); $("backendInfo").textContent = r.error; flash(r.error, "err"); return; }
     setAuth(true);
     state.visits = r.visits;
-    $("backendInfo").textContent = `資料層：${r.backend} · ${r.visits.length} 場`;
+    $("backendInfo").textContent = `${r.visits.length} 場參訪`;
+    $("backendInfo").title = `資料存在 ${r.backend}`;
     const opts = r.visits.map((v) => `<option value="${esc(v.visit_id)}">${esc(v.date)} ${esc(v.org)}（${esc(v.status)}）</option>`).join("");
     $("preVisitSelect").innerHTML = `<option value="">（新的一場，還沒存檔）</option>${opts}`;
     const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
@@ -484,10 +485,10 @@
     $("orgName").value = v.org?.name || ""; $("orgLocal").value = v.org?.name_local || ""; $("orgType").value = v.org?.type || "university"; $("orgCountry").value = v.org?.country || "";
     $("language").value = v.language || "en"; $("date").value = v.date || ""; $("startTime").value = v.start_time || "10:00"; $("duration").value = v.duration_minutes || 90; $("headcount").value = v.headcount || 0;
     $("contactTeacher").value = v.contact_teacher || "張俊彥"; $("purpose").value = v.purpose || ""; $("interests").value = (v.interests || []).join(", ");
-    $("code").value = state.saved ? v.visit_id.slice(11) : ""; $("code").disabled = state.saved;
-    $("preStatus").textContent = state.saved ? `${v.visit_id} · ${v.status}` : "還沒存檔";
-    // 「新增」不是一個動作：填完按儲存就是新增一場（busy() 會還原按鈕文字，所以提示放在旁邊這一行）
-    if (!state.saved) $("saveInfo").textContent = "填完按「儲存」就會建立這一場";
+    $("code").value = v.visit_id ? v.visit_id.slice(11) : ""; $("code").disabled = !!state.urlFixed;
+    $("preStatus").textContent = state.saved ? v.visit_id : "";
+    $("deleteBtn").hidden = !state.saved;
+    if (!state.saved) $("saveInfo").textContent = "填上單位名稱就會自己建一場，不必按存檔";
     renderGuests(v.guests || []); renderProgramme(v.programme || []); renderItinerary(v.itinerary); renderDeckState(v); renderBackground(v.background);
     $("rationale").textContent = v.plan_rationale || ""; $("uncertainties").innerHTML = (v.uncertainties || []).map((u) => `<li>${esc(u)}</li>`).join("");
     $("afterSave").hidden = !state.saved;
@@ -504,7 +505,7 @@
     v.itinerary = readItinerary();
     v.slides = Array.isArray(state.visit?.slides) ? state.visit.slides : [];
     if (state.visit?.background) v.background = state.visit.background;
-    if (!state.saved && $("code").value.trim()) v.code = $("code").value.trim().toLowerCase();
+    if (!state.urlFixed && $("code").value.trim()) v.code = $("code").value.trim().toLowerCase();
     return v;
   }
   function renderGuests(guests) {
@@ -691,6 +692,7 @@
     if (!b) { $("background").innerHTML = ""; return; }
     if (state.visit) state.visit.background = b;
     renderBackground(b);
+    await saveVisit();
     flash("背景研判完成，請自己再判斷一次");
   });
   /**
@@ -739,6 +741,7 @@
     $("listFilesInfo").innerHTML = (out.files_read || []).map((f) => `<li>${esc(f.name)} <span class="ok">已讀（${f.kind === "text" ? `${f.chars} 字` : f.kind === "document" ? "PDF 交給 AI 直接讀" : "照片交給 AI 直接讀"}）</span></li>`).join("") + (out.warnings || []).map((w) => `<li class="err">${esc(w)}</li>`).join("");
     state.saved = false; $("preVisitSelect").value = "";
     fillForm({ ...emptyVisit(), ...out.visit, visit_id: "" });
+    await saveVisit();
     flash("抽取完成，請逐項確認（尤其是名單的 email）");
   }
   $("planBtn").onclick = () => busy($("planBtn"), async () => {
@@ -752,22 +755,61 @@
     if (!out) return;
     const v = out.visit; state.visit = { ...state.visit, ...v, visit_id: state.saved ? state.visit.visit_id : "" };
     renderProgramme(v.programme); renderItinerary(v.itinerary); renderDeckState(state.visit);
-    $("rationale").textContent = v.plan_rationale || ""; $("planInfo").textContent = `也挑了 ${(v.slides || []).length} 頁、簡報約 ${out.estimated_briefing_minutes} 分鐘，存檔後到「簡報」分頁確認${out.master_text_available ? "" : "（尚無母簡報文字：第 1–3 頁的替換文字要在產檔時處理）"}`;
-    flash((out.warnings || []).length ? out.warnings.join(" ") : "已排好，請確認後儲存", (out.warnings || []).length ? "err" : "ok");
+    $("rationale").textContent = v.plan_rationale || ""; $("planInfo").textContent = `也挑了 ${(v.slides || []).length} 頁、簡報約 ${out.estimated_briefing_minutes} 分鐘，到「簡報」分頁確認${out.master_text_available ? "" : "（尚無母簡報文字：第 1–3 頁的替換文字要在產檔時處理）"}`;
+    await saveVisit();
+    flash((out.warnings || []).length ? out.warnings.join(" ") : "已排好，時間不對就直接改", (out.warnings || []).length ? "err" : "ok");
   }
-  $("saveBtn").onclick = () => busy($("saveBtn"), async () => {
+  /**
+   * 自己存。填完就存好了，不必找存檔鍵；不要的那一場按「刪掉這一場」。
+   * 網址（日期 ＋ 代碼）在還沒用出去之前跟著欄位走，所以先打錯日期再改也不會留下怪網址。
+   */
+  const AUTOSAVE_DELAY = 1200;
+  function scheduleSave() {
+    if (!$("orgName").value.trim()) return; // 連單位名稱都還沒有，沒東西可存
+    clearTimeout(scheduleSave.t);
+    $("saveInfo").textContent = "存檔中…";
+    scheduleSave.t = setTimeout(saveVisit, AUTOSAVE_DELAY);
+  }
+  async function saveVisit() {
+    clearTimeout(scheduleSave.t);
     const v = readForm();
-    if (!v.org.name) return flash("單位名稱必填", "err");
-    const r = await api("/api/visits", { method: "POST", body: v });
+    if (!v.org.name) return;
+    if (saveVisit.running) { scheduleSave.t = setTimeout(saveVisit, AUTOSAVE_DELAY); return; } // 上一次還沒回來，等一下再存
+    saveVisit.running = true;
+    try {
+      const r = await api("/api/visits", { method: "POST", body: v });
+      if (!r.ok) { $("saveInfo").textContent = ""; return flash(`存不起來：${r.error}`, "err"); }
+      state.urlFixed = !!r.url_fixed;
+      const first = !state.saved;
+      await loadVisits();
+      $("preVisitSelect").value = r.visit.visit_id;
+      const focused = document.activeElement;
+      fillForm(r.visit);
+      if (focused && focused.id) $(focused.id)?.focus?.(); // 重畫表單不要把游標從手上搶走
+      if (first) flash(`建好這一場了：${r.visit.visit_id}`);
+      else if (r.renamed_from) flash(`網址改成 ${r.visit.visit_id}`);
+    } finally {
+      saveVisit.running = false;
+    }
+  }
+  // 訪前分頁裡任何一個欄位改動都會自己存（含名單、流程、動線那幾張表）
+  $("tab-pre").addEventListener("input", scheduleSave);
+  $("tab-pre").addEventListener("change", scheduleSave);
+  $("deleteBtn").onclick = () => busy($("deleteBtn"), async () => {
+    const v = state.visit;
+    if (!state.saved || !confirm(`刪掉「${v.org?.name || v.visit_id}」這一場？\n來賓專頁 ${v.visit_id} 會跟著消失。Drive 上的備份不會動。`)) return;
+    const r = await api(`/api/visits?id=${encodeURIComponent(v.visit_id)}`, { method: "DELETE" });
     if (!r.ok) return flash(r.error, "err");
-    await loadVisits(); $("preVisitSelect").value = r.visit.visit_id; fillForm(r.visit);
-    flash(`已儲存 ${r.visit.visit_id}`);
+    await loadVisits();
+    $("preVisitSelect").value = "";
+    fillForm(emptyVisit());
+    flash(`已刪掉 ${r.deleted}`);
   });
   function showSaved(v) {
     $("afterSave").hidden = false;
     $("pageLink").textContent = v.page_url; $("pageLink").href = v.page_url;
     $("qr").innerHTML = ""; if (window.QRCode) new QRCode($("qr"), { text: v.page_url, width: 128, height: 128 });
-    $("saveInfo").textContent = `更新：${(v.updated_at || "").replace("T", " ").slice(0, 16)}`;
+    $("saveInfo").textContent = `已存 ${(v.updated_at || "").slice(11, 16)}`;
   }
   /** 訪前頁只報一行簡報狀態，實際的選頁與產檔在「簡報」分頁。 */
   function renderDeckState(v) {
@@ -931,7 +973,8 @@
       const info = $("deckInfo"); info.hidden = false; const log = (m) => { info.textContent = m; };
       $("deckReport").innerHTML = "";
       try {
-        const spec = state.deckVisit;
+        // 規格一律用畫面上現在勾的那些頁：不必先按「儲存選頁」，下面存檔時會一起存回去
+        const spec = state.deckVisit && { ...state.deckVisit, slides: slideInputs().filter((i) => i.checked).map((i) => Number(i.value)) };
         if (!spec) throw new Error("請先選一場參訪");
         const lang = spec.language || "zh";
         const core = await deckCore();
@@ -952,7 +995,7 @@
         $("deckReport").innerHTML = lines.map((l) => `<li>${esc(l)}</li>`).join("");
         const deck = { ...(spec.deck || {}), generated_at: new Date().toISOString(), slides: report.output_slides };
         const saved = await api("/api/visits", { method: "POST", body: { ...spec, deck } });
-        if (saved.ok) afterDeckSave(saved.visit);
+        if (saved.ok) { afterDeckSave(saved.visit); $("slidesInfo").textContent = `已存 ${saved.visit.slides.length} 頁`; }
       } catch (e) { info.textContent = `產檔失敗：${e.message || e}`; flash(String(e.message || e), "err"); }
     });
   }

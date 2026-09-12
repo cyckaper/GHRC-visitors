@@ -48,21 +48,64 @@ export default async (req: Request) => {
     if (denied) return denied;
     const body = await readJSON<Partial<Visit>>(req);
     if (!body || typeof body !== "object") return fail(400, "需要 JSON body");
-    // 已存在的參訪不能改 visit_id（網址已經發出去了）：忽略 code
-    if (body.visit_id && (await store.getVisit(String(body.visit_id)))) delete (body as any).code;
+    const previousId = String(body.visit_id || "");
+    const current = previousId ? await store.getVisit(previousId) : null;
+    let renameBlocked = false;
+    if (current) {
+      // 網址還沒用出去（沒人回覆、沒寄信、沒放東西）就跟著日期與代碼走；用出去了就固定，不能再換
+      if (await isUnused(store, current)) (body as any).code = String((body as any).code || "").trim() || previousId.slice(11);
+      else {
+        delete (body as any).code;
+        renameBlocked = true;
+      }
+    }
     const merged = normalizeVisit(body, siteUrl(req));
     if (!merged.org?.name) return fail(400, "單位名稱必填");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(merged.date)) return fail(400, "日期格式需為 YYYY-MM-DD");
-    const existing = await store.getVisit(merged.visit_id);
+    const renamedFrom = current && merged.visit_id !== previousId ? previousId : "";
+    if (renamedFrom && (await store.getVisit(merged.visit_id))) return fail(409, `已經有一場叫 ${merged.visit_id} 了，請換一個網址代碼`);
+    const existing = renamedFrom ? current : await store.getVisit(merged.visit_id);
     merged.created_at = existing?.created_at || nowISO();
     merged.updated_at = nowISO();
     await store.putVisit(merged);
+    if (renamedFrom) await store.deleteVisit(renamedFrom);
     await triggerDriveSync(merged.visit_id);
-    return json({ ok: true, visit: merged });
+    return json({ ok: true, visit: merged, renamed_from: renamedFrom, url_fixed: renameBlocked });
+  }
+
+  if (req.method === "DELETE") {
+    const denied = requireAdmin(req);
+    if (denied) return denied;
+    const id = url.searchParams.get("id") || "";
+    const visit = await store.getVisit(id);
+    if (!visit) return fail(404, "找不到這次參訪");
+    // 來賓的回覆與寄出去的信不是我們的東西，有這些就不給刪
+    if ((await store.listResponses(id)).length) return fail(409, "這一場已經有來賓回覆了，不刪。要清掉請直接改 Google Sheet 或聯絡管理者。");
+    if (visit.letters?.thanks?.sent_at) return fail(409, "這一場的感謝信已經寄出去了，不刪。");
+    for (const key of mediaKeys(visit)) await store.deleteMedia(key).catch(() => {});
+    await store.deleteVisit(id);
+    return json({ ok: true, deleted: id });
   }
 
   return fail(405, "method not allowed");
 };
+
+/** 這一場的網址還沒「用出去」：沒人回覆、沒寄出感謝信、沒放任何檔案、還沒備份到 Drive。 */
+async function isUnused(store: ReturnType<typeof getStore>, v: Visit): Promise<boolean> {
+  const a = v as any;
+  if (v.letters?.thanks?.sent_at) return false;
+  if (v.materials?.deck_pdf || v.materials?.photos?.length || v.materials?.links?.length) return false;
+  if (v.signbook?.photo_key || v.dictation?.audio_key || v.dictation?.transcript) return false;
+  if (a.cards?.length || a.drive?.backed_up_at) return false;
+  return !(await store.listResponses(v.visit_id)).length;
+}
+
+/** 這一場自己的檔案（簽名簿、口述、名片、當天資料）——刪掉這一場就一起清掉。 */
+function mediaKeys(v: Visit): string[] {
+  const a = v as any;
+  const keys = [v.signbook?.photo_key, v.dictation?.audio_key, v.materials?.deck_pdf, ...(v.materials?.photos || []), ...((a.cards || []) as { key: string }[]).map((c) => c.key)];
+  return keys.filter((k): k is string => typeof k === "string" && !!k && !/^https?:/i.test(k));
+}
 
 export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   const base = emptyVisit() as Visit;

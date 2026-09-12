@@ -482,6 +482,30 @@ test("research: 查網路要一到三分鐘，所以走背景工作；**還沒�
   assert.deepEqual((await api(`/api/research?job=${started.body.job_id}`, { headers: admin })).body.result.purposes, b.purposes, "輪詢拿到的跟寫回參訪的是同一份");
 });
 
+test("網址還沒用出去就跟著日期與代碼走；不要的那一場直接刪掉", async () => {
+  const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const a = (await put({ org: { name: "Test Org" }, date: "2026-11-01", code: "tst" })).body.visit;
+  assert.equal(a.visit_id, "2026-11-01-tst");
+
+  // 日期打錯再改：網址跟著換，舊的那一筆不會留在列表裡
+  const b = (await put({ ...a, date: "2026-11-08" })).body.visit;
+  assert.equal(b.visit_id, "2026-11-08-tst");
+  assert.equal((await api("/api/visits?id=2026-11-01-tst", { headers: admin })).status, 404, "舊網址不留著");
+
+  // 有人回覆之後網址就固定了——已經有人拿著那個連結
+  await api("/api/respond", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visit_id: b.visit_id, anonymous: true, suggestion: "第 303 間講太快" }) });
+  const c = await put({ ...b, code: "changed" });
+  assert.equal(c.body.visit.visit_id, b.visit_id, "已經有人回覆，網址不再跟著改");
+  assert.equal(c.body.url_fixed, true);
+  assert.equal((await api(`/api/visits?id=${b.visit_id}`, { method: "DELETE", headers: admin })).status, 409, "有回覆的那一場不給刪");
+
+  // 建錯的那一場：刪掉就好
+  const d = (await put({ org: { name: "Throwaway" }, date: "2026-12-01", code: "bye" })).body.visit;
+  assert.equal((await api(`/api/visits?id=${d.visit_id}`, { method: "DELETE" })).status, 401, "刪除也要 token");
+  assert.equal((await api(`/api/visits?id=${d.visit_id}`, { method: "DELETE", headers: admin })).status, 200);
+  assert.equal((await api(`/api/visits?id=${d.visit_id}`, { headers: admin })).status, 404);
+});
+
 test("背景工作的規矩：每一支跑得久的 AI 都一樣", async () => {
   const started = await api("/api/summary", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId }) });
   assert.equal(started.status, 202, JSON.stringify(started.body));
