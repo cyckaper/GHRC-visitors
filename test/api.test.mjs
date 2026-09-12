@@ -482,6 +482,21 @@ test("research: 查網路要一到三分鐘，所以走背景工作；**還沒�
   assert.deepEqual((await api(`/api/research?job=${started.body.job_id}`, { headers: admin })).body.result.purposes, b.purposes, "輪詢拿到的跟寫回參訪的是同一份");
 });
 
+test("排程會參考歷次累積：同類單位選過哪幾頁、哪幾頁被提問（功能 4 回饋功能 2）", async () => {
+  // 這時候 store 裡已經有一場存過 slides 的參訪，也跑過一頁摘要（slide_performance 有列）
+  const p = await plan({ org: { name: "Another University", type: "university" }, date: "2026-12-20", start_time: "10:00", duration_minutes: 120 });
+  assert.equal(p.status, 200, JSON.stringify(p.body));
+  const h = p.body.history;
+  assert.ok(h, "有歷史就要帶進排程");
+  assert.ok(h.visits >= 1, "算過的場次");
+  assert.equal(h.same_type.org_type, "university", "同類單位另外算一份");
+  assert.ok(h.same_type.visits >= 1);
+
+  // 第一場（store 還空著）沒有歷史可參考，也不能因此壞掉
+  const perf = (await api("/api/visits?export=json&table=slide_performance", { headers: admin })).body.rows;
+  assert.ok(perf.length, "一頁摘要寫過 slide_performance");
+});
+
 test("網址還沒用出去就跟著日期與代碼走；不要的那一場直接刪掉", async () => {
   const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
   const a = (await put({ org: { name: "Test Org" }, date: "2026-11-01", code: "tst" })).body.visit;

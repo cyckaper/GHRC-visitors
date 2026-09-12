@@ -39,11 +39,11 @@
     <span id="previewBadge" class="text-sm px-2 py-0.5 rounded-lg bg-amber-100 text-amber-900" hidden>這是預覽站：資料跟正式站分開，看不到正式站的參訪</span>
     <span id="authBox" class="flex items-center gap-2">
       <input type="password" id="token" placeholder="ADMIN_TOKEN" class="!w-48" autocomplete="off">
-      <button class="btn btn-soft" id="tokenSave">登入</button>
+      <button class="btn btn-soft" id="tokenSave" title="把 ADMIN_TOKEN 換成這台裝置的登入憑證，之後半年不必再貼">登入</button>
     </span>
     <span id="authOk" class="flex items-center gap-2" hidden>
       <span class="ok text-sm">已登入 ✓</span>
-      <button class="btn btn-soft" id="logout" type="button">登出</button>
+      <button class="btn btn-soft" id="logout" title="清掉這台裝置的登入憑證（共用電腦用完請按）" type="button">登出</button>
     </span>
   </header>
 
@@ -61,13 +61,15 @@
     <select id="visitSelect" class="!w-auto"><option value="">＋ 新的一場</option></select>
     <span class="muted" id="preStatus"></span>
     <span class="muted mr-auto" id="saveInfo"></span>
-    <button class="btn btn-soft" id="deleteBtn" hidden>刪掉這一場</button>
+    <button class="btn btn-soft" id="deleteBtn" title="整場刪掉：來賓專頁跟著消失。已經有人回覆或已寄出感謝信的不給刪；Drive 備份不動" hidden>刪掉這一場</button>
+    <div class="w-full flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" id="progress"></div>
   </div>
 
   <p id="flash" class="text-sm" hidden></p>
 
   <!-- ───────── 訪前 ───────── -->
   <section id="tab-pre" class="space-y-5">
+    <p class="text-sm text-stone-600"><b>這一頁：參訪前把四件事做完</b>——讀來信抽出資料、確認欄位、查對方背景、排今日流程。做完就有一個來賓專頁可以給對方。填完自己會存，不必找存檔鍵。</p>
     <div class="card space-y-3">
       <h2 class="font-semibold">1. 貼上 email 往來或上傳名單檔，AI 抽取背景</h2>
       <p class="muted">單位、人名、職稱、人數、隨行名單與聯絡方式、對口老師、來訪目的、興趣、日期時間。抽出來的東西會填進下面的欄位，你逐項看過再改。</p>
@@ -77,12 +79,13 @@
         <span class="muted">名單檔：Word（.docx）、Excel（.xlsx）、CSV／文字、PDF、名單照片，最多 8 個共 5 MB；.doc／.xls 請先另存新格式</span>
       </div>
       <ul id="listFilesInfo" class="text-sm text-stone-600 list-disc pl-5"></ul>
-      <div class="flex flex-wrap items-center gap-2"><button class="btn" id="extractBtn">AI 抽取</button><span class="muted" id="extractInfo"></span></div>
+      <div class="flex flex-wrap items-center gap-2"><button class="btn" id="extractBtn" title="把貼上的信與附件交給 AI，讀出單位、名單、日期、目的，填進下面的欄位給你改">AI 抽取</button><span class="muted" id="extractInfo"></span></div>
       <ul class="text-sm text-amber-700 list-disc pl-5" id="uncertainties"></ul>
     </div>
 
     <div class="card space-y-4">
       <h2 class="font-semibold">2. 確認訪客背景</h2>
+      <p class="muted">AI 讀出來的一律要你看過。<b>名單上每個人的 email 最重要</b>——訪後信會寄給名單上每一個人，漏一個就少一份回饋；當場拿不到的可以之後在「收工」拍名片補。</p>
       <div class="grid sm:grid-cols-3 gap-3">
         <div class="sm:col-span-2"><label class="f">單位名稱（英文為主）</label><input type="text" id="orgName"></div>
         <div><label class="f">單位名稱（當地語）</label><input type="text" id="orgLocal"></div>
@@ -99,7 +102,7 @@
         <div class="sm:col-span-3"><label class="f">興趣關鍵字（逗號分隔）</label><input type="text" id="interests"></div>
       </div>
       <div>
-        <div class="flex items-center justify-between"><label class="f">參訪名單（每一個人都要留 email：訪後信會寄給名單上每一個人）</label><button class="btn btn-soft" id="addGuest" type="button">＋ 加一人</button></div>
+        <div class="flex items-center justify-between"><label class="f">參訪名單（每一個人都要留 email：訪後信會寄給名單上每一個人）</label><button class="btn btn-soft" id="addGuest" title="手動補一個人（名單上每個人都要 email，訪後信才寄得到）" type="button">＋ 加一人</button></div>
         <table id="guestTable"><thead><tr><th>姓名</th><th>職稱</th><th>email</th><th>單位</th><th>主賓</th><th></th></tr></thead><tbody></tbody></table>
       </div>
     </div>
@@ -107,7 +110,7 @@
     <div class="card space-y-3">
       <div class="flex flex-wrap items-center gap-2">
         <h2 class="font-semibold">3. 訪客背景研判</h2>
-        <button class="btn btn-soft" id="researchBtn" type="button">AI 查訪客背景</button>
+        <button class="btn btn-soft" id="researchBtn" title="查這個單位與名單上的人的公開資料，判斷他們可能為什麼來、可能最想看哪幾間" type="button">AI 查訪客背景</button>
         <span class="muted" id="researchInfo"></span>
       </div>
       <p class="muted">用網路查這個單位與名單上的人的公開專業資料，整理出<b>可能的參訪目的</b>、可能最想看哪幾間、可以先準備什麼。只給主辦端看，不會出現在來賓專頁或信裡。查完自己會出現在下面，不必再按一次。</p>
@@ -116,14 +119,15 @@
 
     <div class="card space-y-4">
       <h2 class="font-semibold">4. 行程</h2>
+      <p class="muted">「今日流程」會印在簡報第 2 頁，也會出現在來賓專頁；「現場動線」決定來賓幾點走到哪一間，同時是動線紀錄的底稿。分鐘數一律照預設重算（總體介紹 20 分、每間研究室 20 分、剩下給綜合討論），不合就直接改。</p>
       <div class="flex flex-wrap gap-2 items-center">
-        <button class="btn" id="planBtn">AI 排行程與選頁</button>
+        <button class="btn" id="planBtn" title="依人數、時間、興趣排出今日流程與現場動線，並先挑好簡報頁次">AI 排行程與選頁</button>
         <span class="muted">選頁與產檔在「簡報」分頁</span>
         <span class="muted" id="planInfo"></span>
       </div>
       <p class="muted" id="rationale"></p>
       <div>
-        <div class="flex items-center justify-between"><label class="f">今日流程（第 2 頁 Programme；固定含總體簡報、研究室參訪、綜合討論）</label><button class="btn btn-soft" id="addBlock" type="button">＋ 區塊</button></div>
+        <div class="flex items-center justify-between"><label class="f">今日流程（第 2 頁 Programme；固定含總體簡報、研究室參訪、綜合討論）</label><button class="btn btn-soft" id="addBlock" title="自己加一個流程區塊（AI 排的不合就直接改）" type="button">＋ 區塊</button></div>
         <table id="programmeTable"><thead><tr><th>開始</th><th>結束</th><th>類型</th><th>英文</th><th>第二語言</th><th>頁碼</th><th></th></tr></thead><tbody></tbody></table>
       </div>
       <div>
@@ -140,18 +144,18 @@
             <div><div class="f mb-0">來賓專頁</div><a id="pageLink" class="underline break-all" target="_blank" rel="noopener"></a></div>
             <p class="muted">這一場專屬的頁面：當天的流程、五間老師卡片，來賓可以在上面留 email。<b>QR 是拿來印或投影的</b>——放在門口或簡報最後一頁，來賓自己掃就打得開，不必個別傳網址。產生簡報時也會自動加一頁一樣的 QR。</p>
             <div class="flex flex-wrap gap-2">
-              <button class="btn" id="openDeck">選頁與產生簡報</button>
-              <button class="btn btn-soft" id="copyLink">複製網址</button>
-              <button class="btn btn-soft" id="downloadIcs">下載收工提醒 .ics</button>
-              <button class="btn btn-soft" id="openWrapup">開收工頁</button>
+              <button class="btn" id="openDeck" title="跳到「簡報」分頁，挑這一場要講的頁次並產出 .pptx">選頁與產生簡報</button>
+              <button class="btn btn-soft" id="copyLink" title="複製來賓專頁網址，貼到信裡或 LINE 給對方">複製網址</button>
+              <button class="btn btn-soft" id="downloadIcs" title="把「收工提醒」加進行事曆：參訪結束時跳出來提醒你拍簽名簿、講三十秒口述">下載收工提醒 .ics</button>
+              <button class="btn btn-soft" id="openWrapup" title="跳到「收工」分頁（來賓離開後要做的四件事都在那裡）">開收工頁</button>
             </div>
             <p class="muted" id="deckState"></p>
           </div>
         </div>
         <div class="space-y-2">
           <div class="flex flex-wrap gap-2 items-center">
-            <button class="btn" id="confirmLetterBtn">AI 草擬確認信</button>
-            <button class="btn btn-soft" id="copyConfirm">複製信件</button>
+            <button class="btn" id="confirmLetterBtn" title="草擬一封給對方的確認信：確認日期時間、附上來賓專頁網址">AI 草擬確認信</button>
+            <button class="btn btn-soft" id="copyConfirm" title="複製主旨與內文，貼到你自己的信箱寄出">複製信件</button>
             <span class="muted" id="confirmLetterInfo"></span>
           </div>
           <input type="text" id="confirmSubject" placeholder="主旨">
@@ -163,6 +167,7 @@
 
   <!-- ───────── 簡報 ───────── -->
   <section id="tab-deck" class="space-y-5" hidden>
+    <p class="text-sm text-stone-600"><b>這一頁：挑這一場要講哪幾頁，產出這一場專屬的 .pptx</b>——母簡報 72 頁不可能全講，這裡從中挑選並重排，第 1–3 頁（封面、今日流程、架構）會照這一場自動改寫。有些參訪只口頭介紹，勾「這場不用簡報」就整頁關掉。</p>
     <div class="card space-y-3">
       <div class="flex flex-wrap items-center gap-2">
         <span class="text-sm muted" id="deckStatus"></span>
@@ -177,16 +182,16 @@
     <div id="deckWork" class="space-y-5">
       <div class="card space-y-3">
         <div class="flex flex-wrap items-center justify-between gap-2"><h2 class="font-semibold">選用頁次 <span id="slideCount" class="muted font-normal"></span></h2><span class="muted">依區塊勾選：區塊標題的方框整區選；「只選這區」會清掉其他區塊；必選頁（封面、流程、架構、核心宣稱、謝謝）永遠保留</span></div>
-        <div class="flex flex-wrap gap-2"><button type="button" class="btn btn-soft" id="slidesAll">全選</button><button type="button" class="btn btn-soft" id="slidesNone">全不選（保留必選頁）</button></div>
+        <div class="flex flex-wrap gap-2"><button type="button" class="btn btn-soft" id="slidesAll" title="把母簡報全部 72 頁都選上（很少這樣做，時間不夠）">全選</button><button type="button" class="btn btn-soft" id="slidesNone" title="清掉所有勾選，只留封面、流程、架構、核心宣稱、謝謝這幾頁">全不選（保留必選頁）</button></div>
         <div class="space-y-2" id="slideGrid"></div>
         <p class="muted" id="deckNeedsVisit" hidden>這裡列的是母簡報的頁次，先看先勾都可以；要存選頁或產生 .pptx，得先到「訪前」填一場參訪（填了單位名稱就會自己建一場）。</p>
-        <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="slidesSave">儲存選頁</button><span class="muted" id="slidesInfo"></span></div>
+        <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="slidesSave" title="把現在勾的頁次記在這一場上（按「產生簡報」也會自動存，不必先按這個）">儲存選頁</button><span class="muted" id="slidesInfo"></span></div>
       </div>
 
       <div class="card space-y-3">
         <h2 class="font-semibold">產生簡報</h2>
         <p class="muted">從母簡報挑出勾選的那幾頁，改好第 1–3 頁與第二語言，直接下載 .pptx。按下去會先把選頁存起來。</p>
-        <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="deckBtn">產生簡報 .pptx</button></div>
+        <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="deckBtn" title="用這一場的行程與勾選的頁次，從母簡報做出這一場專屬的 .pptx 並下載">產生簡報 .pptx</button></div>
         <p class="text-sm" id="deckInfo" hidden></p>
         <ul class="text-sm text-stone-600 list-disc pl-5" id="deckReport"></ul>
         <p class="text-sm flex flex-wrap items-center gap-2" id="masterRow"></p>
@@ -197,19 +202,21 @@
 
   <!-- ───────── 收工 ───────── -->
   <section id="tab-wrapup" class="space-y-5" hidden>
+    <p class="text-sm text-stone-600"><b>這一頁：來賓離開後四件事</b>——簽名簿、名片、三十秒口述、當天資料。這些東西直接決定訪後信寄得到誰、寫得出什麼，所以當天做完最省力；隔一天記憶就掉了。</p>
     <div class="card space-y-2">
       <p class="muted">來賓離開後這幾件事，幾分鐘做完。受訪的是主持人自己。</p>
       <p class="text-sm flex flex-wrap items-center gap-x-3 gap-y-1" id="wrapLinks"></p>
     </div>
     <div class="card space-y-3">
       <h2 class="font-semibold">動作一｜拍一張簽名簿</h2>
+      <p class="muted">實體本子拍一張就好。AI 把手寫字讀成一則一則留言，讀錯直接改——原圖會一直留著，之後還能回頭核對。</p>
       <input type="file" id="signbookFile" accept="image/*" capture="environment">
       <img id="signbookPreview" class="max-h-64 rounded-lg" hidden alt="">
-      <div class="flex flex-wrap gap-2"><button class="btn" id="signbookUpload" disabled>上傳並讀字</button><span class="muted" id="signbookInfo"></span></div>
+      <div class="flex flex-wrap gap-2"><button class="btn" id="signbookUpload" title="把簽名簿照片存起來，並讓 AI 把手寫字讀成一則一則留言" disabled>上傳並讀字</button><span class="muted" id="signbookInfo"></span></div>
       <div id="signbookEntries" class="space-y-2" hidden>
         <label class="f">AI 讀到的留言（可修改；署名看不清就留空）</label>
         <table id="signbookTable"><thead><tr><th>留言</th><th>署名</th><th></th></tr></thead><tbody></tbody></table>
-        <div class="flex gap-2"><button class="btn btn-soft" id="signbookAdd" type="button">＋ 一則</button><button class="btn" id="signbookSave">存入回饋</button></div>
+        <div class="flex gap-2"><button class="btn btn-soft" id="signbookAdd" title="AI 漏掉的留言自己加一則" type="button">＋ 一則</button><button class="btn" id="signbookSave" title="把上面這些留言寫進這一場的回饋紀錄（之後的摘要與彙整會讀到）">存入回饋</button></div>
         <details class="muted"><summary>整頁的字（AI 讀出來的原文）</summary><pre class="wrap" id="signbookTranscript"></pre></details>
       </div>
     </div>
@@ -221,7 +228,7 @@
         <span class="text-sm" id="cardStatus"></span>
       </div>
       <table id="cardTable" hidden><thead><tr><th>加入</th><th>姓名</th><th>職稱</th><th>單位</th><th>email</th><th>電話</th><th></th></tr></thead><tbody></tbody></table>
-      <div class="flex flex-wrap gap-2 items-center" id="cardActions" hidden><button class="btn" id="cardSave">加進這場的名單</button><span class="muted" id="cardSaveInfo"></span></div>
+      <div class="flex flex-wrap gap-2 items-center" id="cardActions" hidden><button class="btn" id="cardSave" title="把勾選的人併進這一場的名單——訪後信就會寄給他們">加進這場的名單</button><span class="muted" id="cardSaveInfo"></span></div>
       <div class="flex flex-wrap gap-3 items-start" id="cardList"></div>
     </div>
 
@@ -229,16 +236,16 @@
       <h2 class="font-semibold">動作三｜三十秒口述</h2>
       <p class="muted">今天誰來、最想看哪一間、問了什麼、有沒有透露合作意願。</p>
       <div class="flex flex-wrap gap-2 items-center">
-        <button class="btn" id="recBtn">● 開始錄音</button>
+        <button class="btn" id="recBtn" title="錄下你自己的三十秒口述：誰來、最想看哪一間、問了什麼、有沒有合作意願">● 開始錄音</button>
         <span id="recTimer" class="tabular-nums muted">0:00</span>
-        <button class="btn btn-soft" id="recUpload" disabled>上傳並轉文字</button>
+        <button class="btn btn-soft" id="recUpload" title="把音檔存起來，轉成文字並抽出上面那幾項" disabled>上傳並轉文字</button>
         <span class="muted" id="recInfo"></span>
       </div>
       <audio id="recAudio" controls hidden></audio>
       <div>
         <label class="f">逐字稿（沒錄音也可以直接打字，再按「抽取」）</label>
         <textarea id="transcript" rows="4"></textarea>
-        <button class="btn btn-soft mt-2" id="extractDictationBtn">從逐字稿抽取</button>
+        <button class="btn btn-soft mt-2" id="extractDictationBtn" title="沒錄音也可以：把打好的逐字稿交給 AI 抽出那幾項">從逐字稿抽取</button>
       </div>
       <div id="dictationFields" class="grid sm:grid-cols-2 gap-3" hidden>
         <div><label class="f">誰來</label><input type="text" id="dWho"></div>
@@ -246,7 +253,7 @@
         <div class="sm:col-span-2"><label class="f">問了什麼（每行一題）</label><textarea id="dQuestions" rows="3"></textarea></div>
         <div><label class="f">合作意願</label><input type="text" id="dCoop"></div>
         <div><label class="f">後續事項（每行一項）</label><textarea id="dFollow" rows="2"></textarea></div>
-        <div class="sm:col-span-2"><button class="btn" id="dictationSave">確認並存入回饋</button> <span class="muted" id="dictationInfo"></span></div>
+        <div class="sm:col-span-2"><button class="btn" id="dictationSave" title="把口述抽出來的內容寫進這一場的回饋紀錄">確認並存入回饋</button> <span class="muted" id="dictationInfo"></span></div>
       </div>
     </div>
     <div class="card space-y-3">
@@ -257,7 +264,7 @@
         <div class="space-y-2">
           <label class="f">簡報 PDF（從 PowerPoint 另存；4.5 MB 以內直接上傳，更大的貼雲端連結）</label>
           <input type="file" id="pdfFile" accept="application/pdf,.pdf">
-          <div class="flex gap-2"><input type="text" id="pdfLink" placeholder="或貼 Drive／OneDrive 連結 https://…"><button class="btn btn-soft" id="pdfLinkSave" type="button">存這個 PDF 連結</button></div>
+          <div class="flex gap-2"><input type="text" id="pdfLink" placeholder="或貼 Drive／OneDrive 連結 https://…"><button class="btn btn-soft" id="pdfLinkSave" title="PDF 超過 4.5 MB 時改貼雲端連結，來賓專頁就放這個連結" type="button">存這個 PDF 連結</button></div>
           <p class="text-sm" id="pdfInfo"></p>
         </div>
         <div class="space-y-2">
@@ -267,30 +274,31 @@
         </div>
       </div>
       <div class="space-y-2">
-        <div class="flex items-center justify-between"><label class="f">相關連結（論文、雲端資料夾、影片……）</label><button class="btn btn-soft" id="linkAdd" type="button">＋ 一筆</button></div>
+        <div class="flex items-center justify-between"><label class="f">相關連結（論文、雲端資料夾、影片……）</label><button class="btn btn-soft" id="linkAdd" title="多加一筆要給來賓的連結（論文、雲端資料夾、影片）" type="button">＋ 一筆</button></div>
         <table id="linkTable"><thead><tr><th>標題</th><th>網址</th><th></th></tr></thead><tbody></tbody></table>
-        <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="materialsSave">儲存相關連結</button><span class="muted" id="materialsInfo"></span></div>
+        <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="materialsSave" title="把上面這些連結放上來賓專頁——感謝信只會承諾頁面上真的有的東西">儲存相關連結</button><span class="muted" id="materialsInfo"></span></div>
       </div>
     </div>
   </section>
 
   <!-- ───────── 訪後信 ───────── -->
   <section id="tab-post" class="space-y-5" hidden>
+    <p class="text-sm text-stone-600"><b>這一頁：寄給名單上每一個人</b>（不只主要窗口），並請他們回三個問題。<b>這是整套系統唯一會拿到真話的地方</b>，所以措辭一律用請益語氣，開放建議欄位可以不具名送出。</p>
     <div class="card space-y-3">
       <div class="grid sm:grid-cols-3 gap-3">
         <div><label class="f">寄件者</label><select id="sender"><option value="director">中心主任 張俊彥</option><option value="contact">對口老師</option></select></div>
       </div>
-      <div class="flex flex-wrap gap-2"><button class="btn" id="thanksBtn">AI 草擬感謝信</button><span class="muted" id="thanksInfo"></span></div>
+      <div class="flex flex-wrap gap-2"><button class="btn" id="thanksBtn" title="草擬感謝信：附上當天資料，並把三個回應項目的連結放進去">AI 草擬感謝信</button><span class="muted" id="thanksInfo"></span></div>
       <input type="text" id="thanksSubject" placeholder="主旨">
       <textarea id="thanksBody" rows="16" placeholder="感謝信草稿：專頁連結（只提頁面上真的有的東西：PDF、合照、連結要先在「收工」放上去）、三個回應項目（含請益語氣的開放建議欄位、可不具名）"></textarea>
       <p class="muted">三個回應項目的措辭固定為請益語氣，且回覆頁支援真匿名；請保留信裡的那一段。</p>
     </div>
     <div class="card space-y-3">
-      <div class="flex items-center justify-between"><h2 class="font-semibold">寄送對象：名單上每一個人 ＋ 現場留信箱的人</h2><button class="btn btn-soft" id="recipientsRefresh">重新整理</button></div>
+      <div class="flex items-center justify-between"><h2 class="font-semibold">寄送對象：名單上每一個人 ＋ 現場留信箱的人</h2><button class="btn btn-soft" id="recipientsRefresh" title="重讀收件人清單（名單上每個人 ＋ 當天在專頁留信箱的人）">重新整理</button></div>
       <div id="recipients" class="space-y-1"></div>
       <div class="flex flex-wrap gap-2 items-center">
-        <button class="btn" id="sendBtn">寄出</button>
-        <button class="btn btn-soft" id="copyThanks">複製信件</button>
+        <button class="btn" id="sendBtn" title="一封一封寄出去（用中心的 Gmail 帳號）。沒設定 Gmail 時會給你 mailto 自己寄">寄出</button>
+        <button class="btn btn-soft" id="copyThanks" title="複製主旨與內文，貼到你自己的信箱寄出">複製信件</button>
         <a class="btn btn-soft" id="mailtoLink" hidden target="_blank" rel="noopener">用自己的信箱寄（mailto）</a>
         <span id="sendInfo"></span>
       </div>
@@ -299,9 +307,10 @@
 
   <!-- ───────── 資料 ───────── -->
   <section id="tab-data" class="space-y-5" hidden>
+    <p class="text-sm text-stone-600"><b>這一頁：歷次參訪的檔案</b>——每場的一頁摘要、來賓回覆、現場動線，以及跨場次的彙整。年報與諮詢委員會要的數字（人次、身分、國家、最受關注的研究室）從這裡出。</p>
     <div class="card space-y-3">
       <div class="flex flex-wrap items-center gap-2">
-        <h2 class="font-semibold mr-auto">歷次參訪</h2>
+        <h2 class="font-semibold mr-auto">歷次參訪 <span class="muted font-normal">點一列看那一場的摘要、回覆與動線</span></h2>
         <a class="btn btn-soft" id="csvVisits" download>visits.csv</a>
         <a class="btn btn-soft" id="csvResponses" download>responses.csv</a>
         <a class="btn btn-soft" id="csvTimeline" download>timeline.csv</a>
@@ -310,7 +319,7 @@
       <table id="visitsTable"><thead><tr><th>日期</th><th>單位</th><th>類型</th><th>國家</th><th>人數</th><th>狀態</th></tr></thead><tbody></tbody></table>
     </div>
     <div class="card space-y-3" id="visitDetail" hidden>
-      <div class="flex flex-wrap gap-2 items-center"><h2 class="font-semibold mr-auto" id="detailTitle"></h2><button class="btn" id="summaryBtn">AI 產一頁摘要</button><button class="btn btn-soft" id="driveBtn">立即備份到 Drive</button></div>
+      <div class="flex flex-wrap gap-2 items-center"><h2 class="font-semibold mr-auto" id="detailTitle"></h2><button class="btn" id="summaryBtn" title="把這一場的回覆、動線、口述整理成一頁摘要，並記下哪幾頁被提問、被提到">AI 產一頁摘要</button><button class="btn btn-soft" id="driveBtn" title="手動補救用：把這一場的資料與檔案另存到中心的 Google Drive（平常會自動備份）">立即備份到 Drive</button></div>
       <p class="text-sm" id="driveInfo"></p>
       <pre class="wrap text-sm" id="summary"></pre>
       <h3 class="font-medium">來賓回覆</h3>
@@ -319,7 +328,7 @@
       <table id="timelineTable"><thead><tr><th>空間</th><th>進入</th><th>離開</th><th>分鐘</th><th>來源</th></tr></thead><tbody></tbody></table>
     </div>
     <div class="card space-y-3">
-      <div class="flex flex-wrap gap-2 items-center"><h2 class="font-semibold mr-auto">跨場次彙整：開放建議裡重複出現的問題</h2><button class="btn" id="digestBtn">AI 彙整</button></div>
+      <div class="flex flex-wrap gap-2 items-center"><h2 class="font-semibold mr-auto">跨場次彙整：開放建議裡重複出現的問題</h2><button class="btn" id="digestBtn" title="把歷次「開放建議」一起讀過，找出重複出現的問題（例如某一間反覆被說聽不懂）">AI 彙整</button></div>
       <pre class="wrap text-sm" id="digest"></pre>
     </div>
   </section>
@@ -471,6 +480,7 @@
     else {
       const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
       if (!r.ok) return flash(r.error, "err");
+      state.responses = r.responses || [];
       fillForm(r.visit);
     }
     reloadTab(currentTab());
@@ -494,6 +504,7 @@
     renderGuests(v.guests || []); renderProgramme(v.programme || []); renderItinerary(v.itinerary); renderDeckState(v); renderBackground(v.background);
     $("rationale").textContent = v.plan_rationale || ""; $("uncertainties").innerHTML = (v.uncertainties || []).map((u) => `<li>${esc(u)}</li>`).join("");
     $("afterSave").hidden = !state.saved;
+    renderProgress(v);
     if (state.saved) showSaved(v);
     $("confirmSubject").value = v.letters?.confirmation?.subject || ""; $("confirmBody").value = v.letters?.confirmation?.body || "";
   }
@@ -551,8 +562,8 @@
       deckNeedsVisit(true);
       $("deckStatus").className = "text-sm err";
       $("deckStatus").innerHTML = state.authed
-        ? `還沒有任何參訪${isPreviewSite ? "（預覽站的資料是獨立的，正式站的參訪不會出現在這裡）" : ""}。 <button type="button" class="underline" id="deckGoPre">到「訪前」建一場</button>`
-        : `這台裝置還沒登入，所以看不到參訪，也不能儲存或產檔（登入是綁裝置的，換手機要再登入一次）。 <button type="button" class="underline" id="deckGoLogin">到最上面登入</button>`;
+        ? `還沒有任何參訪${isPreviewSite ? "（預覽站的資料是獨立的，正式站的參訪不會出現在這裡）" : ""}。 <button type="button" class="underline" id="deckGoPre" title="先到「訪前」填一場參訪，這裡才存得了選頁、產得出簡報">到「訪前」建一場</button>`
+        : `這台裝置還沒登入，所以看不到參訪，也不能儲存或產檔（登入是綁裝置的，換手機要再登入一次）。 <button type="button" class="underline" id="deckGoLogin" title="這台裝置還沒登入，回到最上面貼一次 ADMIN_TOKEN">到最上面登入</button>`;
       const pre = $("deckGoPre"); if (pre) pre.onclick = () => showTab("pre");
       const login = $("deckGoLogin"); if (login) login.onclick = goLogin;
       checkMaster();
@@ -756,7 +767,8 @@
     if (!out) return;
     const v = out.visit; state.visit = { ...state.visit, ...v, visit_id: state.saved ? state.visit.visit_id : "" };
     renderProgramme(v.programme); renderItinerary(v.itinerary); renderDeckState(state.visit);
-    $("rationale").textContent = v.plan_rationale || ""; $("planInfo").textContent = `也挑了 ${(v.slides || []).length} 頁、簡報約 ${out.estimated_briefing_minutes} 分鐘，到「簡報」分頁確認${out.master_text_available ? "" : "（尚無母簡報文字：第 1–3 頁的替換文字要在產檔時處理）"}`;
+    $("rationale").textContent = v.plan_rationale || ""; const hist = out.history ? `；參考了過去 ${out.history.visits} 場（同類單位 ${out.history.same_type.visits} 場）哪幾頁被提問、被提到` : "";
+    $("planInfo").textContent = `也挑了 ${(v.slides || []).length} 頁、簡報約 ${out.estimated_briefing_minutes} 分鐘，到「簡報」分頁確認${hist}${out.master_text_available ? "" : "（尚無母簡報文字：第 1–3 頁的替換文字要在產檔時處理）"}`;
     await saveVisit();
     flash((out.warnings || []).length ? out.warnings.join(" ") : "已排好，時間不對就直接改", (out.warnings || []).length ? "err" : "ok");
   }
@@ -806,6 +818,42 @@
     fillForm(emptyVisit());
     flash(`已刪掉 ${r.deleted}`);
   });
+  /**
+   * 這一場到哪一步了。五個分頁是時間順序，但畫面上本來沒有任何地方說做到哪、下一步是什麼——
+   * 每次都得自己回想「確認信寄了嗎？口述錄了嗎？」點一格就跳到該做那件事的分頁。
+   */
+  function renderProgress(v) {
+    const box = $("progress");
+    if (!v?.visit_id || !state.saved) { box.innerHTML = ""; return; }
+    const m = v.materials || {};
+    const n = (state.responses || []).length;
+    const groups = [
+      ["訪前", [
+        ["pre", (v.guests || []).length ? `名單 ${v.guests.length} 人` : "名單", (v.guests || []).length > 0, "訪後信會寄給名單上每一個人，所以名單就是回饋的上限"],
+        ["pre", "背景研判", v.background?.status === "done", "查過對方的公開資料，判斷可能的參訪目的"],
+        ["pre", "今日流程", (v.programme || []).length > 0, "排好時間表與現場動線；會印在簡報第 2 頁與來賓專頁"],
+        ["deck", v.deck?.skip ? "不用簡報" : v.deck?.generated_at ? "簡報已產" : `選了 ${(v.slides || []).length} 頁`, !!(v.deck?.skip || v.deck?.generated_at), "挑頁並產出這一場的 .pptx；只口頭介紹的場次可以整頁關掉"],
+        ["pre", "確認信", !!v.letters?.confirmation?.drafted_at, "跟對方確認日期時間，順便把來賓專頁網址交出去"],
+      ]],
+      ["當天", [
+        ["wrapup", "簽名簿", !!v.signbook?.photo_key, "實體本子拍一張，AI 讀成留言"],
+        ["wrapup", (v.cards || []).length ? `名片 ${v.cards.length} 張` : "名片", (v.cards || []).length > 0, "現場拿到的名片變成名單上的人——訪後信才寄得到他"],
+        ["wrapup", "口述", !!v.dictation?.transcript, "主持人三十秒：誰來、最想看哪一間、問了什麼"],
+        ["wrapup", "當天資料", !!(m.deck_pdf || (m.photos || []).length || (m.links || []).length), "PDF、合照、連結放上來賓專頁——感謝信只能承諾頁面上真的有的東西"],
+      ]],
+      ["訪後", [
+        ["post", v.letters?.thanks?.sent_at ? `感謝信 ${v.letters.thanks.sent_to?.length || 0} 人` : "感謝信", !!v.letters?.thanks?.sent_at, "寄給名單上每一個人，並請他們回三個問題"],
+        ["data", n ? `回覆 ${n}` : "回覆", n > 0, "來賓回的三個問題、簽名簿留言、口述抽出來的內容"],
+        ["data", "一頁摘要", !!v.summary, "這一場的結論；也是 Drive 備份與跨場次彙整的來源"],
+      ]],
+    ];
+    box.innerHTML = groups
+      .map(([label, items]) => `<span class="muted">${label}</span>` + items
+        .map(([tab, text, done, why]) => `<button type="button" data-go="${tab}" title="${esc(why)}" class="${done ? "text-emerald-700" : "text-stone-400"} hover:underline">${done ? "✓" : "·"} ${esc(text)}</button>`)
+        .join(""))
+      .join(`<span class="text-stone-300">｜</span>`);
+  }
+  $("progress").addEventListener("click", (e) => { const b = e.target.closest("[data-go]"); if (b) showTab(b.dataset.go); });
   function showSaved(v) {
     $("afterSave").hidden = false;
     $("pageLink").textContent = v.page_url; $("pageLink").href = v.page_url;
@@ -840,7 +888,7 @@
   }
   function renderMasterRow() {
     const row = $("masterRow");
-    if (state.master) row.innerHTML = `<span class="muted">母簡報 ${esc(state.master.name)} · ${mb(state.master.size)} · ${esc((state.master.uploaded_at || "").slice(0, 10))}</span><label class="underline cursor-pointer">更換<input type="file" id="masterUpload" accept=".pptx" hidden></label><button type="button" class="underline" id="masterRemove">移除</button>`;
+    if (state.master) row.innerHTML = `<span class="muted">母簡報 ${esc(state.master.name)} · ${mb(state.master.size)} · ${esc((state.master.uploaded_at || "").slice(0, 10))}</span><label class="underline cursor-pointer">更換<input type="file" id="masterUpload" accept=".pptx" hidden></label><button type="button" class="underline" id="masterRemove" title="把站台上存的母簡報移除（換新版母簡報時才需要）">移除</button>`;
     else if (state.masterOnSite) row.innerHTML = `<span class="muted">母簡報：站台上的 slim-master.pptx</span>`;
     else row.innerHTML = `<span class="muted">母簡報還沒放上站台（只要做一次；可直接選原始母簡報，會先在瀏覽器裡瘦身）</span><label class="btn btn-soft cursor-pointer">上傳母簡報 .pptx<input type="file" id="masterUpload" accept=".pptx" hidden></label>`;
     const up = $("masterUpload"); if (up) up.onchange = () => { const f = up.files[0]; if (f) uploadMaster(f); };
