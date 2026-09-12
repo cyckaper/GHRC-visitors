@@ -61,12 +61,12 @@ try {
   await page.click('[data-tab="pre"]');
   await page.fill("#token", "e2e-token");
   await page.click("#tokenSave");
-  await page.waitForFunction(() => document.getElementById("backendInfo").textContent.includes("file"));
+  await page.waitForFunction(() => /場參訪/.test(document.getElementById("backendInfo").textContent));
   check(await page.isHidden("#token") && await page.isVisible("#authOk"), "token field is put away after login");
   check(await page.evaluate(() => { try { return !localStorage.getItem("ghrc-admin-token"); } catch (e) { return true; } }), "the admin token is not left sitting in localStorage");
   // 登入一次就好：重新整理不必再貼一次 token（伺服器發的 cookie 記住了）
   await page.reload();
-  await page.waitForFunction(() => document.getElementById("backendInfo").textContent.includes("file"));
+  await page.waitForFunction(() => /場參訪/.test(document.getElementById("backendInfo").textContent));
   check(await page.isHidden("#token") && await page.isVisible("#authOk"), "still signed in after a reload — nothing to paste again");
 
   // 一場參訪都還沒有的時候，簡報分頁仍要列出母簡報的頁次（只是不能存、不能產檔）
@@ -84,7 +84,13 @@ try {
   check((await page.textContent("#extractInfo")) === "", "…and the progress line clears once the form is filled");
   check((await page.inputValue("#date")) === "2026-10-07", "extract fills the date");
   check((await page.locator("#guestTable tbody tr").count()) === 2, "extract lists both guests");
+  // 存檔不是一個動作：抽取完就自己建好一場，改網址代碼就跟著改網址（還沒用出去之前）
+  await page.waitForSelector("#afterSave:not([hidden])", { timeout: 30000 });
+  check((await page.$("#saveBtn")) === null, "no save button — the extracted visit is created by itself");
   await page.fill("#code", "uwa");
+  await page.waitForFunction(() => /2026-10-07-uwa$/.test(document.getElementById("pageLink").textContent), null, { timeout: 30000 });
+  check(/已存/.test(await page.textContent("#saveInfo")), "it says when it last saved");
+  check((await page.locator("#visitSelect option").count()) === 2, "changing the code renames the visit instead of leaving a stray one behind");
 
   await page.click("#planBtn");
   // 排行程也跑在背景（提示詞帶整份頁次索引，10 秒同樣不夠）
@@ -96,23 +102,22 @@ try {
   check((await page.textContent("#itinerary label:first-child")).includes("總體介紹"), "route starts with the overall briefing");
   check((await page.inputValue('#itinerary input[data-room="briefing"]')) !== "0", "briefing has minutes");
   check((await page.inputValue("#itinerary [data-briefing-location]")) === "302", "briefing room defaults to 302");
-  await page.click("#saveBtn");
-  await page.waitForSelector("#afterSave:not([hidden])");
   const link = await page.textContent("#pageLink");
   check(link === `${base}/2026-10-07-uwa`, `saved visit has page url ${link}`);
   check((await page.textContent("#deckState")).includes("已選"), "the pre-visit tab only reports how many slides are picked");
 
-  // 訪前功課：查網路跑在背景（一般函式 10 秒不夠），觸發後輪詢，查完才出現在訪前分頁
+  // 訪前功課：查網路跑在背景（一般函式 10 秒不夠），觸發後輪詢，查完自己出現，不必再按一次
   await page.click("#researchBtn");
   await page.waitForFunction(() => /查資料中/.test(document.getElementById("background").textContent));
   check(true, "researching the visitors runs in the background instead of holding the request open");
   await page.waitForFunction(() => document.querySelectorAll("#background li").length > 0, null, { timeout: 90000 });
   check((await page.textContent("#background")).includes("可能的參訪目的"), "the background card lists the likely purposes of the visit once it finishes");
+  check(!/跑在背景|背景函式/.test(await page.textContent("#tab-pre")), "the pre-visit tab explains waits in plain words, not in terms of how the server is built");
 
   // ── 簡報分頁：選頁、不用簡報、產檔 ──
   await page.click("#openDeck");
   await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-slide]").length > 0);
-  check((await page.inputValue("#deckVisitSelect")) === "2026-10-07-uwa", "「選頁與產生簡報」opens the deck tab on this visit");
+  check((await page.inputValue("#visitSelect")) === "2026-10-07-uwa", "「選頁與產生簡報」opens the deck tab on this visit");
   check((await page.locator("#slideGrid input[data-slide]:checked").count()) >= 5, "the plan's slides are waiting in the deck tab");
   check((await page.locator("#slideGrid fieldset[data-group]").count()) >= 10, "slides are grouped into blocks");
   await page.click("#slidesNone");
@@ -168,9 +173,9 @@ try {
     check(/瘦身：抽掉 1 個影片/.test(await page.textContent("#deckReport")), "slim report shown: 1 video stripped");
     check((await page.locator("#subLinks").count()) === 0, "the pre-visit block does not carry the two interaction links");
     await page.reload();
-    await page.waitForFunction(() => document.getElementById("backendInfo").textContent.includes("file"));
+    await page.waitForFunction(() => /場參訪/.test(document.getElementById("backendInfo").textContent));
     await page.click('[data-tab="deck"]');
-    await page.selectOption("#deckVisitSelect", "2026-10-07-uwa");
+    await page.selectOption("#visitSelect", "2026-10-07-uwa");
     await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-slide]").length > 0);
     await page.waitForFunction(() => /移除/.test(document.getElementById("masterRow").textContent));
     const [download2] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), page.click("#deckBtn")]);
@@ -180,7 +185,7 @@ try {
     check(v2.errors.length === 0 && v2.slideCount === 6, "deck built from the master stored on the site (chunked download, no file picker)");
   } else console.log("skip - browser deck build (python-pptx fixture unavailable)");
   await page.click('[data-tab="pre"]');
-  await page.selectOption("#preVisitSelect", "2026-10-07-uwa");
+  await page.selectOption("#visitSelect", "2026-10-07-uwa");
   await page.waitForSelector("#afterSave:not([hidden])");
   check((await page.textContent("#deckState")).includes("已選"), "the pre-visit tab reports the saved slide count after a reload");
   await page.click("#confirmLetterBtn");
@@ -191,7 +196,7 @@ try {
 
   // 收工分頁：用打字的逐字稿
   await page.click('[data-tab="wrapup"]');
-  await page.selectOption("#wrapVisitSelect", "2026-10-07-uwa");
+  await page.selectOption("#visitSelect", "2026-10-07-uwa");
   await page.fill("#transcript", "今天校長來，最想看 303 的模擬，問了能不能合作。");
   await page.click("#extractDictationBtn");
   await page.waitForSelector("#dictationFields:not([hidden])", { timeout: 60000 });
@@ -228,15 +233,15 @@ try {
 
   // 訪後信分頁
   await page.click('[data-tab="post"]');
-  await page.selectOption("#postVisitSelect", "2026-10-07-uwa");
+  await page.selectOption("#visitSelect", "2026-10-07-uwa");
   await page.click("#thanksBtn");
   await page.waitForFunction(() => document.getElementById("thanksBody").value.includes("what should we be doing better"), null, { timeout: 60000 });
   await page.waitForFunction(() => document.querySelectorAll("#recipients input").length === 2);
   check(true, "thanks letter drafted with the 請益 wording and 2 recipients");
 
-  // ── 資料分頁：拍名片 → AI 讀 → 確認後併進這場的名單 ──
-  await page.click('[data-tab="data"]');
-  await page.selectOption("#cardVisitSelect", "2026-10-07-uwa");
+  // ── 收工分頁的動作二：拍名片 → AI 讀 → 確認後併進這場的名單（拍名片是現場的事，跟簽名簿放一起）──
+  await page.click('[data-tab="wrapup"]');
+  check((await page.locator('#tab-data #cardFiles').count()) === 0 && (await page.locator('#tab-wrapup #cardFiles').count()) === 1, "photographing cards sits with the visit-day steps, not in the archive tab");
   await page.waitForFunction(() => document.getElementById("cardStatus").textContent.includes("名單目前"));
   const guestsBefore = Number(/名單目前 (\d+) 人/.exec(await page.textContent("#cardStatus"))[1]);
   await page.setInputFiles("#cardFiles", pngPath);
@@ -246,6 +251,18 @@ try {
   await page.waitForFunction(() => /加了 \d+ 人/.test(document.getElementById("cardSaveInfo").textContent));
   await page.waitForFunction((n) => new RegExp(`名單目前 ${n + 1} 人`).test(document.getElementById("cardStatus").textContent), guestsBefore);
   check((await page.locator("#cardList img").count()) === 1, "the card photo is kept with the visit and the person is on the guest list");
+
+  // 建錯的那一場：直接刪掉（不必先想「要不要存」）
+  await page.click('[data-tab="pre"]');
+  await page.selectOption("#visitSelect", "");
+  const beforeDelete = await page.locator("#visitSelect option").count();
+  await page.fill("#orgName", "Typo Institute");
+  await page.waitForFunction((n) => document.querySelectorAll("#visitSelect option").length === n + 1, beforeDelete, { timeout: 30000 });
+  check(true, "typing an organisation name is enough to create the visit");
+  page.once("dialog", (d) => d.accept());
+  await page.click("#deleteBtn");
+  await page.waitForFunction((n) => document.querySelectorAll("#visitSelect option").length === n, beforeDelete, { timeout: 30000 });
+  check(await page.isHidden("#afterSave"), "and deleting it clears the form");
 
   // ── 來賓端：首頁（沒有參訪代碼）一律從訪前開始 ──
   await page.goto(`${base}/`);

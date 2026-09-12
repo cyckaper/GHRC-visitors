@@ -214,12 +214,21 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
 > `transcribe`（Whisper ＋抽取）、`cards`（讀名片）、`translate`（第二語言）。再有跑得久的 AI 就照這個模式加，
 > 不要直接在一般函式裡等。
 >
+> **兩條給畫面的規矩**（主辦端是老師，不是工程師）：
+> 1. **進度那一行只講在做什麼、大概多久**——「AI 排行程中……大約一兩分鐘。」
+>    不要出現「背景函式」「跑在背景」「輪詢」「job」這類字眼：那是我們怎麼實作的，與他無關。
+> 2. **等就等到底**，輪詢等滿 15 分鐘（背景函式的上限）才放棄，中途不要叫人「再按一次看看」——
+>    以前 4 分鐘就放棄，AI 慢一點就變成「等很久沒反應、再按一次才有結果」，看起來像壞掉。
+>
 > 兩個刻意的例外：`translate` **整批命中快取就當場回**（產簡報時一批一批來，不能每批都空等三秒）；
 > `letter` 的 `action:"recipients"` 與「沒設定 Gmail」也當場回，因為根本沒有等待可言。
 
 **訪前功課（`/api/research`）**：抽取之後再查一次**公開的專業資料**（單位的性質與業務、來賓的職稱與領域、近期公開計畫或報導），整理成一頁研判：單位側寫、名單上的人、**可能的參訪目的**（最可能的放前面，附依據）、可能最想看哪幾間（301–305）、可以先準備什麼、還要確認什麼、讀過的網址。用 Claude 的伺服器端網路搜尋工具；帳號沒開搜尋時退回「只讀來信」並在畫面上標明。只查公開的專業資訊，不查私人生活；查不到就說查不到，不編。結果只給主辦端看，不進來賓專頁、不進信件。
 
-> **查網路要一兩分鐘，一般函式只有 10 秒**（實際踩過：畫面回 504 Inactivity Timeout）。所以 `/api/research` 只負責觸發與查詢，真正的工作在背景函式 `research-background`（15 分鐘上限），結果寫回 `visit.background`（`status` running／done／error），前端每 5 秒輪詢 `GET /api/research?id=`。**因此這一場要先存檔才查得了背景**——背景函式只能靠 store 溝通。
+> **查網路要一到三分鐘，一般函式只有 10 秒**（實際踩過：畫面回 504 Inactivity Timeout），所以走背景工作
+> （`research-background`，15 分鐘上限）。**還沒存檔也查得了**：要查的那一筆跟著工作走，結果從 `GET /api/research?job=` 拿；
+> 存過檔的另外把 `status` 與結果寫回 `visit.background`，重新整理或換台機器再打開，`GET /api/research?id=` 接得回進度。
+> 沒存檔的結果先留在畫面上，`readForm()` 會把它一起帶進「儲存」。
 
 ### 2. 客製化雙語簡報
 
@@ -247,7 +256,8 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
   「以您的專業，中心哪一部分還可以做得更好？」／
   "From your perspective, what should we be doing better?"
   並加一句「一句話就好」，且**可不具名送出**
-- **訪客名片**：現場拿到名片就拍一張（後台「資料」分頁，手機直接開相機，可連拍）。AI 讀出姓名、職稱、單位、email、電話，**人逐欄確認後**才併進這場的名單（`/api/cards`）——訪後信就會寄給他。併入規則 `lib/visit.mjs mergeGuests`：email 相同（不分大小寫）或「姓名＋單位」相同視為同一人，**只補空欄位、不覆寫已確認的資料**，也不會把主賓降級；同一張再存一次是 no-op。看不清楚的字一律留空不猜（email 猜錯比留空更糟）。原圖存 `cards/<visit_id>/<ts>.jpg`（**有個資，`/api/media` 只給 admin**），Drive 備份用名片主人的名字當檔名。
+- **訪客名片**：現場拿到名片就拍一張（後台**「收工」分頁的動作二**——拍名片是現場的事，跟簽名簿、口述放在一起，
+  不在翻舊帳的「資料」分頁；手機直接開相機，可連拍）。AI 讀出姓名、職稱、單位、email、電話，**人逐欄確認後**才併進這場的名單（`/api/cards`）——訪後信就會寄給他。併入規則 `lib/visit.mjs mergeGuests`：email 相同（不分大小寫）或「姓名＋單位」相同視為同一人，**只補空欄位、不覆寫已確認的資料**，也不會把主賓降級；同一張再存一次是 no-op。看不清楚的字一律留空不猜（email 猜錯比留空更糟）。原圖存 `cards/<visit_id>/<ts>.jpg`（**有個資，`/api/media` 只給 admin**），Drive 備份用名片主人的名字當檔名。
 - **簽名簿**：實體本子，主持人拍照上傳，AI 讀手寫字歸檔（原圖保留）
 - **主持人三十秒口述**：參訪結束後由主持人口述，Whisper 轉文字後抽取
   （誰來、最想看哪一間、問了什麼、有無合作意願）。依議程結束時間推播提醒
@@ -326,7 +336,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 **已完成（P1–P4 最小可用系統 ＋ P5 捷徑 ＋ P6 產檔 ＋ P7 摘要／彙整）**
 
-- `public/admin.html`：訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → 排行程 → 儲存 → QR／.ics／確認信）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、收工（簽名簿照片讀字、三十秒口述錄音轉文字抽取、或打字、**當天資料**：簡報 PDF、合照、相關連結放上專頁）、訪後信（草擬、全名單收件人、寄出或 mailto）、資料（**訪客名片拍照讀名單**、列表、回覆、動線、摘要、跨場次彙整、CSV）。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
+- `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → 排行程 → 自動存 → QR／.ics／確認信）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、收工（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁）、訪後信（草擬、全名單收件人、寄出或 mailto）、資料（歷次參訪、回覆、動線、摘要、跨場次彙整、CSV、Drive）。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
 - `public/index.html`：專屬網址 `/<visit_id>`；全頁英文為主、第二語言為輔（預設中文，ko／ja 來賓用韓／日文）；流程（參訪當天標出「現在」）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
 - `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `timeline` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`）`drive` `drive-sync-background`（自動備份）`drive-cron`（每晚補漏，`export const config = { schedule }`）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
@@ -347,12 +357,24 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - 主辦端 API 用 `Authorization: Bearer ADMIN_TOKEN`、`?token=`，或**登入後的 session cookie**；現場訊號用 `SIGNAL_KEY`；`respond` 與 `visits?public=1` 公開。
 - **登入一次就好**：後台貼一次 ADMIN_TOKEN → `/api/session` 發一個 HttpOnly、SameSite=Strict 的 cookie（值是用 ADMIN_TOKEN 簽的 `v1.<到期>.<HMAC>`，**不是 token 本身**），180 天，每次打開後台自動續期。token 不再存 localStorage（iPad Safari 七天沒互動就清掉，所以以前每次都要重登；舊的會在開場自動換成 cookie）。登出走 `DELETE /api/session`。
 - 老師卡片內容 `public/data/labs.json` 的 `confirmed=false` 表示尚待老師確認；照片 `photo` 為 null 時顯示縮寫。
+- **全站一個「這一場」**：後台最上面一個下拉（`#visitSelect`）＋「已存 14:32」＋「刪掉這一場」，
+  五個分頁都在同一場上做事，切分頁時 `reloadTab()` 重載那一頁要的東西。打開後台就停在今天
+  （沒有就最近）那一場，不必自己先選；「＋ 新的一場」是明確的選擇。**不要再讓任何分頁自己長一個參訪下拉。**
+- **沒有「存檔」這個動作**：訪前分頁任何欄位改動都會在 1.2 秒後自己存（`scheduleSave`／`saveVisit`），
+  AI 抽取、排行程、查背景做完也各存一次。畫面上只有一行「已存 14:32」與「刪掉這一場」。
+  建錯的那一場就刪掉：`DELETE /api/visits?id=`，順手清掉這一場自己的檔案（簽名簿、口述、名片、當天資料）；
+  **已經有來賓回覆、或感謝信已經寄出去的不給刪**（那不是我們的東西），Drive 上的備份也不動。
+- **網址（`visit_id` ＝ 日期 ＋ 代碼）在用出去之前跟著欄位走**：日期或網址代碼改了就換一個 visit_id，
+  舊的那一筆刪掉（`POST /api/visits` 回 `renamed_from`）。一旦「用出去了」就固定，不再跟著改（回 `url_fixed`）——
+  判斷標準 `isUnused()`：有人回覆、感謝信寄出、放了當天資料、有簽名簿／口述／名片、已備份到 Drive，其中之一就算用出去了。
+  這樣先打錯日期再改也不會留下怪網址，而印出去的 QR 不會突然失效。
+- 「產生簡報」直接用畫面上現在勾的頁，產完一起存回去——不必先按「儲存選頁」。
 - **現場動線第一站固定是總體介紹，地點預設 302**：`itinerary[0].room === "briefing"`，`location` 空白就是 302（`lib/visit.mjs DEFAULT_BRIEFING_LOCATION`），之後才是 301–305；`ensureBriefingFirst` 在存檔與排程時強制，AI 排程不決定地點。現場訊號 `room=briefing` 代表簡報室（開總體簡報＝整場起點）。
 - **當天資料** `visit.materials = { deck_pdf, photos[], links[] }`：值是媒體庫 key（`materials/<visit_id>/<file>`）或 https 連結，`sanitizeMaterials` 只留這兩種。上傳走 `/api/materials`（單檔 4.5 MB 以內；更大的 PDF 貼雲端連結）。合照先在瀏覽器縮到長邊 1600px，**縮不動就原檔上傳**（HEIC、壞檔、記憶體不夠都算），進度與錯誤顯示在「動作三」那張卡片上（`#materialsStatus`），不是只在頁面最上方 —— 上傳失敗時人在頁面中段，看不到頂端的提示。**訪後信只能承諾頁面上真的有的東西**：`lib/visit.mjs pageContents()` 算出清單交給提示詞（mock 信也照同一份清單）。PDF 由 PowerPoint 另存，再到「收工」放上去。
 - 產檔在瀏覽器：`admin.html` 先問 `/api/master`（後台上傳的母簡報，4 MB 分塊存在媒體庫 `master/<upload_id>/part-i` ＋ `master/manifest.json`），再 HEAD `/assets/master/slim-master.pptx`（站台對不存在的路徑會回 index.html，所以看 content-type 不看狀態碼）；兩者都沒有時，「產生簡報」在同一個點擊裡同步開檔案選擇視窗，選完立刻產，並提供「把這份母簡報存到站台」。選檔或上傳時若檔案含影片或超過 60 MB，先在瀏覽器裡瘦身（`public/lib/pptx.mjs slimDeck`：抽影片留海報＋「▶ Video」、超過 3 MB 的圖用 canvas 縮到 2000px、清孤兒；規則同 `scripts/slim-master.py`），所以可以直接選 396 MB 的原始母簡報。JSZip 由 cdnjs 載入、QR 用頁面已有的 qrcodejs 畫 canvas（沒有就只放網址文字）。存檔後區塊不放操作說明，只有一行進度與必要時的警告。
 - **來賓端雙語**：英文永遠是主語，第二語言預設中文（中英對照）；`visit.language` 是 ko／ja 時改英韓、英日。流程區塊的 `title_2nd` 空白時用 `i18n.json` 的 `kind_*` 補第二語言。
 - **來賓端依階段換措辭**：訪前（日期在未來，或沒有參訪代碼的首頁）用「將參訪」、不放留信箱與感謝表單；當天才有留信箱與備援按鍵；訪後（日期已過或從感謝信的 `#respond` 進來）用過去式、標題改「感謝蒞臨」。`?phase=before|today|after` 可強制預覽。兩個互動層各有自己的連結，帶連結進來一定看得到（也支援中途換 hash）：`/<visit_id>#email`（留信箱）、`/<visit_id>#respond`（三個回應項目）。**這兩個連結在行程走完後才產出**，列在後台「收工」分頁，不在訪前。
 - 今日流程固定含三個區塊：總體簡報（briefing）→ 研究室參訪（tour）→ **綜合討論（discussion）**，合照可省略；`plan.mts` 在 AI 漏掉綜合討論時自動補上並回傳 `warnings`。**時間分配預設**（`lib/visit.mjs allocateProgramme`）：總體介紹 20 分、每間研究室 20 分、合照 5 分，剩下的時間全部給綜合討論；總時間不夠時先縮研究室（每間至少 5）、再縮總體介紹（至少 10），綜合討論至少 10。預設總長 150 分。**分鐘數不歸 AI 決定**：AI 只決定哪幾間、順序與重點，`plan.mts` 回傳前一律用 `applyProgrammeTimes()` 重算動線分鐘與流程時間（改過就回 `warnings` 說一聲）；主辦端在表單上手改的分鐘數則照他的意思存，不會被重算。
-- **選頁與產檔自成一個分頁**（`admin.html`「簡報」）：訪前只排行程與存檔，**有些參訪不用簡報，只口頭介紹**——在簡報分頁勾「這場不用簡報」即可，狀態存成 `visit.deck.skip`，訪前分頁只顯示一行結果。簡報分頁自己選參訪、自己存（`儲存選頁` 寫 `visit.slides`），產檔的規格一律取**存檔後**的那一筆（`state.deckVisit`），所以改了選頁要先存。
+- **選頁與產檔自成一個分頁**（`admin.html`「簡報」）：訪前只排行程，**有些參訪不用簡報，只口頭介紹**——在簡報分頁勾「這場不用簡報」即可，狀態存成 `visit.deck.skip`，訪前分頁只顯示一行結果。選頁存在 `visit.slides`（「儲存選頁」仍在，但**「產生簡報」會直接用畫面上現在勾的那幾頁並在產完一起存回去**，所以不必先按）；參訪則跟全站共用的「這一場」走。
 - 後台「選用頁次」依 `public/data/slides.json` 的 `groups` 分區塊（章節／研究室）：區塊方框整區選、「只選這區」、全選／全不選；必選頁永遠保留。每一頁必須恰好屬於一個區塊。
 - 開放建議欄位措辭在 `public/data/i18n.json`（`ask_better`、`one_sentence`、`anonymous`），ko／ja 譯文請母語者校閱。

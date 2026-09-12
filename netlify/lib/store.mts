@@ -16,6 +16,7 @@ export interface Store {
   listVisits(): Promise<Visit[]>;
   getVisit(id: string): Promise<Visit | null>;
   putVisit(v: Visit): Promise<void>;
+  deleteVisit(id: string): Promise<void>;
   listResponses(visitId?: string): Promise<ResponseRow[]>;
   appendResponse(r: ResponseRow): Promise<void>;
   listTimeline(visitId?: string): Promise<TimelineSignal[]>;
@@ -109,6 +110,10 @@ function fileStore(): Store {
       else all.push(v);
       await writeJsonFile(f("visits"), all);
     },
+    async deleteVisit(id) {
+      const all = await readJsonFile<Visit[]>(f("visits"), []);
+      await writeJsonFile(f("visits"), all.filter((x) => x.visit_id !== id));
+    },
     async listResponses(visitId) {
       const all = await readJsonFile<ResponseRow[]>(f("responses"), []);
       return visitId ? all.filter((r) => r.visit_id === visitId) : all;
@@ -196,6 +201,10 @@ function blobsStore(): Store {
     async putVisit(v) {
       const s = await blobStore();
       await s.setJSON(`visits/${v.visit_id}`, v);
+    },
+    async deleteVisit(id) {
+      const s = await blobStore();
+      await s.delete(`visits/${id}`);
     },
     async listResponses(visitId) {
       return listJson<ResponseRow>(visitId ? `responses/${visitId}/` : "responses/");
@@ -376,6 +385,16 @@ function sheetsStore(media: { putMedia: Store["putMedia"]; getMedia: Store["getM
           method: "PUT",
           body: JSON.stringify({ values: [row] }),
         });
+    },
+    async deleteVisit(id) {
+      const { rows } = await readTable("visits");
+      const i = rows.findIndex((r) => r.visit_id === id);
+      if (i < 0) return;
+      // 整列清空就等於刪掉：列號不動，其他列的位置才不會跑掉
+      await sheetsApi(`/values/${encodeURIComponent("visits")}!A${i + 2}?valueInputOption=RAW`, {
+        method: "PUT",
+        body: JSON.stringify({ values: [SHEETS.visits.map(() => "")] }),
+      });
     },
     async listResponses(visitId) {
       const { rows } = await readTable("responses");
