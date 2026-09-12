@@ -62,7 +62,7 @@
     <div class="card space-y-3">
       <div class="flex flex-wrap items-center gap-2">
         <label class="f mb-0">參訪</label>
-        <select id="preVisitSelect" class="!w-auto"><option value="">＋ 新增一次參訪</option></select>
+        <select id="preVisitSelect" class="!w-auto"><option value="">（新的一場，還沒存檔）</option></select>
         <span class="muted" id="preStatus"></span>
       </div>
     </div>
@@ -425,7 +425,7 @@
     state.visits = r.visits;
     $("backendInfo").textContent = `資料層：${r.backend} · ${r.visits.length} 場`;
     const opts = r.visits.map((v) => `<option value="${esc(v.visit_id)}">${esc(v.date)} ${esc(v.org)}（${esc(v.status)}）</option>`).join("");
-    $("preVisitSelect").innerHTML = `<option value="">＋ 新增一次參訪</option>${opts}`;
+    $("preVisitSelect").innerHTML = `<option value="">（新的一場，還沒存檔）</option>${opts}`;
     const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
     const pick = r.visits.find((v) => v.date === today) || r.visits[0];
     for (const id of ["deckVisitSelect", "wrapVisitSelect", "postVisitSelect", "cardVisitSelect"]) { $(id).innerHTML = opts || `<option value="">（尚無參訪）</option>`; if (pick) $(id).value = pick.visit_id; }
@@ -447,7 +447,9 @@
     $("language").value = v.language || "en"; $("date").value = v.date || ""; $("startTime").value = v.start_time || "10:00"; $("duration").value = v.duration_minutes || 90; $("headcount").value = v.headcount || 0;
     $("contactTeacher").value = v.contact_teacher || "張俊彥"; $("purpose").value = v.purpose || ""; $("interests").value = (v.interests || []).join(", ");
     $("code").value = state.saved ? v.visit_id.slice(11) : ""; $("code").disabled = state.saved;
-    $("preStatus").textContent = state.saved ? `${v.visit_id} · ${v.status}` : "尚未存檔";
+    $("preStatus").textContent = state.saved ? `${v.visit_id} · ${v.status}` : "還沒存檔";
+    // 「新增」不是一個動作：填完按儲存就是新增一場（busy() 會還原按鈕文字，所以提示放在旁邊這一行）
+    if (!state.saved) $("saveInfo").textContent = "填完按「儲存」就會建立這一場";
     renderGuests(v.guests || []); renderProgramme(v.programme || []); renderItinerary(v.itinerary); renderDeckState(v); renderBackground(v.background);
     $("rationale").textContent = v.plan_rationale || ""; $("uncertainties").innerHTML = (v.uncertainties || []).map((u) => `<li>${esc(u)}</li>`).join("");
     $("afterSave").hidden = !state.saved;
