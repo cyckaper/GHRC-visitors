@@ -278,8 +278,11 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
   **`GOOGLE_DRIVE_FOLDER_ID` 通常留空**：`drive.file` 只看得到程式自己建立的檔案，指定別人建的資料夾會存取不到，
   留空時 `ensureFolder("GHRC 參訪", "root")` 會自己在雲端硬碟根目錄建一個並沿用（設定步驟見 `docs/DEPLOY.md` 6.5）。
 - 每場產出一頁摘要
-- `slide_performance` 累積後，功能 2 的挑頁改為「同類單位過去選過什麼、哪幾頁引發提問、
-  哪幾頁在回饋中被提到」
+- **歷次累積回饋下一次的挑頁（已接上）**：`netlify/lib/history.mts slideHistory()` 算出
+  「每一頁過去選過幾次／同類單位選過幾次、哪幾頁被提問、哪幾頁在回饋中被提到、來賓點名最想看哪幾間」，
+  由 `plan-background` 交給提示詞。**選過哪幾頁直接讀每一場的 `visit.slides`**，不必等人按「一頁摘要」就有資料；
+  被提問／被提到才靠 `slide_performance`。提示詞明講「沒有數字不代表那頁不好，history 是佐證不是排行榜」。
+  排完會回 `history: {visits, same_type}`，後台在「也挑了 N 頁」那一行順便說參考了幾場。
 - 跨場次彙整開放建議欄位，找出重複出現的問題（例如某一間反覆被說聽不懂），
   定期送回各研究室老師手上
 - 年報與諮詢委員會統計：人次、身分、國家、最受關注的研究室、合作意向趨勢
@@ -358,6 +361,10 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - 主辦端 API 用 `Authorization: Bearer ADMIN_TOKEN`、`?token=`，或**登入後的 session cookie**；現場訊號用 `SIGNAL_KEY`；`respond` 與 `visits?public=1` 公開。
 - **登入一次就好**：後台貼一次 ADMIN_TOKEN → `/api/session` 發一個 HttpOnly、SameSite=Strict 的 cookie（值是用 ADMIN_TOKEN 簽的 `v1.<到期>.<HMAC>`，**不是 token 本身**），180 天，每次打開後台自動續期。token 不再存 localStorage（iPad Safari 七天沒互動就清掉，所以以前每次都要重登；舊的會在開場自動換成 cookie）。登出走 `DELETE /api/session`。
 - 老師卡片內容 `public/data/labs.json` 的 `confirmed=false` 表示尚待老師確認；照片 `photo` 為 null 時顯示縮寫。
+- **進度線**：共用的「這一場」那一張卡片下面一排（`#progress`，`renderProgress()`）——
+  訪前（名單／背景研判／今日流程／簡報／確認信）｜當天（簽名簿／名片／口述／當天資料）｜訪後（感謝信／回覆／一頁摘要）。
+  綠勾＝做過，灰點＝還沒；點一格跳到該做那件事的分頁，`title` 說明那一步是為了什麼。
+  五個分頁是時間順序，但畫面本來沒有任何地方說「這一場做到哪、下一步是什麼」。
 - **全站一個「這一場」**：後台最上面一個下拉（`#visitSelect`）＋「已存 14:32」＋「刪掉這一場」，
   五個分頁都在同一場上做事，切分頁時 `reloadTab()` 重載那一頁要的東西。打開後台就停在今天
   （沒有就最近）那一場，不必自己先選；「＋ 新的一場」是明確的選擇。**不要再讓任何分頁自己長一個參訪下拉。**

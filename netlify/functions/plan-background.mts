@@ -2,6 +2,8 @@ import { siteUrl } from "../lib/http.mts";
 import { loadMasterText, loadPublicData } from "../lib/data.mts";
 import { planVisit } from "../lib/ai.mts";
 import { backgroundHandler } from "../lib/jobs.mts";
+import { slideHistory } from "../lib/history.mts";
+import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
 import { normalizeVisit } from "./visits.mts";
 import { applyProgrammeTimes, briefingBlockMinutes, ensureBriefingFirst } from "../../lib/visit.mjs";
@@ -13,8 +15,14 @@ import { applyProgrammeTimes, briefingBlockMinutes, ensureBriefingFirst } from "
  */
 export default backgroundHandler<{ visit?: Partial<Visit> }>("排程", async (input, req) => {
   const visit = normalizeVisit(input.visit || {}, siteUrl(req));
-  const [slidesIndex, labs, masterText] = await Promise.all([loadPublicData("slides"), loadPublicData("labs"), loadMasterText()]);
-  const plan = await planVisit(visit, slidesIndex, labs, masterText);
+  const [slidesIndex, labs, masterText, history] = await Promise.all([
+    loadPublicData("slides"),
+    loadPublicData("labs"),
+    loadMasterText(),
+    // 歷次累積回饋這一次的挑頁：同類單位選過什麼、哪幾頁引發提問、哪幾間被點名
+    slideHistory(getStore(), visit.org?.type || "other", visit.visit_id).catch(() => null),
+  ]);
+  const plan = await planVisit(visit, slidesIndex, labs, masterText, history);
   // 後端再驗一次：頁次必須存在、always 頁一定在、順序依母簡報頁序
   const known = new Map<number, any>((slidesIndex.slides as any[]).map((s) => [s.n, s]));
   const chosen = new Set<number>(plan.slides.filter((n) => known.has(n)));
@@ -51,5 +59,5 @@ export default backgroundHandler<{ visit?: Partial<Visit> }>("排程", async (in
   if (timed.changed) warnings.push(`每間研究室一律 ${timed.alloc.perRoom} 分、總體介紹 ${timed.alloc.briefing} 分（AI 排的分鐘數已按預設重算）；要改就直接在下面改。`);
   merged = { ...merged, programme: timed.programme, itinerary: timed.itinerary };
   const minutes = slides.reduce((sum, n) => sum + (known.get(n)?.minutes || 1), 0);
-  return { plan: { ...plan, programme: merged.programme, slides }, visit: merged, estimated_briefing_minutes: Math.round(minutes), master_text_available: !!masterText, warnings };
+  return { plan: { ...plan, programme: merged.programme, slides }, visit: merged, estimated_briefing_minutes: Math.round(minutes), master_text_available: !!masterText, history: history ? { visits: history.visits, same_type: history.same_type } : null, warnings };
 });

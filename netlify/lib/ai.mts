@@ -255,6 +255,7 @@ const PLAN_SYSTEM = `你替 GHRC 排一次參訪的行程並從母簡報挑頁�
 - always=true 的頁（封面、今日流程、簡報架構、核心宣稱、謝謝）永遠保留。
 - 每頁約 40–60 秒（索引裡的 minutes），影片頁另計；總頁數要塞得進「總體簡報」區塊的分鐘數。
 - 選頁偏好：政府單位偏政策與場域落地；大學偏研究與學生交流；企業偏應用與委託研究；學生團偏影片與體驗。以索引的 audience 與 lab 標記為線索，並參考來賓興趣。
+- **history（歷次實際表現，有才給）**：slides[].used／used_same_type 是這一頁過去選過幾次、同類單位選過幾次；asked 是那一場被提問、mentioned 是在回饋中被提到。rooms[] 是來賓自己說最想看／想合作哪幾間。用法：**被提問或被提到過的頁優先留下**，同類單位常選的頁優先考慮，來賓點名多的研究室優先排進動線。但**沒有數字不代表那頁不好**——可能只是沒人選過，該講還是要講；history 是佐證，不是排行榜。
 - 實驗室頁：要參訪的房間才放它的頁；分隔頁（role=divider）只在放了該實驗室內容時保留。
 - 最後的「您最想看哪一部分」頁與 QR 頁由產檔程式另外加，不要選。
 - 不放中心總預算數字；HEALS Design 是 301 專屬方法論。
@@ -272,9 +273,10 @@ const PLAN_SYSTEM = `你替 GHRC 排一次參訪的行程並從母簡報挑頁�
 
 ${CENTER_FACTS}`;
 
-export async function planVisit(visit: Visit, slidesIndex: any, labs: any, masterText: any | null): Promise<Plan> {
+export async function planVisit(visit: Visit, slidesIndex: any, labs: any, masterText: any | null, history: unknown = null): Promise<Plan> {
   if (isMock()) return mockPlan(visit, slidesIndex);
   const payload = {
+    history,
     visit: {
       org: visit.org, guests: visit.guests, headcount: visit.headcount, date: visit.date, start_time: visit.start_time,
       duration_minutes: visit.duration_minutes, purpose: visit.purpose, interests: visit.interests, language: visit.language, contact_teacher: visit.contact_teacher,

@@ -102,6 +102,13 @@ try {
   check((await page.textContent("#itinerary label:first-child")).includes("總體介紹"), "route starts with the overall briefing");
   check((await page.inputValue('#itinerary input[data-room="briefing"]')) !== "0", "briefing has minutes");
   check((await page.inputValue("#itinerary [data-briefing-location]")) === "302", "briefing room defaults to 302");
+  // 進度線：這一場到哪一步了，點一格跳到該做那件事的分頁
+  check(/名單 2 人/.test(await page.textContent("#progress")), "the progress line counts the guest list");
+  check(/·\s*感謝信/.test(await page.textContent("#progress")), "…and shows what has not been done yet");
+  await page.click('#progress [data-go="wrapup"]');
+  check(!(await page.isHidden("#tab-wrapup")), "clicking a step jumps to the tab where that step happens");
+  await page.click('[data-tab="pre"]');
+
   const link = await page.textContent("#pageLink");
   check(link === `${base}/2026-10-07-uwa`, `saved visit has page url ${link}`);
   check((await page.textContent("#deckState")).includes("已選"), "the pre-visit tab only reports how many slides are picked");
