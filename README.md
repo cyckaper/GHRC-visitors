@@ -24,7 +24,7 @@ public/            單檔 HTML（Tailwind CDN，無建置）：index.html 來賓
 public/lib/        pptx.mjs：母簡報子集化核心（瀏覽器與 CLI 共用，零 Node 相依）
 public/assets/master/  （選用）slim-master.pptx 靜態檔；平常改用後台「上傳母簡報」存進 Blobs，不必進 git
 netlify/functions/ API（.mts）：visits extract plan letter respond timeline signbook cards transcribe summary media materials translate master session drive
-                   跑得久的 AI 走背景函式（一般函式只有 10 秒）：extract-background research-background；另有 drive-sync-background drive-cron
+                   跑得久的 AI 走背景函式（一般函式只有 10 秒）：extract-background plan-background research-background；另有 drive-sync-background drive-cron
 netlify/lib/       函式共用：store（file／blobs／sheets）、ai（Claude、Whisper、mock）、http、data、types、jobs（背景工作）
 lib/               純 JS 共用：visit（id、匿名化、寄送清單、ICS）、timeline（動線推補）
 cli/               npm run deck：同一份核心的本機入口 → pptx（＋PDF）

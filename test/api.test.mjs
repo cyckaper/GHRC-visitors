@@ -45,19 +45,21 @@ simon.kilbane@uwa.edu.au`;
 let visitId = "";
 
 /**
- * 抽取跑在背景函式（Claude 讀長信常常超過一般函式的 10 秒）：POST 只開一個工作、回 202。
+ * 跑得久的 AI（讀信、排行程）都在背景函式裡做，POST 只開一個工作、回 202。
  * 測試裡的 SITE_URL 指向站台網址，觸發打不到這台 dev server，所以照前端的順序自己跑一遍：
  * 觸發 → 叫背景函式做事 → 輪詢拿結果。
  */
-async function extract(body) {
-  const started = await api("/api/extract", { method: "POST", headers: admin, body: JSON.stringify(body) });
+async function runJob(name, body) {
+  const started = await api(`/api/${name}`, { method: "POST", headers: admin, body: JSON.stringify(body) });
   if (started.status !== 202) return started; // 檔案太大、沒東西可讀之類的，當場就擋下來
-  const ran = await api("/api/extract-background", { method: "POST", headers: admin, body: JSON.stringify({ job_id: started.body.job_id }) });
+  const ran = await api(`/api/${name}-background`, { method: "POST", headers: admin, body: JSON.stringify({ job_id: started.body.job_id }) });
   assert.equal(ran.status, 200, JSON.stringify(ran.body));
-  const job = await api(`/api/extract?job=${started.body.job_id}`, { headers: admin });
+  const job = await api(`/api/${name}?job=${started.body.job_id}`, { headers: admin });
   assert.equal(job.body.status, "done", JSON.stringify(job.body));
   return { status: 200, body: { ok: true, ...job.body.result } };
 }
+const extract = (body) => runJob("extract", body);
+const plan = (visit) => runJob("plan", { visit });
 
 test("admin endpoints reject a missing or wrong token", async () => {
   assert.equal((await api("/api/visits")).status, 401);
@@ -114,10 +116,25 @@ test("extract 跑在背景：一般函式 10 秒不夠，所以回 202 加工作
   assert.equal(done.body.result.visit.date, "2026-10-07");
 });
 
+test("plan 也跑在背景：提示詞帶整份頁次索引，10 秒同樣不夠", async () => {
+  assert.equal((await api("/api/plan", { method: "POST", body: JSON.stringify({ visit: {} }) })).status, 401, "needs the admin token");
+  assert.equal((await api("/api/plan", { method: "POST", headers: admin, body: "{}" })).status, 400, "需要 visit");
+  const started = await api("/api/plan", { method: "POST", headers: admin, body: JSON.stringify({ visit: { org: { name: "UWA" }, date: "2026-10-07", start_time: "10:00", duration_minutes: 90 } }) });
+  assert.equal(started.status, 202, JSON.stringify(started.body));
+  assert.equal((await api(`/api/plan?job=${started.body.job_id}`, { headers: admin })).body.status, "running");
+  assert.equal((await api("/api/plan-background", { method: "POST", headers: admin, body: "{}" })).status, 400, "background needs a job_id");
+  assert.equal((await api("/api/plan-background", { method: "POST", body: JSON.stringify({ job_id: started.body.job_id }) })).status, 401, "background needs the token too");
+  assert.equal((await api("/api/plan-background", { method: "POST", headers: admin, body: JSON.stringify({ job_id: started.body.job_id }) })).status, 200);
+  const done = await api(`/api/plan?job=${started.body.job_id}`, { headers: admin });
+  assert.equal(done.body.status, "done");
+  assert.equal(done.body.input, undefined, "輪詢不會把整筆參訪再送回前端");
+  assert.ok(done.body.result.visit.programme.length, "行程留在工作上，前端輪到就拿得到");
+});
+
 test("plan → programme, itinerary, slides (always-slides present), then save", async () => {
   const ex = await extract({ email_text: EMAIL });
   const visit = { ...ex.body.visit, code: "uwa", start_time: "10:00", duration_minutes: 90 };
-  const p = await api("/api/plan", { method: "POST", headers: admin, body: JSON.stringify({ visit }) });
+  const p = await plan(visit);
   assert.equal(p.status, 200, JSON.stringify(p.body));
   const planned = p.body.visit;
   for (const n of [1, 2, 3, 4, 72]) assert.ok(planned.slides.includes(n), `slide ${n} missing`);
@@ -136,7 +153,7 @@ test("plan → programme, itinerary, slides (always-slides present), then save",
   assert.equal(planned.itinerary[0].minutes, 20);
   assert.equal(planned.itinerary[0].location, "302", "the briefing is in 302 by default");
   assert.ok(planned.itinerary.slice(1).every((s) => s.minutes === 11));
-  const p2 = await api("/api/plan", { method: "POST", headers: admin, body: JSON.stringify({ visit: { ...visit, itinerary: [{ room: "briefing", minutes: 20, location: "304" }] } }) });
+  const p2 = await plan({ ...visit, itinerary: [{ room: "briefing", minutes: 20, location: "304" }] });
   assert.equal(p2.body.visit.itinerary[0].location, "304", "an organiser-chosen briefing room survives the AI plan");
   assert.ok(planned.itinerary[0].minutes > 0);
   assert.equal(planned.itinerary.reduce((s, x) => s + x.minutes, 0) <= 90, true);

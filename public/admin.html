@@ -386,6 +386,30 @@
   }
   function flash(msg, cls = "ok") { const f = $("flash"); f.textContent = msg; f.className = "text-sm " + cls; f.hidden = false; clearTimeout(flash.t); flash.t = setTimeout(() => (f.hidden = true), 6000); }
   async function busy(btn, fn) { const t = btn.textContent; btn.disabled = true; btn.textContent = "…"; try { return await fn(); } finally { btn.disabled = false; btn.textContent = t; } }
+  /**
+   * 跑得久的 AI（讀信、排行程）一律走背景函式：POST 回 202 與 job_id，這裡每 3 秒問一次 GET <path>?job=<id>。
+   * Netlify 一般函式只有 10 秒，Claude 常常不只——直接等就會變成 504 Inactivity Timeout。
+   * 做完回傳結果；失敗、等太久或又按了一次都回 null（訊息已經顯示過）。infoId 是進度那一行。
+   */
+  const jobSeq = {};
+  async function waitForJob(path, jobId, infoId) {
+    const seq = (jobSeq[path] = (jobSeq[path] || 0) + 1);
+    const stop = (msg) => { $(infoId).textContent = ""; flash(msg, "err"); return null; };
+    let misses = 0;
+    for (let i = 0; i < 100; i++) { // 三秒問一次，最多等五分鐘
+      await new Promise((r) => setTimeout(r, 3000));
+      if (seq !== jobSeq[path]) return null; // 又按了一次，這一輪作廢
+      const r = await api(`${path}?job=${encodeURIComponent(jobId)}`);
+      if (!r.ok) { if (++misses < 3) continue; return stop(r.error || "查不到進度，請再按一次"); }
+      misses = 0;
+      if (r.status === "running") continue;
+      if (r.status !== "done") return stop(r.error || "跑不出來，請再按一次");
+      $(infoId).textContent = "";
+      return r.result || {};
+    }
+    $(infoId).textContent = "等太久了，請再按一次看看";
+    return null;
+  }
   const download = (name, text, type = "application/json") => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); };
   const copy = async (text) => { try { await navigator.clipboard.writeText(text); flash("已複製"); } catch (e) { flash("無法複製，請手動選取", "err"); } };
 
@@ -689,40 +713,28 @@
     $("extractInfo").textContent = "AI 讀信中……跑在背景，大約一兩分鐘。";
     pollExtract(r.job_id);
   });
-  /** 抽取跑在背景函式（Claude 讀長信＋附件常常超過一般函式的 10 秒，會變成 504），每 3 秒問一次做完了沒。 */
   async function pollExtract(jobId) {
-    clearTimeout(pollExtract.t);
-    const seq = (pollExtract.seq = (pollExtract.seq || 0) + 1);
-    let misses = 0;
-    for (let i = 0; i < 100; i++) {
-      await new Promise((r) => { pollExtract.t = setTimeout(r, 3000); });
-      if (seq !== pollExtract.seq) return; // 又按了一次抽取，這一輪作廢
-      const r = await api(`/api/extract?job=${encodeURIComponent(jobId)}`);
-      if (!r.ok) {
-        if (++misses < 3) continue;
-        $("extractInfo").textContent = "";
-        return flash(r.error || "查不到抽取的進度，請再按一次", "err");
-      }
-      misses = 0;
-      if (r.status === "running") continue;
-      $("extractInfo").textContent = "";
-      if (r.status !== "done") return flash(`抽取失敗：${r.error || "未知原因"}`, "err");
-      const out = r.result || {};
-      $("listFilesInfo").innerHTML = (out.files_read || []).map((f) => `<li>${esc(f.name)} <span class="ok">已讀（${f.kind === "text" ? `${f.chars} 字` : f.kind === "document" ? "PDF 交給 AI 直接讀" : "照片交給 AI 直接讀"}）</span></li>`).join("") + (out.warnings || []).map((w) => `<li class="err">${esc(w)}</li>`).join("");
-      state.saved = false; $("preVisitSelect").value = "";
-      fillForm({ ...emptyVisit(), ...out.visit, visit_id: "" });
-      return flash("抽取完成，請逐項確認（尤其是名單的 email）");
-    }
-    $("extractInfo").textContent = "等太久了，請再按一次看看";
+    const out = await waitForJob("/api/extract", jobId, "extractInfo");
+    if (!out) return;
+    $("listFilesInfo").innerHTML = (out.files_read || []).map((f) => `<li>${esc(f.name)} <span class="ok">已讀（${f.kind === "text" ? `${f.chars} 字` : f.kind === "document" ? "PDF 交給 AI 直接讀" : "照片交給 AI 直接讀"}）</span></li>`).join("") + (out.warnings || []).map((w) => `<li class="err">${esc(w)}</li>`).join("");
+    state.saved = false; $("preVisitSelect").value = "";
+    fillForm({ ...emptyVisit(), ...out.visit, visit_id: "" });
+    flash("抽取完成，請逐項確認（尤其是名單的 email）");
   }
   $("planBtn").onclick = () => busy($("planBtn"), async () => {
     const r = await api("/api/plan", { method: "POST", body: { visit: readForm() } });
-    if (!r.ok) return flash(r.error, "err");
-    const v = r.visit; state.visit = { ...state.visit, ...v, visit_id: state.saved ? state.visit.visit_id : "" };
-    renderProgramme(v.programme); renderItinerary(v.itinerary); renderDeckState(state.visit);
-    $("rationale").textContent = v.plan_rationale || ""; $("planInfo").textContent = `也挑了 ${(v.slides || []).length} 頁、簡報約 ${r.estimated_briefing_minutes} 分鐘，存檔後到「簡報」分頁確認${r.master_text_available ? "" : "（尚無母簡報文字：第 1–3 頁的替換文字要在產檔時處理）"}`;
-    flash((r.warnings || []).length ? r.warnings.join(" ") : "已排好，請確認後儲存", (r.warnings || []).length ? "err" : "ok");
+    if (!r.ok || !r.job_id) return flash(r.error || "排程沒有開始，請再按一次", "err");
+    $("planInfo").textContent = "AI 排行程中……跑在背景，大約一兩分鐘。";
+    pollPlan(r.job_id);
   });
+  async function pollPlan(jobId) {
+    const out = await waitForJob("/api/plan", jobId, "planInfo");
+    if (!out) return;
+    const v = out.visit; state.visit = { ...state.visit, ...v, visit_id: state.saved ? state.visit.visit_id : "" };
+    renderProgramme(v.programme); renderItinerary(v.itinerary); renderDeckState(state.visit);
+    $("rationale").textContent = v.plan_rationale || ""; $("planInfo").textContent = `也挑了 ${(v.slides || []).length} 頁、簡報約 ${out.estimated_briefing_minutes} 分鐘，存檔後到「簡報」分頁確認${out.master_text_available ? "" : "（尚無母簡報文字：第 1–3 頁的替換文字要在產檔時處理）"}`;
+    flash((out.warnings || []).length ? out.warnings.join(" ") : "已排好，請確認後儲存", (out.warnings || []).length ? "err" : "ok");
+  }
   $("saveBtn").onclick = () => busy($("saveBtn"), async () => {
     const v = readForm();
     if (!v.org.name) return flash("單位名稱必填", "err");

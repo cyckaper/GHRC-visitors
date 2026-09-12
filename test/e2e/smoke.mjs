@@ -87,7 +87,10 @@ try {
   await page.fill("#code", "uwa");
 
   await page.click("#planBtn");
-  await page.waitForFunction(() => document.querySelectorAll("#programmeTable tbody tr").length > 0);
+  // 排行程也跑在背景（提示詞帶整份頁次索引，10 秒同樣不夠）
+  await page.waitForFunction(() => /排行程中/.test(document.getElementById("planInfo").textContent));
+  check(true, "排行程 runs in the background too");
+  await page.waitForFunction(() => document.querySelectorAll("#programmeTable tbody tr").length > 0, null, { timeout: 90000 });
   check((await page.locator("#programmeTable tbody tr select").evaluateAll((els) => els.map((e) => e.options[e.selectedIndex].text))).includes("綜合討論"), "programme table shows a 綜合討論 block");
   check((await page.locator("#tab-pre #slideGrid").count()) === 0, "the pre-visit tab no longer carries the slide picker");
   check((await page.textContent("#itinerary label:first-child")).includes("總體介紹"), "route starts with the overall briefing");
