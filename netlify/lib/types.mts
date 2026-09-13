@@ -86,7 +86,7 @@ export interface Visit {
   signbook: { photo_key?: string; transcript?: string; entries?: SignbookEntry[]; read_at?: string };
   dictation: { audio_key?: string; transcript?: string; extracted?: DictationExtract; recorded_at?: string };
   letters: {
-    confirmation?: { subject: string; body: string; drafted_at: string };
+    confirmation?: { subject: string; body: string; sender?: string; drafted_at: string; sent_to?: { name: string; email: string }[]; sent_at?: string };
     thanks?: { subject: string; body: string; sender: string; drafted_at: string; sent_to?: { name: string; email: string }[]; sent_at?: string };
   };
   summary: string;

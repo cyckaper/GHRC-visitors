@@ -90,10 +90,11 @@ export default async (req: Request) => {
   return fail(405, "method not allowed");
 };
 
-/** 這一場的網址還沒「用出去」：沒人回覆、沒寄出感謝信、沒放任何檔案、還沒備份到 Drive。 */
+/** 這一場的網址還沒「用出去」：沒人回覆、兩封信都還沒寄出、沒放任何檔案、還沒備份到 Drive。 */
 async function isUnused(store: ReturnType<typeof getStore>, v: Visit): Promise<boolean> {
   const a = v as any;
-  if (v.letters?.thanks?.sent_at) return false;
+  // 確認信裡就有來賓專頁的網址，寄出去之後對方手上那個連結不能失效
+  if (v.letters?.thanks?.sent_at || v.letters?.confirmation?.sent_at) return false;
   if (v.materials?.deck_pdf || v.materials?.photos?.length || v.materials?.links?.length) return false;
   if (v.signbook?.photo_key || v.dictation?.audio_key || v.dictation?.transcript) return false;
   if (a.cards?.length || a.drive?.backed_up_at) return false;

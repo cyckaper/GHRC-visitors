@@ -45,7 +45,8 @@ export default backgroundHandler<Input>("信件", async (input, req) => {
       visit.letters.thanks = { subject, body: text, sender: input.sender || visit.letters.thanks?.sender || "director", drafted_at: visit.letters.thanks?.drafted_at || nowISO(), sent_to: [...(visit.letters.thanks?.sent_to || []), ...sent], sent_at: nowISO() };
       if (!failed.length) visit.status = "done";
     } else {
-      visit.letters.confirmation = { subject, body: text, drafted_at: visit.letters.confirmation?.drafted_at || nowISO() };
+      // 確認信也記下寄給誰、什麼時候寄的：信裡有來賓專頁的網址，寄出去之後那個網址就不能再改了
+      visit.letters.confirmation = { subject, body: text, sender: input.sender || visit.letters.confirmation?.sender || "contact", drafted_at: visit.letters.confirmation?.drafted_at || nowISO(), sent_to: [...(visit.letters.confirmation?.sent_to || []), ...sent], sent_at: nowISO() };
       if (visit.status === "draft") visit.status = "confirmed";
     }
     visit.updated_at = nowISO();
