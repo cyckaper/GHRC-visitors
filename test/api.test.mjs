@@ -519,7 +519,7 @@ test("設定：預設值存得起來，外部服務只回「接好了沒」不�
   assert.equal(bad.body.settings.sender_default, "contact", "亂填的值不收");
   await api("/api/settings", { method: "POST", headers: admin, body: JSON.stringify({ settings: { sender_default: "director" } }) });
 
-  // 收工提醒寄到哪裡：留空就退回 Netlify 的寄件帳號；不是 email 的不收
+  // 後續提醒寄到哪裡：留空就退回 Netlify 的寄件帳號；不是 email 的不收
   assert.equal(r.body.settings.reminder_to, "", "預設留空");
   assert.equal(r.body.effective.reminder_to, "ghrc@example.test", "留空時用寄件帳號");
   const notEmail = await api("/api/settings", { method: "POST", headers: admin, body: JSON.stringify({ settings: { reminder_to: "中心信箱" } }) });
@@ -560,7 +560,7 @@ test("一頁摘要不必人記得按：每晚掃一次，過完又有回覆的�
   assert.ok(!String(again.body).includes(v.visit_id), "摘要比回覆新就不必重寫");
 });
 
-test("收工提醒：依結束時間寄信給自己，一場只寄一次；沒接 Gmail 就老實說", async () => {
+test("後續提醒：依結束時間寄信給自己，一場只寄一次；沒接 Gmail 就老實說", async () => {
   const cron = () => api("/api/reminder-cron", { method: "POST", headers: admin, body: "{}" });
   const stood = await cron();
   assert.equal(stood.status, 200);
@@ -577,14 +577,14 @@ test("收工提醒：依結束時間寄信給自己，一場只寄一次；沒�
   process.env.MAIL_MOCK = "1"; // 不真的打 Gmail：信會寫進媒體庫讓這裡讀
   try {
     const sent = await cron();
-    assert.ok(String(sent.body).includes(v.visit_id), `結束了又沒收工的場次要提醒：${sent.body}`);
+    assert.ok(String(sent.body).includes(v.visit_id), `結束了又沒後續的場次要提醒：${sent.body}`);
     assert.ok(!String(sent.body).includes(later.visit_id), "還沒結束的場次不提醒");
 
     const mail = JSON.parse(await readFile(path.join(tmp, "media", "mail", "last.json"), "utf8"));
     assert.equal(mail.to, "ghrc@example.test", "留空就寄給 Netlify 設的寄件帳號");
-    assert.ok(mail.subject.includes("收工提醒") && mail.subject.includes("Reminder Normal University"));
+    assert.ok(mail.subject.includes("後續提醒") && mail.subject.includes("Reminder Normal University"));
     assert.ok(mail.text.includes("拍一張簽名簿") && mail.text.includes("三十秒口述"), "信裡列出還缺哪幾件");
-    assert.ok(mail.text.includes(`/admin.html#wrapup=${v.visit_id}`), "附一個直接打開收工頁的連結");
+    assert.ok(mail.text.includes(`/admin.html#wrapup=${v.visit_id}`), "附一個直接打開後續頁的連結");
 
     assert.ok(!String((await cron()).body).includes(v.visit_id), "一場只寄一次");
 
@@ -596,7 +596,7 @@ test("收工提醒：依結束時間寄信給自己，一場只寄一次；沒�
     done.dictation = { transcript: "今天校長來" };
     done.materials = { deck_pdf: "", photos: [], links: [{ title: "t", url: "https://x.example" }] };
     await put(done);
-    assert.ok(!String((await cron()).body).includes(v.visit_id), "收工做完了就不必提醒");
+    assert.ok(!String((await cron()).body).includes(v.visit_id), "後續做完了就不必提醒");
   } finally {
     delete process.env.MAIL_MOCK;
   }
@@ -615,7 +615,7 @@ test("一般存檔不會清掉別的端點寫的東西（摘要、提醒紀錄�
   // 後台在別的分頁開著舊資料按一下存檔（body 裡沒有這些欄位）→ 不能被清掉
   const stale = await put({ visit_id: v.visit_id, org: { name: "Keep Fields College" }, date: "2026-08-21", code: "keep" });
   assert.equal(stale.body.visit.summary, "摘要");
-  assert.equal(stale.body.visit.reminders.wrapup_sent_at, "2026-08-21T05:00:00.000Z", "提醒紀錄留著，不然收工提醒會重寄一次");
+  assert.equal(stale.body.visit.reminders.wrapup_sent_at, "2026-08-21T05:00:00.000Z", "提醒紀錄留著，不然後續提醒會重寄一次");
   assert.equal(stale.body.visit.signbook.photo_key, "signbook/x/1.jpg");
 });
 

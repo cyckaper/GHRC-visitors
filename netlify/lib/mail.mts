@@ -4,7 +4,7 @@ import { getStore } from "./store.mts";
 /**
  * 用中心自己的 Gmail 帳號寄信（OAuth refresh token，與 Drive 備份共用那組 Google 授權）。
  * 兩個地方用：訪後信與確認信（letter-background，一封一封寄給來賓），
- * 以及參訪結束的收工提醒（reminder-cron，寄給中心自己）。
+ * 以及參訪結束的後續提醒（reminder-cron，寄給中心自己）。
  */
 let cached: { token: string; exp: number } | null = null;
 

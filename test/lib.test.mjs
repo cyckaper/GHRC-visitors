@@ -194,7 +194,7 @@ test("結束時間：今日流程與總分鐘取晚的那一個（提醒早到�
   assert.equal(visitEndAt({ date: "2026-10-07", start_time: "09:00", duration_minutes: 60 }).toISOString(), "2026-10-07T02:00:00.000Z");
 });
 
-test("收工提醒講的四件事：做了的打勾，名片說幾張", () => {
+test("後續提醒講的四件事：做了的打勾，名片說幾張", () => {
   const bare = wrapupTodo({});
   assert.deepEqual(bare.map((t) => t.key), ["signbook", "cards", "dictation", "materials"]);
   assert.equal(bare.every((t) => !t.done), true, "什麼都還沒做");
@@ -323,6 +323,6 @@ test("幾點開始、幾點結束：總分鐘由這兩個算出來", () => {
   assert.equal(endTimeOf({ start_time: "13:30", duration_minutes: 90 }), "15:00");
   assert.equal(endTimeOf({ start_time: "10:00", end_time: "11:15", duration_minutes: 150 }), "11:15", "填了就以填的為準");
   assert.equal(endTimeOf(emptyVisit()), "12:30", "新的一場就先給預設的開始與結束");
-  // 收工提醒看的結束時間也跟著走
+  // 後續提醒看的結束時間也跟著走
   assert.equal(visitEndAt({ date: "2026-10-07", start_time: "09:00", end_time: "10:00" }).toISOString(), "2026-10-07T02:00:00.000Z");
 });
