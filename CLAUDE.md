@@ -349,9 +349,9 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 **已完成（P1–P4 最小可用系統 ＋ P5 捷徑 ＋ P6 產檔 ＋ P7 摘要／彙整）**
 
-- `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → 排行程 → 自動存 → QR／.ics／確認信）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、收工（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁）、**信件（確認信＋感謝信同一頁，收件人共用一份；草擬、寄出或 mailto）**、資料（歷次參訪、回覆、動線、摘要、跨場次彙整、CSV、Drive）、**設定（母簡報、現場動線捷徑與 NFC、預設值、外部服務狀態）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
+- `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → 排行程 → 自動存 → QR／.ics／確認信，**最底下列出「以前做過的參訪」**）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、收工（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁）、**信件（確認信＋感謝信同一頁，收件人共用一份；草擬、寄出或 mailto）**、資料（歷次參訪、回覆、動線、摘要、跨場次彙整、CSV、Drive）、**設定（母簡報、現場動線捷徑與 NFC、預設值、外部服務狀態）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
 - `public/index.html`：專屬網址 `/<visit_id>`；全頁英文為主、第二語言為輔（預設中文，ko／ja 來賓用韓／日文）；流程（參訪當天標出「現在」）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
-- `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `timeline` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`）`drive` `drive-sync-background`（自動備份）`drive-cron`（每晚補漏，`export const config = { schedule }`）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
+- `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `timeline` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`）`drive` `drive-sync-background`（自動備份）`drive-cron`（每晚補漏，`export const config = { schedule }`）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
 - `public/lib/pptx.mjs`：母簡報子集化核心（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證），零 Node 相依，瀏覽器與 CLI 共用；`cli/lib/pptx.mjs` 只是注入 jszip／xmldom 的 Node 入口；`cli/deck.mjs` 加上 QR（qrcode 套件）與 PDF（LibreOffice）。`--inspect`、`--dump`、`--validate`。
 - `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-shortcuts.mjs`：研究室電腦捷徑與 NFC 網址。
@@ -385,6 +385,19 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
   AI 抽取、排行程、查背景做完也各存一次。畫面上只有一行「已存 14:32」與「刪掉這一場」。
   建錯的那一場就刪掉：`DELETE /api/visits?id=`，順手清掉這一場自己的檔案（簽名簿、口述、名片、當天資料）；
   **已經有來賓回覆、或感謝信已經寄出去的不給刪**（那不是我們的東西），Drive 上的備份也不動。
+- **還沒交出去的東西也自己存**（`/api/draft`，存在媒體庫 `drafts/<visit_id|new>.json`）：後台幾個最花時間打的方框
+  ——貼進來的 email、打好的逐字稿、手改過還沒寄出的信件、**還沒有單位名稱（算不出 visit_id、存不成一場）的整份表單**
+  ——一關網頁就沒了。現在同時存兩份：**這台瀏覽器（`localStorage` 的 `ghrc-draft:<id>`，輸入當下就寫）**
+  與**站台（那一秒半後寫，換台機器打開接得回來）**，載入時取時間新的那一份。
+  判斷什麼叫「還沒交出去」＝**畫面上的值 減去 伺服器剛給的值**（`draftBase`／`rebase()`）：所以 AI 草擬填進來、
+  信寄出去、口述存入回饋之後重新比對一次，那一筆自然就空了（POST 空的 `fields` 等於刪掉），不必到處記得清。
+  換一場或改網址代碼時暫存跟著走（`migrateDraft`；改代碼那一段在 `visits.mts` 用 `moveDraft` 做，換台機器也一致），
+  整場刪掉就一起清（`dropDraft`）。**已經存在伺服器上的東西不算暫存**：簽名簿的原圖與留言、口述的逐字稿與抽出來的欄位
+  由「收工」分頁載回畫面（`renderSavedSignbook`／`renderSavedDictation`）——它們本來就沒掉，只是以前看起來像掉了。
+- **「以前做過的參訪」列在訪前分頁最底下**（`renderPastVisits`）：最近 8 場的類型、國家、人數、**選了幾頁**、有沒有摘要，
+  同類單位標「同類」，點一列就把全站共用的「這一場」切過去（手上那一場有暫存，不會掉）。
+  全部歷次、回覆與動線仍然在「資料」分頁——那裡是檔案庫，這裡只是排新一場時的參考。
+  清單欄位由 `GET /api/visits` 一併回傳（`slides`／`summary`／`guests`／`updated_at`）。
 - **網址（`visit_id` ＝ 日期 ＋ 代碼）在用出去之前跟著欄位走**：日期或網址代碼改了就換一個 visit_id，
   舊的那一筆刪掉（`POST /api/visits` 回 `renamed_from`）。一旦「用出去了」就固定，不再跟著改（回 `url_fixed`）——
   判斷標準 `isUnused()`：有人回覆、感謝信寄出、放了當天資料、有簽名簿／口述／名片、已備份到 Drive，其中之一就算用出去了。
