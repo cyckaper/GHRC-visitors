@@ -53,6 +53,7 @@
     <button class="tab" role="tab" data-tab="wrapup">收工</button>
     <button class="tab" role="tab" data-tab="post">信件</button>
     <button class="tab" role="tab" data-tab="data">資料</button>
+    <button class="tab" role="tab" data-tab="settings">設定</button>
   </nav>
 
   <!-- 全站一個「這一場」：每個分頁都在同一場上做事，不必一頁選一次 -->
@@ -186,7 +187,7 @@
         <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="deckBtn" title="用這一場的行程與勾選的頁次，從母簡報做出這一場專屬的 .pptx 並下載">產生簡報 .pptx</button></div>
         <p class="text-sm" id="deckInfo" hidden></p>
         <ul class="text-sm text-stone-600 list-disc pl-5" id="deckReport"></ul>
-        <p class="text-sm flex flex-wrap items-center gap-2" id="masterRow"></p>
+        <p class="text-sm" id="deckMasterNote"></p>
         <input type="file" id="masterFile" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" hidden>
       </div>
     </div>
@@ -335,23 +336,6 @@
   <section id="tab-data" class="space-y-5" hidden>
     <p class="text-sm text-stone-600"><b>這一頁：歷次參訪的檔案</b>——每場的一頁摘要、來賓回覆、現場動線，以及跨場次的彙整。年報與諮詢委員會要的數字（人次、身分、國家、最受關注的研究室）從這裡出。</p>
     <div class="card space-y-3">
-      <h2 class="font-semibold">現場動線設定 <span class="muted font-normal">一次做完，之後每場自動記</span></h2>
-      <p class="muted">來賓走到哪一間、待多久，靠兩種訊號記下來：<b>老師開簡報的捷徑</b>（電腦桌面，點了先送訊號再開簡報）與<b>門口的 NFC 貼紙</b>（主持人碰一下手機）。沒有訊號的時段用當天的行程推補。訊號不必帶參訪代碼——伺服器會對到「今天」排定的那一場。</p>
-      <p class="text-sm" id="shortcutsStatus"></p>
-      <div id="shortcutsList" class="space-y-2"></div>
-      <details class="text-sm">
-        <summary class="cursor-pointer">iPhone 的 NFC 貼紙怎麼設（一次）</summary>
-        <ol class="list-decimal pl-5 mt-2 space-y-1">
-          <li>簡報室與五間研究室門口各貼一片 NFC 貼紙（NTAG213 就夠）。</li>
-          <li>iPhone「捷徑」App → 自動化 → 新增 → NFC → 掃描那片貼紙、命名（例如 Lab 303）→ 關掉「執行前先詢問」。</li>
-          <li>動作選「取得 URL 內容」，網址貼上面那一行的 NFC 網址，方法 GET。</li>
-          <li>不要加任何顯示動作——碰一下就送出，螢幕不用亮。</li>
-        </ol>
-        <p class="mt-2">研究生代按或來賓自己按也可以：來賓端專頁最下面有「我現在在哪一間」，那個不需要金鑰。</p>
-      </details>
-    </div>
-
-    <div class="card space-y-3">
       <div class="flex flex-wrap items-center gap-2">
         <h2 class="font-semibold mr-auto">歷次參訪 <span class="muted font-normal">點一列看那一場的摘要、回覆與動線</span></h2>
         <a class="btn btn-soft" id="csvVisits" download>visits.csv</a>
@@ -373,6 +357,54 @@
     <div class="card space-y-3">
       <div class="flex flex-wrap gap-2 items-center"><h2 class="font-semibold mr-auto">跨場次彙整：開放建議裡重複出現的問題</h2><button class="btn" id="digestBtn" title="把歷次「開放建議」一起讀過，找出重複出現的問題（例如某一間反覆被說聽不懂）">AI 彙整</button></div>
       <pre class="wrap text-sm" id="digest"></pre>
+    </div>
+  </section>
+
+  <!-- ───────── 設定 ───────── -->
+  <section id="tab-settings" class="space-y-5" hidden>
+    <p class="text-sm text-stone-600"><b>這一頁：一次做完就不用再碰的東西</b>——母簡報、現場動線的捷徑與貼紙、預設值，以及「哪些外部服務接好了」。這些不屬於任何一場參訪，所以不放在前面幾個分頁裡。</p>
+
+    <div class="card space-y-3">
+      <h2 class="font-semibold">母簡報</h2>
+      <p class="muted">站台存一份，之後每場產簡報就不必再選檔。可以直接選原始的母簡報（含影片、幾百 MB 都行）——會先在瀏覽器裡瘦身再上傳。</p>
+      <p class="text-sm flex flex-wrap items-center gap-2" id="masterRow"></p>
+    </div>
+
+    <div class="card space-y-3">
+      <h2 class="font-semibold">現場動線 <span class="muted font-normal">捷徑與 NFC 貼紙，一次做完之後每場自動記</span></h2>
+      <p class="muted">來賓走到哪一間、待多久，靠兩種訊號記下來：<b>老師開簡報的捷徑</b>（電腦桌面，點了先送訊號再開簡報）與<b>門口的 NFC 貼紙</b>（主持人碰一下手機）。沒有訊號的時段用當天的行程推補。訊號不必帶參訪代碼——伺服器會對到「今天」排定的那一場。</p>
+      <p class="text-sm" id="shortcutsStatus"></p>
+      <div id="shortcutsList" class="space-y-2"></div>
+      <details class="text-sm">
+        <summary class="cursor-pointer">iPhone 的 NFC 貼紙怎麼設（一次）</summary>
+        <ol class="list-decimal pl-5 mt-2 space-y-1">
+          <li>簡報室與五間研究室門口各貼一片 NFC 貼紙（NTAG213 就夠）。</li>
+          <li>iPhone「捷徑」App → 自動化 → 新增 → NFC → 掃描那片貼紙、命名（例如 Lab 303）→ 關掉「執行前先詢問」。</li>
+          <li>動作選「取得 URL 內容」，網址貼上面那一行的 NFC 網址，方法 GET。</li>
+          <li>不要加任何顯示動作——碰一下就送出，螢幕不用亮。</li>
+        </ol>
+        <p class="mt-2">研究生代按或來賓自己按也可以：來賓端專頁最下面有「我現在在哪一間」，那個不需要金鑰。</p>
+      </details>
+    </div>
+
+    <div class="card space-y-3">
+      <h2 class="font-semibold">預設值</h2>
+      <div class="flex flex-wrap items-center gap-2">
+        <label class="f mb-0" for="senderDefault">訪後信預設寄件者</label>
+        <select id="senderDefault" class="!w-auto" title="新的一場草擬感謝信時預設用誰的名義；個別那一場還是可以在「信件」分頁改"><option value="director">中心主任 張俊彥</option><option value="contact">對口老師</option></select>
+        <span class="muted" id="settingsInfo"></span>
+      </div>
+    </div>
+
+    <div class="card space-y-3">
+      <h2 class="font-semibold">外部服務</h2>
+      <p class="muted">金鑰一律放 Netlify 的環境變數，這裡只看得到「接好了沒」。改完要重新部署才會生效。</p>
+      <ul class="text-sm space-y-1" id="statusList"></ul>
+    </div>
+
+    <div class="card space-y-3">
+      <h2 class="font-semibold">老師卡片</h2>
+      <p class="muted">來賓專頁上那五張卡片（一句話研究主題、專長、學經歷、照片）目前放在 repo 的 <code>public/data/labs.json</code>，還不能在後台改——內容要先經各位老師確認（CLAUDE.md 待確認 1）。確認好的文字給我，我改進去。</p>
     </div>
   </section>
 </div>
@@ -472,7 +504,7 @@
   document.querySelectorAll(".tab").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
   function showTab(name) {
     document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
-    for (const t of ["pre", "deck", "wrapup", "post", "data"]) $("tab-" + t).hidden = t !== name;
+    for (const t of ["pre", "deck", "wrapup", "post", "data", "settings"]) $("tab-" + t).hidden = t !== name;
     reloadTab(name);
   }
 
@@ -490,6 +522,7 @@
     await ensureIndexes();
     renderItinerary();
     await loadVisits();
+    api("/api/settings").then((r) => { if (r.ok) state.settings = r.settings; }); // 預設值（例如訪後信寄件者）一開場就拿，不必等人打開「設定」
     // 打開後台就停在今天（或最近）那一場——不必自己先去選
     const m = /wrapup=([\w-]+)/.exec(location.hash);
     if (m) $("visitSelect").value = m[1];
@@ -534,6 +567,7 @@
     if (name === "wrapup") { loadMaterials(); loadCards(); }
     if (name === "post") loadRecipients();
     if (name === "data") loadDataTab();
+    if (name === "settings") loadSettingsTab();
   }
   function fillForm(v) {
     state.visit = v; state.saved = !!v.visit_id && state.visits.some((x) => x.visit_id === v.visit_id);
@@ -944,6 +978,11 @@
   }
   function renderMasterRow() {
     const row = $("masterRow");
+    $("deckMasterNote").innerHTML = state.master
+      ? `<span class="muted">母簡報：站台上有一份（${esc(state.master.name)}）</span>`
+      : state.masterOnSite
+        ? `<span class="muted">母簡報：用站台靜態檔那一份</span>`
+        : `<span class="muted">母簡報還沒放上站台——按「產生簡報」會請你當場選檔，或到「設定」放一份上去（只要做一次）。</span>`;
     if (state.master) row.innerHTML = `<span class="muted">母簡報 ${esc(state.master.name)} · ${mb(state.master.size)} · ${esc((state.master.uploaded_at || "").slice(0, 10))}</span><label class="underline cursor-pointer">更換<input type="file" id="masterUpload" accept=".pptx" hidden></label><button type="button" class="underline" id="masterRemove" title="把站台上存的母簡報移除（換新版母簡報時才需要）">移除</button>`;
     else if (state.masterOnSite) row.innerHTML = `<span class="muted">母簡報：站台上的 slim-master.pptx</span>`;
     else row.innerHTML = `<span class="muted">母簡報還沒放上站台（只要做一次；可直接選原始母簡報，會先在瀏覽器裡瘦身）</span><label class="btn btn-soft cursor-pointer">上傳母簡報 .pptx<input type="file" id="masterUpload" accept=".pptx" hidden></label>`;
@@ -1299,7 +1338,7 @@
     $("confirmSubject").value = c?.subject || ""; $("confirmBody").value = c?.body || "";
     $("confirmSendInfo").innerHTML = c?.sent_at ? `<span class="ok">已於 ${esc(c.sent_at.slice(0, 16).replace("T", " "))} 寄給 ${c.sent_to?.length || 0} 人</span>` : "";
     $("thanksSubject").value = t?.subject || ""; $("thanksBody").value = t?.body || "";
-    if (t?.sender) $("sender").value = t.sender;
+    $("sender").value = t?.sender || state.settings?.sender_default || "director";
     if (c?.sender) $("confirmSender").value = c.sender;
     $("sendInfo").innerHTML = t?.sent_at ? `<span class="ok">已於 ${esc(t.sent_at.slice(0, 16).replace("T", " "))} 寄給 ${t.sent_to?.length || 0} 人</span>` : "";
     // 哪一封「現在該寄」：參訪還沒到就是確認信，過了就是感謝信；寄過的就不再催
@@ -1391,8 +1430,36 @@
     else box.innerHTML = `<code class="text-xs break-all">${esc(x.nfc_url)}</code>`;
   });
 
+  // ── 設定：一次做完就不用再碰的東西 ──
+  const STATUS_ROWS = [
+    ["ai", "Claude（抽取、排程、信件、讀字、摘要）", "ANTHROPIC_API_KEY"],
+    ["whisper", "Whisper（口述轉文字）", "OPENAI_API_KEY；沒有也能用打字的逐字稿"],
+    ["gmail", "Gmail（從後台寄信）", "GMAIL_CLIENT_ID／SECRET／REFRESH_TOKEN；沒有就用 mailto 自己寄"],
+    ["drive", "Google Drive（每場自動備份）", "GOOGLE_*（沒有就用 GMAIL_* 那一組），refresh token 要含 drive.file"],
+    ["signal", "現場動線訊號", "SIGNAL_KEY；沒有的話捷徑與 NFC 貼紙送不出訊號"],
+    ["master", "母簡報", "在上面放一份，或 commit 到 public/assets/master/"],
+  ];
+  async function loadSettingsTab() {
+    await Promise.all([loadShortcuts(), checkMaster()]);
+    const r = await api("/api/settings");
+    if (!r.ok) { $("statusList").innerHTML = `<li class="err">${esc(r.error)}</li>`; return; }
+    state.settings = r.settings;
+    $("senderDefault").value = r.settings.sender_default || "director";
+    $("statusList").innerHTML = STATUS_ROWS.map(([k, label, where]) => {
+      const on = !!r.status[k];
+      const note = k === "ai" && r.status.ai_mock ? "（AI_MOCK：回固定範例，不會真的問 Claude）" : "";
+      return `<li><span class="${on ? "ok" : "err"}">${on ? "已設定" : "未設定"}</span> ${esc(label)}${note ? `<span class="muted">${note}</span>` : ""} <span class="muted">· ${esc(where)}</span></li>`;
+    }).join("") + `<li class="muted">資料存在：${esc(r.status.store)}</li>`;
+  }
+  $("senderDefault").onchange = async () => {
+    const r = await api("/api/settings", { method: "POST", body: { settings: { sender_default: $("senderDefault").value } } });
+    if (!r.ok) return flash(r.error, "err");
+    state.settings = r.settings;
+    $("settingsInfo").textContent = "已存";
+    setTimeout(() => ($("settingsInfo").textContent = ""), 3000);
+  };
+
   async function loadDataTab() {
-    await loadShortcuts();
     const t = encodeURIComponent(token());
     $("csvVisits").href = `/api/visits?export=csv&table=visits&token=${t}`; $("csvResponses").href = `/api/visits?export=csv&table=responses&token=${t}`; $("csvTimeline").href = `/api/visits?export=csv&table=timeline&token=${t}`; $("csvPerf").href = `/api/visits?export=csv&table=slide_performance&token=${t}`;
     await loadVisits();
