@@ -14,7 +14,8 @@ export default backgroundHandler<{ visit_id?: string; visit?: Partial<Visit> }>(
   const store = getStore();
   const id = String(input.visit_id || "");
   const saved = id ? await store.getVisit(id) : null;
-  const visit = (saved || input.visit) as Visit;
+  // 要查的內容以工作帶進來的那一份為準（後台送的是畫面上現在的名單），存檔的那一筆只用來寫回結果
+  const visit = (input.visit || saved) as Visit;
   if (!visit) throw new Error("沒有可以查的參訪資料");
 
   const write = async (background: any) => {

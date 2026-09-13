@@ -481,6 +481,14 @@ test("research: 查網路要一到三分鐘，所以走背景工作；**還沒�
   assert.ok(b.purposes.length, "可能的參訪目的");
   assert.ok(b.researched_at);
   assert.deepEqual((await api(`/api/research?job=${started.body.job_id}`, { headers: admin })).body.result.purposes, b.purposes, "輪詢拿到的跟寫回參訪的是同一份");
+
+  // 存過檔、但畫面上的名單剛改過（例如刪掉一個人）：查的要是**送上來的那一份**，不是伺服器上的舊名單，
+  // 不然剛刪掉的人又會出現在「名單上的人」裡
+  const stored = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit;
+  assert.ok(stored.guests.length >= 2, "這一場本來就有兩個人以上");
+  const onlyOne = await runJob("research", { visit_id: visitId, visit: { ...stored, guests: [stored.guests[0]] } });
+  assert.equal(onlyOne.status, 200, JSON.stringify(onlyOne.body));
+  assert.deepEqual(onlyOne.body.people.map((p) => p.name), [stored.guests[0].name], "只查名單上還在的人");
 });
 
 test("排程會參考歷次累積：同類單位選過哪幾頁、哪幾頁被提問（功能 4 回饋功能 2）", async () => {

@@ -7,8 +7,9 @@ import type { Visit } from "../lib/types.mts";
  * 訪前功課（查公開資料，判斷可能的參訪目的）。查網路要一到三分鐘，一般函式只有 10 秒，
  * 所以真正的工作在 research-background。
  *
- * POST /api/research {visit}      → 202 {job_id}；**還沒存檔也查得了**，要查的那一筆跟著工作走
- * POST /api/research {visit_id}   → 202 {job_id}；已經存檔的就順便寫回 visit.background
+ * POST /api/research {visit}            → 202 {job_id}；**還沒存檔也查得了**，要查的那一筆跟著工作走
+ * POST /api/research {visit_id, visit?}  → 202 {job_id}；順便寫回 visit.background。
+ *   有帶 visit 就查那一份（畫面上的名單剛改過、存檔還沒回來時，要查的是畫面上那一份）
  * GET  /api/research?job=<id>     → 進度與結果
  * GET  /api/research?id=<visit_id> → { background }（重新整理後接回進度用；只有存過檔的才有）
  */
@@ -33,11 +34,12 @@ export default async (req: Request) => {
   if (id) {
     const visit = await store.getVisit(id);
     if (!visit) return fail(404, "找不到這次參訪");
-    draft = visit;
+    // 後台送上來的那一份優先：名單剛改過（例如刪掉一個人）而存檔還沒回來時，要查的是畫面上這一份
+    draft = draft || visit;
     // 存過檔的順便把「查資料中」記在那一筆上：重新整理、換台機器都看得到進度
     (visit as any).background = { ...((visit as any).background || {}), status: "running", started_at: nowISO() };
     await store.putVisit(visit);
   }
   if (!draft?.org?.name && !(draft?.guests || []).length) return fail(400, "至少要有單位名稱或一個名單上的人，才查得到東西");
-  return startBackground("research", { visit_id: id, visit: id ? null : draft }, req);
+  return startBackground("research", { visit_id: id, visit: draft }, req);
 };

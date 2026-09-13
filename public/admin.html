@@ -146,13 +146,10 @@
             <div><div class="f mb-0">來賓專頁</div><a id="pageLink" class="underline break-all" target="_blank" rel="noopener"></a></div>
             <p class="muted">這一場專屬的頁面：當天的流程、五間老師卡片，來賓可以在上面留 email。<b>QR 是拿來印或投影的</b>——放在門口或簡報最後一頁，來賓自己掃就打得開，不必個別傳網址。產生簡報時也會自動加一頁一樣的 QR。</p>
             <div class="flex flex-wrap gap-2">
-              <button class="btn" id="openDeck" title="跳到「簡報」分頁，挑這一場要講的頁次並產出 .pptx">選頁與產生簡報</button>
-              <button class="btn btn-soft" id="copyLink" title="複製來賓專頁網址，貼到信裡或 LINE 給對方">複製網址</button>
-              <button class="btn btn-soft" id="downloadIcs" title="把「收工提醒」加進行事曆：參訪結束時跳出來提醒你拍簽名簿、講三十秒口述。系統本來就會在結束時間寄一封提醒信，這個只是想在行事曆上也看到的人用">下載收工提醒 .ics</button>
-              <button class="btn btn-soft" id="openLetters" title="跳到「信件」分頁草擬確認信：確認日期時間、附上來賓專頁網址">草擬確認信</button>
-              <button class="btn btn-soft" id="openWrapup" title="跳到「收工」分頁（來賓離開後要做的四件事都在那裡）">開收工頁</button>
+              <button class="btn" id="copyLink" title="複製來賓專頁網址，貼到信裡或 LINE 給對方">複製網址</button>
+              <button class="btn btn-soft" id="downloadIcs" title="把這一場加進行事曆，結束時間跳出來提醒你拍簽名簿、講三十秒口述。系統本來就會在那個時間寄一封提醒信，這顆是給想在行事曆上也看到的人">下載收工提醒 .ics</button>
             </div>
-            <p class="muted" id="deckState"></p>
+            <p class="muted">接下來要做什麼（選頁、確認信、收工）看上面那一排進度：綠勾是做過了，點一格就跳到該做那件事的分頁。</p>
           </div>
         </div>
       </div>
@@ -612,7 +609,7 @@
     $("deleteBtn").hidden = !state.saved;
     $("draftDiscard").hidden = state.saved || !state.draft?.fields?.form;
     if (!state.saved) $("saveInfo").textContent = "填上單位名稱就會自己建一場，不必按存檔";
-    renderGuests(v.guests || []); renderProgramme(v.programme || []); renderItinerary(v.itinerary); renderDeckState(v); renderBackground(v.background);
+    renderGuests(v.guests || []); renderProgramme(v.programme || []); renderItinerary(v.itinerary); renderBackground(v.background);
     $("rationale").textContent = v.plan_rationale || ""; $("uncertainties").innerHTML = (v.uncertainties || []).map((u) => `<li>${esc(u)}</li>`).join("");
     $("afterSave").hidden = !state.saved;
     renderProgress(v);
@@ -635,11 +632,24 @@
   function renderGuests(guests) {
     $("guestTable").tBodies[0].innerHTML = guests.map((g) => guestRow(g)).join("");
   }
-  const guestRow = (g = {}) => `<tr><td><input type="text" value="${esc(g.name)}"></td><td><input type="text" value="${esc(g.title)}"></td><td><input type="email" value="${esc(g.email)}"></td><td><input type="text" value="${esc(g.affiliation)}"></td><td class="text-center"><input type="radio" name="lead" ${g.role === "lead" ? "checked" : ""}></td><td><button type="button" class="muted" onclick="this.closest('tr').remove()">✕</button></td></tr>`;
+  const guestRow = (g = {}) => `<tr><td><input type="text" value="${esc(g.name)}"></td><td><input type="text" value="${esc(g.title)}"></td><td><input type="email" value="${esc(g.email)}"></td><td><input type="text" value="${esc(g.affiliation)}"></td><td class="text-center"><input type="radio" name="lead" ${g.role === "lead" ? "checked" : ""}></td><td><button type="button" class="muted" data-del-row title="刪掉這一列">✕</button></td></tr>`;
   $("addGuest").onclick = () => $("guestTable").tBodies[0].insertAdjacentHTML("beforeend", guestRow());
+  /**
+   * 每一張表的 ✕：刪掉那一列。**訪前那兩張表（名單、今日流程）刪完要自己叫一次存檔**——
+   * 刪一列不會冒出 input／change 事件，所以以前是「畫面上刪掉了、伺服器上還在」：
+   * 重新整理、或下一次按「AI 查訪客背景」，被刪掉的人又會回來。
+   */
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-del-row]");
+    if (!btn) return;
+    const row = btn.closest("tr");
+    const inPre = !!row?.closest("#tab-pre");
+    row?.remove();
+    if (inPre) scheduleSave();
+  });
   function renderProgramme(blocks) { $("programmeTable").tBodies[0].innerHTML = blocks.map(blockRow).join(""); }
   const KIND_LABEL = { briefing: "總體簡報", tour: "研究室參訪", discussion: "綜合討論", photo: "合照", other: "其他" };
-  const blockRow = (b = { kind: "discussion", title_en: "General discussion", title_2nd: "綜合討論" }) => `<tr><td><input type="time" value="${esc(b.start)}"></td><td><input type="time" value="${esc(b.end)}"></td><td><select>${Object.entries(KIND_LABEL).map(([k, label]) => `<option value="${k}" ${b.kind === k ? "selected" : ""}>${label}</option>`).join("")}</select></td><td><input type="text" value="${esc(b.title_en)}"></td><td><input type="text" value="${esc(b.title_2nd)}"></td><td><input type="text" value="${esc(b.slides_range || "")}"></td><td><button type="button" class="muted" onclick="this.closest('tr').remove()">✕</button></td></tr>`;
+  const blockRow = (b = { kind: "discussion", title_en: "General discussion", title_2nd: "綜合討論" }) => `<tr><td><input type="time" value="${esc(b.start)}"></td><td><input type="time" value="${esc(b.end)}"></td><td><select>${Object.entries(KIND_LABEL).map(([k, label]) => `<option value="${k}" ${b.kind === k ? "selected" : ""}>${label}</option>`).join("")}</select></td><td><input type="text" value="${esc(b.title_en)}"></td><td><input type="text" value="${esc(b.title_2nd)}"></td><td><input type="text" value="${esc(b.slides_range || "")}"></td><td><button type="button" class="muted" data-del-row title="刪掉這一列">✕</button></td></tr>`;
   $("addBlock").onclick = () => $("programmeTable").tBodies[0].insertAdjacentHTML("beforeend", blockRow());
   function renderItinerary(it) {
     const by = new Map((it || []).map((s, i) => [String(s.room), { ...s, order: i }]));
@@ -705,7 +715,7 @@
   /** 存檔後把新的那一份同步回訪前分頁，免得訪前再按儲存時蓋掉。 */
   function afterDeckSave(visit) {
     state.deckVisit = visit;
-    if (state.visit?.visit_id === visit.visit_id) { state.visit.slides = visit.slides; state.visit.deck = visit.deck; renderDeckState(visit); }
+    if (state.visit?.visit_id === visit.visit_id) { state.visit.slides = visit.slides; state.visit.deck = visit.deck; renderProgress(state.visit); }
   }
   $("noDeck").onchange = async () => {
     applyNoDeck();
@@ -823,8 +833,8 @@
     const v = readForm();
     if (!v.org?.name && !(v.guests || []).length) return flash("至少要有單位名稱或一個名單上的人，才查得到東西", "err");
     $("background").innerHTML = `<p class="muted">查資料中……AI 要讀幾個網頁，大約一到三分鐘，查完會直接出現在這裡。</p>`;
-    // 還沒存檔也查得了：存過的就順便寫回那一場，沒存的結果留在畫面上，按「儲存」時一起存進去
-    const b = await runJob("/api/research", state.saved ? { visit_id: state.visit.visit_id } : { visit: v }, noteInto("researchInfo"), "查資料中……");
+    // 查的一律是畫面上現在這一份（剛把某個人從名單刪掉，就不該再去查他）；存過檔的另外把進度與結果寫回那一場
+    const b = await runJob("/api/research", { visit_id: state.saved ? state.visit.visit_id : "", visit: v }, noteInto("researchInfo"), "查資料中……");
     if (!b) { $("background").innerHTML = ""; return; }
     if (state.visit) state.visit.background = b;
     renderBackground(b);
@@ -891,7 +901,7 @@
     const out = await waitForJob("/api/plan", jobId, noteInto("planInfo"));
     if (!out) return;
     const v = out.visit; state.visit = { ...state.visit, ...v, visit_id: state.saved ? state.visit.visit_id : "" };
-    renderProgramme(v.programme); renderItinerary(v.itinerary); renderDeckState(state.visit);
+    renderProgramme(v.programme); renderItinerary(v.itinerary);
     $("rationale").textContent = v.plan_rationale || ""; const hist = out.history ? `；參考了過去 ${out.history.visits} 場（同類單位 ${out.history.same_type.visits} 場）哪幾頁被提問、被提到` : "";
     $("planInfo").textContent = `也挑了 ${(v.slides || []).length} 頁、簡報約 ${out.estimated_briefing_minutes} 分鐘，到「簡報」分頁確認${hist}${out.master_text_available ? "" : "（尚無母簡報文字：第 1–3 頁的替換文字要在產檔時處理）"}`;
     await saveVisit();
@@ -1153,10 +1163,6 @@
     $("saveInfo").textContent = `已存 ${(v.updated_at || "").slice(11, 16)}`;
   }
   /** 訪前頁只報一行簡報狀態，實際的選頁與產檔在「簡報」分頁。 */
-  function renderDeckState(v) {
-    $("deckState").textContent = v?.deck?.skip ? "簡報：這場不用簡報，只口頭介紹" : `簡報：已選 ${(v?.slides || []).length} 頁`;
-  }
-  $("openDeck").onclick = () => showTab("deck");
   $("copyLink").onclick = () => copy(state.visit.page_url);
 
   // ── 產生簡報：在瀏覽器裡子集化母簡報（核心 /lib/pptx.mjs 與本機 CLI 同一份），直接下載 .pptx ──
@@ -1346,8 +1352,6 @@
     });
   }
   $("downloadIcs").onclick = () => download(`${state.visit.visit_id}-wrapup.ics`, ics(state.visit), "text/calendar");
-  $("openWrapup").onclick = () => showTab("wrapup");
-  $("openLetters").onclick = () => showTab("post");
   function ics(v) {
     const start = new Date(`${v.date}T${v.start_time || "10:00"}:00+08:00`); const end = new Date(start.getTime() + (v.duration_minutes || 90) * 60000);
     const f = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z"); const url = `${location.origin}/admin.html#wrapup=${v.visit_id}`;
@@ -1396,7 +1400,7 @@
     $("signbookInfo").textContent = `照片已存：${r.photo_key}`;
     state.signbookEntries = r.entries || []; renderSignbook(); $("signbookTranscript").textContent = r.transcript || ""; $("signbookEntries").hidden = false;
   });
-  function renderSignbook() { $("signbookTable").tBodies[0].innerHTML = state.signbookEntries.map((e) => `<tr><td><textarea rows="2">${esc(e.text)}</textarea></td><td><input type="text" value="${esc(e.signed_by)}"></td><td><button type="button" class="muted" onclick="this.closest('tr').remove()">✕</button></td></tr>`).join(""); }
+  function renderSignbook() { $("signbookTable").tBodies[0].innerHTML = state.signbookEntries.map((e) => `<tr><td><textarea rows="2">${esc(e.text)}</textarea></td><td><input type="text" value="${esc(e.signed_by)}"></td><td><button type="button" class="muted" data-del-row title="刪掉這一列">✕</button></td></tr>`).join(""); }
   $("signbookAdd").onclick = () => { state.signbookEntries = readSignbook(); state.signbookEntries.push({ text: "", signed_by: "", language: "" }); renderSignbook(); };
   const readSignbook = () => [...$("signbookTable").tBodies[0].rows].map((tr) => ({ text: tr.cells[0].firstChild.value.trim(), signed_by: tr.cells[1].firstChild.value.trim(), language: "" }));
   $("signbookSave").onclick = () => busy($("signbookSave"), async () => {
@@ -1507,7 +1511,7 @@
     $("photoList").innerHTML = state.materials.photos.map((p) => `<span class="relative inline-block"><img src="${esc(mediaUrl(p))}" alt="" class="h-20 rounded-lg object-cover"><button type="button" class="absolute -top-2 -right-2 bg-white rounded-full border px-1.5 text-xs" data-remove-photo="${esc(p)}">✕</button></span>`).join("") || `<span class="muted">尚無合照</span>`;
     $("linkTable").tBodies[0].innerHTML = state.materials.links.map(linkRow).join("");
   }
-  const linkRow = (l = {}) => `<tr><td><input type="text" value="${esc(l.title)}" placeholder="例如：Lab 303 近期論文"></td><td><input type="text" value="${esc(l.url)}" placeholder="https://…"></td><td><button type="button" class="muted" onclick="this.closest('tr').remove()">✕</button></td></tr>`;
+  const linkRow = (l = {}) => `<tr><td><input type="text" value="${esc(l.title)}" placeholder="例如：Lab 303 近期論文"></td><td><input type="text" value="${esc(l.url)}" placeholder="https://…"></td><td><button type="button" class="muted" data-del-row title="刪掉這一列">✕</button></td></tr>`;
   $("linkAdd").onclick = () => $("linkTable").tBodies[0].insertAdjacentHTML("beforeend", linkRow());
   const readLinks = () => [...$("linkTable").tBodies[0].rows].map((tr) => ({ title: tr.cells[0].firstChild.value.trim(), url: tr.cells[1].firstChild.value.trim() })).filter((l) => l.url);
   async function saveMaterials(next) {
@@ -1773,7 +1777,7 @@ $("driveInfo").innerHTML = d?.backed_up_at
         (p) => `<tr data-g="${p.gi}" data-p="${p.pi}"><td class="text-center"><input type="checkbox" checked data-take></td>
         <td><input type="text" value="${esc(p.name)}"></td><td><input type="text" value="${esc(p.title)}"></td><td><input type="text" value="${esc(p.affiliation)}"></td>
         <td><input type="email" value="${esc(p.email)}"></td><td><input type="text" value="${esc(p.phone)}"></td>
-        <td><button type="button" class="muted" onclick="this.closest('tr').remove()">✕</button></td></tr>`,
+        <td><button type="button" class="muted" data-del-row title="刪掉這一列">✕</button></td></tr>`,
       )
       .join("");
     const any = rows.length > 0;
