@@ -309,6 +309,22 @@ try {
   await page.waitForFunction(() => !document.getElementById("visitDetail").hidden && /Western Australia/.test(document.getElementById("detailTitle").textContent));
   check(true, "…and each one opens that visit's record");
 
+  // 圓點是「螢幕上幾個像素」，不是地圖座標：地圖畫得越大，點在地圖上越小，
+  // 不然把地圖拉大之後整個韓國還是被一個點蓋住
+  const dot = () => page.evaluate(() => {
+    const c = document.querySelector("#worldMap circle.dot");
+    const svg = document.querySelector("#worldMap svg");
+    const [, , w] = svg.getAttribute("viewBox").split(" ").map(Number);
+    const r = Number(c.getAttribute("r"));
+    return { r, px: (r * svg.getBoundingClientRect().width) / w };
+  });
+  const narrow = await dot();
+  await page.setViewportSize({ width: 1500, height: 900 });
+  await page.waitForFunction((r) => Number(document.querySelector("#worldMap circle.dot").getAttribute("r")) < r, narrow.r, { timeout: 15000 });
+  const wide = await dot();
+  check(wide.r < narrow.r && Math.abs(wide.px - narrow.px) < 1, `dots shrink on the map as the map grows, staying the same size on screen (${narrow.px.toFixed(1)}px → ${wide.px.toFixed(1)}px)`);
+  await page.setViewportSize({ width: 1100, height: 900 });
+
   // 現場動線：後台自己產捷徑與 NFC 網址（以前只能開終端機）；一次性設定都收在「設定」分頁
   await page.click('[data-tab="settings"]');
   check((await page.locator('#tab-data #shortcutsList').count()) === 0, "one-time setup lives in the settings tab, not mixed in with the archive");
@@ -334,9 +350,11 @@ try {
   await page.fill("#orgName", "Typo Institute");
   await page.waitForFunction((n) => document.querySelectorAll("#visitSelect option").length === n + 1, beforeDelete, { timeout: 30000 });
   check(true, "typing an organisation name is enough to create the visit");
+  await page.fill("#date", "2026-08-01"); // 一場已經過去的參訪（網址還沒用出去，日期改了就換一個 visit_id）
+  await page.waitForFunction(() => /^2026-08-01/.test(document.getElementById("preStatus").textContent), null, { timeout: 30000 });
+  const typoId = await page.inputValue("#visitSelect");
 
   // 「以前做過的參訪」：列在訪前分頁底下，點一列就把全站的「這一場」切過去
-  const typoId = await page.inputValue("#visitSelect");
   await page.waitForFunction(() => document.querySelectorAll('#pastVisits [data-past]').length > 0);
   check((await page.locator('#pastVisits [data-past="2026-10-07-uwa"]').count()) === 1, "past visits are listed at the bottom of the pre-visit tab");
   check(/選了 \d+ 頁/.test(await page.textContent("#pastVisits")), "…saying what that visit picked, so the next deck has something to go on");
@@ -345,7 +363,12 @@ try {
   await page.click('#pastVisits [data-past="2026-10-07-uwa"]');
   await page.waitForFunction(() => document.getElementById("preStatus").textContent === "2026-10-07-uwa", null, { timeout: 30000 });
   check((await page.inputValue("#visitSelect")) === "2026-10-07-uwa", "clicking one pulls it up as the current visit");
-  await page.click(`#pastVisits [data-past="${typoId}"]`); // 換過去之後，這一列就變成剛才那一場
+
+  // 一打開後台不該看到上一次那一場的資料：停在今天或接下來最近的一場，過去的不自己跳出來
+  await page.reload();
+  await page.waitForFunction(() => document.getElementById("preStatus").textContent === "2026-10-07-uwa", null, { timeout: 30000 });
+  check(true, "opening the admin lands on the next visit, not on the one that already happened");
+  await page.click(`#pastVisits [data-past="${typoId}"]`); // 過去那一場要自己點才會出現
   await page.waitForFunction((id) => document.getElementById("preStatus").textContent === id, typoId, { timeout: 30000 });
   page.once("dialog", (d) => d.accept());
   await page.click("#deleteBtn");

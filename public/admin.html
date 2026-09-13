@@ -28,9 +28,10 @@
   [hidden] { display: none !important; }
   /* 訪客地圖：選到的國家亮起來；滑鼠點的時候不要跳出對焦外框，但鍵盤按到還是要看得見 */
   #worldMap g:focus { outline: none; }
-  #worldMap g circle { fill: #1c1917; fill-opacity: .78; stroke: #fff; stroke-width: 1.5; }
-  #worldMap g:hover circle, #worldMap g[data-on] circle { fill: #0369a1; fill-opacity: 1; }
-  #worldMap g:focus-visible circle { stroke: #0369a1; stroke-width: 3; }
+  #worldMap g circle.dot { fill: #1c1917; fill-opacity: .78; stroke: #fff; stroke-width: 1.5; }
+  #worldMap g:hover circle.dot, #worldMap g[data-on] circle.dot { fill: #0369a1; fill-opacity: 1; }
+  #worldMap g:focus-visible circle.dot { stroke: #0369a1; stroke-width: 3; }
+  #worldMap g circle.hit { fill: transparent; stroke: none; }
   #flash { position: fixed; left: 50%; transform: translateX(-50%); bottom: 1rem; z-index: 50; max-width: min(42rem, calc(100% - 2rem)); padding: .55rem .9rem; border-radius: .7rem; font-size: .9rem; color: #fff; background: #1c1917; box-shadow: 0 10px 30px rgba(0,0,0,.22); }
   #flash.ok { background: #047857; color: #fff; } #flash.err { background: #b91c1c; color: #fff; }
   .slide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: .25rem .75rem; font-size: .85rem; }
@@ -553,7 +554,7 @@
     localPrune();
     await ensureIndexes();
     renderItinerary();
-    await loadVisits();
+    await loadVisits({ autoPick: true });
     api("/api/settings").then((r) => { if (r.ok) state.settings = r.settings; }); // 預設值（例如訪後信寄件者）一開場就拿，不必等人打開「設定」
     // 打開後台就停在今天（或最近）那一場——不必自己先去選
     const m = /wrapup=([\w-]+)/.exec(location.hash);
@@ -561,7 +562,8 @@
     await selectVisit($("visitSelect").value);
     if (m) showTab("wrapup");
   }
-  async function loadVisits() {
+  /** `autoPick`：只有「剛打開後台」那一次才自動挑一場（見下面那段）；平常重載清單不動使用者選好的那一場。 */
+  async function loadVisits({ autoPick = false } = {}) {
     const r = await api("/api/visits");
     if (!r.ok) { setAuth(false); $("backendInfo").textContent = r.error; flash(r.error, "err"); return; }
     setAuth(true);
@@ -571,9 +573,13 @@
     const opts = r.visits.map((v) => `<option value="${esc(v.visit_id)}">${esc(v.date)} ${esc(v.org)}（${esc(v.status)}）</option>`).join("");
     const keep = $("visitSelect").value;
     $("visitSelect").innerHTML = `<option value="">＋ 新的一場</option>${opts}`;
-    // 沒有特別選過就停在今天那一場，不然停在最近一場；全站共用這一個選擇
+    // 打開後台停在「今天或接下來最近的那一場」——那才是現在要做的事。
+    // **過去的場次不會自己跳出來**：一打開就看到上禮拜那一場的資料，會以為系統把舊東西留在畫面上。
+    // 沒有將來的場次就停在乾淨的「＋ 新的一場」；要回頭處理舊的一場，上面的下拉或最底下
+    // 「以前做過的參訪」點一下就切過去。（已經選好一場的情形不動它——存檔之後也要留在原地。）
     const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
-    const pick = r.visits.find((v) => v.visit_id === keep) || r.visits.find((v) => v.date === today) || r.visits[0];
+    const next = autoPick ? r.visits.filter((v) => String(v.date) >= today).sort((a, b) => String(a.date).localeCompare(String(b.date)))[0] : null;
+    const pick = r.visits.find((v) => v.visit_id === keep) || next;
     $("visitSelect").value = keep && !r.visits.some((v) => v.visit_id === keep) ? "" : pick ? pick.visit_id : "";
     renderPastVisits();
   }
@@ -1751,17 +1757,19 @@
       groups.set(c.name, g);
     }
     state.mapGroups = groups;
-    const most = Math.max(1, ...[...groups.values()].map((g) => g.visits.length));
     const dots = [...groups.values()].map((g) => {
       const people = g.visits.reduce((n, v) => n + (Number(v.headcount) || 0), 0);
-      const r = (3 + 5 * Math.sqrt(g.visits.length / most)).toFixed(1);
-      return `<g data-country="${esc(g.c.name)}" tabindex="0" role="button" class="cursor-pointer"><circle cx="${g.c.x}" cy="${g.c.y}" r="${r}"><title>${esc(g.c.name)}：${g.visits.length} 場、${people} 人次</title></circle></g>`;
+      // data-r 是「螢幕上的半徑（像素）」，不是地圖座標；真正的 r 由 sizeDots() 換算
+      return `<g data-country="${esc(g.c.name)}" data-r="${dotPx(g.visits.length)}" tabindex="0" role="button" class="cursor-pointer"><circle class="hit" cx="${g.c.x}" cy="${g.c.y}" r="0"></circle><circle class="dot" cx="${g.c.x}" cy="${g.c.y}" r="0" vector-effect="non-scaling-stroke"><title>${esc(g.c.name)}：${g.visits.length} 場、${people} 人次</title></circle></g>`;
     }).join("");
     // 上下切掉南極與北極的空白（北緯 84 以北、南緯 60 以南沒有訪客，留著只會把其他地方壓扁）
     const [, , w, h] = world.viewBox.split(" ").map(Number);
     const top = (h * (90 - 84)) / 180;
     const view = `0 ${top} ${w} ${(h * (84 + 60)) / 180}`;
-    $("worldMap").innerHTML = `<svg viewBox="${view}" class="w-full h-auto rounded-xl border bg-stone-50" role="img" aria-label="訪客來自哪些國家的世界地圖"><path d="${world.land}" fill="#e7e5e4" stroke="#a8a29e" stroke-width="0.5"></path>${dots}</svg>`;
+    $("worldMap").innerHTML = `<svg viewBox="${view}" class="w-full h-auto rounded-xl border bg-stone-50" role="img" aria-label="訪客來自哪些國家的世界地圖"><path d="${world.land}" fill="#e7e5e4" stroke="#a8a29e" stroke-width="0.6" vector-effect="non-scaling-stroke"></path>${dots}</svg>`;
+    sizeDots();
+    // 地圖是跟著版面寬度縮放的：寬度一變就要重算圓點半徑
+    if (window.ResizeObserver && !state.mapResize) { state.mapResize = new ResizeObserver(() => sizeDots()); state.mapResize.observe($("worldMap")); }
     const visits = [...groups.values()].reduce((n, g) => n + g.visits.length, 0);
     const people = [...groups.values()].reduce((n, g) => n + g.visits.reduce((m, v) => m + (Number(v.headcount) || 0), 0), 0);
     $("mapSummary").textContent = groups.size ? `${groups.size} 個國家 · ${visits} 場 · 共 ${people} 人次` : "";
@@ -1771,6 +1779,27 @@
     if (state.mapCountry && groups.has(state.mapCountry)) showCountry(state.mapCountry);
     else { state.mapCountry = ""; $("mapVisits").innerHTML = ""; }
   }
+  /**
+   * 圓點多大：**用螢幕上的像素算，不是地圖座標**。地圖是跟著版面寬度縮放的，
+   * 半徑若寫死在地圖座標裡，地圖畫得越大圓點就跟著越大，整個韓國永遠被一個點蓋住。
+   * 這裡反過來：地圖越大，圓點在地圖座標上就越小，螢幕上看起來一樣大、蓋住的地方越來越少。
+   * 場次多的大一點（絕對尺度，不是跟當下最多的那一國比，這樣不同時間看到的大小才可比），最大 12 px。
+   * 另外疊一顆透明的圓當點擊範圍，至少 11 px，手指才點得到。
+   */
+  const dotPx = (n) => Math.min(12, 3 + 2 * Math.sqrt(n)).toFixed(1);
+  function sizeDots() {
+    const svg = $("worldMap").querySelector("svg");
+    const wide = svg?.getBoundingClientRect().width;
+    if (!wide) return;
+    const [, , w] = svg.getAttribute("viewBox").split(" ").map(Number);
+    const k = w / wide; // 一個螢幕像素等於幾個地圖座標
+    for (const g of svg.querySelectorAll("[data-country]")) {
+      const px = Number(g.dataset.r) || 5;
+      g.querySelector("circle.dot").setAttribute("r", (px * k).toFixed(2));
+      g.querySelector("circle.hit").setAttribute("r", (Math.max(px, 11) * k).toFixed(2));
+    }
+  }
+
   /** 點一個國家：列出那個國家的每一場，再點一列就跳到那一場的紀錄。 */
   function showCountry(name) {
     const g = state.mapGroups?.get(name);
