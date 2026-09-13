@@ -553,7 +553,7 @@
     localPrune();
     await ensureIndexes();
     renderItinerary();
-    await loadVisits();
+    await loadVisits({ autoPick: true });
     api("/api/settings").then((r) => { if (r.ok) state.settings = r.settings; }); // 預設值（例如訪後信寄件者）一開場就拿，不必等人打開「設定」
     // 打開後台就停在今天（或最近）那一場——不必自己先去選
     const m = /wrapup=([\w-]+)/.exec(location.hash);
@@ -561,7 +561,8 @@
     await selectVisit($("visitSelect").value);
     if (m) showTab("wrapup");
   }
-  async function loadVisits() {
+  /** `autoPick`：只有「剛打開後台」那一次才自動挑一場（見下面那段）；平常重載清單不動使用者選好的那一場。 */
+  async function loadVisits({ autoPick = false } = {}) {
     const r = await api("/api/visits");
     if (!r.ok) { setAuth(false); $("backendInfo").textContent = r.error; flash(r.error, "err"); return; }
     setAuth(true);
@@ -571,9 +572,13 @@
     const opts = r.visits.map((v) => `<option value="${esc(v.visit_id)}">${esc(v.date)} ${esc(v.org)}（${esc(v.status)}）</option>`).join("");
     const keep = $("visitSelect").value;
     $("visitSelect").innerHTML = `<option value="">＋ 新的一場</option>${opts}`;
-    // 沒有特別選過就停在今天那一場，不然停在最近一場；全站共用這一個選擇
+    // 打開後台停在「今天或接下來最近的那一場」——那才是現在要做的事。
+    // **過去的場次不會自己跳出來**：一打開就看到上禮拜那一場的資料，會以為系統把舊東西留在畫面上。
+    // 沒有將來的場次就停在乾淨的「＋ 新的一場」；要回頭處理舊的一場，上面的下拉或最底下
+    // 「以前做過的參訪」點一下就切過去。（已經選好一場的情形不動它——存檔之後也要留在原地。）
     const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
-    const pick = r.visits.find((v) => v.visit_id === keep) || r.visits.find((v) => v.date === today) || r.visits[0];
+    const next = autoPick ? r.visits.filter((v) => String(v.date) >= today).sort((a, b) => String(a.date).localeCompare(String(b.date)))[0] : null;
+    const pick = r.visits.find((v) => v.visit_id === keep) || next;
     $("visitSelect").value = keep && !r.visits.some((v) => v.visit_id === keep) ? "" : pick ? pick.visit_id : "";
     renderPastVisits();
   }

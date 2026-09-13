@@ -334,9 +334,11 @@ try {
   await page.fill("#orgName", "Typo Institute");
   await page.waitForFunction((n) => document.querySelectorAll("#visitSelect option").length === n + 1, beforeDelete, { timeout: 30000 });
   check(true, "typing an organisation name is enough to create the visit");
+  await page.fill("#date", "2026-08-01"); // 一場已經過去的參訪（網址還沒用出去，日期改了就換一個 visit_id）
+  await page.waitForFunction(() => /^2026-08-01/.test(document.getElementById("preStatus").textContent), null, { timeout: 30000 });
+  const typoId = await page.inputValue("#visitSelect");
 
   // 「以前做過的參訪」：列在訪前分頁底下，點一列就把全站的「這一場」切過去
-  const typoId = await page.inputValue("#visitSelect");
   await page.waitForFunction(() => document.querySelectorAll('#pastVisits [data-past]').length > 0);
   check((await page.locator('#pastVisits [data-past="2026-10-07-uwa"]').count()) === 1, "past visits are listed at the bottom of the pre-visit tab");
   check(/選了 \d+ 頁/.test(await page.textContent("#pastVisits")), "…saying what that visit picked, so the next deck has something to go on");
@@ -345,7 +347,12 @@ try {
   await page.click('#pastVisits [data-past="2026-10-07-uwa"]');
   await page.waitForFunction(() => document.getElementById("preStatus").textContent === "2026-10-07-uwa", null, { timeout: 30000 });
   check((await page.inputValue("#visitSelect")) === "2026-10-07-uwa", "clicking one pulls it up as the current visit");
-  await page.click(`#pastVisits [data-past="${typoId}"]`); // 換過去之後，這一列就變成剛才那一場
+
+  // 一打開後台不該看到上一次那一場的資料：停在今天或接下來最近的一場，過去的不自己跳出來
+  await page.reload();
+  await page.waitForFunction(() => document.getElementById("preStatus").textContent === "2026-10-07-uwa", null, { timeout: 30000 });
+  check(true, "opening the admin lands on the next visit, not on the one that already happened");
+  await page.click(`#pastVisits [data-past="${typoId}"]`); // 過去那一場要自己點才會出現
   await page.waitForFunction((id) => document.getElementById("preStatus").textContent === id, typoId, { timeout: 30000 });
   page.once("dialog", (d) => d.accept());
   await page.click("#deleteBtn");
