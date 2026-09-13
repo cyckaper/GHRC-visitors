@@ -54,7 +54,6 @@
   .btn-soft:hover { background: #e7e5e4; }
   .btn-soft[aria-pressed="true"] { background: var(--ink); color: #fff; }
   .btn-accent { background: var(--accent); }
-  .btn-room { background: var(--tone); }
   .btn-accent:hover { background: #115e59; }
   input[type=text], input[type=email], textarea { width: 100%; border: 1px solid #d6d3d1; border-radius: .6rem; padding: .55rem .7rem; background: #fff; transition: border-color .2s, box-shadow .2s; }
   input:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(15, 118, 110, .15); }
@@ -131,11 +130,6 @@
       <button class="btn btn-accent" type="submit" id="emailSend"></button>
       <p class="text-sm text-emerald-700" id="emailDone" hidden></p>
     </form>
-    <details class="text-sm text-stone-500">
-      <summary id="roomTitle" class="cursor-pointer"></summary>
-      <div class="flex flex-wrap gap-2 mt-2" id="roomButtons"></div>
-      <p class="mt-2 text-emerald-700" id="roomDone" hidden></p>
-    </details>
   </section>
 
   <section class="card space-y-4 reveal" id="respond">
@@ -387,16 +381,6 @@
     $("emailSend").disabled = false;
     if (r.ok) { $("emailDone").textContent = T("thanks"); $("emailDone").hidden = false; $("emailForm").reset(); }
     else showNotice(r.error || "error");
-  });
-
-  // 備援：來賓自己按「現在進入哪一間」
-  $("roomTitle").textContent = T("now_in_room");
-  $("roomButtons").innerHTML = ROOMS.map((r) => `<button type="button" class="btn btn-room" style="--tone:${roomTone(r)}" data-room="${r}">${r}</button>`).join("");
-  $("roomButtons").addEventListener("click", async (ev) => {
-    const b = ev.target.closest("button[data-room]");
-    if (!b || !visit) return;
-    const r = await post("/api/timeline", { visit_id: visit.visit_id, room: b.dataset.room, source: "guest" });
-    if (r.ok) { $("roomDone").textContent = `${b.dataset.room} ✓`; $("roomDone").hidden = false; }
   });
 
   // 訪後三個回應項目（工作包 4.6）

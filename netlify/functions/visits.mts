@@ -9,7 +9,7 @@ import { dropDraft, moveDraft } from "./draft.mts";
  * GET  /api/visits?id=X&public=1   來賓端可見子集（不需授權）
  * GET  /api/visits?id=X            完整資料（admin）
  * GET  /api/visits                 列表（admin）
- * GET  /api/visits?export=csv&table=visits|responses|timeline|slide_performance（admin）
+ * GET  /api/visits?export=csv&table=visits|responses|slide_performance（admin）
  * POST /api/visits                 新增或更新（admin）
  */
 export default async (req: Request) => {
@@ -30,7 +30,7 @@ export default async (req: Request) => {
     if (exp) {
       const table = url.searchParams.get("table") || "visits";
       const rows =
-        table === "responses" ? await store.listResponses() : table === "timeline" ? await store.listTimeline() : table === "slide_performance" ? await store.listSlidePerformance() : await store.listVisits();
+        table === "responses" ? await store.listResponses() : table === "slide_performance" ? await store.listSlidePerformance() : await store.listVisits();
       if (exp === "csv") return new Response(toCSV(rows as any[]), { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="${table}.csv"` } });
       return json({ ok: true, table, rows });
     }

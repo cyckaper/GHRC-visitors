@@ -18,7 +18,6 @@ const fnDir = path.join(root, "netlify", "functions");
 
 process.env.STORE_BACKEND ||= "file";
 process.env.ADMIN_TOKEN ||= "dev";
-process.env.SIGNAL_KEY ||= "devsignal";
 const port = Number(process.env.PORT || 8888);
 process.env.SITE_URL ||= `http://localhost:${port}`;
 

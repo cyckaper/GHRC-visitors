@@ -30,7 +30,6 @@ process.env.STORE_BACKEND = "file";
 process.env.STORE_DIR = tmp;
 process.env.AI_MOCK = "1";
 process.env.ADMIN_TOKEN = "e2e-token";
-process.env.SIGNAL_KEY = "e2e-signal";
 const { createServer } = await import("../../scripts/dev-server.mjs");
 const server = createServer();
 await new Promise((r) => server.listen(0, r));
@@ -343,15 +342,10 @@ try {
   check(wide.r < narrow.r && Math.abs(wide.px - narrow.px) < 1, `dots shrink on the map as the map grows, staying the same size on screen (${narrow.px.toFixed(1)}px → ${wide.px.toFixed(1)}px)`);
   await page.setViewportSize({ width: 1100, height: 900 });
 
-  // 現場動線：後台自己產捷徑與 NFC 網址（以前只能開終端機）；一次性設定都收在「設定」分頁
+  // 一次性設定都收在「設定」分頁
   await page.click('[data-tab="settings"]');
-  check((await page.locator('#tab-data #shortcutsList').count()) === 0, "one-time setup lives in the settings tab, not mixed in with the archive");
-  await page.waitForFunction(() => document.querySelectorAll("#shortcutsList [data-qr]").length === 6, null, { timeout: 30000 });
-  check(/已設定金鑰/.test(await page.textContent("#shortcutsStatus")), "the on-site signal URLs are ready in the admin, no terminal needed");
-  await page.click('#shortcutsList [data-qr="0"]');
-  await page.waitForFunction(() => document.querySelector('#shortcutsList [data-qrbox="0"]').innerHTML.length > 0);
-  check(true, "each room can show a QR to print for the door");
-  check((await page.locator("#statusList li").count()) >= 7, "the settings tab says which external services are wired up");
+  await page.waitForFunction(() => document.querySelectorAll("#statusList li").length > 0, null, { timeout: 30000 });
+  check((await page.locator("#statusList li").count()) >= 6, "the settings tab says which external services are wired up");
   check(/收工提醒/.test(await page.textContent("#statusList")), "…including whether the wrap-up reminder can be sent");
   check(/不會寄|現在寄到/.test(await page.textContent("#reminderInfo")), "the settings tab says where the wrap-up reminder would go");
   await page.fill("#reminderTo", "wrapup@ntu.edu.tw");

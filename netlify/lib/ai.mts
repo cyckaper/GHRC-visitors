@@ -3,7 +3,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { env } from "./http.mts";
 import { isMock } from "./data.mts";
-import type { DictationExtract, ResponseRow, SignbookEntry, TimelineSignal, Visit } from "./types.mts";
+import type { DictationExtract, ResponseRow, SignbookEntry, Visit } from "./types.mts";
 import type { Extracted } from "./files.mts";
 import { allocateProgramme, pageContents } from "../../lib/visit.mjs";
 
@@ -473,11 +473,11 @@ export async function extractDictation(transcript: string, visit: Visit): Promis
 
 // ───────────────────────── 6. 摘要與彙整 ─────────────────────────
 
-export async function summarizeVisit(visit: Visit, responses: ResponseRow[], timeline: any[]): Promise<string> {
-  if (isMock()) return mockSummary(visit, responses, timeline);
-  const payload = { visit: { ...visit, letters: undefined }, responses, timeline };
+export async function summarizeVisit(visit: Visit, responses: ResponseRow[]): Promise<string> {
+  if (isMock()) return mockSummary(visit, responses);
+  const payload = { visit: { ...visit, letters: undefined }, responses };
   return plain(
-    `替 GHRC 寫一頁參訪摘要（繁體中文，Markdown，300 字內）。段落固定：誰來（單位、主要來賓、人數）；看了哪幾間各多久（用 timeline）；最想看什麼（口述抽取）；問了哪些問題；想合作誰（responses 的 cooperate_rooms 與口述）；收到什麼建議（responses 的 suggestion，不具名的不要試圖猜是誰）；待辦。沒有資料的段落寫「（無）」。不要評分、不要用滿意度用語。\n\n${CENTER_FACTS}`,
+    `替 GHRC 寫一頁參訪摘要（繁體中文，Markdown，300 字內）。段落固定：誰來（單位、主要來賓、人數）；看了哪幾間各多久（用 visit.itinerary 當天排定的動線）；最想看什麼（口述抽取）；問了哪些問題；想合作誰（responses 的 cooperate_rooms 與口述）；收到什麼建議（responses 的 suggestion，不具名的不要試圖猜是誰）；待辦。沒有資料的段落寫「（無）」。不要評分、不要用滿意度用語。\n\n${CENTER_FACTS}`,
     JSON.stringify(payload),
   );
 }
@@ -630,13 +630,13 @@ function mockDictation(t: string): DictationExtract {
   };
 }
 
-function mockSummary(v: Visit, responses: ResponseRow[], timeline: any[]): string {
+function mockSummary(v: Visit, responses: ResponseRow[]): string {
   const lead = v.guests?.find((g) => g.role === "lead") || v.guests?.[0];
   return [
     `# ${v.org?.name || v.visit_id} · ${v.date}`,
     "",
     `**誰來**：${v.org?.name || "（無）"}，${lead ? `${lead.name} ${lead.title}` : ""}，${v.headcount || v.guests?.length || 0} 人`,
-    `**看了哪幾間**：${timeline.length ? timeline.map((t: any) => `${t.room}（${t.minutes} 分）`).join("、") : "（無）"}`,
+    `**看了哪幾間**：${(v.itinerary || []).filter((s) => Number(s.minutes) > 0).map((s) => `${s.room}（${s.minutes} 分）`).join("、") || "（無）"}`,
     `**最想看什麼**：${(v.dictation?.extracted?.most_wanted_rooms || []).join("、") || "（無）"}`,
     `**問了哪些問題**：${(v.dictation?.extracted?.questions || []).map((q) => `\n- ${q}`).join("") || "（無）"}`,
     `**想合作誰**：${[...new Set(responses.flatMap((r) => r.cooperate_rooms))].join("、") || "（無）"}`,
@@ -646,4 +646,3 @@ function mockSummary(v: Visit, responses: ResponseRow[], timeline: any[]): strin
   ].join("\n");
 }
 
-export type { TimelineSignal };

@@ -13,7 +13,6 @@ process.env.STORE_BACKEND = "file";
 process.env.STORE_DIR = tmp;
 process.env.AI_MOCK = "1";
 process.env.ADMIN_TOKEN = "test-token";
-process.env.SIGNAL_KEY = "test-signal";
 process.env.SITE_URL = "https://visit.example.test";
 process.env.GMAIL_SENDER = "ghrc@example.test"; // 只有寄件帳號：Gmail 仍算沒接好（沒有 client id／secret／refresh token）
 
@@ -206,29 +205,6 @@ test("confirmation letter draft is stored on the visit", async () => {
   assert.ok(v.body.visit.letters.confirmation.subject);
 });
 
-test("signals: keyed sources need SIGNAL_KEY, resolve today's visit, guest fallback needs visit_id", async () => {
-  // 今天沒有參訪 → 主要訊號沒有 visit_id 時回 404
-  const noVisit = await api("/api/timeline", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ room: "303", source: "nfc", key: "test-signal" }) });
-  assert.equal(noVisit.status, 404);
-  const badKey = await api("/api/timeline?room=303&source=presentation&key=wrong");
-  assert.equal(badKey.status, 401);
-  const ok = await api(`/api/timeline?room=303&source=presentation&key=test-signal&visit_id=${visitId}&at=2026-10-07T02:31:00Z`);
-  assert.equal(ok.status, 200, JSON.stringify(ok.body));
-  const brief = await api(`/api/timeline?room=briefing&source=presentation&key=test-signal&visit_id=${visitId}&at=2026-10-07T02:01:00Z`);
-  assert.equal(brief.status, 200, "the briefing room PC shortcut is a valid signal");
-  assert.equal((await api(`/api/timeline?room=999&source=presentation&key=test-signal&visit_id=${visitId}`)).status, 400);
-  const guest = await api("/api/timeline", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ room: "304", source: "guest", visit_id: visitId, at: "2026-10-07T02:45:00Z" }) });
-  assert.equal(guest.status, 200);
-  const noId = await api("/api/timeline", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ room: "304", source: "guest" }) });
-  assert.equal(noId.status, 400);
-  const tl = await api(`/api/timeline?id=${visitId}`, { headers: admin });
-  assert.equal(tl.status, 200);
-  assert.equal(tl.body.signals.length, 3);
-  assert.ok(tl.body.timeline.find((r) => r.room === "303").source === "presentation");
-  assert.equal(tl.body.timeline[0].room, "briefing");
-  assert.equal(tl.body.timeline[0].source, "presentation");
-});
-
 test("respond: anonymous suggestion is stored with no identity; named onsite email is kept", async () => {
   const anon = await api("/api/respond", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visit_id: visitId, anonymous: true, name: "Simon", email: "simon.kilbane@uwa.edu.au", suggestion: "Room 302 was hard to follow.", cooperate_rooms: ["301", "303"], next_actions: ["papers"] }) });
   assert.equal(anon.status, 200, JSON.stringify(anon.body));
@@ -414,7 +390,7 @@ test("drive backup: lists everything the archive folder should get; refuses to u
   assert.equal(r.body.configured, false, "no Google credentials in the test environment");
   assert.ok(r.body.hint.includes("GOOGLE_DRIVE_FOLDER_ID"));
   const names = r.body.items.map((i) => i.name);
-  assert.ok(names.includes("參訪資料.json") && names.includes("回覆.csv") && names.includes("動線.csv"));
+  assert.ok(names.includes("參訪資料.json") && names.includes("回覆.csv"));
   assert.ok(names.includes("一頁摘要.md"), "the summary written earlier is archived too");
   assert.ok(names.some((n) => n.startsWith("簽名簿.")), "signbook photo");
   assert.ok(names.some((n) => n.startsWith("主持人口述.")), "dictation audio");
@@ -532,7 +508,6 @@ test("設定：預設值存得起來，外部服務只回「接好了沒」不�
   const r = await api("/api/settings", { headers: admin });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.settings.sender_default, "director", "預設是中心主任");
-  assert.equal(r.body.status.signal, true, "測試環境有 SIGNAL_KEY");
   assert.equal(r.body.status.ai_mock, true, "測試跑在 AI_MOCK");
   assert.ok(!JSON.stringify(r.body).includes("test-signal"), "**不回金鑰內容**");
   assert.ok(!JSON.stringify(r.body).includes("test-token"), "**不回 ADMIN_TOKEN**");
@@ -642,21 +617,6 @@ test("一般存檔不會清掉別的端點寫的東西（摘要、提醒紀錄�
   assert.equal(stale.body.visit.summary, "摘要");
   assert.equal(stale.body.visit.reminders.wrapup_sent_at, "2026-08-21T05:00:00.000Z", "提醒紀錄留著，不然收工提醒會重寄一次");
   assert.equal(stale.body.visit.signbook.photo_key, "signbook/x/1.jpg");
-});
-
-test("現場動線的捷徑網址：後台自己拿得到，不必開終端機", async () => {
-  assert.equal((await api("/api/timeline?shortcuts=1")).status, 401, "要 token");
-  const r = await api("/api/timeline?shortcuts=1", { headers: admin });
-  assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.equal(r.body.key_set, true, "測試環境有設 SIGNAL_KEY");
-  assert.deepEqual(r.body.rooms.map((x) => x.room), ["briefing", "301", "302", "303", "304", "305"], "第一站是總體介紹");
-  const lab303 = r.body.rooms.find((x) => x.room === "303");
-  assert.ok(lab303.nfc_url.includes("source=nfc") && lab303.nfc_url.includes("key=test-signal"));
-  assert.ok(lab303.presentation_url.includes("source=presentation"));
-  // 拿到的網址真的送得出訊號：金鑰對就不會是 401（今天沒有排定參訪時回 404，那是另一回事）
-  const hit = await api(lab303.nfc_url.replace("https://visit.example.test", ""));
-  assert.notEqual(hit.status, 401, `金鑰應該被接受：${JSON.stringify(hit.body)}`);
-  assert.ok([200, 404].includes(hit.status), `${hit.status} ${JSON.stringify(hit.body)}`);
 });
 
 test("兩封信同一套：確認信也寄得出去，寄了之後網址就固定", async () => {
@@ -813,7 +773,7 @@ test("drive: needsSync only fires when something changed after the last backup",
   assert.equal(needsSync({ ...backed, updated_at: "2026-11-17T12:00:00.000Z" }, []), true, "the visit changed");
   assert.equal(needsSync(backed, [{ submitted_at: "2026-11-17T12:30:00.000Z" }]), true, "a guest replied");
   assert.equal(needsSync(backed, [{ submitted_at: "2026-11-17T10:30:00.000Z" }]), false, "an older reply is already in the backup");
-  assert.deepEqual(plan(base).map((i) => i.name), ["參訪資料.json", "回覆.csv", "動線.csv"]);
+  assert.deepEqual(plan(base).map((i) => i.name), ["參訪資料.json", "回覆.csv"]);
   // 合照用原始檔名（拿掉上傳時加的時間戳），同名的加序號，不靠流水號——刪掉中間一張才不會蓋到別張
   const full = plan({
     ...base,
@@ -821,7 +781,7 @@ test("drive: needsSync only fires when something changed after the last backup",
     signbook: { photo_key: "signbook/x/1.jpg" },
     materials: { deck_pdf: "materials/x/a.pdf", photos: ["materials/x/1789133705833-IMG_0696.jpg", "materials/x/1789134238242-IMG_7836.jpg", "materials/x/1789134999999-IMG_0696.jpg", "https://example.com/p.jpg"], links: [] },
   });
-  assert.deepEqual(full.map((i) => i.name), ["參訪資料.json", "回覆.csv", "動線.csv", "一頁摘要.md", "簽名簿.jpg", "當天簡報.pdf", "IMG_0696.jpg", "IMG_7836.jpg", "IMG_0696-2.jpg"]);
+  assert.deepEqual(full.map((i) => i.name), ["參訪資料.json", "回覆.csv", "一頁摘要.md", "簽名簿.jpg", "當天簡報.pdf", "IMG_0696.jpg", "IMG_7836.jpg", "IMG_0696-2.jpg"]);
   assert.equal(full.find((i) => i.name === "IMG_7836.jpg").key, "materials/x/1789134238242-IMG_7836.jpg");
 });
 

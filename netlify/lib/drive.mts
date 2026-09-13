@@ -135,7 +135,6 @@ export function plan(visit: Visit): DriveItem[] {
   const items: DriveItem[] = [
     { key: "visit.json", name: "參訪資料.json" },
     { key: "responses.csv", name: "回覆.csv" },
-    { key: "timeline.csv", name: "動線.csv" },
   ];
   if (visit.summary) items.push({ key: "summary.md", name: "一頁摘要.md" });
   if (visit.signbook?.photo_key) items.push({ key: visit.signbook.photo_key, name: `簽名簿.${ext(visit.signbook.photo_key) || "jpg"}` });
@@ -163,11 +162,10 @@ export function plan(visit: Visit): DriveItem[] {
 }
 
 /** 一個項目的內容：JSON／CSV／Markdown 現算，媒體從媒體庫取。 */
-export async function itemBytes(visit: Visit, responses: ResponseRow[], timeline: unknown[], key: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
+export async function itemBytes(visit: Visit, responses: ResponseRow[], key: string): Promise<{ bytes: Uint8Array; mime: string } | null> {
   const text = (s: string, mime: string) => ({ bytes: new TextEncoder().encode(s), mime });
   if (key === "visit.json") return text(JSON.stringify(visit, null, 2), "application/json");
   if (key === "responses.csv") return text("﻿" + toCSV(responses), "text/csv");
-  if (key === "timeline.csv") return text("﻿" + toCSV(timeline), "text/csv");
   if (key === "summary.md") return text(visit.summary || "", "text/markdown");
   const m = await getStore().getMedia(key);
   if (!m) return null;
@@ -190,14 +188,14 @@ export async function syncVisit(visitId: string, { force = false } = {}): Promis
   const store = getStore();
   const visit = await store.getVisit(visitId);
   if (!visit) throw new Error("找不到這次參訪");
-  const [responses, timeline] = await Promise.all([store.listResponses(visitId), store.listTimeline(visitId)]);
+  const responses = await store.listResponses(visitId);
   if (!force && !needsSync(visit, responses)) return { skipped: true, uploaded: [], failed: [] };
   const folder = await ensureVisitFolder(visit);
   const uploaded: string[] = [];
   const failed: string[] = [];
   for (const item of plan(visit)) {
     try {
-      const payload = await itemBytes(visit, responses, timeline, item.key);
+      const payload = await itemBytes(visit, responses, item.key);
       if (!payload) {
         failed.push(`${item.name}（媒體庫找不到 ${item.key}）`);
         continue;

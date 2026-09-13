@@ -135,14 +135,6 @@ export interface ResponseRow {
   submitted_at: string;
 }
 
-export interface TimelineSignal {
-  visit_id: string;
-  room: string;
-  at: string; // ISO
-  source: string; // presentation | nfc | student | guest | schedule
-  note?: string;
-}
-
 export interface SlidePerf {
   visit_id: string;
   org_type: string;
