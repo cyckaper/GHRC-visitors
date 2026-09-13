@@ -595,13 +595,16 @@
     // 不然慢的那一輪後回來，畫面上的資料會跟上面選的那一場對不起來
     const seq = (selectVisit.seq = (selectVisit.seq || 0) + 1);
     const stale = () => seq !== selectVisit.seq;
-    await flushDraft();
-    if (stale()) return;
+    // **先同步換畫面，再去拿資料**：切到「＋ 新的一場」的人常常馬上就開始打字，
+    // 如果等資料回來才清空表單，剛打的字會被清掉（而且看起來像沒反應——存檔也不會發生）
     for (const f of DRAFT_FIELDS) { const el = $(f); if (el) el.value = ""; } // 不要把上一場的信件、逐字稿留在畫面上
     draftBase = {};
+    if (!id) fillForm(emptyVisit());
+    await flushDraft();
+    if (stale()) return;
     await loadDraft(id || "new");
     if (stale()) return;
-    if (!id) fillForm(emptyVisit());
+    if (!id) { /* 表單前面已經清好了 */ }
     else {
       const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
       if (stale()) return;

@@ -349,6 +349,7 @@ try {
   // 建錯的那一場：直接刪掉（不必先想「要不要存」）
   await page.click('[data-tab="pre"]');
   await page.selectOption("#visitSelect", "");
+  await page.waitForFunction(() => document.getElementById("preStatus").textContent === "" && document.getElementById("orgName").value === ""); // 表單真的空了才打字
   const beforeDelete = await page.locator("#visitSelect option").count();
   await page.fill("#orgName", "Typo Institute");
   await page.waitForFunction((n) => document.querySelectorAll("#visitSelect option").length === n + 1, beforeDelete, { timeout: 30000 });
