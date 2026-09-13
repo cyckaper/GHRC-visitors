@@ -309,6 +309,22 @@ try {
   await page.waitForFunction(() => !document.getElementById("visitDetail").hidden && /Western Australia/.test(document.getElementById("detailTitle").textContent));
   check(true, "…and each one opens that visit's record");
 
+  // 圓點是「螢幕上幾個像素」，不是地圖座標：地圖畫得越大，點在地圖上越小，
+  // 不然把地圖拉大之後整個韓國還是被一個點蓋住
+  const dot = () => page.evaluate(() => {
+    const c = document.querySelector("#worldMap circle.dot");
+    const svg = document.querySelector("#worldMap svg");
+    const [, , w] = svg.getAttribute("viewBox").split(" ").map(Number);
+    const r = Number(c.getAttribute("r"));
+    return { r, px: (r * svg.getBoundingClientRect().width) / w };
+  });
+  const narrow = await dot();
+  await page.setViewportSize({ width: 1500, height: 900 });
+  await page.waitForFunction((r) => Number(document.querySelector("#worldMap circle.dot").getAttribute("r")) < r, narrow.r, { timeout: 15000 });
+  const wide = await dot();
+  check(wide.r < narrow.r && Math.abs(wide.px - narrow.px) < 1, `dots shrink on the map as the map grows, staying the same size on screen (${narrow.px.toFixed(1)}px → ${wide.px.toFixed(1)}px)`);
+  await page.setViewportSize({ width: 1100, height: 900 });
+
   // 現場動線：後台自己產捷徑與 NFC 網址（以前只能開終端機）；一次性設定都收在「設定」分頁
   await page.click('[data-tab="settings"]');
   check((await page.locator('#tab-data #shortcutsList').count()) === 0, "one-time setup lives in the settings tab, not mixed in with the archive");
