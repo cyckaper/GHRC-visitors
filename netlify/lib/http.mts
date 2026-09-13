@@ -94,6 +94,26 @@ export function requireAdmin(req: Request): Response | null {
   return fail(401, "未授權");
 }
 
+/**
+ * 排程函式（`export const config = { schedule }`）的保護。
+ * Netlify 的排程器用 POST 送一個 `{next_run}` 進來，那個放行；人要手動跑一次就帶 ADMIN_TOKEN。
+ * 其餘一律擋掉——這幾支會花 Claude 的錢、會寄信，不該讓任何人打得動。
+ */
+export async function requireCron(req: Request): Promise<Response | null> {
+  if (req.method === "POST") {
+    try {
+      const body = (await req.clone().json()) as { next_run?: unknown } | null;
+      if (body && body.next_run) return null;
+    } catch {
+      /* 不是 JSON 就當一般請求看待 */
+    }
+  }
+  const denied = requireAdmin(req);
+  // 排程真的被擋下來的話，Netlify 的函式紀錄要看得出原因（不然只會有一行「未授權」）
+  if (denied && denied.status === 401) return fail(401, "排程函式只收 Netlify 排程器（POST {next_run}）或帶 ADMIN_TOKEN 的手動觸發");
+  return denied;
+}
+
 /** 現場訊號保護：x-signal-key 標頭、body.key 或 ?key=。 */
 export function checkSignalKey(req: Request, bodyKey?: string): boolean {
   const key = env("SIGNAL_KEY");

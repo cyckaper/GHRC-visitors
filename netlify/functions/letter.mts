@@ -1,5 +1,6 @@
 import { env, fail, json, nowISO, readJSON, requireAdmin } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
+import { gmailConfigured } from "../lib/mail.mts";
 import { pollJob, startBackground } from "../lib/jobs.mts";
 import { recipientList } from "../../lib/visit.mjs";
 
@@ -35,7 +36,7 @@ export default async (req: Request) => {
     const subject = String(body.subject || "").trim();
     const text = String(body.body || "").trim();
     if (!recipients.length || !subject || !text) return fail(400, "需要 subject、body、recipients");
-    if (!(env("GMAIL_CLIENT_ID") && env("GMAIL_CLIENT_SECRET") && env("GMAIL_REFRESH_TOKEN"))) {
+    if (!gmailConfigured()) {
       // 沒設定 Gmail 就沒有等待可言，當場把 mailto 交回去
       const mailto = `mailto:?bcc=${encodeURIComponent(recipients.map((r) => r.email).join(","))}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
       return json({ ok: true, sent: false, reason: "gmail_not_configured", mailto, recipients });

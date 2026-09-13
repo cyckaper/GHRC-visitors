@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { reconcileTimeline, plannedEntries } from "../lib/timeline.mjs";
-import { makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
+import { makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, needsSummary, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -230,4 +230,37 @@ test("csv escapes commas and quotes; ics has an alarm at the end time", () => {
   assert.ok(ics.includes("DTEND:20261007T033000Z"));
   assert.ok(ics.includes("admin.html#wrapup=2026-10-07-uwa"));
   assert.ok(ics.includes("BEGIN:VALARM"));
+});
+
+test("結束時間：今日流程與總分鐘取晚的那一個（提醒早到會在來賓還在的時候響）", () => {
+  // 流程只排到 11:00，但總長 90 分 → 11:30。取晚的那一個
+  assert.equal(visitEndAt(visit).toISOString(), "2026-10-07T03:30:00.000Z");
+  // 流程排得比總分鐘長（主持人自己把綜合討論拉長）→ 以流程為準
+  assert.equal(visitEndAt({ ...visit, programme: [...visit.programme, { kind: "discussion", start: "11:00", end: "12:30" }] }).toISOString(), "2026-10-07T04:30:00.000Z");
+  // 沒有流程表就只能用總分鐘
+  assert.equal(visitEndAt({ date: "2026-10-07", start_time: "09:00", duration_minutes: 60 }).toISOString(), "2026-10-07T02:00:00.000Z");
+});
+
+test("收工提醒講的四件事：做了的打勾，名片說幾張", () => {
+  const bare = wrapupTodo({});
+  assert.deepEqual(bare.map((t) => t.key), ["signbook", "cards", "dictation", "materials"]);
+  assert.equal(bare.every((t) => !t.done), true, "什麼都還沒做");
+  const done = wrapupTodo({ signbook: { photo_key: "signbook/x/1.jpg" }, cards: [{ key: "cards/x/1.jpg" }, { key: "cards/x/2.jpg" }], dictation: { transcript: "今天校長來" }, materials: { links: [{ title: "t", url: "https://x.example" }] } });
+  assert.equal(done.every((t) => t.done), true);
+  assert.equal(done[1].detail, "已經讀了 2 張");
+});
+
+test("一頁摘要自己產的條件：過完了、有回饋、而且比最新回覆舊", () => {
+  const past = { ...visit, date: "2026-09-01", summary: "", summary_at: "", dictation: {}, signbook: {} };
+  const resp = [{ visit_id: past.visit_id, submitted_at: "2026-09-02T10:00:00.000Z", suggestion: "第 303 間講太快" }];
+  const now = new Date("2026-09-05T00:00:00.000Z");
+  assert.equal(needsSummary(past, resp, now), true, "過完了、有回覆、還沒摘要 → 產");
+  assert.equal(needsSummary(past, [], now), false, "沒有任何回饋就沒什麼可寫");
+  assert.equal(needsSummary({ ...past, dictation: { transcript: "主持人講的" } }, [], now), true, "只有口述也算有東西可寫");
+  assert.equal(needsSummary({ ...visit, date: "2026-12-31" }, resp, now), false, "還沒參訪就不產");
+  const fresh = { ...past, summary: "已經有摘要", summary_at: "2026-09-03T00:00:00.000Z" };
+  assert.equal(needsSummary(fresh, resp, now), false, "摘要比回覆新 → 不必重寫");
+  assert.equal(needsSummary(fresh, [...resp, { visit_id: past.visit_id, submitted_at: "2026-09-04T08:00:00.000Z" }], now), true, "又有人回覆 → 重寫一份");
+  // 不具名那一筆只有日期（真匿名的代價）：當天最後一刻算，才不會被當成很舊
+  assert.equal(needsSummary(fresh, [{ visit_id: past.visit_id, submitted_at: "2026-09-03" }], now), true);
 });

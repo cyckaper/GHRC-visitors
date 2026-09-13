@@ -90,6 +90,10 @@ export interface Visit {
     thanks?: { subject: string; body: string; sender: string; drafted_at: string; sent_to?: { name: string; email: string }[]; sent_at?: string };
   };
   summary: string;
+  /** 產摘要的時間：summary-cron 用它跟最新那筆回覆比，比較舊就自己重寫一份。 */
+  summary_at?: string;
+  /** 自動提醒（reminder-cron）：收工提醒寄出的時間與收件者，一場只寄一次。 */
+  reminders?: { wrapup_sent_at?: string; wrapup_to?: string };
   /** Google Drive 備份（/api/drive）：這場參訪在 Drive 上的資料夾。 */
   drive?: { folder_id?: string; url?: string; backed_up_at?: string; items?: number };
   status: "draft" | "confirmed" | "done";

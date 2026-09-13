@@ -27,6 +27,7 @@ export default backgroundHandler<{ visit_id?: string; digest?: boolean }>("摘�
   const timeline = reconcileTimeline(visit, signals);
   const summary = await summarizeVisit(visit, responses, timeline);
   visit.summary = summary;
+  visit.summary_at = nowISO(); // summary-cron 靠這個判斷「回覆比摘要新」→ 自己重寫一份
   visit.updated_at = nowISO();
   await store.putVisit(visit);
 

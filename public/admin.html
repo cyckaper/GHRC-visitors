@@ -149,7 +149,7 @@
             <div class="flex flex-wrap gap-2">
               <button class="btn" id="openDeck" title="跳到「簡報」分頁，挑這一場要講的頁次並產出 .pptx">選頁與產生簡報</button>
               <button class="btn btn-soft" id="copyLink" title="複製來賓專頁網址，貼到信裡或 LINE 給對方">複製網址</button>
-              <button class="btn btn-soft" id="downloadIcs" title="把「收工提醒」加進行事曆：參訪結束時跳出來提醒你拍簽名簿、講三十秒口述">下載收工提醒 .ics</button>
+              <button class="btn btn-soft" id="downloadIcs" title="把「收工提醒」加進行事曆：參訪結束時跳出來提醒你拍簽名簿、講三十秒口述。系統本來就會在結束時間寄一封提醒信，這個只是想在行事曆上也看到的人用">下載收工提醒 .ics</button>
               <button class="btn btn-soft" id="openLetters" title="跳到「信件」分頁草擬確認信：確認日期時間、附上來賓專頁網址">草擬確認信</button>
               <button class="btn btn-soft" id="openWrapup" title="跳到「收工」分頁（來賓離開後要做的四件事都在那裡）">開收工頁</button>
             </div>
@@ -209,6 +209,7 @@
     <p class="text-sm text-stone-600"><b>這一頁：來賓離開後四件事</b>——簽名簿、名片、三十秒口述、當天資料。這些東西直接決定訪後信寄得到誰、寫得出什麼，所以當天做完最省力；隔一天記憶就掉了。</p>
     <div class="card space-y-2">
       <p class="muted">來賓離開後這幾件事，幾分鐘做完。受訪的是主持人自己。</p>
+      <p class="muted">不必記得：<b>參訪的結束時間一到，系統會寄一封提醒</b>到中心信箱（還缺哪幾件、附一個直接打開這一頁的連結）。收件信箱在「設定」分頁。</p>
     </div>
 
     <div class="card space-y-2">
@@ -336,6 +337,7 @@
       <input type="text" id="thanksSubject" placeholder="主旨">
       <textarea id="thanksBody" rows="16" placeholder="感謝信草稿：專頁連結（只提頁面上真的有的東西：PDF、合照、連結要先在「收工」放上去）、三個回應項目（含請益語氣的開放建議欄位、可不具名）"></textarea>
       <p class="muted">三個回應項目的措辭固定為請益語氣，且回覆頁支援真匿名；請保留信裡的那一段。</p>
+      <p class="muted">寄出之後就不必再回來按什麼了：來賓的回覆會自己進「資料」分頁，<b>一頁摘要每天凌晨自己產</b>（回覆陸續進來就自己重寫一份），Drive 備份也是自動的。</p>
       <div class="flex flex-wrap gap-2 items-center">
         <button class="btn" id="sendBtn" title="一封一封寄出去（用中心的 Gmail 帳號）。沒設定 Gmail 時會給你 mailto 自己寄">寄出感謝信</button>
         <button class="btn btn-soft" id="copyThanks" title="複製主旨與內文，貼到你自己的信箱寄出">複製信件</button>
@@ -359,7 +361,7 @@
       <table id="visitsTable"><thead><tr><th>日期</th><th>單位</th><th>類型</th><th>國家</th><th>人數</th><th>狀態</th></tr></thead><tbody></tbody></table>
     </div>
     <div class="card space-y-3" id="visitDetail" hidden>
-      <div class="flex flex-wrap gap-2 items-center"><h2 class="font-semibold mr-auto" id="detailTitle"></h2><button class="btn" id="summaryBtn" title="把這一場的回覆、動線、口述整理成一頁摘要，並記下哪幾頁被提問、被提到">AI 產一頁摘要</button><button class="btn btn-soft" id="driveBtn" title="手動補救用：把這一場的資料與檔案另存到中心的 Google Drive（平常會自動備份）">立即備份到 Drive</button></div>
+      <div class="flex flex-wrap gap-2 items-center"><h2 class="font-semibold mr-auto" id="detailTitle"></h2><button class="btn" id="summaryBtn" title="現在就產一份：把這一場的回覆、動線、口述整理成一頁摘要，並記下哪幾頁被提問、被提到。平常不必按——有回覆之後每天凌晨會自己產，回覆變多也會自己重寫">AI 產一頁摘要</button><button class="btn btn-soft" id="driveBtn" title="手動補救用：把這一場的資料與檔案另存到中心的 Google Drive（平常會自動備份）">立即備份到 Drive</button></div>
       <p class="text-sm" id="driveInfo"></p>
       <pre class="wrap text-sm" id="summary"></pre>
       <h3 class="font-medium">來賓回覆</h3>
@@ -407,7 +409,12 @@
         <select id="senderDefault" class="!w-auto" title="新的一場草擬感謝信時預設用誰的名義；個別那一場還是可以在「信件」分頁改"><option value="director">中心主任 張俊彥</option><option value="contact">對口老師</option></select>
         <span class="muted" id="settingsInfo"></span>
       </div>
-    </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <label class="f mb-0" for="reminderTo">收工提醒寄到</label>
+        <input type="email" id="reminderTo" class="!w-72" placeholder="留空就用寄信那個帳號" title="參訪的結束時間一到，系統寄一封提醒到這個信箱：還缺簽名簿、名片、口述、當天資料哪幾件，並附一個直接打開收工頁的連結">
+        <span class="muted" id="reminderInfo"></span>
+      </div>
+      <p class="muted">參訪的<b>結束時間一到</b>（依今日流程），系統會寄一封收工提醒到上面那個信箱——手機收信就會跳出來。一場只寄一次，四件事都做完了就不寄。需要 Gmail 接好。</p>
 
     <div class="card space-y-3">
       <h2 class="font-semibold">外部服務</h2>
@@ -1114,7 +1121,7 @@
       ["訪後", [
         ["post", v.letters?.thanks?.sent_at ? `感謝信 ${v.letters.thanks.sent_to?.length || 0} 人` : "感謝信", !!v.letters?.thanks?.sent_at, "寄給名單上每一個人，並請他們回三個問題"],
         ["data", n ? `回覆 ${n}` : "回覆", n > 0, "來賓回的三個問題、簽名簿留言、口述抽出來的內容"],
-        ["data", "一頁摘要", !!v.summary, "這一場的結論；也是 Drive 備份與跨場次彙整的來源"],
+        ["data", "一頁摘要", !!v.summary, "這一場的結論；也是 Drive 備份與跨場次彙整的來源。有回覆之後每天凌晨自己產，不必記得按"],
       ]],
     ];
     box.innerHTML = groups
@@ -1649,6 +1656,7 @@
     ["gmail", "Gmail（從後台寄信）", "GMAIL_CLIENT_ID／SECRET／REFRESH_TOKEN；沒有就用 mailto 自己寄"],
     ["drive", "Google Drive（每場自動備份）", "GOOGLE_*（沒有就用 GMAIL_* 那一組），refresh token 要含 drive.file"],
     ["signal", "現場動線訊號", "SIGNAL_KEY；沒有的話捷徑與 NFC 貼紙送不出訊號"],
+    ["reminder", "收工提醒（參訪結束時寄信給自己）", "需要 Gmail ＋上面那個收件信箱"],
     ["master", "母簡報", "在上面放一份，或 commit 到 public/assets/master/"],
   ];
   async function loadSettingsTab() {
@@ -1657,19 +1665,23 @@
     if (!r.ok) { $("statusList").innerHTML = `<li class="err">${esc(r.error)}</li>`; return; }
     state.settings = r.settings;
     $("senderDefault").value = r.settings.sender_default || "director";
+    $("reminderTo").value = r.settings.reminder_to || "";
+    $("reminderInfo").textContent = r.settings.reminder_to ? "" : r.effective?.reminder_to ? `留空：現在寄到 ${r.effective.reminder_to}` : "還沒有收件信箱，現在不會寄提醒";
     $("statusList").innerHTML = STATUS_ROWS.map(([k, label, where]) => {
       const on = !!r.status[k];
       const note = k === "ai" && r.status.ai_mock ? "（AI_MOCK：回固定範例，不會真的問 Claude）" : "";
       return `<li><span class="${on ? "ok" : "err"}">${on ? "已設定" : "未設定"}</span> ${esc(label)}${note ? `<span class="muted">${note}</span>` : ""} <span class="muted">· ${esc(where)}</span></li>`;
     }).join("") + `<li class="muted">資料存在：${esc(r.status.store)}</li>`;
   }
-  $("senderDefault").onchange = async () => {
-    const r = await api("/api/settings", { method: "POST", body: { settings: { sender_default: $("senderDefault").value } } });
-    if (!r.ok) return flash(r.error, "err");
+  $("senderDefault").onchange = () => saveSettings({ sender_default: $("senderDefault").value }, "settingsInfo");
+  $("reminderTo").onchange = () => saveSettings({ reminder_to: $("reminderTo").value.trim() }, "reminderInfo");
+  async function saveSettings(settings, infoId) {
+    const r = await api("/api/settings", { method: "POST", body: { settings } });
+    if (!r.ok) { $(infoId).textContent = ""; return flash(r.error, "err"); }
     state.settings = r.settings;
-    $("settingsInfo").textContent = "已存";
-    setTimeout(() => ($("settingsInfo").textContent = ""), 3000);
-  };
+    $(infoId).textContent = settings.reminder_to === "" && r.effective?.reminder_to ? `已存（留空：寄到 ${r.effective.reminder_to}）` : "已存";
+    setTimeout(() => ($(infoId).textContent = ""), 4000);
+  }
 
   async function loadDataTab() {
     const t = encodeURIComponent(token());
@@ -1681,7 +1693,7 @@
   async function showDetail(id) {
     const [v, tl] = await Promise.all([api(`/api/visits?id=${encodeURIComponent(id)}`), api(`/api/timeline?id=${encodeURIComponent(id)}`)]);
     if (!v.ok) return flash(v.error, "err");
-    state.detailId = id; $("visitDetail").hidden = false; $("detailTitle").textContent = `${v.visit.date} ${v.visit.org?.name}`; $("summary").textContent = v.visit.summary || "（尚未產生摘要）";
+    state.detailId = id; $("visitDetail").hidden = false; $("detailTitle").textContent = `${v.visit.date} ${v.visit.org?.name}`; $("summary").textContent = v.visit.summary || "（還沒有摘要。參訪過完、有來賓回覆之後，系統會在每天凌晨自己產一份；想現在就要就按上面那顆按鈕。）";
     const d = v.visit.drive;
 $("driveInfo").innerHTML = d?.backed_up_at
       ? `<span class="ok">Google Drive 已自動備份 ${esc(d.backed_up_at.slice(0, 16).replace("T", " "))}${d.items ? `（${d.items} 個檔案）` : ""}</span> <a class="underline" target="_blank" rel="noopener" href="${esc(d.url || "")}">在 Drive 開啟</a>${d.failed?.length ? `<span class="err block">${esc(d.failed.join("；"))}</span>` : ""}`
