@@ -195,11 +195,18 @@ try {
   await page.selectOption("#visitSelect", "2026-10-07-uwa");
   await page.waitForSelector("#afterSave:not([hidden])");
   check((await page.textContent("#deckState")).includes("已選"), "the pre-visit tab reports the saved slide count after a reload");
+  // 兩封信都在「信件」分頁，收件人共用一份
+  check((await page.locator('#tab-pre #confirmLetterBtn').count()) === 0, "the confirmation letter moved out of the pre-visit tab");
+  await page.click("#openLetters");
+  check(!(await page.isHidden("#tab-post")), "「草擬確認信」jumps to the letters tab");
   await page.click("#confirmLetterBtn");
   // 草擬信件也跑在背景（Claude 寫一整封雙語信同樣超過 10 秒）
   await page.waitForFunction(() => /草擬中/.test(document.getElementById("confirmLetterInfo").textContent));
   await page.waitForFunction(() => document.getElementById("confirmBody").value.length > 0, null, { timeout: 60000 });
   check(true, "confirmation letter drafted in the background");
+  check(await page.isVisible("#confirmDue"), "before the visit, the confirmation letter is the one flagged as due");
+  check((await page.locator("#recipients input").count()) === 2, "both letters share one recipient list");
+  await page.click('[data-tab="pre"]');
 
   // 收工分頁：用打字的逐字稿
   await page.click('[data-tab="wrapup"]');
@@ -238,7 +245,7 @@ try {
   await page.waitForFunction(() => document.getElementById("materialsInfo").textContent.includes("已儲存"));
   check(true, "photo uploaded and link saved for the visit page");
 
-  // 訪後信分頁
+  // 信件分頁：感謝信
   await page.click('[data-tab="post"]');
   await page.selectOption("#visitSelect", "2026-10-07-uwa");
   await page.click("#thanksBtn");

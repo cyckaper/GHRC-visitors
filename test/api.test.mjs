@@ -497,6 +497,29 @@ test("排程會參考歷次累積：同類單位選過哪幾頁、哪幾頁被�
   assert.ok(perf.length, "一頁摘要寫過 slide_performance");
 });
 
+test("兩封信同一套：確認信也寄得出去，寄了之後網址就固定", async () => {
+  const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const v = (await put({ org: { name: "Letter Test University" }, date: "2026-11-20", code: "ltr", guests: [{ name: "A", email: "a@example.edu" }] })).body.visit;
+
+  const draft = await runJob("letter", { visit_id: v.visit_id, kind: "confirmation", sender: "contact" });
+  assert.equal(draft.status, 200, JSON.stringify(draft.body));
+  assert.ok(draft.body.draft.body.includes(v.visit_id), "確認信裡有來賓專頁的網址");
+
+  // 沒設定 Gmail 的環境：當場回 mailto，也就還沒真的寄出去，網址還能改
+  const send = await runJob("letter", { visit_id: v.visit_id, action: "send", kind: "confirmation", subject: draft.body.draft.subject, body: draft.body.draft.body, recipients: [{ name: "A", email: "a@example.edu" }] });
+  assert.equal(send.body.sent, false);
+  assert.equal(send.body.reason, "gmail_not_configured");
+  assert.equal((await put({ ...v, code: "ltr2" })).body.visit.visit_id, "2026-11-20-ltr2", "還沒寄出去，網址還能改");
+
+  // 背景函式真的跑完（模擬 Gmail 寄出）之後，網址就固定了
+  const after = (await api(`/api/visits?id=2026-11-20-ltr2`, { headers: admin })).body.visit;
+  after.letters.confirmation = { ...(after.letters.confirmation || { subject: "s", body: "b", drafted_at: new Date().toISOString() }), sent_at: new Date().toISOString(), sent_to: [{ name: "A", email: "a@example.edu" }] };
+  await put(after);
+  const fixed = await put({ ...after, code: "ltr3" });
+  assert.equal(fixed.body.visit.visit_id, "2026-11-20-ltr2", "確認信寄出去之後網址不再改（對方手上的連結不能失效）");
+  assert.equal(fixed.body.url_fixed, true);
+});
+
 test("網址還沒用出去就跟著日期與代碼走；不要的那一場直接刪掉", async () => {
   const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
   const a = (await put({ org: { name: "Test Org" }, date: "2026-11-01", code: "tst" })).body.visit;
