@@ -268,13 +268,17 @@ try {
   await page.waitForFunction((n) => new RegExp(`名單目前 ${n + 1} 人`).test(document.getElementById("cardStatus").textContent), guestsBefore);
   check((await page.locator("#cardList img").count()) === 1, "the card photo is kept with the visit and the person is on the guest list");
 
-  // 現場動線：後台自己產捷徑與 NFC 網址（以前只能開終端機）
-  await page.click('[data-tab="data"]');
+  // 現場動線：後台自己產捷徑與 NFC 網址（以前只能開終端機）；一次性設定都收在「設定」分頁
+  await page.click('[data-tab="settings"]');
+  check((await page.locator('#tab-data #shortcutsList').count()) === 0, "one-time setup lives in the settings tab, not mixed in with the archive");
   await page.waitForFunction(() => document.querySelectorAll("#shortcutsList [data-qr]").length === 6, null, { timeout: 30000 });
   check(/已設定金鑰/.test(await page.textContent("#shortcutsStatus")), "the on-site signal URLs are ready in the admin, no terminal needed");
   await page.click('#shortcutsList [data-qr="0"]');
   await page.waitForFunction(() => document.querySelector('#shortcutsList [data-qrbox="0"]').innerHTML.length > 0);
   check(true, "each room can show a QR to print for the door");
+  check((await page.locator("#statusList li").count()) >= 6, "the settings tab says which external services are wired up");
+  check(!(await page.textContent("#statusList")).includes("e2e-signal"), "…without ever showing the keys themselves");
+  check(await page.isVisible("#masterRow"), "the master deck lives in settings now, not at the bottom of the deck tab");
 
   // 建錯的那一場：直接刪掉（不必先想「要不要存」）
   await page.click('[data-tab="pre"]');

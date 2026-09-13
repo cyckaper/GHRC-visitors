@@ -497,6 +497,24 @@ test("排程會參考歷次累積：同類單位選過哪幾頁、哪幾頁被�
   assert.ok(perf.length, "一頁摘要寫過 slide_performance");
 });
 
+test("設定：預設值存得起來，外部服務只回「接好了沒」不回金鑰", async () => {
+  assert.equal((await api("/api/settings")).status, 401, "要 token");
+  const r = await api("/api/settings", { headers: admin });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.settings.sender_default, "director", "預設是中心主任");
+  assert.equal(r.body.status.signal, true, "測試環境有 SIGNAL_KEY");
+  assert.equal(r.body.status.ai_mock, true, "測試跑在 AI_MOCK");
+  assert.ok(!JSON.stringify(r.body).includes("test-signal"), "**不回金鑰內容**");
+  assert.ok(!JSON.stringify(r.body).includes("test-token"), "**不回 ADMIN_TOKEN**");
+
+  const saved = await api("/api/settings", { method: "POST", headers: admin, body: JSON.stringify({ settings: { sender_default: "contact" } }) });
+  assert.equal(saved.body.settings.sender_default, "contact");
+  assert.equal((await api("/api/settings", { headers: admin })).body.settings.sender_default, "contact", "存得住");
+  const bad = await api("/api/settings", { method: "POST", headers: admin, body: JSON.stringify({ settings: { sender_default: "someone-else" } }) });
+  assert.equal(bad.body.settings.sender_default, "contact", "亂填的值不收");
+  await api("/api/settings", { method: "POST", headers: admin, body: JSON.stringify({ settings: { sender_default: "director" } }) });
+});
+
 test("現場動線的捷徑網址：後台自己拿得到，不必開終端機", async () => {
   assert.equal((await api("/api/timeline?shortcuts=1")).status, 401, "要 token");
   const r = await api("/api/timeline?shortcuts=1", { headers: admin });
