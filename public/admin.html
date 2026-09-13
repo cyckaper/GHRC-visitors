@@ -781,7 +781,7 @@
     $("preStatus").textContent = state.saved ? v.visit_id : "";
     $("deleteBtn").hidden = !state.saved;
     $("draftDiscard").hidden = state.saved || !state.draft?.fields?.form;
-    if (!state.saved) $("saveInfo").textContent = "填上單位名稱就會自己建一場，不必按存檔";
+    if (!state.saved) $("saveInfo").textContent = "";
     renderGuests(v.guests || []); renderProgramme(v.programme || []); renderItinerary(v.itinerary); renderBackground(v.background);
     $("rationale").textContent = v.plan_rationale || ""; $("uncertainties").innerHTML = (v.uncertainties || []).map((u) => `<li>${esc(u)}</li>`).join("");
     $("afterSave").hidden = !state.saved;
@@ -1215,7 +1215,7 @@
     const fields = state.draft?.fields || {};
     if (fields.form && !state.saved && !$("orgName").value.trim() && !$("guestTable").tBodies[0].rows.length) {
       fillForm({ ...emptyVisit(), ...fields.form, visit_id: "" });
-      $("saveInfo").textContent = "上次沒填完的內容留著了；填上單位名稱就會自己建一場";
+      $("saveInfo").textContent = "上次沒填完的內容留著了";
     }
     for (const g of DRAFT_GROUPS) {
       for (const id of g.fields) { const el = $(id); if (el && fields[id] && el.value !== fields[id]) el.value = fields[id]; }

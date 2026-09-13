@@ -372,7 +372,6 @@
   "303 模擬室": "303 Simulation",
   "304 全景影院": "304 Panoramic Cinema",
   "305 IVR": "305 IVR",
-  "填上單位名稱就會自己建一場，不必按存檔": "Fill in an organisation name and the visit creates itself; there is no save button",
   "請先在上面選一場參訪（還沒有任何參訪就先到「訪前」填一場）。": "Choose a visit above first (with none yet, fill one in on the Before tab).",
   "請先在上面選一場參訪（還沒有任何參訪就先到「訪前」建一場）。": "Choose a visit above first (with none yet, create one on the Before tab).",
   "還沒有別的參訪。做完第一場之後，這裡就會列出來給下一場參考。": "No other visits yet. Once the first one is done it will be listed here for the next.",
@@ -473,7 +472,6 @@
   "到「訪前」建一場": "create one on the Before tab",
   "頁次索引還沒載入（/data/slides.json）。重新整理頁面再試一次。": "The slide index has not loaded (/data/slides.json). Refresh the page and try again.",
   "已登入": "Signed in",
-  "上次沒填完的內容留著了；填上單位名稱就會自己建一場": "What you had not finished is still here; an organisation name creates the visit",
   "上次貼進來、還沒抽取的內容留著。不要的話整段刪掉就好。": "The text you pasted but had not extracted is still here. Delete it if you do not want it.",
   "上次打的口述內容留著；按「確認並存入回饋」才算收進紀錄。": "What you typed for the dictation is still here; it only enters the record when you press Confirm.",
   "手改過、還沒寄出的信件內容帶回來了。按「AI 草擬」會換成新的一份。": "The letter you edited but had not sent is back. Drafting again replaces it.",
@@ -525,7 +523,8 @@
   "結束時間": "End time",
   "人數（不確定就留著，之後再改）": "Headcount (leave it if you are not sure; change it later)",
   "共 # 分": "# min in all",
-  "結束時間要晚於開始時間": "The end time has to be later than the start time"
+  "結束時間要晚於開始時間": "The end time has to be later than the start time",
+  "上次沒填完的內容留著了": "What you had not finished is still here"
  },
  "patterns": [
   [
