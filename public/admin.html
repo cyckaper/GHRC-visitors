@@ -330,6 +330,23 @@
   <section id="tab-data" class="space-y-5" hidden>
     <p class="text-sm text-stone-600"><b>這一頁：歷次參訪的檔案</b>——每場的一頁摘要、來賓回覆、現場動線，以及跨場次的彙整。年報與諮詢委員會要的數字（人次、身分、國家、最受關注的研究室）從這裡出。</p>
     <div class="card space-y-3">
+      <h2 class="font-semibold">現場動線設定 <span class="muted font-normal">一次做完，之後每場自動記</span></h2>
+      <p class="muted">來賓走到哪一間、待多久，靠兩種訊號記下來：<b>老師開簡報的捷徑</b>（電腦桌面，點了先送訊號再開簡報）與<b>門口的 NFC 貼紙</b>（主持人碰一下手機）。沒有訊號的時段用當天的行程推補。訊號不必帶參訪代碼——伺服器會對到「今天」排定的那一場。</p>
+      <p class="text-sm" id="shortcutsStatus"></p>
+      <div id="shortcutsList" class="space-y-2"></div>
+      <details class="text-sm">
+        <summary class="cursor-pointer">iPhone 的 NFC 貼紙怎麼設（一次）</summary>
+        <ol class="list-decimal pl-5 mt-2 space-y-1">
+          <li>簡報室與五間研究室門口各貼一片 NFC 貼紙（NTAG213 就夠）。</li>
+          <li>iPhone「捷徑」App → 自動化 → 新增 → NFC → 掃描那片貼紙、命名（例如 Lab 303）→ 關掉「執行前先詢問」。</li>
+          <li>動作選「取得 URL 內容」，網址貼上面那一行的 NFC 網址，方法 GET。</li>
+          <li>不要加任何顯示動作——碰一下就送出，螢幕不用亮。</li>
+        </ol>
+        <p class="mt-2">研究生代按或來賓自己按也可以：來賓端專頁最下面有「我現在在哪一間」，那個不需要金鑰。</p>
+      </details>
+    </div>
+
+    <div class="card space-y-3">
       <div class="flex flex-wrap items-center gap-2">
         <h2 class="font-semibold mr-auto">歷次參訪 <span class="muted font-normal">點一列看那一場的摘要、回覆與動線</span></h2>
         <a class="btn btn-soft" id="csvVisits" download>visits.csv</a>
@@ -1309,7 +1326,53 @@
   $("confirmSendBtn").onclick = () => sendLetter("confirmation");
 
   // ── 資料 ──
+  /**
+   * 現場動線設定：六個房間的捷徑與 NFC 網址。以前只能開終端機跑 scripts/make-shortcuts.mjs，
+   * 但當初就決定過「主辦端不必開終端機」——所以後台自己產。
+   * 網址裡的金鑰是 SIGNAL_KEY：它只能寫動線時間、讀不到任何資料，本來就要印在門口的貼紙上。
+   */
+  async function loadShortcuts() {
+    const r = await api("/api/timeline?shortcuts=1");
+    if (!r.ok) { $("shortcutsStatus").textContent = r.error || ""; return; }
+    $("shortcutsStatus").innerHTML = r.key_set
+      ? `<span class="ok">已設定金鑰，下面的網址可以直接用</span>`
+      : `<span class="err">Netlify 還沒設定 SIGNAL_KEY，下面的網址送不出訊號。請到 Netlify 環境變數加一個（隨便一串長字，外洩就換掉），再重新整理這一頁。</span>`;
+    $("shortcutsList").innerHTML = r.rooms
+      .map((x, i) => `<div class="border rounded-xl p-2 space-y-1">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="font-medium">${esc(x.label)}</span>
+          <code class="text-xs text-stone-500 break-all mr-auto">${esc(x.nfc_url.replace(/key=[^&]*/, "key=…"))}</code>
+          <button type="button" class="btn btn-soft" data-copy-url="${i}" title="複製 NFC 貼紙要用的網址（iPhone 捷徑貼這個）">複製 NFC 網址</button>
+          <button type="button" class="btn btn-soft" data-win="${i}" title="Windows 桌面捷徑：點了先送訊號再開簡報（裡面的簡報路徑自己改成當天的檔案）">Windows 捷徑</button>
+          <button type="button" class="btn btn-soft" data-mac="${i}" title="macOS 桌面捷徑：點了先送訊號再開簡報">Mac 捷徑</button>
+          <button type="button" class="btn btn-soft" data-qr="${i}" title="印出來貼在門口也可以：掃了就送訊號">QR</button>
+        </div>
+        <div data-qrbox="${i}"></div>
+      </div>`)
+      .join("");
+    state.shortcuts = r.rooms;
+  }
+  $("shortcutsList").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-copy-url],[data-win],[data-mac],[data-qr]");
+    if (!b) return;
+    const x = (state.shortcuts || [])[Number(b.dataset.copyUrl ?? b.dataset.win ?? b.dataset.mac ?? b.dataset.qr)];
+    if (!x) return;
+    if (b.dataset.copyUrl !== undefined) return copy(x.nfc_url);
+    if (b.dataset.win !== undefined) {
+      return download(`${x.room}-今日參訪.bat`, ["@echo off", `rem GHRC 參訪：${x.label} 開簡報就記時。桌面放這個檔的捷徑。`, `curl -s -m 5 "${x.presentation_url}" >nul 2>&1`, `rem 把當天簡報的路徑填在下一行，然後拿掉開頭的 rem`, `rem start "" "C:\\GHRC\\today.pptx"`].join("\r\n"), "text/plain");
+    }
+    if (b.dataset.mac !== undefined) {
+      return download(`${x.room}-今日參訪.command`, ["#!/bin/bash", `# GHRC 參訪：${x.label} 開簡報就記時。`, `curl -s -m 5 "${x.presentation_url}" >/dev/null 2>&1 &`, `# open "/Users/you/GHRC/today.pptx"`].join("\n"), "text/plain");
+    }
+    const box = document.querySelector(`#shortcutsList [data-qrbox="${b.dataset.qr}"]`);
+    if (!box) return;
+    if (box.innerHTML) { box.innerHTML = ""; return; }
+    if (window.QRCode) new QRCode(box, { text: x.nfc_url, width: 128, height: 128 });
+    else box.innerHTML = `<code class="text-xs break-all">${esc(x.nfc_url)}</code>`;
+  });
+
   async function loadDataTab() {
+    await loadShortcuts();
     const t = encodeURIComponent(token());
     $("csvVisits").href = `/api/visits?export=csv&table=visits&token=${t}`; $("csvResponses").href = `/api/visits?export=csv&table=responses&token=${t}`; $("csvTimeline").href = `/api/visits?export=csv&table=timeline&token=${t}`; $("csvPerf").href = `/api/visits?export=csv&table=slide_performance&token=${t}`;
     await loadVisits();
