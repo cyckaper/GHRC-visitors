@@ -124,8 +124,7 @@
       <h2 class="font-semibold">4. 行程</h2>
       <p class="muted">「今日流程」會印在簡報第 2 頁，也會出現在來賓專頁；「現場動線」決定來賓幾點走到哪一間，同時是動線紀錄的底稿。分鐘數一律照預設重算（總體介紹 20 分、每間研究室 20 分、剩下給綜合討論），不合就直接改。</p>
       <div class="flex flex-wrap gap-2 items-center">
-        <button class="btn" id="planBtn" title="依人數、時間、興趣排出今日流程與現場動線，並先挑好簡報頁次">AI 排行程與選頁</button>
-        <span class="muted">選頁與產檔在「簡報」分頁</span>
+        <button class="btn" id="planBtn" title="依人數、時間、興趣排出今日流程與現場動線">AI 排行程</button>
         <span class="muted" id="planInfo"></span>
       </div>
       <p class="muted" id="rationale"></p>
@@ -574,13 +573,20 @@
   $("visitSelect").onchange = () => selectVisit($("visitSelect").value);
   /** 換一場：表單先載好，再把現在看的那個分頁重新整理一次。 */
   async function selectVisit(id) {
+    // 連續切兩場（點了「以前做過的」又馬上改下拉）時，前一輪的載入要作廢：
+    // 不然慢的那一輪後回來，畫面上的資料會跟上面選的那一場對不起來
+    const seq = (selectVisit.seq = (selectVisit.seq || 0) + 1);
+    const stale = () => seq !== selectVisit.seq;
     await flushDraft();
+    if (stale()) return;
     for (const f of DRAFT_FIELDS) { const el = $(f); if (el) el.value = ""; } // 不要把上一場的信件、逐字稿留在畫面上
     draftBase = {};
     await loadDraft(id || "new");
+    if (stale()) return;
     if (!id) fillForm(emptyVisit());
     else {
       const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
+      if (stale()) return;
       if (!r.ok) return flash(r.error, "err");
       state.responses = r.responses || [];
       fillForm(r.visit);
@@ -952,6 +958,15 @@
   const fieldVal = (id) => ($(id)?.value ?? "");
   const draftId = () => $("visitSelect").value || "new";
   const someDraft = (d) => !!d && !!d.fields && !!Object.keys(d.fields).length;
+  /**
+   * 從伺服器載回來的東西擺進畫面。**只有這一格還是我們上次填進去的樣子才覆寫**——
+   * 換一場之後那幾個大方框是先清空、再非同步載回來的，中間人已經動手打字的話不能蓋掉他。
+   */
+  function setField(id, value) {
+    const el = $(id);
+    if (!el || el.value !== (draftBase[id] || "")) return;
+    el.value = value;
+  }
   /** 伺服器剛給的值就是新的比較基準：這幾格算「已經交出去」，暫存裡不再留。 */
   function rebase(ids) { for (const id of ids) draftBase[id] = fieldVal(id); }
   function collectDraft() {
@@ -1355,9 +1370,9 @@
   }
   /** 同理：已經轉好的逐字稿與抽出來的那幾格。 */
   function renderSavedDictation(d = {}) {
-    $("transcript").value = d.transcript || "";
-    if (d.extracted) fillDictation(d.extracted);
-    else { $("dictationFields").hidden = true; for (const id of DICT_FIELDS.slice(1)) $(id).value = ""; }
+    setField("transcript", d.transcript || "");
+    if (d.extracted) { $("dictationFields").hidden = false; for (const [id, v] of dictationPairs(d.extracted)) setField(id, v); }
+    else if (!fieldVal("transcript")) { $("dictationFields").hidden = true; for (const id of DICT_FIELDS.slice(1)) setField(id, ""); }
     $("recInfo").textContent = d.audio_key ? `音檔已存：${d.audio_key}` : "";
     rebase(DICT_FIELDS);
   }
@@ -1438,7 +1453,9 @@
     rebase(DICT_FIELDS); queueDraft(); applyDraft();
     if (r.warning) flash(r.warning, "err");
   });
-  function fillDictation(x) { $("dictationFields").hidden = false; $("dWho").value = x.who_came || ""; $("dRooms").value = (x.most_wanted_rooms || []).join(", "); $("dQuestions").value = (x.questions || []).join("\n"); $("dCoop").value = x.cooperation || ""; $("dFollow").value = (x.follow_ups || []).join("\n"); }
+  const dictationPairs = (x) => [["dWho", x.who_came || ""], ["dRooms", (x.most_wanted_rooms || []).join(", ")], ["dQuestions", (x.questions || []).join("\n")], ["dCoop", x.cooperation || ""], ["dFollow", (x.follow_ups || []).join("\n")]];
+  /** AI 剛跑完，結果就是要蓋上去。 */
+  function fillDictation(x) { $("dictationFields").hidden = false; for (const [id, v] of dictationPairs(x)) $(id).value = v; }
   $("dictationSave").onclick = () => busy($("dictationSave"), async () => {
     const extracted = { who_came: $("dWho").value.trim(), most_wanted_rooms: $("dRooms").value.split(/[,，\s]+/).filter((r) => ROOMS.includes(r)), questions: $("dQuestions").value.split("\n").map((s) => s.trim()).filter(Boolean), cooperation: $("dCoop").value.trim(), follow_ups: $("dFollow").value.split("\n").map((s) => s.trim()).filter(Boolean), other: "" };
     const r = await api("/api/transcribe", { method: "POST", body: { visit_id: $("visitSelect").value, action: "save", extracted } });

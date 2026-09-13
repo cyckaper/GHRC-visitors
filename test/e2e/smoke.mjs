@@ -225,6 +225,7 @@ try {
   // 收工分頁：用打字的逐字稿
   await page.click('[data-tab="wrapup"]');
   await page.selectOption("#visitSelect", "2026-10-07-uwa");
+  await page.waitForFunction(() => /名單目前/.test(document.getElementById("cardStatus").textContent)); // 等這一頁載完再打字
   await page.fill("#transcript", "今天校長來，最想看 303 的模擬，問了能不能合作。");
   await page.click("#extractDictationBtn");
   await page.waitForSelector("#dictationFields:not([hidden])", { timeout: 60000 });
@@ -318,11 +319,12 @@ try {
   check((await page.locator('#pastVisits [data-past="2026-10-07-uwa"]').count()) === 1, "past visits are listed at the bottom of the pre-visit tab");
   check(/選了 \d+ 頁/.test(await page.textContent("#pastVisits")), "…saying what that visit picked, so the next deck has something to go on");
   check(/同類/.test(await page.textContent("#pastVisits")), "…and marking the ones of the same organisation type");
+  // 等的是「畫面真的換過去了」（#preStatus 由 fillForm 寫），不是下拉的值——切換是非同步的
   await page.click('#pastVisits [data-past="2026-10-07-uwa"]');
-  await page.waitForFunction(() => document.getElementById("visitSelect").value === "2026-10-07-uwa");
-  check(true, "clicking one pulls it up as the current visit");
-  await page.selectOption("#visitSelect", typoId);
-  await page.waitForFunction((id) => document.getElementById("visitSelect").value === id, typoId);
+  await page.waitForFunction(() => document.getElementById("preStatus").textContent === "2026-10-07-uwa", null, { timeout: 30000 });
+  check((await page.inputValue("#visitSelect")) === "2026-10-07-uwa", "clicking one pulls it up as the current visit");
+  await page.click(`#pastVisits [data-past="${typoId}"]`); // 換過去之後，這一列就變成剛才那一場
+  await page.waitForFunction((id) => document.getElementById("preStatus").textContent === id, typoId, { timeout: 30000 });
   page.once("dialog", (d) => d.accept());
   await page.click("#deleteBtn");
   await page.waitForFunction((n) => document.querySelectorAll("#visitSelect option").length === n, beforeDelete, { timeout: 30000 });
