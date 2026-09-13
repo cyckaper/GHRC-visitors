@@ -26,6 +26,11 @@
   .ok { color: #047857; } .err { color: #b91c1c; }
   pre.wrap { white-space: pre-wrap; word-break: break-word; font-family: inherit; }
   [hidden] { display: none !important; }
+  /* 訪客地圖：選到的國家亮起來；滑鼠點的時候不要跳出對焦外框，但鍵盤按到還是要看得見 */
+  #worldMap g:focus { outline: none; }
+  #worldMap g circle { fill: #1c1917; fill-opacity: .78; stroke: #fff; stroke-width: 1.5; }
+  #worldMap g:hover circle, #worldMap g[data-on] circle { fill: #0369a1; fill-opacity: 1; }
+  #worldMap g:focus-visible circle { stroke: #0369a1; stroke-width: 3; }
   #flash { position: fixed; left: 50%; transform: translateX(-50%); bottom: 1rem; z-index: 50; max-width: min(42rem, calc(100% - 2rem)); padding: .55rem .9rem; border-radius: .7rem; font-size: .9rem; color: #fff; background: #1c1917; box-shadow: 0 10px 30px rgba(0,0,0,.22); }
   #flash.ok { background: #047857; color: #fff; } #flash.err { background: #b91c1c; color: #fff; }
   .slide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: .25rem .75rem; font-size: .85rem; }
@@ -346,6 +351,16 @@
   <!-- ───────── 資料 ───────── -->
   <section id="tab-data" class="space-y-5" hidden>
     <p class="text-sm text-stone-600"><b>這一頁：歷次參訪的檔案</b>——每場的一頁摘要、來賓回覆、現場動線，以及跨場次的彙整。年報與諮詢委員會要的數字（人次、身分、國家、最受關注的研究室）從這裡出。</p>
+
+    <div class="card space-y-3">
+      <div class="flex flex-wrap items-baseline gap-2">
+        <h2 class="font-semibold mr-auto">訪客來自哪裡 <span class="muted font-normal">點一個國家，看那幾場</span></h2>
+        <span class="muted" id="mapSummary"></span>
+      </div>
+      <div id="worldMap"></div>
+      <p class="text-sm" id="mapNote"></p>
+      <div id="mapVisits" class="text-sm"></div>
+    </div>
     <div class="card space-y-3">
       <div class="flex flex-wrap items-center gap-2">
         <h2 class="font-semibold mr-auto">歷次參訪 <span class="muted font-normal">點一列看那一場的摘要、回覆與動線</span></h2>
@@ -1704,10 +1719,85 @@
     setTimeout(() => ($(infoId).textContent = ""), 4000);
   }
 
+  /**
+   * 訪客來自哪裡：一張等距長方投影的世界地圖，一個國家一個點，點的大小是場次多寡。
+   * 點一下列出那個國家的每一場，再點一列就跳到那一場的紀錄（摘要、回覆、動線）。
+   *
+   * 地圖資料是 `public/data/world.json`（Natural Earth 1:110m，座標已經投影好，見 scripts/make-world.mjs），
+   * 所以不必為了一張圖去載一套地圖函式庫——後台是單檔 HTML、沒有建置步驟，而且現場網路不一定好。
+   * 國名對不到的**不會消失**，會列在圖下面（來信裡的國名寫法千百種，寧可講出來也不要靜靜地漏掉）。
+   */
+  const normCountry = (x) => String(x || "").trim().toLowerCase().replace(/^the\s+/, "").replace(/[.,\s]+/g, " ").trim();
+  function ensureWorld() {
+    if (!state.world) state.world = fetch("/data/world.json").then((r) => r.json()).then((w) => {
+      w.byName = new Map(w.countries.map((c) => [normCountry(c.name), c]));
+      w.alias = new Map(Object.entries(w.aliases).map(([k, v]) => [normCountry(k), normCountry(v)]));
+      return w;
+    }).catch((e) => { state.world = null; throw e; });
+    return state.world;
+  }
+  const countryPoint = (w, raw) => { const n = normCountry(raw); return (n && (w.byName.get(n) || w.byName.get(w.alias.get(n) || ""))) || null; };
+
+  async function renderWorldMap() {
+    let world;
+    try { world = await ensureWorld(); } catch (e) { $("worldMap").innerHTML = ""; $("mapNote").textContent = "地圖資料載不到，其他東西照常用。"; return; }
+    const groups = new Map();
+    const unmatched = new Map();
+    for (const v of state.visits || []) {
+      const c = countryPoint(world, v.country);
+      if (!c) { const k = v.country?.trim() || "（沒填國家）"; unmatched.set(k, (unmatched.get(k) || 0) + 1); continue; }
+      const g = groups.get(c.name) || { c, visits: [] };
+      g.visits.push(v);
+      groups.set(c.name, g);
+    }
+    state.mapGroups = groups;
+    const most = Math.max(1, ...[...groups.values()].map((g) => g.visits.length));
+    const dots = [...groups.values()].map((g) => {
+      const people = g.visits.reduce((n, v) => n + (Number(v.headcount) || 0), 0);
+      const r = (3 + 5 * Math.sqrt(g.visits.length / most)).toFixed(1);
+      return `<g data-country="${esc(g.c.name)}" tabindex="0" role="button" class="cursor-pointer"><circle cx="${g.c.x}" cy="${g.c.y}" r="${r}"><title>${esc(g.c.name)}：${g.visits.length} 場、${people} 人次</title></circle></g>`;
+    }).join("");
+    // 上下切掉南極與北極的空白（北緯 84 以北、南緯 60 以南沒有訪客，留著只會把其他地方壓扁）
+    const [, , w, h] = world.viewBox.split(" ").map(Number);
+    const top = (h * (90 - 84)) / 180;
+    const view = `0 ${top} ${w} ${(h * (84 + 60)) / 180}`;
+    $("worldMap").innerHTML = `<svg viewBox="${view}" class="w-full h-auto rounded-xl border bg-stone-50" role="img" aria-label="訪客來自哪些國家的世界地圖"><path d="${world.land}" fill="#e7e5e4" stroke="#a8a29e" stroke-width="0.5"></path>${dots}</svg>`;
+    const visits = [...groups.values()].reduce((n, g) => n + g.visits.length, 0);
+    const people = [...groups.values()].reduce((n, g) => n + g.visits.reduce((m, v) => m + (Number(v.headcount) || 0), 0), 0);
+    $("mapSummary").textContent = groups.size ? `${groups.size} 個國家 · ${visits} 場 · 共 ${people} 人次` : "";
+    $("mapNote").innerHTML = unmatched.size
+      ? `<span class="muted">地圖上沒有：${[...unmatched].map(([k, n]) => `${esc(k)}（${n} 場）`).join("、")}——國名寫法對不到就先列在這裡，改「訪前」那一場的國家欄位就會歸位。</span>`
+      : groups.size ? "" : `<span class="muted">還沒有填了國家的參訪。</span>`;
+    if (state.mapCountry && groups.has(state.mapCountry)) showCountry(state.mapCountry);
+    else { state.mapCountry = ""; $("mapVisits").innerHTML = ""; }
+  }
+  /** 點一個國家：列出那個國家的每一場，再點一列就跳到那一場的紀錄。 */
+  function showCountry(name) {
+    const g = state.mapGroups?.get(name);
+    if (!g) return;
+    state.mapCountry = name;
+    for (const el of $("worldMap").querySelectorAll("[data-country]")) el.toggleAttribute("data-on", el.dataset.country === name);
+    const rows = [...g.visits].sort((a, b) => String(b.date).localeCompare(String(a.date))).map((v) => `<button type="button" data-visit="${esc(v.visit_id)}" title="看這一場的紀錄：一頁摘要、來賓回覆、現場動線" class="w-full text-left border-b last:border-0 py-1.5 hover:bg-stone-50 flex flex-wrap items-baseline gap-x-2">
+        <span class="tabular-nums muted">${esc(v.date)}</span>
+        <span class="font-medium">${esc(v.org || v.visit_id)}</span>
+        <span class="muted">${esc([ORG_TYPE_LABEL[v.type] || v.type, v.headcount ? `${v.headcount} 人` : "", v.summary ? "有摘要" : ""].filter(Boolean).join(" · "))}</span>
+      </button>`).join("");
+    $("mapVisits").innerHTML = `<div class="border rounded-xl p-2 space-y-1"><div class="font-medium">${esc(name)} <span class="muted font-normal">${g.visits.length} 場</span></div>${rows}</div>`;
+  }
+  $("worldMap").addEventListener("click", (e) => { const g = e.target.closest("[data-country]"); if (g) showCountry(g.dataset.country); });
+  $("worldMap").addEventListener("keydown", (e) => { if (e.key !== "Enter" && e.key !== " ") return; const g = e.target.closest("[data-country]"); if (g) { e.preventDefault(); showCountry(g.dataset.country); } });
+  $("mapVisits").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-visit]");
+    if (!b) return;
+    showDetail(b.dataset.visit);
+    $("visitDetail").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
   async function loadDataTab() {
     const t = encodeURIComponent(token());
     $("csvVisits").href = `/api/visits?export=csv&table=visits&token=${t}`; $("csvResponses").href = `/api/visits?export=csv&table=responses&token=${t}`; $("csvTimeline").href = `/api/visits?export=csv&table=timeline&token=${t}`; $("csvPerf").href = `/api/visits?export=csv&table=slide_performance&token=${t}`;
     await loadVisits();
+    renderWorldMap();
     $("visitsTable").tBodies[0].innerHTML = state.visits.map((v) => `<tr class="cursor-pointer hover:bg-stone-50" data-id="${esc(v.visit_id)}"><td>${esc(v.date)}</td><td>${esc(v.org)}</td><td>${esc(v.type)}</td><td>${esc(v.country)}</td><td>${esc(v.headcount)}</td><td>${esc(v.status)}</td></tr>`).join("");
   }
   $("visitsTable").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-id]"); if (tr) showDetail(tr.dataset.id); });
