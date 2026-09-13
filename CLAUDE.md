@@ -375,6 +375,8 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
 - `public/lib/pptx.mjs`：母簡報子集化核心（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證），零 Node 相依，瀏覽器與 CLI 共用；`cli/lib/pptx.mjs` 只是注入 jszip／xmldom 的 Node 入口；`cli/deck.mjs` 加上 QR（qrcode 套件）與 PDF（LibreOffice）。`--inspect`、`--dump`、`--validate`。
 - `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-shortcuts.mjs`：研究室電腦捷徑與 NFC 網址。`scripts/make-world.mjs`：訪客地圖的陸地輪廓與國家落點（`public/data/world.json`）。
+- 介面語言：`public/data/i18n-admin.json`（後台英文；鍵＝畫面上那句中文）、`scripts/i18n-scan.mjs`（掃出沒翻的，`npm test` 會跑）、
+  `public/data/i18n.json`（來賓端四語）、`slides.json` 的 `title_en`。
 - 測試：`npm test`（單元、API 走本機 dev server、產檔與瘦身走合成簡報）、`npm run test:e2e`（Chromium）。`AI_MOCK=1` 讓所有 AI 呼叫回固定範例，`MAIL_MOCK=1` 讓寄信不真的打 Gmail（信寫進媒體庫 `mail/last.json`，測試再讀出來對內容）。CI：`.github/workflows/ci.yml` 在每個 PR 與 main 的 push 跑同一套（typecheck → npm test → e2e）。
 
 **尚未在真實環境驗證（首次建置時沒有金鑰與母簡報）**
@@ -390,6 +392,19 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - 主辦端 API 用 `Authorization: Bearer ADMIN_TOKEN`、`?token=`，或**登入後的 session cookie**；現場訊號用 `SIGNAL_KEY`；`respond` 與 `visits?public=1` 公開。
 - **登入一次就好**：後台貼一次 ADMIN_TOKEN → `/api/session` 發一個 HttpOnly、SameSite=Strict 的 cookie（值是用 ADMIN_TOKEN 簽的 `v1.<到期>.<HMAC>`，**不是 token 本身**），180 天，每次打開後台自動續期。token 不再存 localStorage（iPad Safari 七天沒互動就清掉，所以以前每次都要重登；舊的會在開場自動換成 cookie）。登出走 `DELETE /api/session`。
 - 老師卡片內容 `public/data/labs.json` 的 `confirmed=false` 表示尚待老師確認；照片 `photo` 為 null 時顯示縮寫。
+- **兩邊都可以切中英文**（明確要求）。做法不一樣，因為兩邊的性質不同：
+  - **後台**：中文寫在頁面上，英文是**疊上去的一層**——`public/data/i18n-admin.json` 的**鍵就是畫面上那一句中文**，
+    所以 render 出什麼就照那一句查，各處不必改寫成 `t("some.key")`；查不到就維持中文（不會變空白或 key）。
+    帶數字的字串把數字抽成 `#` 用同一條（「已存 3 頁」＝「已存 # 頁」），帶其他變數的走 `patterns` 正則。
+    右上角那顆鍵切完是**存好再重新整理**（表單與暫存本來就自己存），省掉「記得原文是什麼」那一整套簿記。
+    **中文改了、英文沒跟著改，`npm test` 會報**（`scripts/i18n-scan.mjs` 掃 admin.html 的每一句中文對表）。
+    新增的畫面文字照樣寫中文，補一條進 i18n-admin.json 就好；`node scripts/i18n-scan.mjs --stub` 會印出缺的骨架。
+  - **來賓端**：本來就是雙語同時出現，切換只是**換哪一個當主語**——英文為主（預設，國際來賓佔多數）
+    或中文為主，另一個永遠在下面那一行。韓／日來的（`visit.language`）輔助語言仍是他們的語言，不受這顆鍵影響。
+    選擇記在這台裝置，也可以用網址帶（`?ui=zh`／`?ui=en`，寄中文版連結給人時用）；換語言會重讀頁面，
+    打到一半的欄位與捲動位置先收進 `sessionStorage` 再放回去。
+  - 母簡報索引 `slides.json` 的頁名與區塊名有 `title`／`title_en` 兩份，後台照介面語言挑；
+    老師卡片 `labs.json`、來賓端字串 `i18n.json` 本來就是多語。**AI 產出的內容不翻**（那是資料，不是介面）。
 - **顏色**：**五間研究室各一色**，值在 `public/data/labs.json` 的 `color`（後台與來賓端同一套：載入時寫進
   CSS 變數 `--c301`…`--c305`，兩個 HTML 裡那五個只是還沒載到時的備用值），所以改顏色改那一個檔就好——
   選頁的區塊、行程的每一列、動線表的房號、老師卡片、「想合作哪幾間」都認得出是同一間。

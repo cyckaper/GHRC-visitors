@@ -439,6 +439,47 @@ try {
   const anon = rows.find((r) => r.suggestion === "Room 302 was hard to follow.");
   check(anon && anon.anonymous && anon.name === "" && anon.email === "" && anon.submitted_at.length === 10, "anonymous response stored without identity");
 
+  // ── 來賓端：中文為主（右上角那顆鍵，或網址帶 ?ui=zh）──
+  await page.goto(`${base}/2026-10-07-uwa?phase=today&ui=zh`);
+  await page.waitForSelector("#lab-303");
+  check((await page.textContent("#welcome")).includes("歡迎"), "?ui=zh puts Chinese first on the guest page");
+  check((await page.textContent("#welcome")).includes("Welcome"), "…and English is still there, as the second line");
+  check((await page.textContent("#langToggle")) === "English", "the toggle offers the other language");
+  check((await page.textContent("#lab-301")).includes("健康景觀智能室"), "the lab cards lead in Chinese too");
+  check((await page.textContent("#lab-301")).includes("Health Landscape Intelligence Lab"), "…with the English name kept alongside");
+  await page.fill("#suggestion", "半路換語言");
+  await page.click("#langToggle");
+  await page.waitForFunction(() => document.getElementById("langToggle")?.textContent === "中文");
+  check((await page.textContent("#welcome")).includes("Welcome to"), "the toggle switches back to English first");
+  check((await page.inputValue("#suggestion")) === "半路換語言", "…and what the guest had already typed survives the switch");
+
+  // ── 主辦端：整個介面切成英文 ──
+  await page.goto(`${base}/admin.html`);
+  await page.waitForSelector("#authOk:not([hidden])");
+  await page.click("#langToggle");
+  await page.waitForFunction(() => document.querySelector('[data-tab="pre"]')?.textContent === "Before", null, { timeout: 20000 });
+  check((await page.textContent('[data-tab="wrapup"]')) === "Wrap-up", "every tab is in English");
+  check(/Check the visitor details/.test(await page.textContent("#tab-pre")), "…and so are the headings inside the tab");
+  await page.click('[data-tab="deck"]');
+  await page.waitForTimeout(500);
+  check(/Slides to use/.test(await page.textContent("#tab-deck")), "the deck tab too");
+  check(/Lab 301 Health Landscape Intelligence Lab/.test(await page.textContent("#slideGrid")), "the master deck's block names come from slides.json in English");
+  const cjkLeft = await page.evaluate(() => {
+    const out = [];
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      if (["SCRIPT", "STYLE", "TEXTAREA", "CODE", "PRE"].includes(n.parentNode?.nodeName)) continue;
+      if (!n.parentElement?.offsetParent) continue;
+      const t = n.nodeValue.trim();
+      if (t && /[一-鿿]/.test(t) && !["中", "中文", "日本語"].includes(t)) out.push(t);
+    }
+    return out;
+  });
+  check(cjkLeft.length === 0, `nothing is left in Chinese on the English deck tab (${cjkLeft.slice(0, 3).join(" | ")})`);
+  await page.click("#langToggle");
+  await page.waitForFunction(() => document.querySelector('[data-tab="pre"]')?.textContent === "訪前", null, { timeout: 20000 });
+  check(true, "and back to Chinese");
+
   check(errors.length === 0, `no page errors (${errors.join(" | ")})`);
   console.log("\nSMOKE OK");
 } catch (e) {

@@ -93,6 +93,7 @@
       <input type="password" id="token" placeholder="ADMIN_TOKEN" class="!w-48" autocomplete="off">
       <button class="btn btn-soft" id="tokenSave" title="把 ADMIN_TOKEN 換成這台裝置的登入憑證，之後半年不必再貼">登入</button>
     </span>
+    <button class="btn btn-soft" id="langToggle" type="button" title="切換介面語言 · Switch interface language">EN</button>
     <span id="authOk" class="flex items-center gap-2" hidden>
       <span class="ok text-sm">已登入 ✓</span>
       <button class="btn btn-soft" id="logout" title="清掉這台裝置的登入憑證（共用電腦用完請按）" type="button">登出</button>
@@ -151,7 +152,7 @@
         <div><label class="f">開始時間</label><input type="time" id="startTime"></div>
         <div><label class="f">總分鐘</label><input type="number" id="duration" min="15" step="5"></div>
         <div><label class="f">人數</label><input type="number" id="headcount" min="0"></div>
-        <div><label class="f">對口老師</label><select id="contactTeacher"><option>張俊彥</option><option>林寶秀</option><option>陳惠美</option><option>張伯茹</option><option>鄭佳昆</option></select></div>
+        <div><label class="f">對口老師</label><select id="contactTeacher"><option value="張俊彥">張俊彥</option><option value="林寶秀">林寶秀</option><option value="陳惠美">陳惠美</option><option value="張伯茹">張伯茹</option><option value="鄭佳昆">鄭佳昆</option></select></div>
         <div><label class="f">網址代碼</label><input type="text" id="code" placeholder="例如 uwa"><p class="muted mt-1">來賓專頁網址的後半段；寄出信或有人回覆之後就固定了。</p></div>
         <div class="sm:col-span-3"><label class="f">來訪目的</label><input type="text" id="purpose"></div>
         <div class="sm:col-span-3"><label class="f">興趣關鍵字（逗號分隔）</label><input type="text" id="interests"></div>
@@ -500,6 +501,87 @@
   const roomTone = (room) => (String(room) === "briefing" ? "var(--cbriefing)" : ROOMS.includes(String(room)) ? `var(--c${room})` : "#57534e");
   function applyLabColors() {
     for (const lab of state.labs?.labs || []) if (lab.color) document.documentElement.style.setProperty(`--c${lab.room}`, lab.color);
+  }
+
+  /**
+   * ── 介面語言：中文寫在頁面上，英文是疊上去的一層 ──
+   * 翻譯表 `public/data/i18n-admin.json` 的**鍵就是畫面上那一句中文**，所以畫面各處不必改寫成
+   * `t("some.key")`——render 出什麼字，就照那一句去查；查不到就維持中文（不會變成空白或 key）。
+   * 動態產生的字（「已存 14:32」「3 場參訪」這種）走 `patterns` 那一組正則。
+   * 中文改了、英文沒跟著改，`npm test` 會報（scripts/i18n-scan.mjs）。
+   *
+   * **切語言＝存好再重新整理**：後台的東西本來就自己存（表單 1.2 秒、暫存 1.5 秒），
+   * 重讀比在畫面上把英文一句一句換回中文簡單也可靠——省掉一整套「記得原文是什麼」的簿記。
+   */
+  const LANG_KEY = "ghrc-admin-lang";
+  const uiLang = () => { try { return localStorage.getItem(LANG_KEY) === "en" ? "en" : "zh"; } catch (e) { return "zh"; } };
+  let dict = null;
+  const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "TEXTAREA", "CODE", "PRE"]); // 使用者打的字、貼上的信、程式碼不翻
+  const I18N_ATTRS = ["title", "placeholder", "aria-label"];
+  const tidy = (x) => String(x == null ? "" : x).replace(/\s+/g, " ").trim();
+  /** 一句中文 → 英文；查不到回空字串。 */
+  function T(zh) {
+    if (!dict) return "";
+    const key = tidy(zh);
+    if (!key) return "";
+    if (dict.strings[key]) return dict.strings[key];
+    // 數字抽掉再查一次：「已存 3 頁」「加了 5 人」共用同一條（表裡寫 #，英文的 # 依序換回數字）
+    const nums = [];
+    const hole = key.replace(/\d+(?:[.:]\d+)?/g, (m) => { nums.push(m); return "#"; });
+    if (dict.strings[hole]) { let i = 0; return dict.strings[hole].replace(/#/g, () => nums[i++] ?? "#"); }
+    for (const [re, en] of dict.patterns || []) {
+      const m = key.match(new RegExp(re));
+      if (m) return en.replace(/\$(\d)/g, (_, i) => m[Number(i)] ?? "");
+    }
+    return "";
+  }
+  /** confirm() 這種不在畫面上的字用這個（查不到就照原文）。 */
+  const t = (zh) => T(zh) || zh;
+  function translateText(node) {
+    if (!node || node.nodeType !== 3 || SKIP_TAGS.has(node.parentNode?.nodeName)) return;
+    const m = /^(\s*)([\s\S]*?)(\s*)$/.exec(node.nodeValue);
+    const en = T(m[2]);
+    if (en && en !== m[2]) node.nodeValue = m[1] + en + m[3]; // 一樣就不要寫回去，不然 observer 會一直繞
+  }
+  function translateAttrs(el) {
+    for (const a of I18N_ATTRS) {
+      const v = el.getAttribute && el.getAttribute(a);
+      const en = v && T(v);
+      if (en && en !== v) el.setAttribute(a, en);
+    }
+  }
+  function applyTo(root) {
+    if (!dict || !root) return;
+    if (root.nodeType === 3) return translateText(root);
+    if (root.nodeType !== 1) return;
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (x) => (SKIP_TAGS.has(x.parentNode?.nodeName) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT) });
+    const texts = [];
+    for (let x = w.nextNode(); x; x = w.nextNode()) texts.push(x);
+    texts.forEach(translateText);
+    translateAttrs(root);
+    root.querySelectorAll && root.querySelectorAll("*").forEach(translateAttrs);
+  }
+  async function initLang() {
+    const btn = $("langToggle");
+    btn.textContent = uiLang() === "en" ? "中" : "EN";
+    btn.onclick = async () => {
+      try { localStorage.setItem(LANG_KEY, uiLang() === "en" ? "zh" : "en"); } catch (e) {}
+      await flushDraft().catch(() => {}); // 打到一半的東西先送出去再重讀
+      location.reload();
+    };
+    if (uiLang() !== "en") return;
+    try { dict = await fetch("/data/i18n-admin.json").then((r) => r.json()); } catch (e) { return; }
+    document.documentElement.lang = "en";
+    document.title = T(document.title) || document.title;
+    applyTo(document.body);
+    // 之後才 render 出來的東西（AI 抽出來的欄位、清單、提示那一行）也要跟著翻
+    new MutationObserver((records) => {
+      for (const r of records) {
+        if (r.type === "characterData") translateText(r.target);
+        else if (r.type === "attributes") translateAttrs(r.target);
+        else r.addedNodes.forEach(applyTo);
+      }
+    }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: I18N_ATTRS });
   }
   const state = { visits: [], visit: null, slides: null, labs: null, thanksRecipients: [], signbookEntries: [], recBlob: null, saved: false };
 
@@ -856,16 +938,18 @@
         <div class="flex flex-wrap items-start gap-2">
           <label class="flex items-start gap-2 min-w-0 cursor-pointer">
             <input type="checkbox" data-block="${g.id}" class="mt-1" ${on ? "checked" : ""} ${g.required ? "disabled" : ""}>
-            <span class="min-w-0"><span class="font-medium">${esc(g.title)}</span>
+            <span class="min-w-0"><span class="font-medium">${esc(slideTitle(g))}</span>
             <span class="muted">　${range} · ${ns.length} 頁 · 約 ${mins} 分${videos ? ` · ${videos} 段影片` : ""}${g.required ? " · 必選" : ""}</span></span>
           </label>
           ${g.required ? "" : `<button type="button" class="muted underline ml-auto" data-group-only="${g.id}">只選這區</button>`}
         </div>
-        <details class="mt-1 ml-6"><summary class="muted cursor-pointer">這一區有哪幾頁</summary><ul class="muted list-disc pl-5 mt-1">${g.items.map((x) => `<li>${String(x.n).padStart(2, "0")} ${esc(x.title)}${x.video ? " ▶" : ""}</li>`).join("")}</ul></details>
+        <details class="mt-1 ml-6"><summary class="muted cursor-pointer">這一區有哪幾頁</summary><ul class="muted list-disc pl-5 mt-1">${g.items.map((x) => `<li>${String(x.n).padStart(2, "0")} ${esc(slideTitle(x))}${x.video ? " ▶" : ""}</li>`).join("")}</ul></details>
       </div>`;
     }).join("");
     updateSlideCount();
   }
+  /** 母簡報的頁名／區塊名：中英兩份都在 slides.json（title／title_en）。 */
+  const slideTitle = (x) => (uiLang() === "en" && x?.title_en ? x.title_en : x?.title || "");
   const blockInputs = () => [...document.querySelectorAll("#slideGrid input[data-block]")];
   /** 勾起來的區塊 → 實際頁次（必選頁永遠在，順序依母簡報頁序）。 */
   function chosenSlides() {
@@ -1153,7 +1237,7 @@
     try { navigator.sendBeacon("/api/draft", new Blob([JSON.stringify({ id: state.draft.id, fields: state.draft.fields })], { type: "application/json" })); } catch (e) {}
   });
   $("draftDiscard").onclick = () => busy($("draftDiscard"), async () => {
-    if (!confirm("清掉這一份還沒存成一場的草稿？表單會回到空白。")) return;
+    if (!confirm(t("清掉這一份還沒存成一場的草稿？表單會回到空白。"))) return;
     await clearDraft("new");
     for (const id of DRAFT_FIELDS) { const el = $(id); if (el) el.value = ""; }
     draftBase = {};
@@ -1183,7 +1267,7 @@
         <span class="font-medium">${esc(v.org || v.visit_id)}</span>
         ${typeTag(v.type)}
         ${v.type && v.type === type ? `<span class="text-xs px-1.5 rounded" style="background:var(--tab);color:#fff">同類</span>` : ""}
-        <span class="muted">${esc(bits.join(" · "))}</span>
+        <span class="muted">${bits.map((b) => `<span>${esc(b)}</span>`).join(" · ")}</span>
       </button>`;
     }).join("") + (rows.length > PAST_SHOW ? `<p class="muted mt-1">還有 ${rows.length - PAST_SHOW} 場，在「資料」分頁。</p>` : "");
   }
@@ -1198,7 +1282,7 @@
   $("orgType").addEventListener("change", renderPastVisits);
   $("deleteBtn").onclick = () => busy($("deleteBtn"), async () => {
     const v = state.visit;
-    if (!state.saved || !confirm(`刪掉「${v.org?.name || v.visit_id}」這一場？\n來賓專頁 ${v.visit_id} 會跟著消失。Drive 上的備份不會動。`)) return;
+    if (!state.saved || !confirm(t(`刪掉「${v.org?.name || v.visit_id}」這一場？\n來賓專頁 ${v.visit_id} 會跟著消失。Drive 上的備份不會動。`))) return;
     const r = await api(`/api/visits?id=${encodeURIComponent(v.visit_id)}`, { method: "DELETE" });
     if (!r.ok) return flash(r.error, "err");
     await loadVisits();
@@ -1283,7 +1367,7 @@
     else if (state.masterOnSite) row.innerHTML = `<span class="muted">母簡報：站台上的 slim-master.pptx</span>`;
     else row.innerHTML = `<span class="muted">母簡報還沒放上站台（只要做一次；可直接選原始母簡報，會先在瀏覽器裡瘦身）</span><label class="btn btn-soft cursor-pointer">上傳母簡報 .pptx<input type="file" id="masterUpload" accept=".pptx" hidden></label>`;
     const up = $("masterUpload"); if (up) up.onchange = () => { const f = up.files[0]; if (f) uploadMaster(f); };
-    const rm = $("masterRemove"); if (rm) rm.onclick = async () => { if (!confirm("移除站台上的母簡報？")) return; const r = await api("/api/master", { method: "DELETE" }); if (!r.ok) return flash(r.error, "err"); state.masterBytes = null; await checkMaster(); };
+    const rm = $("masterRemove"); if (rm) rm.onclick = async () => { if (!confirm(t("移除站台上的母簡報？"))) return; const r = await api("/api/master", { method: "DELETE" }); if (!r.ok) return flash(r.error, "err"); state.masterBytes = null; await checkMaster(); };
   }
   async function uploadMaster(file) {
     const info = $("deckInfo"); info.hidden = false;
@@ -1674,7 +1758,7 @@
     rebase(LETTER_FIELDS); // 伺服器上這一版才是基準；手改過還沒寄的那一版由 applyDraft 擺回來
   }
   function renderRecipients() {
-    $("recipients").innerHTML = state.thanksRecipients.length ? state.thanksRecipients.map((r, i) => `<label class="flex gap-2 items-center"><input type="checkbox" checked data-i="${i}"><span>${esc(r.name)} <span class="muted">${esc(r.email)} · ${r.from === "list" ? "名單" : "現場留信箱"}</span></span></label>`).join("") : `<p class="muted">名單上沒有 email。請回「訪前」補上隨行名單的聯絡方式。</p>`;
+    $("recipients").innerHTML = state.thanksRecipients.length ? state.thanksRecipients.map((r, i) => `<label class="flex gap-2 items-center"><input type="checkbox" checked data-i="${i}"><span>${esc(r.name)} <span class="muted">${esc(r.email)} · <span>${r.from === "list" ? "名單" : "現場留信箱"}</span></span></span></label>`).join("") : `<p class="muted">名單上沒有 email。請回「訪前」補上隨行名單的聯絡方式。</p>`;
   }
   $("thanksBtn").onclick = () => busy($("thanksBtn"), async () => {
     const r = await runJob("/api/letter", { visit_id: $("visitSelect").value, kind: "thanks", sender: $("sender").value }, noteInto("thanksInfo"), "AI 草擬中……大約一分鐘。");
@@ -1700,7 +1784,7 @@
       const recipients = [...document.querySelectorAll("#recipients input:checked")].map((i) => state.thanksRecipients[Number(i.dataset.i)]);
       if (!recipients.length) return flash("沒有勾選收件人", "err");
       if (!$(ids.subject).value.trim() || !$(ids.body).value.trim()) return flash(`${label}還是空的，先按「AI 草擬」`, "err");
-      if (!confirm(`把${label}寄給 ${recipients.length} 人？`)) return;
+      if (!confirm(t(`把${label}寄給 ${recipients.length} 人？`))) return;
       const note = (m) => { $(ids.info).textContent = m; };
       const r = await runJob("/api/letter", { visit_id: $("visitSelect").value, action: "send", kind, sender: $(ids.sender).value, subject: $(ids.subject).value, body: $(ids.body).value, recipients }, note, `寄送中……一封一封寄，${recipients.length} 人大約要一分鐘。`);
       if (!r) return;
@@ -1841,7 +1925,7 @@
     const people = [...groups.values()].reduce((n, g) => n + g.visits.reduce((m, v) => m + (Number(v.headcount) || 0), 0), 0);
     $("mapSummary").textContent = groups.size ? `${groups.size} 個國家 · ${visits} 場 · 共 ${people} 人次` : "";
     $("mapNote").innerHTML = unmatched.size
-      ? `<span class="muted">地圖上沒有：${[...unmatched].map(([k, n]) => `${esc(k)}（${n} 場）`).join("、")}——國名寫法對不到就先列在這裡，改「訪前」那一場的國家欄位就會歸位。</span>`
+      ? `<span class="muted"><span>地圖上沒有：</span>${[...unmatched].map(([k, n]) => `<span>${esc(k)}</span>（<span>${n} 場</span>）`).join("、")}<span>——國名寫法對不到就先列在這裡，改「訪前」那一場的國家欄位就會歸位。</span></span>`
       : groups.size ? "" : `<span class="muted">還沒有填了國家的參訪。</span>`;
     if (state.mapCountry && groups.has(state.mapCountry)) showCountry(state.mapCountry);
     else { state.mapCountry = ""; $("mapVisits").innerHTML = ""; }
@@ -1877,7 +1961,7 @@
         <span class="tabular-nums muted">${esc(v.date)}</span>
         <span class="font-medium">${esc(v.org || v.visit_id)}</span>
         ${typeTag(v.type)}
-        <span class="muted">${esc([v.headcount ? `${v.headcount} 人` : "", v.summary ? "有摘要" : ""].filter(Boolean).join(" · "))}</span>
+        <span class="muted">${[v.headcount ? `${v.headcount} 人` : "", v.summary ? "有摘要" : ""].filter(Boolean).map((b) => `<span>${esc(b)}</span>`).join(" · ")}</span>
       </button>`).join("");
     $("mapVisits").innerHTML = `<div class="border rounded-xl p-2 space-y-1"><div class="font-medium">${esc(name)} <span class="muted font-normal">${g.visits.length} 場</span></div>${rows}</div>`;
   }
@@ -1952,7 +2036,7 @@ $("driveInfo").innerHTML = d?.backed_up_at
   }
   $("cardList").addEventListener("click", async (e) => {
     const b = e.target.closest("[data-remove-card]");
-    if (!b || !confirm("刪掉這張名片的原圖？（已經加進名單的人不會被刪）")) return;
+    if (!b || !confirm(t("刪掉這張名片的原圖？（已經加進名單的人不會被刪）"))) return;
     const r = await api("/api/cards", { method: "POST", body: { visit_id: $("visitSelect").value, action: "remove", key: b.dataset.removeCard } });
     if (!r.ok) return flash(r.error, "err");
     loadCards();
@@ -2034,6 +2118,7 @@ $("driveInfo").innerHTML = d?.backed_up_at
 
   // 開場：把舊版存在瀏覽器的 token 換成 cookie，然後看 cookie 還在不在
   (async () => {
+    await initLang();
     const legacy = legacyToken();
     if (legacy) await signIn(legacy);
     const s = await api("/api/session");

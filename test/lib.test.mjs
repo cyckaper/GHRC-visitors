@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { reconcileTimeline, plannedEntries } from "../lib/timeline.mjs";
+import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
 import { snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, needsSummary, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
 
 const visit = {
@@ -332,4 +333,29 @@ test("五間研究室各有自己的顏色：labs.json 是全站唯一來源", (
     for (const lab of labs) assert.ok(html.includes(`--c${lab.room}:`), `${f} 要有 --c${lab.room} 的備用值`);
     assert.ok(/setProperty\(`--c\$\{lab\.room\}`, lab\.color\)/.test(html), `${f} 要把 labs.json 的 color 寫進 CSS 變數`);
   }
+});
+
+test("後台的英文：畫面上每一句中文都有翻譯", () => {
+  const strings = scanAdmin();
+  assert.ok(strings.length > 200, "應該掃得到整頁的中文");
+  const gaps = missing(strings);
+  assert.deepEqual(gaps, [], `這幾句還沒有英文（改完中文請一起補 public/data/i18n-admin.json）：\n${gaps.join("\n")}`);
+  const dict = loadDict();
+  // patterns 是帶數字的那種（「已存 14:32」）：正則要編得起來，且英文裡的 $1 不能超過括號數
+  for (const [re, en] of dict.patterns) {
+    const r = new RegExp(re);
+    const groups = new RegExp(`${re}|`).exec("").length - 1;
+    for (const m of en.matchAll(/\$(\d)/g)) assert.ok(Number(m[1]) <= groups, `${re} 只有 ${groups} 個括號，英文卻用到 ${m[0]}`);
+    assert.ok(r.source, re);
+  }
+});
+
+test("母簡報索引與來賓端字串：兩種語言都齊", () => {
+  const index = JSON.parse(readFileSync("public/data/slides.json", "utf8"));
+  for (const s of index.slides) assert.ok(s.title_en, `第 ${s.n} 頁少了 title_en`);
+  for (const g of index.groups) assert.ok(g.title_en, `區塊 ${g.id} 少了 title_en`);
+  // 來賓端可以把中文切成主語言，所以 zh 不能有缺（kind_other 四種語言都是空的，那是刻意的）
+  const i18n = JSON.parse(readFileSync("public/data/i18n.json", "utf8"));
+  const gaps = Object.keys(i18n.en).filter((k) => i18n.en[k] && !i18n.zh[k]);
+  assert.deepEqual(gaps, [], `中文版缺這幾個字串：${gaps.join(", ")}`);
 });
