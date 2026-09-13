@@ -219,6 +219,8 @@ try {
   await page.waitForFunction(() => document.getElementById("dictationInfo").textContent.includes("已存入"));
   const wrapLinks = await page.textContent("#wrapLinks");
   check(wrapLinks.includes("#email") && wrapLinks.includes("#respond"), "after the visit, the wrap-up tab produces the on-site email and response links");
+  check((await page.locator("#wrapLinks [data-copy]").count()) === 3, "all three links to the guest page are listed in one place");
+  check(/參訪當天用/.test(wrapLinks) && /訪後用/.test(wrapLinks), "…each saying when to use it");
 
   // 動作三：合照與連結放上專屬頁面
   const pngPath = path.join(tmp, "group.png");

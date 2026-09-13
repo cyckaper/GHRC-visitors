@@ -197,7 +197,12 @@
     <p class="text-sm text-stone-600"><b>這一頁：來賓離開後四件事</b>——簽名簿、名片、三十秒口述、當天資料。這些東西直接決定訪後信寄得到誰、寫得出什麼，所以當天做完最省力；隔一天記憶就掉了。</p>
     <div class="card space-y-2">
       <p class="muted">來賓離開後這幾件事，幾分鐘做完。受訪的是主持人自己。</p>
-      <p class="text-sm flex flex-wrap items-center gap-x-3 gap-y-1" id="wrapLinks"></p>
+    </div>
+
+    <div class="card space-y-2">
+      <h2 class="font-semibold">來賓專頁的三個連結 <span class="muted font-normal">同一個頁面，三種用法</span></h2>
+      <p class="muted">都是這一場的專屬頁面，差別只在打開後停在哪一段。<b>什麼時候用哪一個</b>：</p>
+      <div id="wrapLinks" class="space-y-2 text-sm"></div>
     </div>
     <div class="card space-y-3">
       <h2 class="font-semibold">動作一｜拍一張簽名簿</h2>
@@ -1202,9 +1207,24 @@
     mnote("");
     state.wrapVisit = r.visit;
     $("materialsPageLink").textContent = r.visit.page_url; $("materialsPageLink").href = r.visit.page_url;
-    // 行程走完才產出的兩個連結：現場留信箱（桌卡、QR）與訪後回應（放進感謝信）
-    $("wrapLinks").innerHTML = [["email", "留信箱"], ["respond", "回應表單"]]
-      .map(([k, label]) => `<span><span class="muted">${label}</span> <a class="underline break-all" target="_blank" rel="noopener" href="${esc(r.visit.page_url)}#${k}">${esc(r.visit.page_url.replace(/^https?:\/\//, ""))}#${k}</a> <button type="button" class="underline" data-copy="${esc(r.visit.page_url)}#${k}">複製</button></span>`)
+    // 同一個頁面三種用法：訪前給的網址（QR）、當天的留信箱、訪後的三個回應項目。
+    // 後兩個是行程走完才用得到的，所以列在「收工」而不是訪前。
+    $("wrapLinks").innerHTML = [
+      ["", "專頁網址", "訪前就能給，門口的 QR 也是這一個。打開是今日流程與五間老師卡片。"],
+      ["email", "留信箱", "<b>參訪當天用</b>：桌卡或投影出來，來賓留 email，訪後信才寄得到他。"],
+      ["respond", "回應表單", "<b>訪後用</b>：放進感謝信。三個問題——想合作哪幾間、希望我們做什麼、開放建議（可不具名）。"],
+    ]
+      .map(([k, label, why]) => {
+        const url = r.visit.page_url + (k ? `#${k}` : "");
+        return `<div class="border rounded-xl p-2 space-y-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="font-medium">${label}</span>
+            <a class="underline break-all mr-auto" target="_blank" rel="noopener" href="${esc(url)}">${esc(url.replace(/^https?:\/\//, ""))}</a>
+            <button type="button" class="btn btn-soft" data-copy="${esc(url)}">複製</button>
+          </div>
+          <p class="muted">${why}</p>
+        </div>`;
+      })
       .join("");
     renderMaterials(r.visit.materials || { deck_pdf: "", photos: [], links: [] });
   }
