@@ -93,6 +93,15 @@ try {
   check(/已存/.test(await page.textContent("#saveInfo")), "it says when it last saved");
   check((await page.locator("#visitSelect option").count()) === 2, "changing the code renames the visit instead of leaving a stray one behind");
 
+  // 名單刪掉一列也要自己存：以前刪一列不會冒 input 事件，畫面刪了、伺服器沒刪，
+  // 重新整理或下一次「AI 查訪客背景」那個人又回來（畫面上的「名單 N 人」來自伺服器存完回傳的那一筆）
+  await page.click("#addGuest");
+  await page.fill("#guestTable tbody tr:last-child td:nth-child(1) input", "Temp Person");
+  await page.waitForFunction(() => /名單 3 人/.test(document.getElementById("progress").textContent), null, { timeout: 30000 });
+  await page.click("#guestTable tbody tr:last-child [data-del-row]");
+  await page.waitForFunction(() => /名單 2 人/.test(document.getElementById("progress").textContent), null, { timeout: 30000 });
+  check(true, "deleting someone from the guest list saves by itself — they do not come back");
+
   await page.click("#planBtn");
   // 排行程也跑在背景（提示詞帶整份頁次索引，10 秒同樣不夠）
   await page.waitForFunction(() => /排行程中/.test(document.getElementById("planInfo").textContent));
@@ -112,7 +121,7 @@ try {
 
   const link = await page.textContent("#pageLink");
   check(link === `${base}/2026-10-07-uwa`, `saved visit has page url ${link}`);
-  check((await page.textContent("#deckState")).includes("已選"), "the pre-visit tab only reports how many slides are picked");
+  check((await page.$("#deckState")) === null && /選了 \d+ 頁/.test(await page.textContent("#progress")), "the pre-visit tab does not repeat the deck state — the progress line already has it");
 
   // 訪前功課：查網路跑在背景（一般函式 10 秒不夠），觸發後輪詢，查完自己出現，不必再按一次
   await page.click("#researchBtn");
@@ -122,10 +131,10 @@ try {
   check((await page.textContent("#background")).includes("可能的參訪目的"), "the background card lists the likely purposes of the visit once it finishes");
   check(!/跑在背景|背景函式/.test(await page.textContent("#tab-pre")), "the pre-visit tab explains waits in plain words, not in terms of how the server is built");
 
-  // ── 簡報分頁：選頁、不用簡報、產檔 ──
-  await page.click("#openDeck");
+  // ── 簡報分頁：選頁、不用簡報、產檔（從進度線那一格跳過去——訪前不再放跳分頁的按鈕）──
+  await page.click('#progress [data-go="deck"]');
   await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-slide]").length > 0);
-  check((await page.inputValue("#visitSelect")) === "2026-10-07-uwa", "「選頁與產生簡報」opens the deck tab on this visit");
+  check((await page.inputValue("#visitSelect")) === "2026-10-07-uwa", "the progress line's 簡報 cell opens the deck tab on this visit");
   check((await page.locator("#slideGrid input[data-slide]:checked").count()) >= 5, "the plan's slides are waiting in the deck tab");
   check((await page.locator("#slideGrid fieldset[data-group]").count()) >= 10, "slides are grouped into blocks");
   await page.click("#slidesNone");
@@ -146,7 +155,7 @@ try {
   await page.waitForFunction(() => document.getElementById("deckWork").hidden);
   await page.waitForFunction(() => /只口頭介紹/.test(document.getElementById("flash").textContent));
   await page.click('[data-tab="pre"]');
-  check((await page.textContent("#deckState")).includes("不用簡報"), "the pre-visit tab says this visit has no deck");
+  check(/不用簡報/.test(await page.textContent("#progress")), "the progress line says this visit has no deck");
   await page.click('[data-tab="deck"]');
   await page.waitForFunction(() => document.getElementById("deckStatus").textContent.includes("2026-10-07") || document.getElementById("deckStatus").textContent.includes("Western"));
   check(await page.isChecked("#noDeck"), "「不用簡報」survives a reload of the tab (stored on the visit)");
@@ -194,11 +203,11 @@ try {
   await page.click('[data-tab="pre"]');
   await page.selectOption("#visitSelect", "2026-10-07-uwa");
   await page.waitForSelector("#afterSave:not([hidden])");
-  check((await page.textContent("#deckState")).includes("已選"), "the pre-visit tab reports the saved slide count after a reload");
+  check(/簡報已產|選了 \d+ 頁/.test(await page.textContent("#progress")), "the progress line reports the deck state after a reload");
   // 兩封信都在「信件」分頁，收件人共用一份
   check((await page.locator('#tab-pre #confirmLetterBtn').count()) === 0, "the confirmation letter moved out of the pre-visit tab");
-  await page.click("#openLetters");
-  check(!(await page.isHidden("#tab-post")), "「草擬確認信」jumps to the letters tab");
+  await page.click('#progress [data-go="post"]');
+  check(!(await page.isHidden("#tab-post")), "the progress line's 確認信 cell jumps to the letters tab");
   await page.click("#confirmLetterBtn");
   // 草擬信件也跑在背景（Claude 寫一整封雙語信同樣超過 10 秒）
   await page.waitForFunction(() => /草擬中/.test(document.getElementById("confirmLetterInfo").textContent));
@@ -225,6 +234,7 @@ try {
   // 收工分頁：用打字的逐字稿
   await page.click('[data-tab="wrapup"]');
   await page.selectOption("#visitSelect", "2026-10-07-uwa");
+  await page.waitForFunction(() => /名單目前/.test(document.getElementById("cardStatus").textContent)); // 等這一頁載完再打字
   await page.fill("#transcript", "今天校長來，最想看 303 的模擬，問了能不能合作。");
   await page.click("#extractDictationBtn");
   await page.waitForSelector("#dictationFields:not([hidden])", { timeout: 60000 });
@@ -318,11 +328,12 @@ try {
   check((await page.locator('#pastVisits [data-past="2026-10-07-uwa"]').count()) === 1, "past visits are listed at the bottom of the pre-visit tab");
   check(/選了 \d+ 頁/.test(await page.textContent("#pastVisits")), "…saying what that visit picked, so the next deck has something to go on");
   check(/同類/.test(await page.textContent("#pastVisits")), "…and marking the ones of the same organisation type");
+  // 等的是「畫面真的換過去了」（#preStatus 由 fillForm 寫），不是下拉的值——切換是非同步的
   await page.click('#pastVisits [data-past="2026-10-07-uwa"]');
-  await page.waitForFunction(() => document.getElementById("visitSelect").value === "2026-10-07-uwa");
-  check(true, "clicking one pulls it up as the current visit");
-  await page.selectOption("#visitSelect", typoId);
-  await page.waitForFunction((id) => document.getElementById("visitSelect").value === id, typoId);
+  await page.waitForFunction(() => document.getElementById("preStatus").textContent === "2026-10-07-uwa", null, { timeout: 30000 });
+  check((await page.inputValue("#visitSelect")) === "2026-10-07-uwa", "clicking one pulls it up as the current visit");
+  await page.click(`#pastVisits [data-past="${typoId}"]`); // 換過去之後，這一列就變成剛才那一場
+  await page.waitForFunction((id) => document.getElementById("preStatus").textContent === id, typoId, { timeout: 30000 });
   page.once("dialog", (d) => d.accept());
   await page.click("#deleteBtn");
   await page.waitForFunction((n) => document.querySelectorAll("#visitSelect option").length === n, beforeDelete, { timeout: 30000 });
