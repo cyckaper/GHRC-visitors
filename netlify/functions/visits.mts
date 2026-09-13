@@ -68,7 +68,7 @@ export default async (req: Request) => {
     const existing = renamedFrom ? current : await store.getVisit(merged.visit_id);
     // 後台表單不管這幾件事（簽名簿、口述、名片、當天資料、信件、摘要、Drive、自動提醒都是別的端點或
     // 背景工作寫的）。body 沒帶就沿用現有的：不然在別的分頁開著舊資料按一下存檔，就會把它們清掉——
-    // 提醒紀錄被清掉還會害收工提醒重寄一次。
+    // 提醒紀錄被清掉還會害後續提醒重寄一次。
     if (existing) for (const k of KEPT) if ((body as any)[k] === undefined) (merged as any)[k] = (existing as any)[k];
     merged.created_at = existing?.created_at || nowISO();
     merged.updated_at = nowISO();

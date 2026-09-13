@@ -222,7 +222,7 @@ try {
   await page.selectOption("#visitSelect", "2026-10-07-uwa");
   await page.waitForSelector("#afterSave:not([hidden])");
   check(/簡報已產|選了 \d+ 頁/.test(await page.textContent("#progress")), "the progress line reports the deck state after a reload");
-  // 確認信在「訪前」（寄出去的那封信裡就有來賓專頁網址），感謝信在「收工」；沒有單獨的「信件」分頁
+  // 確認信在「訪前」（寄出去的那封信裡就有來賓專頁網址），感謝信在「後續」；沒有單獨的「信件」分頁
   check((await page.locator("#tab-pre #confirmLetterBtn").count()) === 1, "the confirmation letter lives on the pre-visit tab");
   check((await page.locator("#tab-wrapup #thanksBtn").count()) === 1, "the thank-you letter lives on the wrap-up tab");
   check((await page.locator('[data-tab="post"]').count()) === 0, "there is no separate letters tab any more");
@@ -249,7 +249,7 @@ try {
   check(true, "a hand-edited letter that was never sent comes back instead of being lost");
   check(await page.isVisible("#confirmDraftNote"), "…and it says so next to the letter");
 
-  // 收工分頁：用打字的逐字稿
+  // 後續分頁：用打字的逐字稿
   await page.click('[data-tab="wrapup"]');
   await page.selectOption("#visitSelect", "2026-10-07-uwa");
   await page.waitForFunction(() => /名單目前/.test(document.getElementById("cardStatus").textContent)); // 等這一頁載完再打字
@@ -290,7 +290,7 @@ try {
   await page.waitForFunction(() => document.getElementById("materialsInfo").textContent.includes("已儲存"));
   check(true, "photo uploaded and link saved for the visit page");
 
-  // 收工分頁的動作五：感謝信
+  // 後續分頁的動作五：感謝信
   await page.click('[data-tab="wrapup"]');
   await page.selectOption("#visitSelect", "2026-10-07-uwa");
   await page.click("#thanksBtn");
@@ -298,7 +298,7 @@ try {
   await page.waitForFunction(() => document.querySelectorAll("#thanksRecipients input").length === 2);
   check(true, "thanks letter drafted with the 請益 wording and 2 recipients");
 
-  // ── 收工分頁的動作二：拍名片 → AI 讀 → 確認後併進這場的名單（拍名片是現場的事，跟簽名簿放一起）──
+  // ── 後續分頁的動作二：拍名片 → AI 讀 → 確認後併進這場的名單（拍名片是現場的事，跟簽名簿放一起）──
   await page.click('[data-tab="wrapup"]');
   // 已經轉好、存過的口述要載回來：以前重新整理就一片空白，看起來像東西掉了
   await page.waitForFunction(() => document.getElementById("transcript").value.length > 0, null, { timeout: 20000 });
@@ -346,7 +346,7 @@ try {
   await page.click('[data-tab="settings"]');
   await page.waitForFunction(() => document.querySelectorAll("#statusList li").length > 0, null, { timeout: 30000 });
   check((await page.locator("#statusList li").count()) >= 6, "the settings tab says which external services are wired up");
-  check(/收工提醒/.test(await page.textContent("#statusList")), "…including whether the wrap-up reminder can be sent");
+  check(/後續提醒/.test(await page.textContent("#statusList")), "…including whether the wrap-up reminder can be sent");
   check(/不會寄|現在寄到/.test(await page.textContent("#reminderInfo")), "the settings tab says where the wrap-up reminder would go");
   await page.fill("#reminderTo", "wrapup@ntu.edu.tw");
   await page.locator("#senderDefault").focus(); // blur → change
@@ -462,7 +462,7 @@ try {
   await page.waitForSelector("#authOk:not([hidden])");
   await page.click("#langToggle");
   await page.waitForFunction(() => document.querySelector('[data-tab="pre"]')?.textContent === "Before", null, { timeout: 20000 });
-  check((await page.textContent('[data-tab="wrapup"]')) === "Wrap-up", "every tab is in English");
+  check((await page.textContent('[data-tab="wrapup"]')) === "Follow-up", "every tab is in English");
   check(/Check the visitor details/.test(await page.textContent("#tab-pre")), "…and so are the headings inside the tab");
   await page.click('[data-tab="deck"]');
   await page.waitForTimeout(500);

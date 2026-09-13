@@ -17,7 +17,7 @@
 | `GOOGLE_SHEET_ID`、`GOOGLE_SERVICE_ACCOUNT_JSON` | sheets 時必要 | 見 §2 |
 | `GMAIL_CLIENT_ID`、`GMAIL_CLIENT_SECRET`、`GMAIL_REFRESH_TOKEN`、`GMAIL_SENDER` | 選 | 訪後信一鍵寄出（§3）。沒設定時後台會給 mailto 與複製 |
 | `DICTATION_LANGUAGE` | 選 | Whisper 的語言提示，預設 `zh` |
-| `REMINDER_TO` | 選 | 收工提醒寄到哪個信箱（參訪結束時自動寄）。**通常不必設**：後台「設定」分頁可以直接填，都沒填就寄給 `GMAIL_SENDER` |
+| `REMINDER_TO` | 選 | 後續提醒寄到哪個信箱（參訪結束時自動寄）。**通常不必設**：後台「設定」分頁可以直接填，都沒填就寄給 `GMAIL_SENDER` |
 
 4. Deploy。部署後：`https://visit.healsdesign.org/admin.html` 用 `ADMIN_TOKEN` 登入。
    「訪前」的 **AI 查訪客背景** 會用 Claude 的伺服器端網路搜尋（每次查幾個網頁，另外計費）；帳號沒開網路搜尋也不會壞，只會退回「只讀來信」的研判並在畫面上標明。**一台裝置只要登入一次**：伺服器會發一個 HttpOnly cookie（180 天，每次打開後台自動續期），換手機或換瀏覽器才要再貼一次；按「登出」就清掉。
@@ -25,7 +25,7 @@
 **資料在哪**：預設在 Netlify Blobs（store `ghrc-visit`：`visits/`、`responses/`、`slideperf/`、`media/`）。後台「資料」分頁可匯出三張表的 CSV。Deploy Preview 與分支部署用 deploy-scoped store，不會混進正式資料。
 
 **排程（Netlify Scheduled Functions，`export const config = { schedule }`）**：`summary-cron`（台北一點：過完又有回饋的參訪自己產一頁摘要）、
-`drive-cron`（兩點：備份補漏）、`reminder-cron`（台北 08:00–21:59 每十五分鐘：參訪結束時寄收工提醒）。
+`drive-cron`（兩點：備份補漏）、`reminder-cron`（台北 08:00–21:59 每十五分鐘：參訪結束時寄後續提醒）。
 三支都只接受 Netlify 排程器送來的 `POST {next_run}`，或帶 `ADMIN_TOKEN` 的手動觸發；被擋下來時函式紀錄會寫明原因。
 
 **金鑰安全**：所有金鑰只在 Netlify Functions 裡使用，前端只拿 `ADMIN_TOKEN`（登入後換成 HttpOnly cookie）。
@@ -49,8 +49,8 @@
 
 沒設定時，後台會明確顯示「尚未寄出」，並提供 mailto（BCC 全員）與複製信件。
 
-**收工提醒**用的是同一組 Gmail 授權：參訪的結束時間一到（依今日流程），系統寄一封信到中心信箱，
-列出簽名簿、名片、口述、當天資料還缺哪幾件，附一個直接打開後台「收工」分頁的連結。一場只寄一次，
+**後續提醒**用的是同一組 Gmail 授權：參訪的結束時間一到（依今日流程），系統寄一封信到中心信箱，
+列出簽名簿、名片、口述、當天資料還缺哪幾件，附一個直接打開後台「後續」分頁的連結。一場只寄一次，
 四件事都做完了就不寄。收件信箱在後台「設定」分頁填（留空就用 `GMAIL_SENDER`）。
 
 
@@ -59,9 +59,9 @@
 現場動線訊號（NFC 貼紙、研究室電腦的簡報捷徑、`SIGNAL_KEY`、`timeline` 表）在 2026-09-13 整套拿掉了
 （明確指示：暫時都不用）。這一節留著只是為了讓後面的編號不變；要找回來翻 git（移除前的最後一版 `191ee60`）。
 
-## 5. 收工提醒
+## 5. 後續提醒
 
-後台儲存參訪後「下載收工提醒 .ics」→ 加進主持人的行事曆。預定結束時間鬧鈴，點開直達 `admin.html#wrapup=<visit_id>`。
+後台儲存參訪後「下載後續提醒 .ics」→ 加進主持人的行事曆。預定結束時間鬧鈴，點開直達 `admin.html#wrapup=<visit_id>`。
 （要改成推播的話：Netlify Scheduled Function 每 5 分鐘掃當天 visits 的結束時間，用 Web Push 送。v1 先用行事曆，零基礎設施。）
 
 ## 6. 母簡報：slim master
@@ -80,7 +80,7 @@ python3 scripts/slim-master.py "GHRC 介紹簡報2026-9.pptx" --out public/asset
 
 ## 6.5 另存 Google Drive（長期檔案）
 
-**設定好之後是全自動的**：每次存檔、收工兩動作、放上當天資料、寄出訪後信、產一頁摘要，以及來賓送出回覆，
+**設定好之後是全自動的**：每次存檔、後續那幾件事、放上當天資料、寄出訪後信、產一頁摘要，以及來賓送出回覆，
 都會自動把那一場同步到中心 Drive 的 `GHRC 參訪/<日期> <單位>/`，裡面放參訪資料.json、回覆.csv、動線.csv、
 一頁摘要.md、簽名簿照片、主持人口述音檔、當天簡報.pdf、現場合照。同名覆蓋，不會愈備份愈多份。
 即時同步若因為網路或部署漏掉，每晚台北時間兩點的 `drive-cron` 會補上。後台「資料」分頁的「立即備份到 Drive」只是手動補救。
@@ -109,7 +109,7 @@ Netlify 環境變數（沿用寄信那組 Google OAuth 也可以，但 refresh t
 
 ## 7. 產出當次簡報
 
-平常在後台「訪前」存好這一場，再到「簡報」分頁選頁、按 **產生簡報 .pptx**（不用簡報的場次勾「這場不用簡報，只口頭介紹」就好）：瀏覽器抓 slim master（後台上傳的、站台靜態檔、或當場選檔）、依選頁與流程子集化、韓／日文版呼叫 `/api/translate` 翻譯中文段落、直接下載 `GHRC_<visit_id>.pptx`。PDF 請用 PowerPoint 另存，再到「收工」放上專屬頁面。本機 CLI 是備援（多出 LibreOffice 轉 PDF）：
+平常在後台「訪前」存好這一場，再到「簡報」分頁選頁、按 **產生簡報 .pptx**（不用簡報的場次勾「這場不用簡報，只口頭介紹」就好）：瀏覽器抓 slim master（後台上傳的、站台靜態檔、或當場選檔）、依選頁與流程子集化、韓／日文版呼叫 `/api/translate` 翻譯中文段落、直接下載 `GHRC_<visit_id>.pptx`。PDF 請用 PowerPoint 另存，再到「後續」放上專屬頁面。本機 CLI 是備援（多出 LibreOffice 轉 PDF）：
 
 ```bash
 npm run deck -- --visit=2026-10-07-uwa          # 需要 data/visits/2026-10-07-uwa.json（/api/visits?id=… 的 visit 物件）與 public/assets/master/slim-master.pptx
@@ -122,5 +122,5 @@ npm run deck -- --spec=path/to.json --no-pdf     # 不裝 LibreOffice 時
 
 ## 8. 第一次試跑
 
-- **Bill Sullivan（2026/9/15–22）**：時間太近，先手動試「收工兩動作」——擺一本簽名簿、結束後用手機錄三十秒。後台「收工」分頁就能把這兩份素材存進系統（先在訪前建一筆參訪即可）。
-- **Simon Kilbane（10 月初）**：完整跑一次。訪前貼信、確認名單 email、排行程、產簡報、寄確認信；收工五件事；訪後信寄全名單，看開放建議欄位收不收得到東西。
+- **Bill Sullivan（2026/9/15–22）**：時間太近，先手動試「後續」那幾件事——擺一本簽名簿、結束後用手機錄三十秒。後台「後續」分頁就能把這兩份素材存進系統（先在訪前建一筆參訪即可）。
+- **Simon Kilbane（10 月初）**：完整跑一次。訪前貼信、確認名單 email、排行程、產簡報、寄確認信；後續五件事；訪後信寄全名單，看開放建議欄位收不收得到東西。

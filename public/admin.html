@@ -102,7 +102,7 @@
   <nav class="flex flex-wrap gap-1" role="tablist">
     <button class="tab" role="tab" data-tab="pre" aria-selected="true">訪前</button>
     <button class="tab" role="tab" data-tab="deck">簡報</button>
-    <button class="tab" role="tab" data-tab="wrapup">收工</button>
+    <button class="tab" role="tab" data-tab="wrapup">後續</button>
     <button class="tab" role="tab" data-tab="data">資料</button>
     <button class="tab" role="tab" data-tab="settings">設定</button>
   </nav>
@@ -139,7 +139,7 @@
 
     <div class="card space-y-4">
       <h2 class="font-semibold"><span class="num">2</span>確認訪客背景</h2>
-      <p class="muted">AI 讀出來的一律要你看過。<b>名單上每個人的 email 最重要</b>——訪後信會寄給名單上每一個人，漏一個就少一份回饋；當場拿不到的可以之後在「收工」拍名片補。</p>
+      <p class="muted">AI 讀出來的一律要你看過。<b>名單上每個人的 email 最重要</b>——訪後信會寄給名單上每一個人，漏一個就少一份回饋；當場拿不到的可以之後在「後續」拍名片補。</p>
       <div class="grid sm:grid-cols-3 gap-3">
         <div class="sm:col-span-2"><label class="f">單位名稱（英文為主）</label><input type="text" id="orgName"></div>
         <div><label class="f">單位名稱（當地語）</label><input type="text" id="orgLocal"></div>
@@ -198,9 +198,9 @@
             <p class="muted">這一場專屬的頁面：當天的流程、五間老師卡片，來賓可以在上面留 email。<b>QR 是拿來印或投影的</b>——放在門口或簡報最後一頁，來賓自己掃就打得開，不必個別傳網址。產生簡報時也會自動加一頁一樣的 QR。</p>
             <div class="flex flex-wrap gap-2">
               <button class="btn" id="copyLink" title="複製來賓專頁網址，貼到信裡或 LINE 給對方">複製網址</button>
-              <button class="btn btn-soft" id="downloadIcs" title="把這一場加進行事曆，結束時間跳出來提醒你拍簽名簿、講三十秒口述。系統本來就會在那個時間寄一封提醒信，這顆是給想在行事曆上也看到的人">下載收工提醒 .ics</button>
+              <button class="btn btn-soft" id="downloadIcs" title="把這一場加進行事曆，結束時間跳出來提醒你拍簽名簿、講三十秒口述。系統本來就會在那個時間寄一封提醒信，這顆是給想在行事曆上也看到的人">下載後續提醒 .ics</button>
             </div>
-            <p class="muted">確認信在下面那一張卡片。其他要做的事（選頁、收工）看上面那一排進度：綠勾是做過了，點一格就跳到該做那件事的分頁。</p>
+            <p class="muted">確認信在下面那一張卡片。其他要做的事（選頁、後續）看上面那一排進度：綠勾是做過了，點一格就跳到該做那件事的分頁。</p>
           </div>
         </div>
       </div>
@@ -279,7 +279,7 @@
     </div>
   </section>
 
-  <!-- ───────── 收工 ───────── -->
+  <!-- ───────── 後續 ───────── -->
   <section id="tab-wrapup" class="space-y-5" hidden>
     <p class="lede text-sm"><b>這一頁：來賓離開後五件事</b>——簽名簿、名片、三十秒口述、當天資料，做完就寄感謝信。前四件直接決定感謝信寄得到誰、寫得出什麼，所以當天做完最省力；隔一天記憶就掉了。</p>
     <div class="card space-y-2">
@@ -447,15 +447,15 @@
       <h2 class="font-semibold">預設值</h2>
       <div class="flex flex-wrap items-center gap-2">
         <label class="f mb-0" for="senderDefault">訪後信預設寄件者</label>
-        <select id="senderDefault" class="!w-auto" title="新的一場草擬感謝信時預設用誰的名義；個別那一場還是可以在「收工」分頁改"><option value="director">中心主任 張俊彥</option><option value="contact">對口老師</option></select>
+        <select id="senderDefault" class="!w-auto" title="新的一場草擬感謝信時預設用誰的名義；個別那一場還是可以在「後續」分頁改"><option value="director">中心主任 張俊彥</option><option value="contact">對口老師</option></select>
         <span class="muted" id="settingsInfo"></span>
       </div>
       <div class="flex flex-wrap items-center gap-2">
-        <label class="f mb-0" for="reminderTo">收工提醒寄到</label>
-        <input type="email" id="reminderTo" class="!w-72" placeholder="留空就用寄信那個帳號" title="參訪的結束時間一到，系統寄一封提醒到這個信箱：還缺簽名簿、名片、口述、當天資料哪幾件，並附一個直接打開收工頁的連結">
+        <label class="f mb-0" for="reminderTo">後續提醒寄到</label>
+        <input type="email" id="reminderTo" class="!w-72" placeholder="留空就用寄信那個帳號" title="參訪的結束時間一到，系統寄一封提醒到這個信箱：還缺簽名簿、名片、口述、當天資料哪幾件，並附一個直接打開後續頁的連結">
         <span class="muted" id="reminderInfo"></span>
       </div>
-      <p class="muted">參訪的<b>結束時間一到</b>（依今日流程），系統會寄一封收工提醒到上面那個信箱——手機收信就會跳出來。一場只寄一次，四件事都做完了就不寄。需要 Gmail 接好。</p>
+      <p class="muted">參訪的<b>結束時間一到</b>（依今日流程），系統會寄一封後續提醒到上面那個信箱——手機收信就會跳出來。一場只寄一次，四件事都做完了就不寄。需要 Gmail 接好。</p>
     </div>
 
     <div class="card space-y-3">
@@ -1316,7 +1316,7 @@
         ["data", "一頁摘要", !!v.summary, "這一場的結論；也是 Drive 備份與跨場次彙整的來源。有回覆之後每天凌晨自己產，不必記得按"],
       ]],
     ];
-    // 三個階段各用那個分頁的顏色（訪前＝訪前分頁、當天＝收工、訪後＝信件）；綠勾仍然是「做過了」
+    // 三個階段各用那個分頁的顏色（訪前＝訪前分頁、當天＝後續、訪後＝信件）；綠勾仍然是「做過了」
     const PHASE_TONE = { "訪前": "#0f766e", "當天": "#b45309", "訪後": "#0369a1" };
     box.innerHTML = groups
       .map(([label, items]) => `<span class="phase" style="--tone:${PHASE_TONE[label]}">${label}</span>` + items
@@ -1524,7 +1524,7 @@
   function ics(v) {
     const start = new Date(`${v.date}T${v.start_time || "10:00"}:00+08:00`); const end = new Date(start.getTime() + (v.duration_minutes || 90) * 60000);
     const f = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z"); const url = `${location.origin}/admin.html#wrapup=${v.visit_id}`;
-    return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//GHRC Visit//EN", "BEGIN:VEVENT", `UID:${v.visit_id}@visit.healsdesign.org`, `DTSTAMP:${f(new Date())}`, `DTSTART:${f(start)}`, `DTEND:${f(end)}`, `SUMMARY:GHRC 參訪收工：${v.org?.name || v.visit_id}`, `DESCRIPTION:來賓離開後：1) 拍一張簽名簿 2) 講三十秒口述。\\n${url}`, `URL:${url}`, "BEGIN:VALARM", "TRIGGER:PT0M", "ACTION:DISPLAY", "DESCRIPTION:拍簽名簿、三十秒口述", "END:VALARM", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+    return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//GHRC Visit//EN", "BEGIN:VEVENT", `UID:${v.visit_id}@visit.healsdesign.org`, `DTSTAMP:${f(new Date())}`, `DTSTART:${f(start)}`, `DTEND:${f(end)}`, `SUMMARY:GHRC 參訪後續：${v.org?.name || v.visit_id}`, `DESCRIPTION:來賓離開後：1) 拍一張簽名簿 2) 講三十秒口述。\\n${url}`, `URL:${url}`, "BEGIN:VALARM", "TRIGGER:PT0M", "ACTION:DISPLAY", "DESCRIPTION:拍簽名簿、三十秒口述", "END:VALARM", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
   }
 
   /**
@@ -1550,7 +1550,7 @@
     rebase(DICT_FIELDS);
   }
 
-  // ── 收工：簽名簿 ──
+  // ── 後續：簽名簿 ──
   $("signbookFile").onchange = async () => {
     const file = $("signbookFile").files[0]; if (!file) return;
     $("signbookInfo").textContent = "讀取照片…";
@@ -1595,7 +1595,7 @@
     });
   }
 
-  // ── 收工：口述 ──
+  // ── 後續：口述 ──
   let rec = null, recChunks = [], recStart = 0, recTick = null;
   $("recBtn").onclick = async () => {
     if (rec && rec.state === "recording") { rec.stop(); return; }
@@ -1637,7 +1637,7 @@
     $("dictationInfo").textContent = "已存入"; flash("口述已存入回饋");
   });
 
-  // ── 收工：當天資料（專屬頁面的 PDF、合照、連結） ──
+  // ── 後續：當天資料（專屬頁面的 PDF、合照、連結） ──
   $("wrapLinks").addEventListener("click", (e) => { const b = e.target.closest("[data-copy]"); if (b) copy(b.dataset.copy); });
   const mediaUrl = (x) => (/^https?:\/\//i.test(x) ? x : `/api/media?key=${encodeURIComponent(x)}`);
   function mnote(msg, cls = "muted") { const el = $("materialsStatus"); if (!el) return; el.textContent = msg || ""; el.className = "text-sm " + cls; }
@@ -1653,7 +1653,7 @@
     renderSavedDictation(r.visit.dictation || {});
     $("materialsPageLink").textContent = r.visit.page_url; $("materialsPageLink").href = r.visit.page_url;
     // 同一個頁面三種用法：訪前給的網址（QR）、當天的留信箱、訪後的三個回應項目。
-    // 後兩個是行程走完才用得到的，所以列在「收工」而不是訪前。
+    // 後兩個是行程走完才用得到的，所以列在「後續」而不是訪前。
     $("wrapLinks").innerHTML = [
       ["", "專頁網址", "訪前就能給，門口的 QR 也是這一個。打開是今日流程與五間老師卡片。"],
       ["email", "留信箱", "<b>參訪當天用</b>：桌卡或投影出來，來賓留 email，訪後信才寄得到他。"],
@@ -1755,7 +1755,7 @@
     $("thanksDue").hidden = !(!before && !t?.sent_at);
     rebase(LETTER_FIELDS); // 伺服器上這一版才是基準；手改過還沒寄的那一版由 applyDraft 擺回來
   }
-  /** 兩封信各自一份收件人清單（確認信在「訪前」、感謝信在「收工」）。 */
+  /** 兩封信各自一份收件人清單（確認信在「訪前」、感謝信在「後續」）。 */
   const recipientBoxes = () => [$("confirmRecipients"), $("thanksRecipients")].filter(Boolean);
   function renderRecipients() {
     const html = state.thanksRecipients.length
@@ -1807,7 +1807,7 @@
     ["whisper", "Whisper（口述轉文字）", "OPENAI_API_KEY；沒有也能用打字的逐字稿"],
     ["gmail", "Gmail（從後台寄信）", "GMAIL_CLIENT_ID／SECRET／REFRESH_TOKEN；沒有就用 mailto 自己寄"],
     ["drive", "Google Drive（每場自動備份）", "GOOGLE_*（沒有就用 GMAIL_* 那一組），refresh token 要含 drive.file"],
-    ["reminder", "收工提醒（參訪結束時寄信給自己）", "需要 Gmail ＋上面那個收件信箱"],
+    ["reminder", "後續提醒（參訪結束時寄信給自己）", "需要 Gmail ＋上面那個收件信箱"],
     ["master", "母簡報", "在上面放一份，或 commit 到 public/assets/master/"],
   ];
   async function loadSettingsTab() {
@@ -1974,7 +1974,7 @@ $("driveInfo").innerHTML = d?.backed_up_at
     info.innerHTML = `<span class="ok">已備份 ${n} 個檔案</span> <a class="underline" target="_blank" rel="noopener" href="${esc(url)}">在 Drive 開啟</a>`;
     flash("已另存到 Google Drive");
   });
-  // ── 收工：訪客名片（拍一張 → AI 讀 → 人確認 → 併進這場的名單） ──
+  // ── 後續：訪客名片（拍一張 → AI 讀 → 人確認 → 併進這場的名單） ──
   const cnote = (msg, cls = "muted") => { const el = $("cardStatus"); el.textContent = msg || ""; el.className = "text-sm " + cls; };
   async function loadCards() {
     const id = $("visitSelect").value;

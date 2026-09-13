@@ -7,11 +7,11 @@ import { visitEndAt, visitStartAt, wrapupTodo } from "../../lib/visit.mjs";
 import type { Visit } from "../lib/types.mts";
 
 /**
- * 收工提醒（每十五分鐘看一次）。
+ * 後續提醒（每十五分鐘看一次）。
  *
  * 工作包寫的是「依議程結束時間推播提醒」。以前只有一個 .ics 要人自己下載、自己匯入行事曆，
  * 等於沒有提醒。這裡改成：**今日流程結束的時間一到，寄一封信到中心信箱**——手機收信就會跳。
- * 內容是收工那四件事還缺哪幾件，附一個直接打開收工頁的連結。
+ * 內容是後續那四件事還缺哪幾件，附一個直接打開後續頁的連結。
  *
  * 規矩：一場只寄一次（`visit.reminders.wrapup_sent_at`）；四件事都做完了就不寄；
  * 只看結束後六小時內的場次（功能上線前就過去的參訪不會突然被翻出來提醒）。
@@ -24,7 +24,7 @@ export default async (req: Request) => {
   if (denied) return denied;
   if (!gmailConfigured()) return new Response("Gmail 尚未設定，略過");
   const to = await reminderTo();
-  if (!to) return new Response("還沒設定收工提醒的收件者，略過");
+  if (!to) return new Response("還沒設定後續提醒的收件者，略過");
   const store = getStore();
   const site = siteUrl(req);
   const now = Date.now();
@@ -51,7 +51,7 @@ export default async (req: Request) => {
 
 const hhmm = (d: Date) => new Intl.DateTimeFormat("zh-TW", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
 
-const subject = (v: Visit) => `收工提醒：${v.org?.name || v.visit_id}（${v.date}）`;
+const subject = (v: Visit) => `後續提醒：${v.org?.name || v.visit_id}（${v.date}）`;
 
 function body(v: Visit, todo: { label: string; done: boolean; detail: string }[], site: string): string {
   return [
@@ -60,7 +60,7 @@ function body(v: Visit, todo: { label: string; done: boolean; detail: string }[]
     "來賓離開後這幾件事，幾分鐘做完——隔一天記憶就掉了：",
     ...todo.map((t, i) => `${i + 1}. ${t.label}　${t.done ? `✓ 已做${t.detail ? `（${t.detail}）` : ""}` : "← 還沒"}`),
     "",
-    `直接打開收工頁：${site}/admin.html#wrapup=${v.visit_id}`,
+    `直接打開後續頁：${site}/admin.html#wrapup=${v.visit_id}`,
     "",
     "（這封是系統依今日流程的結束時間自動寄的，一場只寄一次。收件地址在後台「設定」分頁可以改。）",
   ].join("\n");

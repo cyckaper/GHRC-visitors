@@ -31,7 +31,7 @@ export async function loadSettings(): Promise<Settings> {
 }
 
 /**
- * 收工提醒寄到哪裡（reminder-cron 用）：後台「設定」填的優先，沒填就用 Netlify 的
+ * 後續提醒寄到哪裡（reminder-cron 用）：後台「設定」填的優先，沒填就用 Netlify 的
  * `REMINDER_TO`，再沒有就用寄件帳號 `GMAIL_SENDER`。三個都沒有就不寄——寧可不寄，
  * 也不要亂猜一個地址。
  */
@@ -51,7 +51,7 @@ export default async (req: Request) => {
     if (sender === "contact" || sender === "director") next.sender_default = sender;
     if (typeof body?.settings?.reminder_to === "string") {
       const to = body.settings.reminder_to.trim().slice(0, 200).toLowerCase();
-      if (to && !EMAIL.test(to)) return fail(400, "收工提醒的收件者要填一個 email 位址（留空就用 Netlify 設的寄件帳號）");
+      if (to && !EMAIL.test(to)) return fail(400, "後續提醒的收件者要填一個 email 位址（留空就用 Netlify 設的寄件帳號）");
       next.reminder_to = to;
     }
     await getStore().putMedia(KEY, new TextEncoder().encode(JSON.stringify(next)), "application/json");
