@@ -318,3 +318,18 @@ test("選頁以區塊為單位：挑到一頁就整區進去，必選頁永遠�
   // 沒有區塊表就照原樣（母簡報改版、索引還沒更新時不要把人的選擇吃掉）
   assert.deepEqual(snapSlidesToGroups([9, 3, 9], { slides: index.slides }), [3, 9]);
 });
+
+test("五間研究室各有自己的顏色：labs.json 是全站唯一來源", () => {
+  const labs = JSON.parse(readFileSync("public/data/labs.json", "utf8")).labs;
+  assert.equal(labs.length, 5);
+  const colors = labs.map((l) => l.color);
+  for (const [i, c] of colors.entries()) assert.match(String(c), /^#[0-9a-f]{6}$/, `${labs[i].room} 要有一個 #rrggbb 的顏色`);
+  assert.equal(new Set(colors).size, 5, "五間不能撞色——303 與 305 同屬驗證，但現場是兩間不同的房間");
+  // 後台與來賓端都用 var(--c301)…var(--c305)，值由 labs.json 在載入時寫進去；
+  // 樣式表裡那五個是還沒載到時的備用值，改顏色改 labs.json 就好
+  for (const f of ["public/admin.html", "public/index.html"]) {
+    const html = readFileSync(f, "utf8");
+    for (const lab of labs) assert.ok(html.includes(`--c${lab.room}:`), `${f} 要有 --c${lab.room} 的備用值`);
+    assert.ok(/setProperty\(`--c\$\{lab\.room\}`, lab\.color\)/.test(html), `${f} 要把 labs.json 的 color 寫進 CSS 變數`);
+  }
+});

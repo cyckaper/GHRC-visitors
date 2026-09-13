@@ -1,5 +1,5 @@
 {
-  "_comment": "來賓端老師卡片。303 只列陳惠美（明確指示，與母簡報不同）。one_line／expertise／background 為依母簡報草擬，confirmed=false 表示尚待老師本人確認（待確認事項 1）；photo 為 null 時頁面顯示姓名縮寫。",
+  "_comment": "來賓端老師卡片。color 是這一間在全站的顏色（來賓端卡片、後台選頁區塊與行程、動線表都用同一色，五間各一色，改這裡就全站跟著改）。303 只列陳惠美（明確指示，與母簡報不同）。one_line／expertise／background 為依母簡報草擬，confirmed=false 表示尚待老師本人確認（待確認事項 1）；photo 為 null 時頁面顯示姓名縮寫。",
   "labs": [
     {
       "room": "301",
@@ -9,6 +9,7 @@
       "name_ja": "健康景観インテリジェンス室",
       "stage": "Measure",
       "stage_zh": "量測",
+      "color": "#047857",
       "lead": { "name_zh": "張俊彥", "name_en": "Chun-Yen Chang", "title_en": "Distinguished Professor · Director, GHRC", "title_zh": "特聘教授 · 中心主任", "email": "" },
       "one_line_en": "Physiological and psychological responses to landscapes, captured in real settings with a seven-workstation measurement array and the in-house HealthCloud platform.",
       "one_line_zh": "以七站量測陣列與自建的 HealthCloud 平台，在真實場域擷取人對景觀的生理與心理反應。",
@@ -28,6 +29,7 @@
       "name_ja": "癒し環境計画室",
       "stage": "Design",
       "stage_zh": "設計",
+      "color": "#0369a1",
       "lead": { "name_zh": "林寶秀", "name_en": "Bau-Show Lin", "title_en": "Professor", "title_zh": "教授", "email": "" },
       "one_line_en": "ENVI-met microclimate simulation calibrated by on-site sensing, turning thermal comfort and wind-field evidence into executable park and green-infrastructure layouts.",
       "one_line_zh": "以現地感測校正 ENVI-met 微氣候模擬，把熱舒適與風場證據轉成可執行的公園與綠色基盤配置方案。",
@@ -47,6 +49,7 @@
       "name_ja": "景観環境シミュレーション室",
       "stage": "Validate",
       "stage_zh": "驗證",
+      "color": "#6d28d9",
       "lead": { "name_zh": "陳惠美", "name_en": "Hui-Mei Chen", "title_en": "Professor · Department Chair · Co-PI, GHRC", "title_zh": "教授 · 系主任 · 中心 Co-PI", "email": "" },
       "one_line_en": "Immersive VR with eye tracking and EEG to validate how designed environments change perception, pain and stress, plus a 360 VR library for environmental and food-and-farming education.",
       "one_line_zh": "以沉浸式 VR 結合眼動與腦波，驗證設計環境如何改變知覺、疼痛與壓力；並建置 360VR 環境教育與食農教育教材庫。",
@@ -66,6 +69,7 @@
       "name_ja": "パノラマシネマ体験室",
       "stage": "Prescribe",
       "stage_zh": "處方",
+      "color": "#b45309",
       "lead": { "name_zh": "張伯茹", "name_en": "Po-Ju Chang", "title_en": "Associate Professor", "title_zh": "副教授", "email": "" },
       "one_line_en": "A CAVE-style 360-degree cinema that moves validation from the single subject to the group, with the flagship super-slow-jogging programme for chronic low back pain.",
       "one_line_zh": "CAVE 式 360 度全景影院，把驗證從單人推進到群體；旗艦案例為針對慢性下背痛的超慢跑介入。",
@@ -85,6 +89,7 @@
       "name_ja": "IVR研究室（没入型バーチャルリアリティ）",
       "stage": "Validate",
       "stage_zh": "驗證",
+      "color": "#a21caf",
       "lead": { "name_zh": "鄭佳昆", "name_en": "Chia-Kuen Cheng", "title_en": "Professor", "title_zh": "教授", "email": "" },
       "one_line_en": "Landscape and place studied through immersive virtual reality: virtual tours, crowding, landscape lighting and drone acceptance, 2019 to 2025.",
       "one_line_zh": "以沉浸式虛擬實境研究景觀與場所：虛擬導覽、擁擠感、景觀照明、無人機接受度（2019–2025）。",
