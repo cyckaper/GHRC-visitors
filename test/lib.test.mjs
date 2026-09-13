@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { reconcileTimeline, plannedEntries } from "../lib/timeline.mjs";
-import { makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, needsSummary, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
+import { snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, needsSummary, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -295,4 +295,26 @@ test("世界地圖的資料：投影好的座標、國名對得到、常見寫�
   assert.equal(w.aliases["usa"], "United States of America");
   assert.equal(w.aliases["uk"], "United Kingdom");
   assert.ok(at("Singapore") && at("Hong Kong"), "1:110m 放不下的小地方要手動補上");
+});
+
+test("選頁以區塊為單位：挑到一頁就整區進去，必選頁永遠在", () => {
+  const index = JSON.parse(readFileSync("public/data/slides.json", "utf8"));
+  const always = index.slides.filter((s) => s.always).map((s) => s.n);
+  assert.deepEqual(snapSlidesToGroups([], index), always, "什麼都沒挑也留必選頁");
+
+  // AI 只挑了 301 的其中兩頁 → 整個 301 區塊都進去
+  const lab301 = index.groups.find((g) => g.id === "lab301");
+  const picked = snapSlidesToGroups([lab301.slides[1], lab301.slides[3]], index);
+  for (const n of lab301.slides) assert.ok(picked.includes(n), `301 的第 ${n} 頁要一起進去`);
+  for (const n of always) assert.ok(picked.includes(n));
+  assert.equal(picked.length, lab301.slides.length + always.length, "不會多帶別區的頁");
+  assert.deepEqual(picked, [...picked].sort((a, b) => a - b), "依母簡報頁序");
+
+  // 再挑一頁 302 → 兩區都在
+  const lab302 = index.groups.find((g) => g.id === "lab302");
+  const two = snapSlidesToGroups([lab301.slides[0], lab302.slides[5]], index);
+  assert.equal(two.length, lab301.slides.length + lab302.slides.length + always.length);
+
+  // 沒有區塊表就照原樣（母簡報改版、索引還沒更新時不要把人的選擇吃掉）
+  assert.deepEqual(snapSlidesToGroups([9, 3, 9], { slides: index.slides }), [3, 9]);
 });

@@ -6,7 +6,7 @@ import { slideHistory } from "../lib/history.mts";
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
 import { normalizeVisit } from "./visits.mts";
-import { applyProgrammeTimes, briefingBlockMinutes, ensureBriefingFirst } from "../../lib/visit.mjs";
+import { applyProgrammeTimes, briefingBlockMinutes, ensureBriefingFirst, snapSlidesToGroups } from "../../lib/visit.mjs";
 
 /**
  * 排行程與選頁（背景函式，15 分鐘上限）：提示詞裡有整份頁次索引與母簡報文字，
@@ -23,11 +23,11 @@ export default backgroundHandler<{ visit?: Partial<Visit> }>("排程", async (in
     slideHistory(getStore(), visit.org?.type || "other", visit.visit_id).catch(() => null),
   ]);
   const plan = await planVisit(visit, slidesIndex, labs, masterText, history);
-  // 後端再驗一次：頁次必須存在、always 頁一定在、順序依母簡報頁序
+  // 後端再驗一次：頁次必須存在、always 頁一定在、順序依母簡報頁序。
+  // 而且**選頁以區塊為單位**（後台只勾區塊）：AI 挑到某一區的任何一頁，就整個區塊一起進去，
+  // 這樣「也挑了 N 頁」跟簡報分頁上看到的才會是同一件事。
   const known = new Map<number, any>((slidesIndex.slides as any[]).map((s) => [s.n, s]));
-  const chosen = new Set<number>(plan.slides.filter((n) => known.has(n)));
-  for (const s of slidesIndex.slides as any[]) if (s.always) chosen.add(s.n);
-  const slides = [...chosen].sort((a, b) => a - b);
+  const slides = snapSlidesToGroups(plan.slides.filter((n) => known.has(n)), slidesIndex);
   // 今日流程固定要有「綜合討論」：AI 漏掉就在最後補 10 分鐘並提醒主辦端調整
   const warnings: string[] = [];
   let programme = plan.programme;
