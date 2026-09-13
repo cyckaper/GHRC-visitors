@@ -7,7 +7,10 @@
 <meta name="robots" content="noindex">
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  :root { --ink: #1c1917; --accent: #0f766e; --tone: #1c1917; }
+  /* 五間研究室各一色，值由 public/data/labs.json 的 color 填進來（後台用同一套）；下面五個只是還沒載到時的備用 */
+  :root { --ink: #1c1917; --accent: #0f766e; --tone: #0f766e;
+          --c301: #047857; --c302: #0369a1; --c303: #6d28d9; --c304: #b45309; --c305: #a21caf; --cbriefing: #0f766e; }
+  body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 60; background: linear-gradient(90deg, var(--c301), var(--c302) 25%, var(--c303) 50%, var(--c304) 75%, var(--c305)); }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Apple SD Gothic Neo", "Hiragino Sans", sans-serif; background: #fafaf9; }
   /* 標題區：柔和的綠—青漸層，兩個慢慢漂移的光暈 */
   .hero { position: relative; overflow: hidden; border-radius: 1.5rem; padding: 2rem 1.5rem; background: linear-gradient(135deg, #ecfdf5 0%, #f0fdfa 50%, #fefce8 100%); border: 1px solid #d1fae5; }
@@ -25,11 +28,19 @@
   .card { background: #fff; border: 1px solid #e7e5e4; border-radius: 1rem; padding: 1.25rem; transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
   .card:hover { transform: translateY(-2px); box-shadow: 0 14px 34px -20px rgba(28, 25, 23, .35); border-color: #d6d3d1; }
   .lab-card { border-left: 4px solid var(--tone); }
-  .stage-Measure { --tone: #059669; } .stage-Design { --tone: #0284c7; } .stage-Validate { --tone: #7c3aed; } .stage-Prescribe { --tone: #d97706; }
+  .pill { display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: .1rem .55rem; border-radius: 9999px; color: var(--tone); background: #f5f5f4; }
   .step { width: 1.75rem; height: 1.75rem; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 600; color: #fff; background: var(--tone); flex: none; }
   .avatar { width: 64px; height: 64px; border-radius: 9999px; object-fit: cover; background: #e7e5e4; color: #44403c; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 1.05rem; flex: none; box-shadow: inset 0 0 0 3px #fff, 0 0 0 2px var(--tone); }
   .tag { display: inline-block; font-size: .75rem; padding: .15rem .55rem; border-radius: 9999px; background: #f5f5f4; color: #57534e; margin: .15rem .25rem 0 0; transition: background .2s, color .2s; }
   .card:hover .tag { background: #ecfdf5; color: #065f46; }
+  @supports (color: color-mix(in srgb, #000 10%, #fff)) {
+    .pill { background: color-mix(in srgb, var(--tone) 12%, #fff); }
+    .card:hover .tag { background: color-mix(in srgb, var(--tone) 12%, #fff); color: var(--tone); }
+    label.choice:has(input:checked) { border-color: var(--tone); background: color-mix(in srgb, var(--tone) 8%, #fff); }
+    .dot { background: color-mix(in srgb, var(--tone) 30%, #e7e5e4); }
+    .now-tag { color: var(--tone); background: color-mix(in srgb, var(--tone) 16%, #fff); }
+    li.now .dot::after { background: color-mix(in srgb, var(--tone) 35%, transparent); }
+  }
   .second { color: #78716c; font-size: .9em; }
   .btn { display: inline-flex; align-items: center; gap: .45rem; padding: .6rem 1.05rem; border-radius: .8rem; background: var(--ink); color: #fff; font-weight: 500; transition: transform .15s ease, background .2s, box-shadow .2s; }
   .btn:hover { transform: translateY(-1px); background: #292524; box-shadow: 0 8px 20px -12px rgba(0,0,0,.5); }
@@ -41,15 +52,15 @@
   .btn-accent:hover { background: #115e59; }
   input[type=text], input[type=email], textarea { width: 100%; border: 1px solid #d6d3d1; border-radius: .6rem; padding: .55rem .7rem; background: #fff; transition: border-color .2s, box-shadow .2s; }
   input:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(15, 118, 110, .15); }
-  label.choice { display: flex; gap: .6rem; align-items: flex-start; padding: .55rem .65rem; border: 1px solid #e7e5e4; border-radius: .6rem; background: #fff; cursor: pointer; transition: border-color .2s, background .2s, transform .15s; }
+  label.choice { --tone: var(--accent); display: flex; gap: .6rem; align-items: flex-start; padding: .55rem .65rem; border: 1px solid #e7e5e4; border-radius: .6rem; background: #fff; cursor: pointer; transition: border-color .2s, background .2s, transform .15s; }
   label.choice:hover { border-color: #a8a29e; }
   label.choice:has(input:checked) { border-color: var(--accent); background: #f0fdfa; }
   /* 今日流程：時間軸 */
-  .timeline li { position: relative; padding-left: 1.75rem; }
+  .timeline li { --tone: var(--accent); position: relative; padding-left: 1.75rem; }
   .timeline li::before { content: ""; position: absolute; left: .5rem; top: 1.35rem; bottom: -.4rem; width: 2px; background: #e7e5e4; }
   .timeline li:last-child::before { display: none; }
   .dot { position: absolute; left: .2rem; top: 1.05rem; width: .8rem; height: .8rem; border-radius: 50%; background: #d6d3d1; border: 2px solid #fff; box-shadow: 0 0 0 1px #d6d3d1; }
-  li.now .dot { background: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  li.now .dot { background: var(--tone); box-shadow: 0 0 0 1px var(--tone); }
   li.now .dot::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; background: rgba(15, 118, 110, .35); animation: ping 1.6s cubic-bezier(0, 0, .2, 1) infinite; }
   li.past { opacity: .55; }
   .now-tag { font-size: .7rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); background: #ccfbf1; padding: .1rem .5rem; border-radius: 9999px; margin-left: .5rem; }
@@ -167,6 +178,9 @@
     fetch("/data/labs.json").then((r) => r.json()),
     fetch("/data/i18n.json").then((r) => r.json()),
   ]);
+  // 五間研究室的顏色來自 labs.json；寫進 CSS 變數，卡片、時間軸的點、勾選項目都吃同一組
+  for (const lab of labsData.labs || []) if (lab.color) document.documentElement.style.setProperty(`--c${lab.room}`, lab.color);
+  const roomTone = (room) => (String(room) === "briefing" ? "var(--cbriefing)" : ROOMS.includes(String(room)) ? `var(--c${room})` : "var(--accent)");
   let visit = null;
   if (visitId) {
     try {
@@ -226,11 +240,12 @@
     const programmeKey = phase === "before" ? "programme_before" : phase === "after" ? "programme_after" : "programme";
     $("programmeTitle").textContent = T(programmeKey);
     $("programmeTitle2").textContent = T2(programmeKey);
+    const blockTone = (b) => (b.rooms && b.rooms.length ? roomTone(b.rooms[0]) : b.kind === "discussion" ? "#4d7c0f" : b.kind === "photo" ? "#b45309" : "var(--cbriefing)");
     $("programme").innerHTML = visit.programme.map((b, i) => `
-      <li class="flex gap-4 py-3 reveal" style="--d:${i * 70}ms" data-start="${esc(b.start)}" data-end="${esc(b.end)}">
+      <li class="flex gap-4 py-3 reveal" style="--d:${i * 70}ms; --tone:${blockTone(b)}" data-start="${esc(b.start)}" data-end="${esc(b.end)}">
         <span class="dot" aria-hidden="true"></span>
         <span class="w-28 flex-none tabular-nums text-stone-500">${esc(b.start)} – ${esc(b.end)}</span>
-        <span><span class="font-medium">${esc(b.title_en)}</span><span class="now-tag" hidden>${esc(T("now"))}</span>${(b.title_2nd || T2("kind_" + (b.kind || "other"))) ? `<span class="second block">${esc(b.title_2nd || T2("kind_" + (b.kind || "other")))}</span>` : ""}${b.rooms && b.rooms.length ? `<span class="block text-xs text-stone-400 mt-0.5">${b.rooms.map((r) => "Lab " + esc(r)).join(" → ")}</span>` : ""}</span>
+        <span><span class="font-medium">${esc(b.title_en)}</span><span class="now-tag" hidden>${esc(T("now"))}</span>${(b.title_2nd || T2("kind_" + (b.kind || "other"))) ? `<span class="second block">${esc(b.title_2nd || T2("kind_" + (b.kind || "other")))}</span>` : ""}${b.rooms && b.rooms.length ? `<span class="block text-xs text-stone-400 mt-0.5">${b.rooms.map((r) => `<span style="color:${roomTone(r)}">Lab ${esc(r)}</span>`).join(" → ")}</span>` : ""}</span>
       </li>`).join("");
     markNow();
     setInterval(markNow, 30000);
@@ -279,7 +294,7 @@
         <div class="flex gap-3 items-start">
           <span class="step">1</span>
           <div class="min-w-0 flex-1">
-            <p class="text-xs uppercase tracking-wide text-stone-400">${esc(T("briefing"))}${briefingStep.location ? ` · ${esc(briefingStep.location)}` : ""}</p>
+            <p class="text-xs"><span class="pill">${esc(T("briefing"))}${briefingStep.location ? ` · ${esc(briefingStep.location)}` : ""}</span></p>
             <h3 class="font-semibold text-lg leading-snug">${esc(T("briefing"))}${T2("briefing") ? ` <span class="second font-normal">${esc(T2("briefing"))}</span>` : ""}</h3>
             <p class="mt-1 text-stone-600 text-sm">${briefingStep.location ? `Room ${esc(briefingStep.location)} · ` : ""}${esc(String(briefingStep.minutes))} ${esc(T("minutes"))}${T2("minutes") ? " / " + esc(T2("minutes")) : ""}</p>
             <p class="mt-1 text-sm text-stone-500">${esc(T("briefing_hint"))}${T2("briefing_hint") ? `<span class="second block">${esc(T2("briefing_hint"))}</span>` : ""}</p>
@@ -297,11 +312,11 @@
     const stepNo = briefingStep && onRoute ? (route.indexOf(lab.room) >= 0 ? route.indexOf(lab.room) + 2 : idx + 2) : null;
     const contact = lead.email ? `<p class="mt-3 text-sm"><span class="text-stone-500">${esc(bi("contact"))}</span> <a class="underline decoration-stone-300 hover:decoration-stone-900" href="mailto:${esc(lead.email)}">${esc(lead.email)}</a></p>` : "";
     return `
-      <article class="card lab-card stage-${esc(lab.stage || "")} reveal ${onRoute ? "" : "opacity-60"}" id="lab-${lab.room}" style="--d:${(idx + 1) * 60}ms">
+      <article class="card lab-card reveal ${onRoute ? "" : "opacity-60"}" id="lab-${lab.room}" style="--d:${(idx + 1) * 60}ms; --tone:${roomTone(lab.room)}">
         <div class="flex gap-4">
           ${lead.photo || lab.photo ? `<img class="avatar" src="${esc(lead.photo || lab.photo)}" alt="">` : `<div class="avatar">${esc(initials)}</div>`}
           <div class="min-w-0 flex-1">
-            <p class="text-xs uppercase tracking-wide text-stone-400 flex items-center gap-2">${stepNo ? `<span class="step">${stepNo}</span>` : ""}<span>Lab ${esc(lab.room)} · ${esc(lab.stage || "")}${lab.stage_zh && secondary === "zh" ? " " + esc(lab.stage_zh) : ""}</span></p>
+            <p class="text-xs flex items-center gap-2">${stepNo ? `<span class="step">${stepNo}</span>` : ""}<span class="pill">Lab ${esc(lab.room)} · ${esc(lab.stage || "")}${lab.stage_zh && secondary === "zh" ? " " + esc(lab.stage_zh) : ""}</span></p>
             <h3 class="font-semibold text-lg leading-snug mt-1">${esc(labName(lab))}${labName2(lab) ? ` <span class="second font-normal">${esc(labName2(lab))}</span>` : ""}</h3>
             <p class="mt-1"><span class="text-stone-500 text-sm">${esc(T("lead"))}${T2("lead") ? " · " + esc(T2("lead")) : ""}</span> <span class="font-medium">${esc(lead.name_zh || "")} ${esc(lead.name_en || "")}</span>${lead.title_en ? `<span class="block text-sm text-stone-500">${esc(lead.title_en)}${secondary === "zh" && lead.title_zh ? ` <span class="second">${esc(lead.title_zh)}</span>` : ""}</span>` : ""}</p>
           </div>
@@ -354,7 +369,7 @@
   $("rName").placeholder = T("name_optional"); $("rEmail").placeholder = T("email");
   $("nextOther").placeholder = T("next_other_hint");
   $("respondSend").textContent = T("send");
-  $("coopChoices").innerHTML = labsData.labs.map((lab) => `<label class="choice"><input type="checkbox" name="coop" value="${lab.room}"><span><span class="font-medium">Lab ${lab.room}</span> ${esc(labName(lab))}<br><span class="text-sm text-stone-500">${esc((lab.lead || {}).name_zh || "")} ${esc((lab.lead || {}).name_en || "")}</span></span></label>`).join("");
+  $("coopChoices").innerHTML = labsData.labs.map((lab) => `<label class="choice" style="--tone:${roomTone(lab.room)}"><input type="checkbox" name="coop" value="${lab.room}"><span><span class="font-medium">Lab ${lab.room}</span> ${esc(labName(lab))}<br><span class="text-sm text-stone-500">${esc((lab.lead || {}).name_zh || "")} ${esc((lab.lead || {}).name_en || "")}</span></span></label>`).join("");
   $("nextChoices").innerHTML = ["papers", "meeting", "exchange", "other"].map((k) => `<label class="choice"><input type="checkbox" name="next" value="${k}"><span>${esc(T("next_" + k))}${T2("next_" + k) ? `<span class="second block">${esc(T2("next_" + k))}</span>` : ""}</span></label>`).join("");
   $("nextChoices").addEventListener("change", () => { $("nextOther").hidden = !$("nextChoices").querySelector('input[value="other"]').checked; });
   $("anonymous").addEventListener("change", () => {

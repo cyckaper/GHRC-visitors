@@ -138,6 +138,10 @@ try {
   await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]").length > 0);
   check((await page.inputValue("#visitSelect")) === "2026-10-07-uwa", "the progress line's 簡報 cell opens the deck tab on this visit");
   check((await page.locator("#slideGrid input[data-block]:checked").count()) >= 2, "the plan's blocks are waiting in the deck tab");
+  // 顏色：研究室的區塊用那一間的顏色，值來自 public/data/labs.json（不是抄在頁面裡的第二份）
+  const hexToRgb = (h) => `rgb(${parseInt(h.slice(1, 3), 16)}, ${parseInt(h.slice(3, 5), 16)}, ${parseInt(h.slice(5, 7), 16)})`;
+  const labColor = Object.fromEntries(JSON.parse(await readFile("public/data/labs.json", "utf8")).labs.map((l) => [l.room, hexToRgb(l.color)]));
+  const leftEdge = (sel) => page.$eval(sel, (el) => getComputedStyle(el).borderLeftColor);
   // 選頁是「一個區塊一個勾」：必選的兩區鎖住，其他的整區進出
   const slideCount = async () => Number(/、(\d+) 頁/.exec(await page.textContent("#slideCount"))[1]);
   check((await page.locator("#slideGrid input[data-block][disabled]").count()) === 2, "the two mandatory blocks are locked on");
@@ -145,6 +149,7 @@ try {
   check((await slideCount()) === 5, "全不選 keeps only the five always-slides");
   await page.click('#slideGrid [data-group-only="lab302"]');
   check((await page.isChecked('#slideGrid [data-block="lab302"]')) && (await slideCount()) === 13, "只選這區 takes the whole block plus the always-slides");
+  check((await leftEdge('#slideGrid [data-group="lab302"]')) === labColor["302"], "a ticked lab block wears that lab's colour, straight from labs.json");
   await page.check('#slideGrid [data-block="ch06"]');
   check((await slideCount()) === 19, "ticking a block adds all of its pages at once");
   await page.click("#slidesAll");
@@ -397,6 +402,7 @@ try {
   check((await page.textContent("#labs article:first-child")).includes("Center overview"), "briefing card comes first");
   check((await page.textContent("#lab-303")).includes("陳惠美") && !(await page.textContent("#lab-303")).includes("鄭佳昆"), "303 lists only 陳惠美");
   check((await page.textContent("#lab-305")).includes("IVR Research Lab") && !(await page.textContent("#lab-305")).includes("outside"), "305 is the IVR Research Lab");
+  check((await leftEdge("#lab-303")) === labColor["303"] && (await leftEdge("#lab-305")) === labColor["305"] && labColor["303"] !== labColor["305"], "every lab card wears its own colour: 303 and 305 are both 驗證 but two different rooms");
   check((await page.textContent("#briefing-card")).includes("302"), "guest page shows the briefing in 302");
   check((await page.textContent("#lab-303")).includes("Landscape Simulation Lab") && (await page.textContent("#lab-303")).includes("景觀環境模擬室"), "English visit is still bilingual: English first, Chinese second");
   check((await page.textContent("#programme li:first-child")).includes("總體介紹"), "programme block gets the Chinese label when the plan left title_2nd empty");

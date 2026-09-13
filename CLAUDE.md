@@ -390,6 +390,12 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - 主辦端 API 用 `Authorization: Bearer ADMIN_TOKEN`、`?token=`，或**登入後的 session cookie**；現場訊號用 `SIGNAL_KEY`；`respond` 與 `visits?public=1` 公開。
 - **登入一次就好**：後台貼一次 ADMIN_TOKEN → `/api/session` 發一個 HttpOnly、SameSite=Strict 的 cookie（值是用 ADMIN_TOKEN 簽的 `v1.<到期>.<HMAC>`，**不是 token 本身**），180 天，每次打開後台自動續期。token 不再存 localStorage（iPad Safari 七天沒互動就清掉，所以以前每次都要重登；舊的會在開場自動換成 cookie）。登出走 `DELETE /api/session`。
 - 老師卡片內容 `public/data/labs.json` 的 `confirmed=false` 表示尚待老師確認；照片 `photo` 為 null 時顯示縮寫。
+- **顏色**：**五間研究室各一色**，值在 `public/data/labs.json` 的 `color`（後台與來賓端同一套：載入時寫進
+  CSS 變數 `--c301`…`--c305`，兩個 HTML 裡那五個只是還沒載到時的備用值），所以改顏色改那一個檔就好——
+  選頁的區塊、行程的每一列、動線表的房號、老師卡片、「想合作哪幾間」都認得出是同一間。
+  後台**六個分頁各一個 accent**（`--tab`）：分頁按鈕、卡片標題那一條、步驟號碼、主要按鈕都跟著走；
+  頁面最上面那條細線是五間的顏色（兩個頁面都有）。
+  **顏色只用來分辨東西，不用來講狀態**——做了沒做仍然是文字與綠勾，只看得到灰階也不會少任何資訊。
 - **進度線**：共用的「這一場」那一張卡片下面一排（`#progress`，`renderProgress()`）——
   訪前（名單／背景研判／今日流程／簡報／確認信）｜當天（簽名簿／名片／口述／當天資料）｜訪後（感謝信／回覆／一頁摘要）。
   綠勾＝做過，灰點＝還沒；點一格跳到該做那件事的分頁，`title` 說明那一步是為了什麼。
