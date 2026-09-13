@@ -10,16 +10,16 @@
   /* 五間研究室各一色，值由 public/data/labs.json 的 color 填進來（後台用同一套）；下面五個只是還沒載到時的備用 */
   :root { --ink: #1c1917; --accent: #0f766e; --tone: #0f766e;
           --c301: #047857; --c302: #0369a1; --c303: #6d28d9; --c304: #b45309; --c305: #a21caf; --cbriefing: #0f766e; }
-  body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 60; background: linear-gradient(90deg, var(--c301), var(--c302) 25%, var(--c303) 50%, var(--c304) 75%, var(--c305)); }
+  body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 5px; z-index: 60; background: linear-gradient(90deg, var(--c301), var(--c302) 25%, var(--c303) 50%, var(--c304) 75%, var(--c305)); }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Apple SD Gothic Neo", "Hiragino Sans", sans-serif; background: #fafaf9; }
   /* 標題區：柔和的綠—青漸層，兩個慢慢漂移的光暈 */
-  .hero { position: relative; overflow: hidden; border-radius: 1.5rem; padding: 2rem 1.5rem; background: linear-gradient(135deg, #ecfdf5 0%, #f0fdfa 50%, #fefce8 100%); border: 1px solid #d1fae5; }
-  .hero::before, .hero::after { content: ""; position: absolute; border-radius: 50%; filter: blur(42px); opacity: .6; pointer-events: none; animation: drift 16s ease-in-out infinite alternate; }
-  .hero::before { width: 340px; height: 340px; background: #a7f3d0; top: -140px; right: -90px; }
-  .hero::after { width: 280px; height: 280px; background: #fde68a; bottom: -150px; left: -70px; animation-delay: -8s; }
+  .hero { position: relative; overflow: hidden; border-radius: 1.5rem; padding: 2rem 1.5rem; background: linear-gradient(135deg, #d1fae5 0%, #cffafe 48%, #fef3c7 100%); border: 1px solid #6ee7b7; }
+  .hero::before, .hero::after { content: ""; position: absolute; border-radius: 50%; filter: blur(42px); opacity: .75; pointer-events: none; animation: drift 16s ease-in-out infinite alternate; }
+  .hero::before { width: 340px; height: 340px; background: #5eead4; top: -140px; right: -90px; }
+  .hero::after { width: 280px; height: 280px; background: #fcd34d; bottom: -150px; left: -70px; animation-delay: -8s; }
   .hero > * { position: relative; }
   @keyframes drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(-36px, 26px) scale(1.18); } }
-  .eyebrow { display: inline-flex; align-items: center; gap: .5rem; font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; color: #047857; }
+  .eyebrow { display: inline-flex; align-items: center; gap: .5rem; font-size: .8rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #065f46; }
   .eyebrow::before { content: ""; width: 1.6rem; height: 2px; background: currentColor; border-radius: 2px; }
   .grad-text { background: linear-gradient(90deg, #065f46, #0f766e 60%, #4d7c0f); -webkit-background-clip: text; background-clip: text; color: transparent; }
   /* 進場：往上浮現，依序錯開 */
@@ -27,20 +27,23 @@
   .reveal.in { opacity: 1; transform: none; }
   .card { background: #fff; border: 1px solid #e7e5e4; border-radius: 1rem; padding: 1.25rem; transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
   .card:hover { transform: translateY(-2px); box-shadow: 0 14px 34px -20px rgba(28, 25, 23, .35); border-color: #d6d3d1; }
-  .lab-card { border-left: 4px solid var(--tone); }
-  .pill { display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: .1rem .55rem; border-radius: 9999px; color: var(--tone); background: #f5f5f4; }
+  .lab-card { border-left: 6px solid var(--tone); }
+  .pill { display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: .12rem .6rem; border-radius: 9999px; color: #fff; background: var(--tone); }
   .step { width: 1.75rem; height: 1.75rem; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 600; color: #fff; background: var(--tone); flex: none; }
-  .avatar { width: 64px; height: 64px; border-radius: 9999px; object-fit: cover; background: #e7e5e4; color: #44403c; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 1.05rem; flex: none; box-shadow: inset 0 0 0 3px #fff, 0 0 0 2px var(--tone); }
+  .avatar { width: 64px; height: 64px; border-radius: 9999px; object-fit: cover; background: #e7e5e4; color: #44403c; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 1.05rem; flex: none; box-shadow: inset 0 0 0 3px #fff, 0 0 0 3px var(--tone); }
   .tag { display: inline-block; font-size: .75rem; padding: .15rem .55rem; border-radius: 9999px; background: #f5f5f4; color: #57534e; margin: .15rem .25rem 0 0; transition: background .2s, color .2s; }
   .card:hover .tag { background: #ecfdf5; color: #065f46; }
   @supports (color: color-mix(in srgb, #000 10%, #fff)) {
-    .pill { background: color-mix(in srgb, var(--tone) 12%, #fff); }
-    .card:hover .tag { background: color-mix(in srgb, var(--tone) 12%, #fff); color: var(--tone); }
-    label.choice:has(input:checked) { border-color: var(--tone); background: color-mix(in srgb, var(--tone) 8%, #fff); }
-    .dot { background: color-mix(in srgb, var(--tone) 30%, #e7e5e4); }
-    .now-tag { color: var(--tone); background: color-mix(in srgb, var(--tone) 16%, #fff); }
-    li.now .dot::after { background: color-mix(in srgb, var(--tone) 35%, transparent); }
+    .lab-card { background: color-mix(in srgb, var(--tone) 6%, #fff); }
+    .lab-card:hover { border-color: var(--tone); }
+    .avatar { background: color-mix(in srgb, var(--tone) 14%, #fff); color: var(--tone); }
+    .tag, .card:hover .tag { background: color-mix(in srgb, var(--tone) 13%, #fff); color: var(--tone); }
+    .card:hover .tag { background: color-mix(in srgb, var(--tone) 20%, #fff); }
+    label.choice:has(input:checked) { border-color: var(--tone); background: color-mix(in srgb, var(--tone) 10%, #fff); }
+    .timeline li::before { background: color-mix(in srgb, var(--tone) 30%, #e7e5e4); }
+    li.now .dot::after { background: color-mix(in srgb, var(--tone) 45%, transparent); }
   }
+  section > h2, .card > h2 { border-left: 4px solid var(--tone); padding-left: .6rem; }
   .second { color: #78716c; font-size: .9em; }
   .btn { display: inline-flex; align-items: center; gap: .45rem; padding: .6rem 1.05rem; border-radius: .8rem; background: var(--ink); color: #fff; font-weight: 500; transition: transform .15s ease, background .2s, box-shadow .2s; }
   .btn:hover { transform: translateY(-1px); background: #292524; box-shadow: 0 8px 20px -12px rgba(0,0,0,.5); }
@@ -49,21 +52,23 @@
   .btn-soft:hover { background: #e7e5e4; }
   .btn-soft[aria-pressed="true"] { background: var(--ink); color: #fff; }
   .btn-accent { background: var(--accent); }
+  .btn-room { background: var(--tone); }
   .btn-accent:hover { background: #115e59; }
   input[type=text], input[type=email], textarea { width: 100%; border: 1px solid #d6d3d1; border-radius: .6rem; padding: .55rem .7rem; background: #fff; transition: border-color .2s, box-shadow .2s; }
   input:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(15, 118, 110, .15); }
   label.choice { --tone: var(--accent); display: flex; gap: .6rem; align-items: flex-start; padding: .55rem .65rem; border: 1px solid #e7e5e4; border-radius: .6rem; background: #fff; cursor: pointer; transition: border-color .2s, background .2s, transform .15s; }
-  label.choice:hover { border-color: #a8a29e; }
+  label.choice { border-left-width: 4px; border-left-color: var(--tone); }
+  label.choice:hover { border-color: #a8a29e; border-left-color: var(--tone); }
   label.choice:has(input:checked) { border-color: var(--accent); background: #f0fdfa; }
   /* 今日流程：時間軸 */
   .timeline li { --tone: var(--accent); position: relative; padding-left: 1.75rem; }
   .timeline li::before { content: ""; position: absolute; left: .5rem; top: 1.35rem; bottom: -.4rem; width: 2px; background: #e7e5e4; }
   .timeline li:last-child::before { display: none; }
-  .dot { position: absolute; left: .2rem; top: 1.05rem; width: .8rem; height: .8rem; border-radius: 50%; background: #d6d3d1; border: 2px solid #fff; box-shadow: 0 0 0 1px #d6d3d1; }
+  .dot { position: absolute; left: .2rem; top: 1.05rem; width: .9rem; height: .9rem; border-radius: 50%; background: var(--tone); border: 2px solid #fff; box-shadow: 0 0 0 1px var(--tone); }
   li.now .dot { background: var(--tone); box-shadow: 0 0 0 1px var(--tone); }
   li.now .dot::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; background: rgba(15, 118, 110, .35); animation: ping 1.6s cubic-bezier(0, 0, .2, 1) infinite; }
   li.past { opacity: .55; }
-  .now-tag { font-size: .7rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--accent); background: #ccfbf1; padding: .1rem .5rem; border-radius: 9999px; margin-left: .5rem; }
+  .now-tag { font-size: .7rem; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: #fff; background: var(--tone); padding: .1rem .5rem; border-radius: 9999px; margin-left: .5rem; }
   @keyframes ping { 75%, 100% { transform: scale(2.4); opacity: 0; } }
   .photo { aspect-ratio: 4 / 3; overflow: hidden; border-radius: .75rem; background: #e7e5e4; display: block; }
   .photo img { width: 100%; height: 100%; object-fit: cover; transition: transform .4s ease; }
@@ -120,7 +125,7 @@
       <input type="text" name="name" id="emailName" autocomplete="name">
       <input type="email" name="email" id="emailEmail" autocomplete="email" required>
       <textarea name="note" id="emailNote" rows="2"></textarea>
-      <button class="btn" type="submit" id="emailSend"></button>
+      <button class="btn btn-accent" type="submit" id="emailSend"></button>
       <p class="text-sm text-emerald-700" id="emailDone" hidden></p>
     </form>
     <details class="text-sm text-stone-500">
@@ -215,7 +220,7 @@
   $("centerLine").textContent = bi("center");
   const welcomeKey = phase === "after" ? "welcome_after" : "welcome";
   $("welcome").textContent = T(welcomeKey);
-  if (T2(welcomeKey)) $("welcome").insertAdjacentHTML("beforeend", `<span class="block text-lg font-normal text-stone-500 mt-1">${esc(T2(welcomeKey))}</span>`);
+  if (T2(welcomeKey)) $("welcome").insertAdjacentHTML("beforeend", `<span class="block text-lg font-normal text-stone-600 mt-1">${esc(T2(welcomeKey))}</span>`);
   // 留信箱與回應表單各有自己的連結，帶連結進來就一定看得到：
   //   /<visit_id>#email    現場留信箱（QR、桌卡用）
   //   /<visit_id>#respond  訪後三個回應項目（感謝信用）
@@ -350,7 +355,7 @@
 
   // 備援：來賓自己按「現在進入哪一間」
   $("roomTitle").textContent = T("now_in_room");
-  $("roomButtons").innerHTML = ROOMS.map((r) => `<button type="button" class="btn btn-soft" data-room="${r}">${r}</button>`).join("");
+  $("roomButtons").innerHTML = ROOMS.map((r) => `<button type="button" class="btn btn-room" style="--tone:${roomTone(r)}" data-room="${r}">${r}</button>`).join("");
   $("roomButtons").addEventListener("click", async (ev) => {
     const b = ev.target.closest("button[data-room]");
     if (!b || !visit) return;
