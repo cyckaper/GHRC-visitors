@@ -88,6 +88,7 @@ try {
   // 存檔不是一個動作：抽取完就自己建好一場，改網址代碼就跟著改網址（還沒用出去之前）
   await page.waitForSelector("#afterSave:not([hidden])", { timeout: 30000 });
   check((await page.$("#saveBtn")) === null, "no save button — the extracted visit is created by itself");
+  await page.fill("#orgCountry", "Australia"); // 英文來信抽不出國家；地圖靠這一欄
   await page.fill("#code", "uwa");
   await page.waitForFunction(() => /2026-10-07-uwa$/.test(document.getElementById("pageLink").textContent), null, { timeout: 30000 });
   check(/已存/.test(await page.textContent("#saveInfo")), "it says when it last saved");
@@ -295,6 +296,18 @@ try {
   await page.waitForFunction(() => /加了 \d+ 人/.test(document.getElementById("cardSaveInfo").textContent));
   await page.waitForFunction((n) => new RegExp(`名單目前 ${n + 1} 人`).test(document.getElementById("cardStatus").textContent), guestsBefore);
   check((await page.locator("#cardList img").count()) === 1, "the card photo is kept with the visit and the person is on the guest list");
+
+  // ── 資料分頁：訪客來自哪裡（世界地圖）──
+  await page.click('[data-tab="data"]');
+  await page.waitForFunction(() => document.querySelectorAll("#worldMap [data-country]").length > 0, null, { timeout: 30000 });
+  check(/1 個國家/.test(await page.textContent("#mapSummary")), "the data tab maps which countries visitors came from");
+  check((await page.textContent("#mapNote")) === "", "…with nothing quietly dropped for want of a country name");
+  await page.click('#worldMap [data-country="Australia"]');
+  await page.waitForFunction(() => document.querySelectorAll("#mapVisits [data-visit]").length === 1);
+  check(true, "clicking a country lists that country's visits");
+  await page.click('#mapVisits [data-visit="2026-10-07-uwa"]');
+  await page.waitForFunction(() => !document.getElementById("visitDetail").hidden && /Western Australia/.test(document.getElementById("detailTitle").textContent));
+  check(true, "…and each one opens that visit's record");
 
   // 現場動線：後台自己產捷徑與 NFC 網址（以前只能開終端機）；一次性設定都收在「設定」分頁
   await page.click('[data-tab="settings"]');

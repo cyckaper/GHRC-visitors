@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { reconcileTimeline, plannedEntries } from "../lib/timeline.mjs";
 import { makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, needsSummary, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
 
@@ -263,4 +264,35 @@ test("一頁摘要自己產的條件：過完了、有回饋、而且比最新�
   assert.equal(needsSummary(fresh, [...resp, { visit_id: past.visit_id, submitted_at: "2026-09-04T08:00:00.000Z" }], now), true, "又有人回覆 → 重寫一份");
   // 不具名那一筆只有日期（真匿名的代價）：當天最後一刻算，才不會被當成很舊
   assert.equal(needsSummary(fresh, [{ visit_id: past.visit_id, submitted_at: "2026-09-03" }], now), true);
+});
+
+test("世界地圖的資料：投影好的座標、國名對得到、常見寫法有別名", () => {
+  const w = JSON.parse(readFileSync("public/data/world.json", "utf8"));
+  assert.equal(w.viewBox, "0 0 720 360");
+  assert.ok(w.land.startsWith("M") && w.land.length > 20000, "陸地輪廓");
+  assert.ok(w.countries.length > 150, `${w.countries.length} 個國家`);
+  // 座標是已經投影好的（等距長方，一度兩像素），前端只要畫，不必再算投影
+  const at = (name) => w.countries.find((c) => c.name === name);
+  const lonlat = (c) => [(c.x / 720) * 360 - 180, 90 - (c.y / 360) * 180];
+  const near = (name, lon, lat) => {
+    const c = at(name);
+    assert.ok(c, `${name} 要在資料裡`);
+    const [gotLon, gotLat] = lonlat(c);
+    assert.ok(Math.abs(gotLon - lon) < 6 && Math.abs(gotLat - lat) < 6, `${name} 落在 ${gotLon.toFixed(1)},${gotLat.toFixed(1)}`);
+  };
+  near("Taiwan", 121, 24);
+  near("Japan", 138, 37);
+  near("Australia", 134, -25);
+  near("United States of America", -99, 39);
+  near("Russia", 100, 62); // 跨換日線那一國最容易被算到海上
+  assert.ok(w.countries.every((c) => c.x >= 0 && c.x <= 720 && c.y >= 0 && c.y <= 360), "每個點都落在圖上");
+
+  // 來信裡的國名寫法千百種：別名一定要對得到真的國名
+  const names = new Set(w.countries.map((c) => c.name));
+  for (const [k, v] of Object.entries(w.aliases)) assert.ok(names.has(v), `別名 ${k} 對到不存在的 ${v}`);
+  assert.equal(w.aliases["台灣"], "Taiwan");
+  assert.equal(w.aliases["韓國"], "South Korea");
+  assert.equal(w.aliases["usa"], "United States of America");
+  assert.equal(w.aliases["uk"], "United Kingdom");
+  assert.ok(at("Singapore") && at("Hong Kong"), "1:110m 放不下的小地方要手動補上");
 });

@@ -303,7 +303,14 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
   排完會回 `history: {visits, same_type}`，後台在「也挑了 N 頁」那一行順便說參考了幾場。
 - 跨場次彙整開放建議欄位，找出重複出現的問題（例如某一間反覆被說聽不懂），
   定期送回各研究室老師手上
-- 年報與諮詢委員會統計：人次、身分、國家、最受關注的研究室、合作意向趨勢
+- 年報與諮詢委員會統計：人次、身分、國家、最受關注的研究室、合作意向趨勢。
+  **「資料」分頁最上面一張世界地圖**（`renderWorldMap()`）：一個國家一個點、點的大小是場次，
+  旁邊直接給「N 個國家 · M 場 · 共 K 人次」；點一個國家列出那幾場，再點一列就跳到那一場的紀錄。
+  地圖資料 `public/data/world.json` 是 **Natural Earth 1:110m（public domain）** 經 world-atlas 轉檔、
+  再由 `scripts/make-world.mjs` 投影成等距長方座標（720×360，一度兩像素）後產出的靜態檔——
+  座標先算好，前端只要畫，**不必為了一張圖去載地圖函式庫**（後台是單檔 HTML，現場網路也不一定好）。
+  國名對不到的**不會消失**，列在圖下面（來信裡的國名寫法千百種；常見的中英寫法在產生器的 `ALIASES`，
+  1:110m 放不下的新加坡、香港、澳門在 `EXTRA`）。要改地圖資料就改 `scripts/make-world.mjs` 重跑，不要手改 JSON。
 
 ### 5. 部署
 
@@ -364,7 +371,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
   `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，收工提醒）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
 - `public/lib/pptx.mjs`：母簡報子集化核心（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證），零 Node 相依，瀏覽器與 CLI 共用；`cli/lib/pptx.mjs` 只是注入 jszip／xmldom 的 Node 入口；`cli/deck.mjs` 加上 QR（qrcode 套件）與 PDF（LibreOffice）。`--inspect`、`--dump`、`--validate`。
-- `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-shortcuts.mjs`：研究室電腦捷徑與 NFC 網址。
+- `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-shortcuts.mjs`：研究室電腦捷徑與 NFC 網址。`scripts/make-world.mjs`：訪客地圖的陸地輪廓與國家落點（`public/data/world.json`）。
 - 測試：`npm test`（單元、API 走本機 dev server、產檔與瘦身走合成簡報）、`npm run test:e2e`（Chromium）。`AI_MOCK=1` 讓所有 AI 呼叫回固定範例，`MAIL_MOCK=1` 讓寄信不真的打 Gmail（信寫進媒體庫 `mail/last.json`，測試再讀出來對內容）。CI：`.github/workflows/ci.yml` 在每個 PR 與 main 的 push 跑同一套（typecheck → npm test → e2e）。
 
 **尚未在真實環境驗證（首次建置時沒有金鑰與母簡報）**
