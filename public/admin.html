@@ -21,7 +21,6 @@
   #tab-pre,      .tab[data-tab="pre"]      { --tab: #0f766e; }
   #tab-deck,     .tab[data-tab="deck"]     { --tab: #6d28d9; }
   #tab-wrapup,   .tab[data-tab="wrapup"]   { --tab: #b45309; }
-  #tab-post,     .tab[data-tab="post"]     { --tab: #0369a1; }
   #tab-data,     .tab[data-tab="data"]     { --tab: #4338ca; }
   #tab-settings, .tab[data-tab="settings"] { --tab: #57534e; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", sans-serif; }
@@ -104,7 +103,6 @@
     <button class="tab" role="tab" data-tab="pre" aria-selected="true">訪前</button>
     <button class="tab" role="tab" data-tab="deck">簡報</button>
     <button class="tab" role="tab" data-tab="wrapup">收工</button>
-    <button class="tab" role="tab" data-tab="post">信件</button>
     <button class="tab" role="tab" data-tab="data">資料</button>
     <button class="tab" role="tab" data-tab="settings">設定</button>
   </nav>
@@ -124,7 +122,7 @@
 
   <!-- ───────── 訪前 ───────── -->
   <section id="tab-pre" class="space-y-5">
-    <p class="lede text-sm"><b>這一頁：參訪前把四件事做完</b>——讀來信抽出資料、確認欄位、查對方背景、排今日流程。做完就有一個來賓專頁可以給對方。填完自己會存，不必找存檔鍵。</p>
+    <p class="lede text-sm"><b>這一頁：參訪前把五件事做完</b>——讀來信抽出資料、確認欄位、查對方背景、排今日流程，最後把確認信寄出去。寄出的那封信裡就有來賓專頁的網址。填完自己會存，不必找存檔鍵。</p>
     <div class="card space-y-3">
       <h2 class="font-semibold"><span class="num">1</span>貼上 email 往來或上傳名單檔，AI 抽取背景</h2>
       <p class="muted">單位、人名、職稱、人數、隨行名單與聯絡方式、對口老師、來訪目的、興趣、日期時間。抽出來的東西會填進下面的欄位，你逐項看過再改。</p>
@@ -150,8 +148,8 @@
         <div><label class="f">第二語言</label><select id="language"><option value="en">English</option><option value="zh">中文</option><option value="ko">한국어</option><option value="ja">日本語</option></select></div>
         <div><label class="f">日期</label><input type="date" id="date"></div>
         <div><label class="f">開始時間</label><input type="time" id="startTime"></div>
-        <div><label class="f">總分鐘</label><input type="number" id="duration" min="15" step="5"></div>
-        <div><label class="f">人數</label><input type="number" id="headcount" min="0"></div>
+        <div><label class="f">結束時間</label><input type="time" id="endTime"><p class="muted mt-1" id="durationInfo"></p></div>
+        <div><label class="f">人數（不確定就留著，之後再改）</label><input type="number" id="headcount" min="0"></div>
         <div><label class="f">對口老師</label><select id="contactTeacher"><option value="張俊彥">張俊彥</option><option value="林寶秀">林寶秀</option><option value="陳惠美">陳惠美</option><option value="張伯茹">張伯茹</option><option value="鄭佳昆">鄭佳昆</option></select></div>
         <div><label class="f">網址代碼</label><input type="text" id="code" placeholder="例如 uwa"><p class="muted mt-1">來賓專頁網址的後半段；寄出信或有人回覆之後就固定了。</p></div>
         <div class="sm:col-span-3"><label class="f">來訪目的</label><input type="text" id="purpose"></div>
@@ -202,9 +200,37 @@
               <button class="btn" id="copyLink" title="複製來賓專頁網址，貼到信裡或 LINE 給對方">複製網址</button>
               <button class="btn btn-soft" id="downloadIcs" title="把這一場加進行事曆，結束時間跳出來提醒你拍簽名簿、講三十秒口述。系統本來就會在那個時間寄一封提醒信，這顆是給想在行事曆上也看到的人">下載收工提醒 .ics</button>
             </div>
-            <p class="muted">接下來要做什麼（選頁、確認信、收工）看上面那一排進度：綠勾是做過了，點一格就跳到該做那件事的分頁。</p>
+            <p class="muted">確認信在下面那一張卡片。其他要做的事（選頁、收工）看上面那一排進度：綠勾是做過了，點一格就跳到該做那件事的分頁。</p>
           </div>
         </div>
+      </div>
+    </div>
+
+
+    <div class="card space-y-3" id="confirmCard">
+      <div class="flex flex-wrap items-center gap-2">
+        <h2 class="font-semibold mr-auto"><span class="num">5</span>確認信 <span class="muted font-normal">參訪前寄</span></h2>
+        <span class="text-sm px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-900" id="confirmDue" hidden>現在該寄這一封</span>
+      </div>
+      <p class="muted">跟對方確認日期時間，順便把來賓專頁網址交出去——當天他們掃 QR 打開的就是那一頁。</p>
+      <div class="flex flex-wrap gap-2 items-center">
+        <div><select id="confirmSender" title="確認信的署名：通常是對口老師"><option value="contact">對口老師</option><option value="director">中心主任 張俊彥</option></select></div>
+        <button class="btn" id="confirmLetterBtn" title="草擬一封給對方的確認信：確認日期時間、附上來賓專頁網址">AI 草擬確認信</button>
+        <span class="muted" id="confirmLetterInfo"></span>
+      </div>
+      <input type="text" id="confirmSubject" placeholder="主旨">
+      <textarea id="confirmBody" rows="10" placeholder="確認信草稿會出現在這裡"></textarea>
+      <p class="muted" id="confirmDraftNote" hidden></p>
+      <div class="flex items-center justify-between">
+        <div class="f mb-0">收件人 <span class="muted font-normal">名單上每一個人</span></div>
+        <button class="btn btn-soft" id="confirmRecipientsRefresh" title="重讀收件人清單（名單上每個人 ＋ 當天在專頁留信箱的人）" type="button">重新整理</button>
+      </div>
+      <div id="confirmRecipients" class="space-y-1"></div>
+      <div class="flex flex-wrap gap-2 items-center">
+        <button class="btn" id="confirmSendBtn" title="把確認信寄給上面勾選的人（用中心的 Gmail）。沒設定 Gmail 時會給你 mailto 自己寄">寄出確認信</button>
+        <button class="btn btn-soft" id="copyConfirm" title="複製主旨與內文，貼到你自己的信箱寄出">複製信件</button>
+        <a class="btn btn-soft" id="confirmMailto" hidden target="_blank" rel="noopener">用自己的信箱寄（mailto）</a>
+        <span id="confirmSendInfo"></span>
       </div>
     </div>
 
@@ -255,7 +281,7 @@
 
   <!-- ───────── 收工 ───────── -->
   <section id="tab-wrapup" class="space-y-5" hidden>
-    <p class="lede text-sm"><b>這一頁：來賓離開後四件事</b>——簽名簿、名片、三十秒口述、當天資料。這些東西直接決定訪後信寄得到誰、寫得出什麼，所以當天做完最省力；隔一天記憶就掉了。</p>
+    <p class="lede text-sm"><b>這一頁：來賓離開後五件事</b>——簽名簿、名片、三十秒口述、當天資料，做完就寄感謝信。前四件直接決定感謝信寄得到誰、寫得出什麼，所以當天做完最省力；隔一天記憶就掉了。</p>
     <div class="card space-y-2">
       <p class="muted">來賓離開後這幾件事，幾分鐘做完。受訪的是主持人自己。</p>
       <p class="muted">不必記得：<b>參訪的結束時間一到，系統會寄一封提醒</b>到中心信箱（還缺哪幾件、附一個直接打開這一頁的連結）。收件信箱在「設定」分頁。</p>
@@ -339,53 +365,27 @@
         <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="materialsSave" title="把上面這些連結放上來賓專頁——感謝信只會承諾頁面上真的有的東西">儲存相關連結</button><span class="muted" id="materialsInfo"></span></div>
       </div>
     </div>
-  </section>
-
-  <!-- ───────── 信件 ───────── -->
-  <section id="tab-post" class="space-y-5" hidden>
-    <p class="lede text-sm"><b>這一頁：兩封信都在這裡</b>——參訪前的<b>確認信</b>、參訪後的<b>感謝信</b>。收件人是同一份：<b>名單上每一個人</b>（不只主要窗口）＋當天在專頁留信箱的人。感謝信是整套系統唯一會拿到真話的地方，所以措辭一律用請益語氣，開放建議欄位可以不具名送出。</p>
-
-    <div class="card space-y-3">
-      <div class="flex items-center justify-between"><h2 class="font-semibold">收件人 <span class="muted font-normal">兩封信共用這份勾選</span></h2><button class="btn btn-soft" id="recipientsRefresh" title="重讀收件人清單（名單上每個人 ＋ 當天在專頁留信箱的人）">重新整理</button></div>
-      <div id="recipients" class="space-y-1"></div>
-      <p class="muted" id="letterDraftNote" hidden></p>
-    </div>
-
-    <div class="card space-y-3" id="confirmCard">
-      <div class="flex flex-wrap items-center gap-2">
-        <h2 class="font-semibold mr-auto">確認信 <span class="muted font-normal">參訪前寄</span></h2>
-        <span class="text-sm px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-900" id="confirmDue" hidden>現在該寄這一封</span>
-      </div>
-      <p class="muted">跟對方確認日期時間，順便把來賓專頁網址交出去——當天他們掃 QR 打開的就是那一頁。</p>
-      <div class="flex flex-wrap gap-2 items-center">
-        <div><select id="confirmSender" title="確認信的署名：通常是對口老師"><option value="contact">對口老師</option><option value="director">中心主任 張俊彥</option></select></div>
-        <button class="btn" id="confirmLetterBtn" title="草擬一封給對方的確認信：確認日期時間、附上來賓專頁網址">AI 草擬確認信</button>
-        <span class="muted" id="confirmLetterInfo"></span>
-      </div>
-      <input type="text" id="confirmSubject" placeholder="主旨">
-      <textarea id="confirmBody" rows="10" placeholder="確認信草稿會出現在這裡"></textarea>
-      <div class="flex flex-wrap gap-2 items-center">
-        <button class="btn" id="confirmSendBtn" title="把確認信寄給上面勾選的人（用中心的 Gmail）。沒設定 Gmail 時會給你 mailto 自己寄">寄出確認信</button>
-        <button class="btn btn-soft" id="copyConfirm" title="複製主旨與內文，貼到你自己的信箱寄出">複製信件</button>
-        <a class="btn btn-soft" id="confirmMailto" hidden target="_blank" rel="noopener">用自己的信箱寄（mailto）</a>
-        <span id="confirmSendInfo"></span>
-      </div>
-    </div>
-
+  
     <div class="card space-y-3" id="thanksCard">
       <div class="flex flex-wrap items-center gap-2">
-        <h2 class="font-semibold mr-auto">感謝信 <span class="muted font-normal">參訪後寄</span></h2>
+        <h2 class="font-semibold mr-auto">動作五｜感謝信 <span class="muted font-normal">寄給名單上每一個人</span></h2>
         <span class="text-sm px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-900" id="thanksDue" hidden>現在該寄這一封</span>
       </div>
-      <p class="muted">附上當天資料，並請他們回三個問題。<b>先到「收工」把 PDF、合照、連結放上專頁</b>——信只會承諾頁面上真的有的東西。</p>
+      <p class="muted">附上當天資料，並請他們回三個問題。<b>上面那四件事先做完</b>——信只會承諾頁面上真的有的東西。</p>
       <div class="flex flex-wrap gap-2 items-center">
         <div><select id="sender" title="感謝信的署名"><option value="director">中心主任 張俊彥</option><option value="contact">對口老師</option></select></div>
         <button class="btn" id="thanksBtn" title="草擬感謝信：附上當天資料，並把三個回應項目的連結放進去">AI 草擬感謝信</button>
         <span class="muted" id="thanksInfo"></span>
       </div>
       <input type="text" id="thanksSubject" placeholder="主旨">
-      <textarea id="thanksBody" rows="16" placeholder="感謝信草稿：專頁連結（只提頁面上真的有的東西：PDF、合照、連結要先在「收工」放上去）、三個回應項目（含請益語氣的開放建議欄位、可不具名）"></textarea>
+      <textarea id="thanksBody" rows="16" placeholder="感謝信草稿：專頁連結（只提頁面上真的有的東西：PDF、合照、連結要先在動作四放上去）、三個回應項目（含請益語氣的開放建議欄位、可不具名）"></textarea>
+      <p class="muted" id="thanksDraftNote" hidden></p>
       <p class="muted">三個回應項目的措辭固定為請益語氣，且回覆頁支援真匿名；請保留信裡的那一段。</p>
+      <div class="flex items-center justify-between">
+        <div class="f mb-0">收件人 <span class="muted font-normal">名單上每一個人 ＋ 當天在專頁留信箱的人</span></div>
+        <button class="btn btn-soft" id="thanksRecipientsRefresh" title="重讀收件人清單（名單上每個人 ＋ 當天在專頁留信箱的人）" type="button">重新整理</button>
+      </div>
+      <div id="thanksRecipients" class="space-y-1"></div>
       <p class="muted">寄出之後就不必再回來按什麼了：來賓的回覆會自己進「資料」分頁，<b>一頁摘要每天凌晨自己產</b>（回覆陸續進來就自己重寫一份），Drive 備份也是自動的。</p>
       <div class="flex flex-wrap gap-2 items-center">
         <button class="btn" id="sendBtn" title="一封一封寄出去（用中心的 Gmail 帳號）。沒設定 Gmail 時會給你 mailto 自己寄">寄出感謝信</button>
@@ -396,6 +396,7 @@
     </div>
   </section>
 
+  <!-- ───────── 信件 ───────── -->
   <!-- ───────── 資料 ───────── -->
   <section id="tab-data" class="space-y-5" hidden>
     <p class="lede text-sm"><b>這一頁：歷次參訪的檔案</b>——每場的一頁摘要、來賓回覆、現場動線，以及跨場次的彙整。年報與諮詢委員會要的數字（人次、身分、國家、最受關注的研究室）從這裡出。</p>
@@ -465,7 +466,7 @@
       <h2 class="font-semibold">預設值</h2>
       <div class="flex flex-wrap items-center gap-2">
         <label class="f mb-0" for="senderDefault">訪後信預設寄件者</label>
-        <select id="senderDefault" class="!w-auto" title="新的一場草擬感謝信時預設用誰的名義；個別那一場還是可以在「信件」分頁改"><option value="director">中心主任 張俊彥</option><option value="contact">對口老師</option></select>
+        <select id="senderDefault" class="!w-auto" title="新的一場草擬感謝信時預設用誰的名義；個別那一場還是可以在「收工」分頁改"><option value="director">中心主任 張俊彥</option><option value="contact">對口老師</option></select>
         <span class="muted" id="settingsInfo"></span>
       </div>
       <div class="flex flex-wrap items-center gap-2">
@@ -494,6 +495,18 @@
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const ROOMS = ["301", "302", "303", "304", "305"];
+  // **幾點開始、幾點結束**是主辦端真正在填的兩個時間；總分鐘由它們算出來（下游仍吃 duration_minutes）。
+  // 規則與 lib/visit.mjs 的 minutesBetween／endTimeOf 同一套——那一份給伺服器與 CLI，這一份給畫面。
+  const hhmm = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t == null ? "" : t).trim()); if (!m) return null; const h = +m[1], mi = +m[2]; return h > 23 || mi > 59 ? null : h * 60 + mi; };
+  const toHHMM = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  const minutesBetween = (a, b) => { const x = hhmm(a), y = hhmm(b); return x == null || y == null || y <= x ? null : y - x; };
+  const endTimeOf = (v) => { const g = hhmm(v && v.end_time); return g != null ? toHHMM(g) : toHHMM((hhmm(v && v.start_time) ?? 600) + (Number(v && v.duration_minutes) || 150)); };
+  /** 結束時間旁邊那一行：算出來的長度，或「結束時間要晚於開始時間」。 */
+  function showDuration() {
+    const m = minutesBetween($("startTime").value, $("endTime").value);
+    $("durationInfo").textContent = m ? `共 ${m} 分` : "結束時間要晚於開始時間";
+    $("durationInfo").className = m ? "muted mt-1" : "err text-sm mt-1";
+  }
   /**
    * 五間研究室的顏色：**來源是 public/data/labs.json 的 color**（來賓端用同一套）。
    * 載進來就寫進 CSS 變數 --c301…--c305，樣式表裡那五個值只是還沒載到時的備用。
@@ -673,7 +686,7 @@
   document.querySelectorAll(".tab").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
   function showTab(name) {
     document.querySelectorAll(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
-    for (const t of ["pre", "deck", "wrapup", "post", "data", "settings"]) $("tab-" + t).hidden = t !== name;
+    for (const t of ["pre", "deck", "wrapup", "data", "settings"]) $("tab-" + t).hidden = t !== name;
     reloadTab(name);
   }
 
@@ -755,7 +768,7 @@
   async function reloadTab(name) {
     if (name === "deck") await loadDeckTab();
     if (name === "wrapup") await Promise.all([loadMaterials(), loadCards()]);
-    if (name === "post") await loadRecipients();
+    if (name === "pre" || name === "wrapup") await loadRecipients(); // 兩封信各在自己的分頁上
     if (name === "data") await loadDataTab();
     if (name === "settings") await loadSettingsTab();
     applyDraft(); // 伺服器那一份填好了，還沒交出去的東西擺回去
@@ -763,13 +776,13 @@
   function fillForm(v) {
     state.visit = v; state.saved = !!v.visit_id && state.visits.some((x) => x.visit_id === v.visit_id);
     $("orgName").value = v.org?.name || ""; $("orgLocal").value = v.org?.name_local || ""; $("orgType").value = v.org?.type || "university"; $("orgCountry").value = v.org?.country || "";
-    $("language").value = v.language || "en"; $("date").value = v.date || ""; $("startTime").value = v.start_time || "10:00"; $("duration").value = v.duration_minutes || 90; $("headcount").value = v.headcount || 0;
+    $("language").value = v.language || "en"; $("date").value = v.date || ""; $("startTime").value = v.start_time || "10:00"; $("endTime").value = endTimeOf(v); showDuration(); $("headcount").value = v.headcount || 0;
     $("contactTeacher").value = v.contact_teacher || "張俊彥"; $("purpose").value = v.purpose || ""; $("interests").value = (v.interests || []).join(", ");
     $("code").value = v.visit_id ? v.visit_id.slice(11) : ""; $("code").disabled = !!state.urlFixed;
     $("preStatus").textContent = state.saved ? v.visit_id : "";
     $("deleteBtn").hidden = !state.saved;
     $("draftDiscard").hidden = state.saved || !state.draft?.fields?.form;
-    if (!state.saved) $("saveInfo").textContent = "填上單位名稱就會自己建一場，不必按存檔";
+    if (!state.saved) $("saveInfo").textContent = "";
     renderGuests(v.guests || []); renderProgramme(v.programme || []); renderItinerary(v.itinerary); renderBackground(v.background);
     $("rationale").textContent = v.plan_rationale || ""; $("uncertainties").innerHTML = (v.uncertainties || []).map((u) => `<li>${esc(u)}</li>`).join("");
     $("afterSave").hidden = !state.saved;
@@ -780,7 +793,7 @@
   function readForm() {
     const v = { ...(state.visit || emptyVisit()) };
     v.org = { name: $("orgName").value.trim(), name_local: $("orgLocal").value.trim(), type: $("orgType").value, country: $("orgCountry").value.trim() };
-    v.language = $("language").value; v.date = $("date").value; v.start_time = $("startTime").value; v.duration_minutes = Number($("duration").value) || 90; v.headcount = Number($("headcount").value) || 0;
+    v.language = $("language").value; v.date = $("date").value; v.start_time = $("startTime").value; v.end_time = $("endTime").value; v.duration_minutes = minutesBetween(v.start_time, v.end_time) || Number(state.visit?.duration_minutes) || 90; v.headcount = Number($("headcount").value) || 0;
     v.contact_teacher = $("contactTeacher").value; v.purpose = $("purpose").value.trim(); v.interests = $("interests").value.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
     v.guests = [...$("guestTable").tBodies[0].rows].map((tr) => ({ name: tr.cells[0].firstChild.value.trim(), title: tr.cells[1].firstChild.value.trim(), email: tr.cells[2].firstChild.value.trim(), affiliation: tr.cells[3].firstChild.value.trim(), role: tr.cells[4].firstChild.checked ? "lead" : "member" })).filter((g) => g.name || g.email);
     v.programme = [...$("programmeTable").tBodies[0].rows].map((tr) => ({ start: tr.cells[0].firstChild.value, end: tr.cells[1].firstChild.value, kind: tr.cells[2].firstChild.value, title_en: tr.cells[3].firstChild.value, title_2nd: tr.cells[4].firstChild.value, slides_range: tr.cells[5].firstChild.value, rooms: tr.cells[2].firstChild.value === "tour" ? labRoute() : [] }));
@@ -1110,6 +1123,8 @@
     }
   }
   // 訪前分頁裡任何一個欄位改動都會自己存（含名單、流程、動線那幾張表）
+  $("startTime").addEventListener("input", showDuration);
+  $("endTime").addEventListener("input", showDuration);
   $("tab-pre").addEventListener("input", scheduleSave);
   $("tab-pre").addEventListener("change", scheduleSave);
 
@@ -1125,7 +1140,8 @@
   const DICT_FIELDS = ["transcript", "dWho", "dRooms", "dQuestions", "dCoop", "dFollow"];
   const DRAFT_GROUPS = [
     { note: "emailDraftNote", fields: ["emailText"], text: "上次貼進來、還沒抽取的內容留著。不要的話整段刪掉就好。" },
-    { note: "letterDraftNote", fields: LETTER_FIELDS, text: "手改過、還沒寄出的信件內容帶回來了。按「AI 草擬」會換成新的一份。" },
+    { note: "confirmDraftNote", fields: ["confirmSubject", "confirmBody"], text: "手改過、還沒寄出的確認信帶回來了。按「AI 草擬」會換成新的一份。" },
+    { note: "thanksDraftNote", fields: ["thanksSubject", "thanksBody"], text: "手改過、還沒寄出的感謝信帶回來了。按「AI 草擬」會換成新的一份。" },
     { note: "dictationDraftNote", fields: DICT_FIELDS, text: "上次打的口述內容留著；按「確認並存入回饋」才算收進紀錄。" },
   ];
   const DRAFT_FIELDS = DRAFT_GROUPS.flatMap((g) => g.fields);
@@ -1201,7 +1217,7 @@
     const fields = state.draft?.fields || {};
     if (fields.form && !state.saved && !$("orgName").value.trim() && !$("guestTable").tBodies[0].rows.length) {
       fillForm({ ...emptyVisit(), ...fields.form, visit_id: "" });
-      $("saveInfo").textContent = "上次沒填完的內容留著了；填上單位名稱就會自己建一場";
+      $("saveInfo").textContent = "上次沒填完的內容留著了";
     }
     for (const g of DRAFT_GROUPS) {
       for (const id of g.fields) { const el = $(id); if (el && fields[id] && el.value !== fields[id]) el.value = fields[id]; }
@@ -1305,7 +1321,7 @@
         ["pre", "背景研判", v.background?.status === "done", "查過對方的公開資料，判斷可能的參訪目的"],
         ["pre", "今日流程", (v.programme || []).length > 0, "排好時間表與現場動線；會印在簡報第 2 頁與來賓專頁"],
         ["deck", v.deck?.skip ? "不用簡報" : v.deck?.generated_at ? "簡報已產" : `選了 ${(v.slides || []).length} 頁`, !!(v.deck?.skip || v.deck?.generated_at), "挑頁並產出這一場的 .pptx；只口頭介紹的場次可以整頁關掉"],
-        ["post", v.letters?.confirmation?.sent_at ? "確認信 已寄" : "確認信", !!v.letters?.confirmation?.sent_at, "跟對方確認日期時間，順便把來賓專頁網址交出去（在「信件」分頁）"],
+        ["pre", v.letters?.confirmation?.sent_at ? "確認信 已寄" : "確認信", !!v.letters?.confirmation?.sent_at, "跟對方確認日期時間，順便把來賓專頁網址交出去"],
       ]],
       ["當天", [
         ["wrapup", "簽名簿", !!v.signbook?.photo_key, "實體本子拍一張，AI 讀成留言"],
@@ -1314,7 +1330,7 @@
         ["wrapup", "當天資料", !!(m.deck_pdf || (m.photos || []).length || (m.links || []).length), "PDF、合照、連結放上來賓專頁——感謝信只能承諾頁面上真的有的東西"],
       ]],
       ["訪後", [
-        ["post", v.letters?.thanks?.sent_at ? `感謝信 ${v.letters.thanks.sent_to?.length || 0} 人` : "感謝信", !!v.letters?.thanks?.sent_at, "寄給名單上每一個人，並請他們回三個問題"],
+        ["wrapup", v.letters?.thanks?.sent_at ? `感謝信 ${v.letters.thanks.sent_to?.length || 0} 人` : "感謝信", !!v.letters?.thanks?.sent_at, "寄給名單上每一個人，並請他們回三個問題"],
         ["data", n ? `回覆 ${n}` : "回覆", n > 0, "來賓回的三個問題、簽名簿留言、口述抽出來的內容"],
         ["data", "一頁摘要", !!v.summary, "這一場的結論；也是 Drive 備份與跨場次彙整的來源。有回覆之後每天凌晨自己產，不必記得按"],
       ]],
@@ -1735,10 +1751,11 @@
   const readFileDataUrl = (file) => new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(String(fr.result)); fr.onerror = () => reject(fr.error); fr.readAsDataURL(file); });
 
   // ── 信件：兩封信（確認信、感謝信）都在這裡，收件人共用一份 ──
-  $("recipientsRefresh").onclick = loadRecipients;
+  $("confirmRecipientsRefresh").onclick = loadRecipients;
+  $("thanksRecipientsRefresh").onclick = loadRecipients;
   async function loadRecipients() {
     const id = $("visitSelect").value;
-    if (!id) { $("recipients").innerHTML = `<p class="muted">請先在上面選一場參訪。</p>`; return; }
+    if (!id) { for (const box of recipientBoxes()) box.innerHTML = `<p class="muted">請先在上面選一場參訪。</p>`; return; }
     const [rec, v] = await Promise.all([api("/api/letter", { method: "POST", body: { visit_id: id, action: "recipients" } }), api(`/api/visits?id=${encodeURIComponent(id)}`)]);
     if (rec.ok) { state.thanksRecipients = rec.recipients; renderRecipients(); }
     if (!v.ok) return;
@@ -1757,8 +1774,13 @@
     $("thanksDue").hidden = !(!before && !t?.sent_at);
     rebase(LETTER_FIELDS); // 伺服器上這一版才是基準；手改過還沒寄的那一版由 applyDraft 擺回來
   }
+  /** 兩封信各自一份收件人清單（確認信在「訪前」、感謝信在「收工」）。 */
+  const recipientBoxes = () => [$("confirmRecipients"), $("thanksRecipients")].filter(Boolean);
   function renderRecipients() {
-    $("recipients").innerHTML = state.thanksRecipients.length ? state.thanksRecipients.map((r, i) => `<label class="flex gap-2 items-center"><input type="checkbox" checked data-i="${i}"><span>${esc(r.name)} <span class="muted">${esc(r.email)} · <span>${r.from === "list" ? "名單" : "現場留信箱"}</span></span></span></label>`).join("") : `<p class="muted">名單上沒有 email。請回「訪前」補上隨行名單的聯絡方式。</p>`;
+    const html = state.thanksRecipients.length
+      ? state.thanksRecipients.map((r, i) => `<label class="flex gap-2 items-center"><input type="checkbox" checked data-i="${i}"><span>${esc(r.name)} <span class="muted">${esc(r.email)} · <span>${r.from === "list" ? "名單" : "現場留信箱"}</span></span></span></label>`).join("")
+      : `<p class="muted">名單上沒有 email。請回「訪前」補上隨行名單的聯絡方式。</p>`;
+    for (const box of recipientBoxes()) box.innerHTML = html;
   }
   $("thanksBtn").onclick = () => busy($("thanksBtn"), async () => {
     const r = await runJob("/api/letter", { visit_id: $("visitSelect").value, kind: "thanks", sender: $("sender").value }, noteInto("thanksInfo"), "AI 草擬中……大約一分鐘。");
@@ -1781,7 +1803,7 @@
     const ids = { btn: isThanks ? "sendBtn" : "confirmSendBtn", info: isThanks ? "sendInfo" : "confirmSendInfo", mailto: isThanks ? "mailtoLink" : "confirmMailto", subject: isThanks ? "thanksSubject" : "confirmSubject", body: isThanks ? "thanksBody" : "confirmBody", sender: isThanks ? "sender" : "confirmSender" };
     const label = isThanks ? "感謝信" : "確認信";
     return busy($(ids.btn), async () => {
-      const recipients = [...document.querySelectorAll("#recipients input:checked")].map((i) => state.thanksRecipients[Number(i.dataset.i)]);
+      const recipients = [...document.querySelectorAll(`#${isThanks ? "thanksRecipients" : "confirmRecipients"} input:checked`)].map((i) => state.thanksRecipients[Number(i.dataset.i)]);
       if (!recipients.length) return flash("沒有勾選收件人", "err");
       if (!$(ids.subject).value.trim() || !$(ids.body).value.trim()) return flash(`${label}還是空的，先按「AI 草擬」`, "err");
       if (!confirm(t(`把${label}寄給 ${recipients.length} 人？`))) return;

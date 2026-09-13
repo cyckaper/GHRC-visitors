@@ -48,6 +48,7 @@ export interface Visit {
   visit_id: string;
   date: string; // YYYY-MM-DD
   start_time: string; // HH:MM
+  end_time?: string; // 幾點結束（主辦端填的就是這個；duration_minutes 由它算出來）
   duration_minutes: number;
   org: { name: string; name_local?: string; type: OrgType; country: string };
   guests: Guest[];

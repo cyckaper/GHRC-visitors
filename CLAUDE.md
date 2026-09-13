@@ -167,7 +167,8 @@ Lab 301 — Health Landscape Intelligence Lab
 Google Sheet 一份四個工作表（或等價的 JSON 檔），靠 `visit_id` 串接。
 `visit_id` 格式：`YYYY-MM-DD-代碼`，例如 `2026-10-07-uwa`。
 
-**visits** — `visit_id`、日期、單位、單位類型、國家、人數、主要來賓姓名職稱、
+**visits** — `visit_id`、日期、**開始時間、結束時間**（`start_time`／`end_time`；主辦端填的就是這兩個，
+`duration_minutes` 由它們算出來給排程、提醒與 ICS 用）、單位、單位類型、國家、人數、主要來賓姓名職稱、
 隨行名單（JSON：姓名/職稱/email）、對口老師、來訪目的、興趣關鍵字、議程（JSON）、
 選用頁次（JSON）、語言、專頁網址、簡報檔連結、簽名簿照片、口述音檔、口述逐字稿、
 訪後信寄送清單與時間、一頁摘要
@@ -249,8 +250,10 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
 
 ### 3. 收集回饋
 
-- **兩封信都在後台的「信件」分頁**（確認信在參訪前、感謝信在參訪後）：**收件人共用一份勾選**（名單上每一個人
-  ＋當天在專頁留信箱的人），寄出走同一支 `letter` 的 `action:"send"`，只差 `kind`。畫面會依日期標出「現在該寄這一封」。
+- **兩封信各在它該在的時間點**（明確指示，沒有獨立的「信件」分頁）：**確認信在「訪前」**（排完行程、
+  拿到專頁網址的下一步），**感謝信在「收工」的動作五**（當天資料放上去之後就寄）。
+  收件人（名單上每一個人 ＋當天在專頁留信箱的人）**兩張卡片各有一份**——分開之後共用勾選只會讓人
+  看不到自己勾了什麼。寄出走同一支 `letter` 的 `action:"send"`，只差 `kind`。畫面會依日期標出「現在該寄這一封」。
   兩封信的署名各自可選（確認信預設對口老師、感謝信預設中心主任）。
   **確認信寄出也會記 `sent_at`／`sent_to`**——信裡就有來賓專頁的網址，寄出去之後那個網址就不能再改
   （`isUnused()` 把它算進「已經用出去了」）。
@@ -368,7 +371,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 **已完成（P1–P4 最小可用系統 ＋ P5 捷徑 ＋ P6 產檔 ＋ P7 摘要／彙整）**
 
-- `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → 排行程 → 自動存 → QR／.ics／確認信，**最底下列出「以前做過的參訪」**）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、收工（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁）、**信件（確認信＋感謝信同一頁，收件人共用一份；草擬、寄出或 mailto）**、資料（歷次參訪、回覆、動線、摘要、跨場次彙整、CSV、Drive）、**設定（母簡報、現場動線捷徑與 NFC、預設值、外部服務狀態）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
+- `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → 排行程 → 自動存 → QR／.ics → **確認信（草擬、寄出或 mailto）**，**最底下列出「以前做過的參訪」**）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、收工（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁、**動作五 感謝信**）、資料（歷次參訪、回覆、動線、摘要、跨場次彙整、CSV、Drive）、**設定（母簡報、現場動線捷徑與 NFC、預設值、外部服務狀態）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
 - `public/index.html`：專屬網址 `/<visit_id>`；全頁英文為主、第二語言為輔（預設中文，ko／ja 來賓用韓／日文）；流程（參訪當天標出「現在」）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
 - `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `timeline` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`）`drive` `drive-sync-background`（自動備份）；**三支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
   `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，收工提醒）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
@@ -476,6 +479,12 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - **來賓端雙語**：英文永遠是主語，第二語言預設中文（中英對照）；`visit.language` 是 ko／ja 時改英韓、英日。流程區塊的 `title_2nd` 空白時用 `i18n.json` 的 `kind_*` 補第二語言。
 - **來賓端依階段換措辭**：訪前（日期在未來，或沒有參訪代碼的首頁）用「將參訪」、不放留信箱與感謝表單；當天才有留信箱與備援按鍵；訪後（日期已過或從感謝信的 `#respond` 進來）用過去式、標題改「感謝蒞臨」。`?phase=before|today|after` 可強制預覽。兩個互動層各有自己的連結，帶連結進來一定看得到（也支援中途換 hash）：`/<visit_id>#email`（留信箱）、`/<visit_id>#respond`（三個回應項目）。**這兩個連結在行程走完後才產出**，列在後台「收工」分頁，不在訪前——
   那裡一張卡片把**三個連結並列**（專頁網址／`#email`／`#respond`），各寫一句什麼時候用，因為它們是同一個頁面的三種用法。
+- **時間填的是「幾點開始、幾點結束」**（明確指示：人數與總分鐘都不是主辦端在意的東西）。
+  表單上是兩個時間欄位，旁邊報一行「共 N 分」；`duration_minutes` 由 `lib/visit.mjs minutesBetween()` 算出來，
+  下游（排程、`visitEndAt` 的收工提醒、ICS、AI 提示詞）全都照舊吃 `duration_minutes`，不必跟著改。
+  結束早於開始＝填錯：`visits.mts` 丟掉那個 end_time，沿用原本的長度再用 `endTimeOf()` 算回一個對的，
+  不會存成負的。**舊資料只有 `duration_minutes` 也讀得回來**（`endTimeOf()` 用開始＋總分鐘補），
+  抽取也會從來信的「10:00-12:30」直接讀出 `end_time`。人數留在表單上（年報的人次要用），但標明不確定可以之後再改。
 - 今日流程固定含三個區塊：總體簡報（briefing）→ 研究室參訪（tour）→ **綜合討論（discussion）**，合照可省略；`plan.mts` 在 AI 漏掉綜合討論時自動補上並回傳 `warnings`。**時間分配預設**（`lib/visit.mjs allocateProgramme`）：總體介紹 20 分、每間研究室 20 分、合照 5 分，剩下的時間全部給綜合討論；總時間不夠時先縮研究室（每間至少 5）、再縮總體介紹（至少 10），綜合討論至少 10。預設總長 150 分。**分鐘數不歸 AI 決定**：AI 只決定哪幾間、順序與重點，`plan.mts` 回傳前一律用 `applyProgrammeTimes()` 重算動線分鐘與流程時間（改過就回 `warnings` 說一聲）；主辦端在表單上手改的分鐘數則照他的意思存，不會被重算。
 - **選頁與產檔自成一個分頁**（`admin.html`「簡報」）：訪前只排行程——那顆按鈕就叫**「AI 排行程」**
   （它還是會順便挑頁，但排完才在旁邊說一句「也挑了 N 頁，到「簡報」分頁確認」）。**按鈕不要寫「與選頁」，

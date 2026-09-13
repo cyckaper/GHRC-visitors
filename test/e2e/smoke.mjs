@@ -85,6 +85,16 @@ try {
   await page.waitForFunction(() => document.getElementById("orgName").value.length > 0, null, { timeout: 90000 });
   check((await page.textContent("#extractInfo")) === "", "…and the progress line clears once the form is filled");
   check((await page.inputValue("#date")) === "2026-10-07", "extract fills the date");
+  // 主辦端填的是幾點開始、幾點結束（不是「總分鐘」）；長度由這兩個算出來
+  check((await page.$("#duration")) === null, "the form no longer asks for a total in minutes");
+  await page.fill("#startTime", "10:00");
+  await page.fill("#endTime", "12:30");
+  await page.waitForFunction(() => /150/.test(document.getElementById("durationInfo").textContent));
+  check(true, "the form works out the length from the two times");
+  await page.fill("#endTime", "09:00");
+  await page.waitForFunction(() => /晚於|later/.test(document.getElementById("durationInfo").textContent));
+  check(true, "…and says so when the end is before the start");
+  await page.fill("#endTime", "12:30");
   check((await page.locator("#guestTable tbody tr").count()) === 2, "extract lists both guests");
   // 存檔不是一個動作：抽取完就自己建好一場，改網址代碼就跟著改網址（還沒用出去之前）
   await page.waitForSelector("#afterSave:not([hidden])", { timeout: 30000 });
@@ -213,17 +223,19 @@ try {
   await page.selectOption("#visitSelect", "2026-10-07-uwa");
   await page.waitForSelector("#afterSave:not([hidden])");
   check(/簡報已產|選了 \d+ 頁/.test(await page.textContent("#progress")), "the progress line reports the deck state after a reload");
-  // 兩封信都在「信件」分頁，收件人共用一份
-  check((await page.locator('#tab-pre #confirmLetterBtn').count()) === 0, "the confirmation letter moved out of the pre-visit tab");
-  await page.click('#progress [data-go="post"]');
-  check(!(await page.isHidden("#tab-post")), "the progress line's 確認信 cell jumps to the letters tab");
+  // 確認信在「訪前」（寄出去的那封信裡就有來賓專頁網址），感謝信在「收工」；沒有單獨的「信件」分頁
+  check((await page.locator("#tab-pre #confirmLetterBtn").count()) === 1, "the confirmation letter lives on the pre-visit tab");
+  check((await page.locator("#tab-wrapup #thanksBtn").count()) === 1, "the thank-you letter lives on the wrap-up tab");
+  check((await page.locator('[data-tab="post"]').count()) === 0, "there is no separate letters tab any more");
+  await page.click('#progress [data-go="pre"]');
+  check(!(await page.isHidden("#tab-pre")), "the progress line's 確認信 cell stays on the pre-visit tab");
   await page.click("#confirmLetterBtn");
   // 草擬信件也跑在背景（Claude 寫一整封雙語信同樣超過 10 秒）
   await page.waitForFunction(() => /草擬中/.test(document.getElementById("confirmLetterInfo").textContent));
   await page.waitForFunction(() => document.getElementById("confirmBody").value.length > 0, null, { timeout: 60000 });
   check(true, "confirmation letter drafted in the background");
   check(await page.isVisible("#confirmDue"), "before the visit, the confirmation letter is the one flagged as due");
-  check((await page.locator("#recipients input").count()) === 2, "both letters share one recipient list");
+  check((await page.locator("#confirmRecipients input").count()) === 2, "the confirmation letter has the list in front of it");
 
   // 暫存：手改過還沒寄出的信、貼進來的那封 email，關掉網頁再打開都還在（以前一關就沒了）
   const draftSaved = page.waitForResponse((r) => r.url().includes("/api/draft") && r.request().method() === "POST", { timeout: 20000 });
@@ -233,12 +245,10 @@ try {
   await page.waitForFunction(() => document.getElementById("emailText").value.includes("Simon Kilbane"), null, { timeout: 30000 });
   check(true, "the pasted email is still there after closing the page — and it followed the visit when the url was renamed");
   check(await page.isVisible("#emailDraftNote"), "…and it says why that text is sitting there");
-  await page.click('[data-tab="post"]');
-  await page.waitForFunction(() => document.querySelectorAll("#recipients input").length === 2);
+  await page.waitForFunction(() => document.querySelectorAll("#confirmRecipients input").length === 2);
   await page.waitForFunction(() => /停車請走側門/.test(document.getElementById("confirmBody").value), null, { timeout: 30000 });
   check(true, "a hand-edited letter that was never sent comes back instead of being lost");
-  check(await page.isVisible("#letterDraftNote"), "…and the letters tab says so too");
-  await page.click('[data-tab="pre"]');
+  check(await page.isVisible("#confirmDraftNote"), "…and it says so next to the letter");
 
   // 收工分頁：用打字的逐字稿
   await page.click('[data-tab="wrapup"]');
@@ -281,12 +291,12 @@ try {
   await page.waitForFunction(() => document.getElementById("materialsInfo").textContent.includes("已儲存"));
   check(true, "photo uploaded and link saved for the visit page");
 
-  // 信件分頁：感謝信
-  await page.click('[data-tab="post"]');
+  // 收工分頁的動作五：感謝信
+  await page.click('[data-tab="wrapup"]');
   await page.selectOption("#visitSelect", "2026-10-07-uwa");
   await page.click("#thanksBtn");
   await page.waitForFunction(() => document.getElementById("thanksBody").value.includes("what should we be doing better"), null, { timeout: 60000 });
-  await page.waitForFunction(() => document.querySelectorAll("#recipients input").length === 2);
+  await page.waitForFunction(() => document.querySelectorAll("#thanksRecipients input").length === 2);
   check(true, "thanks letter drafted with the 請益 wording and 2 recipients");
 
   // ── 收工分頁的動作二：拍名片 → AI 讀 → 確認後併進這場的名單（拍名片是現場的事，跟簽名簿放一起）──

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { reconcileTimeline, plannedEntries } from "../lib/timeline.mjs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
-import { snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, needsSummary, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
+import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, needsSummary, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -358,4 +358,20 @@ test("母簡報索引與來賓端字串：兩種語言都齊", () => {
   const i18n = JSON.parse(readFileSync("public/data/i18n.json", "utf8"));
   const gaps = Object.keys(i18n.en).filter((k) => i18n.en[k] && !i18n.zh[k]);
   assert.deepEqual(gaps, [], `中文版缺這幾個字串：${gaps.join(", ")}`);
+});
+
+test("幾點開始、幾點結束：總分鐘由這兩個算出來", () => {
+  assert.equal(minutesBetween("10:00", "12:30"), 150);
+  assert.equal(minutesBetween("09:05", "09:20"), 15);
+  assert.equal(minutesBetween("10:00", "10:00"), null, "一樣長不算一場");
+  assert.equal(minutesBetween("14:00", "13:00"), null, "結束早於開始＝填錯，讓上層沿用原本的長度");
+  assert.equal(minutesBetween("", "12:30"), null);
+  assert.equal(minutesBetween("10:00", "25:00"), null);
+  // 沒填結束時間的舊資料：用「開始 ＋ 總分鐘」算回來
+  assert.equal(endTimeOf({ start_time: "10:00", duration_minutes: 150 }), "12:30");
+  assert.equal(endTimeOf({ start_time: "13:30", duration_minutes: 90 }), "15:00");
+  assert.equal(endTimeOf({ start_time: "10:00", end_time: "11:15", duration_minutes: 150 }), "11:15", "填了就以填的為準");
+  assert.equal(endTimeOf(emptyVisit()), "12:30", "新的一場就先給預設的開始與結束");
+  // 收工提醒看的結束時間也跟著走
+  assert.equal(visitEndAt({ date: "2026-10-07", start_time: "09:00", end_time: "10:00" }).toISOString(), "2026-10-07T02:00:00.000Z");
 });

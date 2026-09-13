@@ -1,7 +1,7 @@
 import { fail, json, nowISO, readJSON, requireAdmin, siteUrl } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
-import { briefingBlockMinutes, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, toCSV } from "../../lib/visit.mjs";
+import { briefingBlockMinutes, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, toCSV, minutesBetween, endTimeOf } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
 import { dropDraft, moveDraft } from "./draft.mts";
 
@@ -127,7 +127,12 @@ export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   v.guests = Array.isArray(input.guests) ? input.guests.map((g) => ({ name: String(g.name || "").trim(), title: String(g.title || "").trim(), email: String(g.email || "").trim().toLowerCase(), role: (g.role === "lead" ? "lead" : "member") as "lead" | "member", affiliation: g.affiliation ? String(g.affiliation) : "", phone: g.phone ? String(g.phone).slice(0, 60) : "" })).filter((g) => g.name || g.email) : [];
   if (v.guests.length && !v.guests.some((g) => g.role === "lead")) v.guests[0].role = "lead";
   v.headcount = Number(input.headcount) || v.guests.length || 0;
-  v.duration_minutes = Number(input.duration_minutes) || 90;
+  // **主辦端填的是幾點開始、幾點結束**；總分鐘由這兩個算出來（下游的排程、提醒、ICS 都還是吃 duration_minutes）
+  v.start_time = String(input.start_time || base.start_time).trim();
+  const spanned = minutesBetween(v.start_time, input.end_time);
+  if (!spanned) v.end_time = ""; // 結束早於開始＝填錯：丟掉它，下一行用原本的長度算回一個對的
+  v.duration_minutes = spanned || Number(input.duration_minutes) || 90;
+  v.end_time = endTimeOf(v);
   v.interests = Array.isArray(input.interests) ? input.interests.map(String) : [];
   v.programme = Array.isArray(input.programme) ? input.programme : [];
   v.itinerary = Array.isArray(input.itinerary) ? input.itinerary.map((s) => ({ room: String(s.room), minutes: Number(s.minutes) || 0, focus: s.focus || "", location: s.location ? String(s.location).slice(0, 60) : "" })) : [];

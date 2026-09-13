@@ -20,7 +20,9 @@ export default backgroundHandler<{ text?: string; attachments?: Extracted[]; war
       headcount: extracted.headcount,
       date: extracted.date || taipeiToday(),
       start_time: extracted.start_time || "10:00",
-      duration_minutes: extracted.duration_minutes || 90,
+      // 信裡寫「10:00-12:30」就照著填；只寫分鐘數的用分鐘數；都沒有就預設一場的長度
+      end_time: extracted.end_time || "",
+      duration_minutes: extracted.duration_minutes || 0,
       contact_teacher: extracted.contact_teacher || "張俊彥",
       purpose: extracted.purpose,
       interests: extracted.interests,
