@@ -1,10 +1,10 @@
-import { checkSignalKey, fail, json, nowISO, readJSON, requireAdmin, taipeiToday } from "../lib/http.mts";
+import { checkSignalKey, env, fail, json, nowISO, readJSON, requireAdmin, siteUrl, taipeiToday } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
 import { isValidVisitId } from "../../lib/visit.mjs";
 import { reconcileTimeline } from "../../lib/timeline.mjs";
 
-const ROOMS = new Set(["briefing", "301", "302", "303", "304", "305"]); // briefing = 總體介紹（簡報室）
+const ROOMS = new Set(["briefing", "301", "302", "303", "304", "305"]); // briefing = 總體介紹（簡報室）；順序就是動線順序
 const KEYED = new Set(["presentation", "nfc", "student"]);
 
 /**
@@ -12,10 +12,33 @@ const KEYED = new Set(["presentation", "nfc", "student"]);
  *  POST /api/timeline {room, source, at?, visit_id?, key?}   source=presentation|nfc|student 需 SIGNAL_KEY；guest 需 visit_id
  *  GET  /api/timeline?room=303&source=presentation&key=…       同上（給只能開網址的捷徑用）
  *  GET  /api/timeline?id=<visit_id>                             admin：原始訊號 ＋ 推補後的時間軸
+ *  GET  /api/timeline?shortcuts=1                               admin：六個房間的捷徑與 NFC 網址（後台自己產貼紙）
  */
 export default async (req: Request) => {
   const url = new URL(req.url);
   const store = getStore();
+
+  // 現場訊號的捷徑網址（admin）：後台自己產捷徑與 NFC 貼紙，不必開終端機跑 scripts/make-shortcuts.mjs
+  if (req.method === "GET" && url.searchParams.get("shortcuts")) {
+    const denied = requireAdmin(req);
+    if (denied) return denied;
+    const site = siteUrl(req);
+    const key = env("SIGNAL_KEY") || "";
+    const label: Record<string, string> = { briefing: "總體介紹（簡報室）", "301": "Lab 301 智能室", "302": "Lab 302 規劃室", "303": "Lab 303 模擬室", "304": "Lab 304 全景影院", "305": "Lab 305 IVR" };
+    return json({
+      ok: true,
+      site,
+      // SIGNAL_KEY 本來就會印在門口的 NFC 貼紙網址裡，而且只能寫動線時間、讀不到任何資料；
+      // 這裡只給登入過的主辦端看（比貼在牆上還少曝光）。Claude／Google 那些金鑰仍然絕不出前端。
+      key_set: !!key,
+      rooms: [...ROOMS].map((room) => ({
+        room,
+        label: label[room] || room,
+        presentation_url: `${site}/api/timeline?room=${room}&source=presentation&key=${encodeURIComponent(key)}`,
+        nfc_url: `${site}/api/timeline?room=${room}&source=nfc&key=${encodeURIComponent(key)}`,
+      })),
+    });
+  }
 
   if (req.method === "GET" && url.searchParams.get("id")) {
     const denied = requireAdmin(req);

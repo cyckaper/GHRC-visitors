@@ -497,6 +497,21 @@ test("排程會參考歷次累積：同類單位選過哪幾頁、哪幾頁被�
   assert.ok(perf.length, "一頁摘要寫過 slide_performance");
 });
 
+test("現場動線的捷徑網址：後台自己拿得到，不必開終端機", async () => {
+  assert.equal((await api("/api/timeline?shortcuts=1")).status, 401, "要 token");
+  const r = await api("/api/timeline?shortcuts=1", { headers: admin });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.key_set, true, "測試環境有設 SIGNAL_KEY");
+  assert.deepEqual(r.body.rooms.map((x) => x.room), ["briefing", "301", "302", "303", "304", "305"], "第一站是總體介紹");
+  const lab303 = r.body.rooms.find((x) => x.room === "303");
+  assert.ok(lab303.nfc_url.includes("source=nfc") && lab303.nfc_url.includes("key=test-signal"));
+  assert.ok(lab303.presentation_url.includes("source=presentation"));
+  // 拿到的網址真的送得出訊號：金鑰對就不會是 401（今天沒有排定參訪時回 404，那是另一回事）
+  const hit = await api(lab303.nfc_url.replace("https://visit.example.test", ""));
+  assert.notEqual(hit.status, 401, `金鑰應該被接受：${JSON.stringify(hit.body)}`);
+  assert.ok([200, 404].includes(hit.status), `${hit.status} ${JSON.stringify(hit.body)}`);
+});
+
 test("兩封信同一套：確認信也寄得出去，寄了之後網址就固定", async () => {
   const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
   const v = (await put({ org: { name: "Letter Test University" }, date: "2026-11-20", code: "ltr", guests: [{ name: "A", email: "a@example.edu" }] })).body.visit;
