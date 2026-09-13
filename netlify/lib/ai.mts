@@ -30,6 +30,9 @@ export const CENTER_FACTS = `中心事實（所有輸出都要遵守）：
 - 信件不感謝中心自己的人（主任、對口老師、同仁），感謝對象只有來賓與對方單位的窗口；也不替中心的人邀功。
 - 不放中心總預算數字；HEALS Design 是 301 專屬方法論，不是中心層級的方法論。`;
 
+/** Claude 接好了沒（AI_MOCK 也算——本機開發與測試用固定範例）。 */
+export const aiConfigured = (): boolean => !!(env("ANTHROPIC_API_KEY") || env("AI_MOCK"));
+
 function model(): string {
   return env("CLAUDE_MODEL") || "claude-opus-5";
 }

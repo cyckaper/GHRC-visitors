@@ -66,6 +66,10 @@ export default async (req: Request) => {
     const renamedFrom = current && merged.visit_id !== previousId ? previousId : "";
     if (renamedFrom && (await store.getVisit(merged.visit_id))) return fail(409, `已經有一場叫 ${merged.visit_id} 了，請換一個網址代碼`);
     const existing = renamedFrom ? current : await store.getVisit(merged.visit_id);
+    // 後台表單不管這幾件事（簽名簿、口述、名片、當天資料、信件、摘要、Drive、自動提醒都是別的端點或
+    // 背景工作寫的）。body 沒帶就沿用現有的：不然在別的分頁開著舊資料按一下存檔，就會把它們清掉——
+    // 提醒紀錄被清掉還會害收工提醒重寄一次。
+    if (existing) for (const k of KEPT) if ((body as any)[k] === undefined) (merged as any)[k] = (existing as any)[k];
     merged.created_at = existing?.created_at || nowISO();
     merged.updated_at = nowISO();
     await store.putVisit(merged);
@@ -94,6 +98,9 @@ export default async (req: Request) => {
 
   return fail(405, "method not allowed");
 };
+
+/** 這幾個欄位由別的端點或背景工作維護，一般存檔不該動到。 */
+const KEPT = ["summary", "summary_at", "reminders", "drive", "cards", "signbook", "dictation", "letters", "materials", "background"] as const;
 
 /** 這一場的網址還沒「用出去」：沒人回覆、兩封信都還沒寄出、沒放任何檔案、還沒備份到 Drive。 */
 async function isUnused(store: ReturnType<typeof getStore>, v: Visit): Promise<boolean> {

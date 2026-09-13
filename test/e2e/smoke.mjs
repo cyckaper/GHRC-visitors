@@ -232,6 +232,7 @@ try {
   await page.click("#dictationSave");
   await page.waitForFunction(() => document.getElementById("dictationInfo").textContent.includes("已存入"));
   const wrapLinks = await page.textContent("#wrapLinks");
+  check(/結束時間一到.*寄一封提醒/s.test(await page.textContent("#tab-wrapup")), "the wrap-up tab promises the reminder arrives by itself at the end of the programme");
   check(wrapLinks.includes("#email") && wrapLinks.includes("#respond"), "after the visit, the wrap-up tab produces the on-site email and response links");
   check((await page.locator("#wrapLinks [data-copy]").count()) === 3, "all three links to the guest page are listed in one place");
   check(/參訪當天用/.test(wrapLinks) && /訪後用/.test(wrapLinks), "…each saying when to use it");
@@ -293,7 +294,13 @@ try {
   await page.click('#shortcutsList [data-qr="0"]');
   await page.waitForFunction(() => document.querySelector('#shortcutsList [data-qrbox="0"]').innerHTML.length > 0);
   check(true, "each room can show a QR to print for the door");
-  check((await page.locator("#statusList li").count()) >= 6, "the settings tab says which external services are wired up");
+  check((await page.locator("#statusList li").count()) >= 7, "the settings tab says which external services are wired up");
+  check(/收工提醒/.test(await page.textContent("#statusList")), "…including whether the wrap-up reminder can be sent");
+  check(/不會寄|現在寄到/.test(await page.textContent("#reminderInfo")), "the settings tab says where the wrap-up reminder would go");
+  await page.fill("#reminderTo", "wrapup@ntu.edu.tw");
+  await page.locator("#senderDefault").focus(); // blur → change
+  await page.waitForFunction(() => /已存/.test(document.getElementById("reminderInfo").textContent), null, { timeout: 15000 });
+  check(true, "…and the address saves itself like every other setting");
   check(!(await page.textContent("#statusList")).includes("e2e-signal"), "…without ever showing the keys themselves");
   check(await page.isVisible("#masterRow"), "the master deck lives in settings now, not at the bottom of the deck tab");
 

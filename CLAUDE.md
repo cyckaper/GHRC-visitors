@@ -266,7 +266,7 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
   不在翻舊帳的「資料」分頁；手機直接開相機，可連拍）。AI 讀出姓名、職稱、單位、email、電話，**人逐欄確認後**才併進這場的名單（`/api/cards`）——訪後信就會寄給他。併入規則 `lib/visit.mjs mergeGuests`：email 相同（不分大小寫）或「姓名＋單位」相同視為同一人，**只補空欄位、不覆寫已確認的資料**，也不會把主賓降級；同一張再存一次是 no-op。看不清楚的字一律留空不猜（email 猜錯比留空更糟）。原圖存 `cards/<visit_id>/<ts>.jpg`（**有個資，`/api/media` 只給 admin**），Drive 備份用名片主人的名字當檔名。
 - **簽名簿**：實體本子，主持人拍照上傳，AI 讀手寫字歸檔（原圖保留）
 - **主持人三十秒口述**：參訪結束後由主持人口述，Whisper 轉文字後抽取
-  （誰來、最想看哪一間、問了什麼、有無合作意願）。依議程結束時間推播提醒
+  （誰來、最想看哪一間、問了什麼、有無合作意願）。**依議程結束時間提醒＝寄一封信**（`reminder-cron`，見功能 4 底下那一段）
 - **動線訊號**：老師開簡報的捷徑、門口 NFC 貼紙、排程推補三者擇有。
   **捷徑與貼紙的網址在後台「資料」分頁自己產**（`GET /api/timeline?shortcuts=1`，admin）：
   六個房間各給 NFC 網址、Windows `.bat`、macOS `.command` 與可印的 QR，不必開終端機
@@ -286,7 +286,16 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
   用中心自己的帳號而不是服務帳戶（服務帳戶沒有 Drive 配額）。站台的 Blobs 仍是主要資料層，Drive 是另存的檔案庫。
   **`GOOGLE_DRIVE_FOLDER_ID` 通常留空**：`drive.file` 只看得到程式自己建立的檔案，指定別人建的資料夾會存取不到，
   留空時 `ensureFolder("GHRC 參訪", "root")` 會自己在雲端硬碟根目錄建一個並沿用（設定步驟見 `docs/DEPLOY.md` 6.5）。
-- 每場產出一頁摘要
+- **每場產出一頁摘要——不必人記得按**（`summary-cron`，每晚台北時間凌晨一點）：參訪過完、有回饋可寫的
+  就自己產一份（`lib/visit.mjs needsSummary`）；回覆是好幾天內陸續進來的，所以**比最新那筆回覆舊就重寫一次**。
+  不具名的回覆只有日期，一律當那天的最後一刻——寧可多寫一次，也不要漏掉匿名建議。排在 `drive-cron`（兩點）之前，
+  當晚的備份就帶到新的摘要。後台那顆「AI 產一頁摘要」留給「現在就要」用。
+- **收工提醒（`reminder-cron`，每十五分鐘看一次）**：參訪的結束時間（`lib/visit.mjs visitEndAt`：今日流程最後一段
+  與「開始＋總分鐘」取晚的那一個）一到，用中心的 Gmail **寄一封信給中心自己**——簽名簿、名片、口述、當天資料
+  還缺哪幾件，附一個直接打開後台「收工」分頁的連結（`/admin.html#wrapup=<visit_id>`）。管道選寄信是因為
+  Gmail 已經接了、手機收信就會跳，不必再接第三個服務。一場只寄一次（`visit.reminders.wrapup_sent_at`）、
+  四件事都做完了就不寄、只看結束後六小時內的場次；寄成功才記，失敗下一輪再試。收件信箱在後台「設定」分頁
+  （`settings.reminder_to`，留空就用 `REMINDER_TO`／`GMAIL_SENDER`）。
 - **歷次累積回饋下一次的挑頁（已接上）**：`netlify/lib/history.mts slideHistory()` 算出
   「每一頁過去選過幾次／同類單位選過幾次、哪幾頁被提問、哪幾頁在回饋中被提到、來賓點名最想看哪幾間」，
   由 `plan-background` 交給提示詞。**選過哪幾頁直接讀每一場的 `visit.slides`**，不必等人按「一頁摘要」就有資料；
@@ -351,11 +360,12 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 - `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → 排行程 → 自動存 → QR／.ics／確認信，**最底下列出「以前做過的參訪」**）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、收工（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁）、**信件（確認信＋感謝信同一頁，收件人共用一份；草擬、寄出或 mailto）**、資料（歷次參訪、回覆、動線、摘要、跨場次彙整、CSV、Drive）、**設定（母簡報、現場動線捷徑與 NFC、預設值、外部服務狀態）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
 - `public/index.html`：專屬網址 `/<visit_id>`；全頁英文為主、第二語言為輔（預設中文，ko／ja 來賓用韓／日文）；流程（參訪當天標出「現在」）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
-- `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `timeline` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`）`drive` `drive-sync-background`（自動備份）`drive-cron`（每晚補漏，`export const config = { schedule }`）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
+- `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `timeline` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`）`drive` `drive-sync-background`（自動備份）；**三支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
+  `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，收工提醒）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
 - `public/lib/pptx.mjs`：母簡報子集化核心（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證），零 Node 相依，瀏覽器與 CLI 共用；`cli/lib/pptx.mjs` 只是注入 jszip／xmldom 的 Node 入口；`cli/deck.mjs` 加上 QR（qrcode 套件）與 PDF（LibreOffice）。`--inspect`、`--dump`、`--validate`。
 - `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-shortcuts.mjs`：研究室電腦捷徑與 NFC 網址。
-- 測試：`npm test`（單元、API 走本機 dev server、產檔與瘦身走合成簡報）、`npm run test:e2e`（Chromium）。`AI_MOCK=1` 讓所有 AI 呼叫回固定範例。CI：`.github/workflows/ci.yml` 在每個 PR 與 main 的 push 跑同一套（typecheck → npm test → e2e）。
+- 測試：`npm test`（單元、API 走本機 dev server、產檔與瘦身走合成簡報）、`npm run test:e2e`（Chromium）。`AI_MOCK=1` 讓所有 AI 呼叫回固定範例，`MAIL_MOCK=1` 讓寄信不真的打 Gmail（信寫進媒體庫 `mail/last.json`，測試再讀出來對內容）。CI：`.github/workflows/ci.yml` 在每個 PR 與 main 的 push 跑同一套（typecheck → npm test → e2e）。
 
 **尚未在真實環境驗證（首次建置時沒有金鑰與母簡報）**
 
@@ -394,10 +404,16 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
   換一場或改網址代碼時暫存跟著走（`migrateDraft`；改代碼那一段在 `visits.mts` 用 `moveDraft` 做，換台機器也一致），
   整場刪掉就一起清（`dropDraft`）。**已經存在伺服器上的東西不算暫存**：簽名簿的原圖與留言、口述的逐字稿與抽出來的欄位
   由「收工」分頁載回畫面（`renderSavedSignbook`／`renderSavedDictation`）——它們本來就沒掉，只是以前看起來像掉了。
+- **該系統自己做的事不要叫人記得**：Drive 備份、一頁摘要、收工提醒都由排程做掉，畫面上的按鈕只留給「現在就要」。
+  新增這類自動化時照 `drive-cron` 的樣子寫：排程函式只判斷「該不該做」再觸發背景工作，真正的事情不要在排程裡等。
 - **「以前做過的參訪」列在訪前分頁最底下**（`renderPastVisits`）：最近 8 場的類型、國家、人數、**選了幾頁**、有沒有摘要，
   同類單位標「同類」，點一列就把全站共用的「這一場」切過去（手上那一場有暫存，不會掉）。
   全部歷次、回覆與動線仍然在「資料」分頁——那裡是檔案庫，這裡只是排新一場時的參考。
   清單欄位由 `GET /api/visits` 一併回傳（`slides`／`summary`／`guests`／`updated_at`）。
+- **一般存檔不會清掉別的端點寫的東西**：`POST /api/visits` 是整筆覆寫，但後台表單管不到的欄位
+  （`summary`／`summary_at`／`reminders`／`drive`／`cards`／`signbook`／`dictation`／`letters`／`materials`／`background`）
+  body 沒帶就沿用現有的（`visits.mts` 的 `KEPT`）。不然在別的分頁開著舊資料按一下存檔就會把它們清掉——
+  提醒紀錄被清掉還會害收工提醒重寄一次。
 - **網址（`visit_id` ＝ 日期 ＋ 代碼）在用出去之前跟著欄位走**：日期或網址代碼改了就換一個 visit_id，
   舊的那一筆刪掉（`POST /api/visits` 回 `renamed_from`）。一旦「用出去了」就固定，不再跟著改（回 `url_fixed`）——
   判斷標準 `isUnused()`：有人回覆、感謝信寄出、放了當天資料、有簽名簿／口述／名片、已備份到 Drive，其中之一就算用出去了。

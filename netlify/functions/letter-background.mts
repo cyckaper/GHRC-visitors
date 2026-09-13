@@ -1,10 +1,11 @@
-import { env, nowISO, siteUrl } from "../lib/http.mts";
+import { nowISO, siteUrl } from "../lib/http.mts";
 import { loadPublicData } from "../lib/data.mts";
 import { getStore } from "../lib/store.mts";
 import { draftLetter } from "../lib/ai.mts";
 import { backgroundHandler } from "../lib/jobs.mts";
 import { recipientList } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
+import { gmailSend } from "../lib/mail.mts";
 
 type Input = {
   mode: "draft" | "send";
@@ -65,43 +66,3 @@ export default backgroundHandler<Input>("信件", async (input, req) => {
   await store.putVisit(visit);
   return { kind, sender, draft, recipients: recipientList(visit, responses) };
 });
-
-let gmailToken: { token: string; exp: number } | null = null;
-
-async function gmailAccessToken(): Promise<string> {
-  if (gmailToken && gmailToken.exp > Date.now() + 60000) return gmailToken.token;
-  const r = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: env("GMAIL_CLIENT_ID")!, client_secret: env("GMAIL_CLIENT_SECRET")!, refresh_token: env("GMAIL_REFRESH_TOKEN")!, grant_type: "refresh_token" }),
-  });
-  if (!r.ok) throw new Error(`Gmail token ${r.status}: ${await r.text()}`);
-  const j = (await r.json()) as { access_token: string; expires_in: number };
-  gmailToken = { token: j.access_token, exp: Date.now() + j.expires_in * 1000 };
-  return j.access_token;
-}
-
-function encodeHeader(s: string): string {
-  return /^[\x20-\x7e]*$/.test(s) ? s : `=?UTF-8?B?${Buffer.from(s, "utf8").toString("base64")}?=`;
-}
-
-async function gmailSend(to: string, subject: string, text: string): Promise<void> {
-  const from = env("GMAIL_SENDER") || "me";
-  const mime = [
-    `From: ${from}`,
-    `To: ${to}`,
-    `Subject: ${encodeHeader(subject)}`,
-    "MIME-Version: 1.0",
-    "Content-Type: text/plain; charset=UTF-8",
-    "Content-Transfer-Encoding: base64",
-    "",
-    Buffer.from(text, "utf8").toString("base64"),
-  ].join("\r\n");
-  const raw = Buffer.from(mime).toString("base64url");
-  const r = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
-    method: "POST",
-    headers: { authorization: `Bearer ${await gmailAccessToken()}`, "content-type": "application/json" },
-    body: JSON.stringify({ raw }),
-  });
-  if (!r.ok) throw new Error(`Gmail send ${r.status}: ${await r.text()}`);
-}

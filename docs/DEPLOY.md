@@ -18,11 +18,16 @@
 | `GOOGLE_SHEET_ID`、`GOOGLE_SERVICE_ACCOUNT_JSON` | sheets 時必要 | 見 §2 |
 | `GMAIL_CLIENT_ID`、`GMAIL_CLIENT_SECRET`、`GMAIL_REFRESH_TOKEN`、`GMAIL_SENDER` | 選 | 訪後信一鍵寄出（§3）。沒設定時後台會給 mailto 與複製 |
 | `DICTATION_LANGUAGE` | 選 | Whisper 的語言提示，預設 `zh` |
+| `REMINDER_TO` | 選 | 收工提醒寄到哪個信箱（參訪結束時自動寄）。**通常不必設**：後台「設定」分頁可以直接填，都沒填就寄給 `GMAIL_SENDER` |
 
 4. Deploy。部署後：`https://visit.healsdesign.org/admin.html` 用 `ADMIN_TOKEN` 登入。
    「訪前」的 **AI 查訪客背景** 會用 Claude 的伺服器端網路搜尋（每次查幾個網頁，另外計費）；帳號沒開網路搜尋也不會壞，只會退回「只讀來信」的研判並在畫面上標明。**一台裝置只要登入一次**：伺服器會發一個 HttpOnly cookie（180 天，每次打開後台自動續期），換手機或換瀏覽器才要再貼一次；按「登出」就清掉。
 
 **資料在哪**：預設在 Netlify Blobs（store `ghrc-visit`：`visits/`、`responses/`、`timeline/`、`slideperf/`、`media/`）。後台「資料」分頁可匯出四張表的 CSV。Deploy Preview 與分支部署用 deploy-scoped store，不會混進正式資料。
+
+**排程（Netlify Scheduled Functions，`export const config = { schedule }`）**：`summary-cron`（台北一點：過完又有回饋的參訪自己產一頁摘要）、
+`drive-cron`（兩點：備份補漏）、`reminder-cron`（台北 08:00–21:59 每十五分鐘：參訪結束時寄收工提醒）。
+三支都只接受 Netlify 排程器送來的 `POST {next_run}`，或帶 `ADMIN_TOKEN` 的手動觸發；被擋下來時函式紀錄會寫明原因。
 
 **金鑰安全**：所有金鑰只在 Netlify Functions 裡使用，前端只拿 `ADMIN_TOKEN`（存在瀏覽器 localStorage）。`SIGNAL_KEY` 會出現在 NFC 貼紙的網址裡，它只能寫動線時間、不能讀資料；外洩就換一個。
 
@@ -44,6 +49,10 @@
 4. 後台「訪後信」→ 勾收件人 → 寄出。每人一封（不是 BCC）。寄件帳號固定是授權的那一個；「寄件者」下拉只決定署名（中心主任或對口老師）。
 
 沒設定時，後台會明確顯示「尚未寄出」，並提供 mailto（BCC 全員）與複製信件。
+
+**收工提醒**用的是同一組 Gmail 授權：參訪的結束時間一到（依今日流程），系統寄一封信到中心信箱，
+列出簽名簿、名片、口述、當天資料還缺哪幾件，附一個直接打開後台「收工」分頁的連結。一場只寄一次，
+四件事都做完了就不寄。收件信箱在後台「設定」分頁填（留空就用 `GMAIL_SENDER`）。
 
 ## 4. 現場硬體
 

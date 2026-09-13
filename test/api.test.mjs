@@ -15,6 +15,7 @@ process.env.AI_MOCK = "1";
 process.env.ADMIN_TOKEN = "test-token";
 process.env.SIGNAL_KEY = "test-signal";
 process.env.SITE_URL = "https://visit.example.test";
+process.env.GMAIL_SENDER = "ghrc@example.test"; // 只有寄件帳號：Gmail 仍算沒接好（沒有 client id／secret／refresh token）
 
 const { createServer } = await import("../scripts/dev-server.mjs");
 const server = createServer();
@@ -513,6 +514,105 @@ test("設定：預設值存得起來，外部服務只回「接好了沒」不�
   const bad = await api("/api/settings", { method: "POST", headers: admin, body: JSON.stringify({ settings: { sender_default: "someone-else" } }) });
   assert.equal(bad.body.settings.sender_default, "contact", "亂填的值不收");
   await api("/api/settings", { method: "POST", headers: admin, body: JSON.stringify({ settings: { sender_default: "director" } }) });
+
+  // 收工提醒寄到哪裡：留空就退回 Netlify 的寄件帳號；不是 email 的不收
+  assert.equal(r.body.settings.reminder_to, "", "預設留空");
+  assert.equal(r.body.effective.reminder_to, "ghrc@example.test", "留空時用寄件帳號");
+  const notEmail = await api("/api/settings", { method: "POST", headers: admin, body: JSON.stringify({ settings: { reminder_to: "中心信箱" } }) });
+  assert.equal(notEmail.status, 400, JSON.stringify(notEmail.body));
+  const to = await api("/api/settings", { method: "POST", headers: admin, body: JSON.stringify({ settings: { reminder_to: "Wrapup@NTU.edu.tw" } }) });
+  assert.equal(to.body.settings.reminder_to, "wrapup@ntu.edu.tw", "存小寫");
+  assert.equal(to.body.effective.reminder_to, "wrapup@ntu.edu.tw");
+  assert.equal((await api("/api/settings", { headers: admin })).body.status.reminder, false, "沒接 Gmail 就還是寄不出提醒");
+  await api("/api/settings", { method: "POST", headers: admin, body: JSON.stringify({ settings: { reminder_to: "" } }) });
+});
+
+test("一頁摘要不必人記得按：每晚掃一次，過完又有回覆的自己產", async () => {
+  const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const v = (await put({ org: { name: "Summary Cron University" }, date: "2026-08-20", code: "sum", start_time: "10:00", duration_minutes: 120 })).body.visit;
+
+  // 排程函式不是誰都打得動（會花 Claude 的錢）：要嘛是 Netlify 的排程器（POST {next_run}），要嘛帶 token
+  assert.equal((await api("/api/summary-cron")).status, 401, "路過的人打不動");
+  assert.equal((await api("/api/reminder-cron")).status, 401, "寄信那支也一樣");
+  assert.equal((await api("/api/drive-cron")).status, 401, "備份那支也一樣");
+  const scheduled = await api("/api/summary-cron", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ next_run: "2026-09-14T17:00:00.000Z" }) });
+  assert.equal(scheduled.status, 200, "Netlify 的排程器打得動");
+  assert.ok(!String(scheduled.body).includes(v.visit_id), "還沒有任何回饋的場次不產摘要");
+
+  // 有人回覆之後就該產（過完了、有東西可寫、還沒有摘要）
+  await api("/api/respond", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visit_id: v.visit_id, anonymous: true, suggestion: "301 的工具鏈想多看" }) });
+  const swept = await api("/api/summary-cron", { method: "POST", headers: admin, body: "{}" });
+  assert.equal(swept.status, 200, JSON.stringify(swept.body));
+  assert.ok(String(swept.body).includes(v.visit_id), `該產摘要的場次要被掃到：${swept.body}`);
+
+  // 摘要產出來之後（模擬背景函式跑完）就不再重複產，除非又有新的回覆。
+  // 不具名那一筆只有日期（真匿名的代價），系統一律當成那一天的最後一刻——寧可多寫一次，也不要漏掉
+  // 匿名建議。所以這裡用「隔天凌晨那一次排程」的時間對照（真正的 cron 就是那個時候跑的）。
+  const done = (await api(`/api/visits?id=${v.visit_id}`, { headers: admin })).body.visit;
+  done.summary = "（測試用摘要）";
+  done.summary_at = new Date(Date.now() + 24 * 3600e3).toISOString();
+  await put(done);
+  const again = await api("/api/summary-cron", { method: "POST", headers: admin, body: "{}" });
+  assert.ok(!String(again.body).includes(v.visit_id), "摘要比回覆新就不必重寫");
+});
+
+test("收工提醒：依結束時間寄信給自己，一場只寄一次；沒接 Gmail 就老實說", async () => {
+  const cron = () => api("/api/reminder-cron", { method: "POST", headers: admin, body: "{}" });
+  const stood = await cron();
+  assert.equal(stood.status, 200);
+  assert.ok(String(stood.body).includes("Gmail"), `沒接 Gmail 要說清楚：${stood.body}`);
+
+  // 剛結束、什麼都還沒做的一場（結束時間＝開始 ＋ 總分鐘，這裡設在十分鐘前）
+  const start = new Date(Date.now() - 70 * 60000);
+  const hhmm = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false }).format(start);
+  const date = new Date(start.getTime() + 8 * 3600e3).toISOString().slice(0, 10);
+  const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const v = (await put({ org: { name: "Reminder Normal University" }, date, code: "rmd", start_time: hhmm, duration_minutes: 60 })).body.visit;
+  const later = (await put({ org: { name: "Tomorrow University" }, date, code: "tmr", start_time: "23:30", duration_minutes: 60 })).body.visit;
+
+  process.env.MAIL_MOCK = "1"; // 不真的打 Gmail：信會寫進媒體庫讓這裡讀
+  try {
+    const sent = await cron();
+    assert.ok(String(sent.body).includes(v.visit_id), `結束了又沒收工的場次要提醒：${sent.body}`);
+    assert.ok(!String(sent.body).includes(later.visit_id), "還沒結束的場次不提醒");
+
+    const mail = JSON.parse(await readFile(path.join(tmp, "media", "mail", "last.json"), "utf8"));
+    assert.equal(mail.to, "ghrc@example.test", "留空就寄給 Netlify 設的寄件帳號");
+    assert.ok(mail.subject.includes("收工提醒") && mail.subject.includes("Reminder Normal University"));
+    assert.ok(mail.text.includes("拍一張簽名簿") && mail.text.includes("三十秒口述"), "信裡列出還缺哪幾件");
+    assert.ok(mail.text.includes(`/admin.html#wrapup=${v.visit_id}`), "附一個直接打開收工頁的連結");
+
+    assert.ok(!String((await cron()).body).includes(v.visit_id), "一場只寄一次");
+
+    // 四件事都做完的那一場，本來就不該吵
+    const done = (await api(`/api/visits?id=${v.visit_id}`, { headers: admin })).body.visit;
+    done.reminders = {};
+    done.signbook = { photo_key: "signbook/x/1.jpg" };
+    done.cards = [{ key: "cards/x/1.jpg", names: ["A"], read_at: new Date().toISOString() }];
+    done.dictation = { transcript: "今天校長來" };
+    done.materials = { deck_pdf: "", photos: [], links: [{ title: "t", url: "https://x.example" }] };
+    await put(done);
+    assert.ok(!String((await cron()).body).includes(v.visit_id), "收工做完了就不必提醒");
+  } finally {
+    delete process.env.MAIL_MOCK;
+  }
+});
+
+test("一般存檔不會清掉別的端點寫的東西（摘要、提醒紀錄、簽名簿、當天資料）", async () => {
+  const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const v = (await put({ org: { name: "Keep Fields College" }, date: "2026-08-21", code: "keep" })).body.visit;
+  const full = (await api(`/api/visits?id=${v.visit_id}`, { headers: admin })).body.visit;
+  full.summary = "摘要";
+  full.summary_at = "2026-08-22T00:00:00.000Z";
+  full.reminders = { wrapup_sent_at: "2026-08-21T05:00:00.000Z", wrapup_to: "wrapup@ntu.edu.tw" };
+  full.signbook = { photo_key: "signbook/x/1.jpg" };
+  await put(full);
+
+  // 後台在別的分頁開著舊資料按一下存檔（body 裡沒有這些欄位）→ 不能被清掉
+  const stale = await put({ visit_id: v.visit_id, org: { name: "Keep Fields College" }, date: "2026-08-21", code: "keep" });
+  assert.equal(stale.body.visit.summary, "摘要");
+  assert.equal(stale.body.visit.reminders.wrapup_sent_at, "2026-08-21T05:00:00.000Z", "提醒紀錄留著，不然收工提醒會重寄一次");
+  assert.equal(stale.body.visit.signbook.photo_key, "signbook/x/1.jpg");
 });
 
 test("現場動線的捷徑網址：後台自己拿得到，不必開終端機", async () => {
