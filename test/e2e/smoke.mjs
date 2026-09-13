@@ -73,7 +73,8 @@ try {
   await page.click('[data-tab="deck"]');
   await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-slide]").length > 0);
   check((await page.locator("#slideGrid input[data-slide]").count()) === 72, "the master deck's pages are listed even with no visit yet");
-  check(await page.isDisabled("#slidesSave") && await page.isDisabled("#deckBtn") && (await page.isVisible("#deckNeedsVisit")), "…but saving and building are held back until a visit exists, and it says why");
+  check((await page.$("#slidesSave")) === null, "there is no save-slides button — picking pages saves itself");
+  check(await page.isDisabled("#deckBtn") && (await page.isVisible("#deckNeedsVisit")), "…but building is held back until a visit exists, and it says why");
   await page.click('[data-tab="pre"]');
   await page.fill("#emailText", `Dear Prof. Chang,\n\nWe would like to visit on 2026-10-07 at 10:00. My colleague Jane Doe <jane@uwa.edu.au> joins me.\n\nSimon Kilbane, University of Western Australia\nsimon@uwa.edu.au`);
   await page.click("#extractBtn");
@@ -137,9 +138,8 @@ try {
   check((await page.locator("#slideGrid input[data-slide]:checked").count()) === 72, "全選 selects every slide");
   await page.click("#slidesNone");
   await page.click('#slideGrid [data-group-only="lab303"]');
-  await page.click("#slidesSave");
-  await page.waitForFunction(() => /已儲存/.test(document.getElementById("slidesInfo").textContent));
-  check(true, "選頁 saved from the deck tab");
+  await page.waitForFunction(() => /已存 \d+ 頁/.test(document.getElementById("slidesInfo").textContent), null, { timeout: 30000 });
+  check(true, "picking pages saves itself, no button to press");
 
   // 有些參訪只口頭介紹：勾「這場不用簡報」就收起選頁與產檔，而且存得住
   await page.check("#noDeck");
