@@ -150,8 +150,8 @@
         <div><label class="f">第二語言</label><select id="language"><option value="en">English</option><option value="zh">中文</option><option value="ko">한국어</option><option value="ja">日本語</option></select></div>
         <div><label class="f">日期</label><input type="date" id="date"></div>
         <div><label class="f">開始時間</label><input type="time" id="startTime"></div>
-        <div><label class="f">總分鐘</label><input type="number" id="duration" min="15" step="5"></div>
-        <div><label class="f">人數</label><input type="number" id="headcount" min="0"></div>
+        <div><label class="f">結束時間</label><input type="time" id="endTime"><p class="muted mt-1" id="durationInfo"></p></div>
+        <div><label class="f">人數（不確定就留著，之後再改）</label><input type="number" id="headcount" min="0"></div>
         <div><label class="f">對口老師</label><select id="contactTeacher"><option value="張俊彥">張俊彥</option><option value="林寶秀">林寶秀</option><option value="陳惠美">陳惠美</option><option value="張伯茹">張伯茹</option><option value="鄭佳昆">鄭佳昆</option></select></div>
         <div><label class="f">網址代碼</label><input type="text" id="code" placeholder="例如 uwa"><p class="muted mt-1">來賓專頁網址的後半段；寄出信或有人回覆之後就固定了。</p></div>
         <div class="sm:col-span-3"><label class="f">來訪目的</label><input type="text" id="purpose"></div>
@@ -494,6 +494,18 @@
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const ROOMS = ["301", "302", "303", "304", "305"];
+  // **幾點開始、幾點結束**是主辦端真正在填的兩個時間；總分鐘由它們算出來（下游仍吃 duration_minutes）。
+  // 規則與 lib/visit.mjs 的 minutesBetween／endTimeOf 同一套——那一份給伺服器與 CLI，這一份給畫面。
+  const hhmm = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t == null ? "" : t).trim()); if (!m) return null; const h = +m[1], mi = +m[2]; return h > 23 || mi > 59 ? null : h * 60 + mi; };
+  const toHHMM = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  const minutesBetween = (a, b) => { const x = hhmm(a), y = hhmm(b); return x == null || y == null || y <= x ? null : y - x; };
+  const endTimeOf = (v) => { const g = hhmm(v && v.end_time); return g != null ? toHHMM(g) : toHHMM((hhmm(v && v.start_time) ?? 600) + (Number(v && v.duration_minutes) || 150)); };
+  /** 結束時間旁邊那一行：算出來的長度，或「結束時間要晚於開始時間」。 */
+  function showDuration() {
+    const m = minutesBetween($("startTime").value, $("endTime").value);
+    $("durationInfo").textContent = m ? `共 ${m} 分` : "結束時間要晚於開始時間";
+    $("durationInfo").className = m ? "muted mt-1" : "err text-sm mt-1";
+  }
   /**
    * 五間研究室的顏色：**來源是 public/data/labs.json 的 color**（來賓端用同一套）。
    * 載進來就寫進 CSS 變數 --c301…--c305，樣式表裡那五個值只是還沒載到時的備用。
@@ -763,7 +775,7 @@
   function fillForm(v) {
     state.visit = v; state.saved = !!v.visit_id && state.visits.some((x) => x.visit_id === v.visit_id);
     $("orgName").value = v.org?.name || ""; $("orgLocal").value = v.org?.name_local || ""; $("orgType").value = v.org?.type || "university"; $("orgCountry").value = v.org?.country || "";
-    $("language").value = v.language || "en"; $("date").value = v.date || ""; $("startTime").value = v.start_time || "10:00"; $("duration").value = v.duration_minutes || 90; $("headcount").value = v.headcount || 0;
+    $("language").value = v.language || "en"; $("date").value = v.date || ""; $("startTime").value = v.start_time || "10:00"; $("endTime").value = endTimeOf(v); showDuration(); $("headcount").value = v.headcount || 0;
     $("contactTeacher").value = v.contact_teacher || "張俊彥"; $("purpose").value = v.purpose || ""; $("interests").value = (v.interests || []).join(", ");
     $("code").value = v.visit_id ? v.visit_id.slice(11) : ""; $("code").disabled = !!state.urlFixed;
     $("preStatus").textContent = state.saved ? v.visit_id : "";
@@ -780,7 +792,7 @@
   function readForm() {
     const v = { ...(state.visit || emptyVisit()) };
     v.org = { name: $("orgName").value.trim(), name_local: $("orgLocal").value.trim(), type: $("orgType").value, country: $("orgCountry").value.trim() };
-    v.language = $("language").value; v.date = $("date").value; v.start_time = $("startTime").value; v.duration_minutes = Number($("duration").value) || 90; v.headcount = Number($("headcount").value) || 0;
+    v.language = $("language").value; v.date = $("date").value; v.start_time = $("startTime").value; v.end_time = $("endTime").value; v.duration_minutes = minutesBetween(v.start_time, v.end_time) || Number(state.visit?.duration_minutes) || 90; v.headcount = Number($("headcount").value) || 0;
     v.contact_teacher = $("contactTeacher").value; v.purpose = $("purpose").value.trim(); v.interests = $("interests").value.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
     v.guests = [...$("guestTable").tBodies[0].rows].map((tr) => ({ name: tr.cells[0].firstChild.value.trim(), title: tr.cells[1].firstChild.value.trim(), email: tr.cells[2].firstChild.value.trim(), affiliation: tr.cells[3].firstChild.value.trim(), role: tr.cells[4].firstChild.checked ? "lead" : "member" })).filter((g) => g.name || g.email);
     v.programme = [...$("programmeTable").tBodies[0].rows].map((tr) => ({ start: tr.cells[0].firstChild.value, end: tr.cells[1].firstChild.value, kind: tr.cells[2].firstChild.value, title_en: tr.cells[3].firstChild.value, title_2nd: tr.cells[4].firstChild.value, slides_range: tr.cells[5].firstChild.value, rooms: tr.cells[2].firstChild.value === "tour" ? labRoute() : [] }));
@@ -1110,6 +1122,8 @@
     }
   }
   // 訪前分頁裡任何一個欄位改動都會自己存（含名單、流程、動線那幾張表）
+  $("startTime").addEventListener("input", showDuration);
+  $("endTime").addEventListener("input", showDuration);
   $("tab-pre").addEventListener("input", scheduleSave);
   $("tab-pre").addEventListener("change", scheduleSave);
 

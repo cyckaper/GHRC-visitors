@@ -521,7 +521,11 @@
   "上傳母簡報 #/#…": "Uploading the master deck #/#…",
   "母簡報已瘦身：抽掉 # 個影片／音訊、縮小 # 張圖，# → #": "Master deck slimmed: # videos or audio taken out, # images resized, # → #",
   "還有 # 場，在「資料」分頁。": "# more on the Records tab.",
-  "第 2 頁流程表：": "Slide 2, the programme table:"
+  "第 2 頁流程表：": "Slide 2, the programme table:",
+  "結束時間": "End time",
+  "人數（不確定就留著，之後再改）": "Headcount (leave it if you are not sure; change it later)",
+  "共 # 分": "# min in all",
+  "結束時間要晚於開始時間": "The end time has to be later than the start time"
  },
  "patterns": [
   [

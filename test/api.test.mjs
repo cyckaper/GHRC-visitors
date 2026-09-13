@@ -123,7 +123,7 @@ test("extract 跑在背景：一般函式 10 秒不夠，所以回 202 加工作
 test("plan 也跑在背景：提示詞帶整份頁次索引，10 秒同樣不夠", async () => {
   assert.equal((await api("/api/plan", { method: "POST", body: JSON.stringify({ visit: {} }) })).status, 401, "needs the admin token");
   assert.equal((await api("/api/plan", { method: "POST", headers: admin, body: "{}" })).status, 400, "需要 visit");
-  const started = await api("/api/plan", { method: "POST", headers: admin, body: JSON.stringify({ visit: { org: { name: "UWA" }, date: "2026-10-07", start_time: "10:00", duration_minutes: 90 } }) });
+  const started = await api("/api/plan", { method: "POST", headers: admin, body: JSON.stringify({ visit: { org: { name: "UWA" }, date: "2026-10-07", start_time: "10:00", end_time: "11:30" } }) });
   assert.equal(started.status, 202, JSON.stringify(started.body));
   assert.equal((await api(`/api/plan?job=${started.body.job_id}`, { headers: admin })).body.status, "running");
   assert.equal((await api("/api/plan-background", { method: "POST", headers: admin, body: "{}" })).status, 400, "background needs a job_id");
@@ -135,9 +135,30 @@ test("plan 也跑在背景：提示詞帶整份頁次索引，10 秒同樣不夠
   assert.ok(done.body.result.visit.programme.length, "行程留在工作上，前端輪到就拿得到");
 });
 
+test("存檔：幾點開始、幾點結束是主，總分鐘跟著算", async () => {
+  const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const r = await put({ org: { name: "Clock University" }, date: "2026-11-05", code: "clock", start_time: "09:30", end_time: "12:00" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.visit.end_time, "12:00");
+  assert.equal(r.body.visit.duration_minutes, 150, "總分鐘由開始與結束算出來");
+  // 結束早於開始＝填錯：不要把這一場算成負的，沿用原本的長度
+  const bad = await put({ ...r.body.visit, start_time: "09:30", end_time: "08:00" });
+  assert.equal(bad.body.visit.duration_minutes, 150, "填錯不動原本的長度");
+  assert.equal(bad.body.visit.end_time, "12:00");
+  // 舊資料只有總分鐘：結束時間算得回來，來賓端也拿得到
+  const legacy = await put({ org: { name: "Legacy University" }, date: "2026-11-06", code: "legacy", start_time: "10:00", duration_minutes: 90 });
+  assert.equal(legacy.body.visit.end_time, "11:30");
+  const pub = await api(`/api/visits?id=${legacy.body.visit.visit_id}&public=1`);
+  assert.equal(pub.body.visit.end_time, "11:30", "來賓專頁的日期那一行要寫得出幾點到幾點");
+  // 這兩場是這個測試自己建的，收乾淨（後面的測試在數同一個清單）
+  for (const id of [r.body.visit.visit_id, legacy.body.visit.visit_id]) {
+    assert.equal((await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin })).status, 200);
+  }
+});
+
 test("plan → programme, itinerary, slides (always-slides present), then save", async () => {
   const ex = await extract({ email_text: EMAIL });
-  const visit = { ...ex.body.visit, code: "uwa", start_time: "10:00", duration_minutes: 90 };
+  const visit = { ...ex.body.visit, code: "uwa", start_time: "10:00", end_time: "11:30" }; // 90 分鐘
   const p = await plan(visit);
   assert.equal(p.status, 200, JSON.stringify(p.body));
   const planned = p.body.visit;
@@ -493,7 +514,7 @@ test("research: 查網路要一到三分鐘，所以走背景工作；**還沒�
 
 test("排程會參考歷次累積：同類單位選過哪幾頁、哪幾頁被提問（功能 4 回饋功能 2）", async () => {
   // 這時候 store 裡已經有一場存過 slides 的參訪，也跑過一頁摘要（slide_performance 有列）
-  const p = await plan({ org: { name: "Another University", type: "university" }, date: "2026-12-20", start_time: "10:00", duration_minutes: 120 });
+  const p = await plan({ org: { name: "Another University", type: "university" }, date: "2026-12-20", start_time: "10:00", end_time: "12:00" });
   assert.equal(p.status, 200, JSON.stringify(p.body));
   const h = p.body.history;
   assert.ok(h, "有歷史就要帶進排程");
@@ -537,7 +558,7 @@ test("設定：預設值存得起來，外部服務只回「接好了沒」不�
 
 test("一頁摘要不必人記得按：每晚掃一次，過完又有回覆的自己產", async () => {
   const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
-  const v = (await put({ org: { name: "Summary Cron University" }, date: "2026-08-20", code: "sum", start_time: "10:00", duration_minutes: 120 })).body.visit;
+  const v = (await put({ org: { name: "Summary Cron University" }, date: "2026-08-20", code: "sum", start_time: "10:00", end_time: "12:00" })).body.visit;
 
   // 排程函式不是誰都打得動（會花 Claude 的錢）：要嘛是 Netlify 的排程器（POST {next_run}），要嘛帶 token
   assert.equal((await api("/api/summary-cron")).status, 401, "路過的人打不動");

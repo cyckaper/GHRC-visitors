@@ -270,7 +270,7 @@
   addEventListener("hashchange", () => { const w = applySections(); if (w === "email" || w === "respond") $(w === "email" ? "emailSec" : "respond").scrollIntoView({ behavior: "smooth" }); });
   if (visit) {
     $("orgLine").textContent = [visit.org && visit.org.name, visit.org && visit.org.name_local].filter(Boolean).join(" · ");
-    $("dateLine").textContent = formatDate(visit.date, visit.start_time);
+    $("dateLine").textContent = formatDate(visit.date, visit.start_time, visit.end_time);
   }
   $("footerContact").textContent = bi("center_contact") + ":";
 
@@ -464,14 +464,16 @@
       return await r.json();
     } catch (e) { return { ok: false, error: String(e) }; }
   }
-  function formatDate(d, t) {
+  // 來賓在意的是幾點到幾點（不是「幾分鐘」），所以日期那一行寫「10:00 – 12:30」
+  function formatDate(d, t, end) {
     if (!d) return "";
     const dt = new Date(`${d}T${t || "00:00"}:00+08:00`);
     const en = dt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Taipei" });
     const zh = `${d.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$1年$2月$3日")}`;
     const first = primary === "zh" ? zh : en;
     const other = primary === "zh" ? en : secondary === "zh" ? zh : "";
-    return `${first}${t ? " · " + t : ""}${other ? " · " + other : ""}`;
+    const clock = t ? (end && end !== t ? `${t} – ${end}` : t) : "";
+    return `${first}${clock ? " · " + clock : ""}${other ? " · " + other : ""}`;
   }
   function hm(s) { const [h, mm] = String(s || "0:0").split(":").map(Number); return h * 60 + (mm || 0); }
   function taipeiToday() { return new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); }

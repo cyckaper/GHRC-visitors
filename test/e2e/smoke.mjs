@@ -85,6 +85,16 @@ try {
   await page.waitForFunction(() => document.getElementById("orgName").value.length > 0, null, { timeout: 90000 });
   check((await page.textContent("#extractInfo")) === "", "…and the progress line clears once the form is filled");
   check((await page.inputValue("#date")) === "2026-10-07", "extract fills the date");
+  // 主辦端填的是幾點開始、幾點結束（不是「總分鐘」）；長度由這兩個算出來
+  check((await page.$("#duration")) === null, "the form no longer asks for a total in minutes");
+  await page.fill("#startTime", "10:00");
+  await page.fill("#endTime", "12:30");
+  await page.waitForFunction(() => /150/.test(document.getElementById("durationInfo").textContent));
+  check(true, "the form works out the length from the two times");
+  await page.fill("#endTime", "09:00");
+  await page.waitForFunction(() => /晚於|later/.test(document.getElementById("durationInfo").textContent));
+  check(true, "…and says so when the end is before the start");
+  await page.fill("#endTime", "12:30");
   check((await page.locator("#guestTable tbody tr").count()) === 2, "extract lists both guests");
   // 存檔不是一個動作：抽取完就自己建好一場，改網址代碼就跟著改網址（還沒用出去之前）
   await page.waitForSelector("#afterSave:not([hidden])", { timeout: 30000 });

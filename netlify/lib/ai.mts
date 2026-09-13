@@ -89,6 +89,7 @@ export const ExtractedSchema = z.object({
   headcount: z.number().int(),
   date: z.string(),
   start_time: z.string(),
+  end_time: z.string(),
   duration_minutes: z.number().int(),
   contact_teacher: z.string(),
   purpose: z.string(),
@@ -105,7 +106,7 @@ const EXTRACT_SYSTEM = `你是臺大生農學院綠色健康研究中心（GHRC�
 - guests：來訪方**每一位**被點名的人都要列出，含職稱與 email（隨行者的 email 是訪後信寄送的關鍵，不要只留主要窗口）。**名單檔（<file> 區塊、PDF、照片）裡的每一列都是一個人**，表格欄位常見順序是姓名／職稱／單位／email，請對應好；沒有 email 的人也要列，email 留空。主要來賓 role=lead，其餘 member。affiliation 填該人的單位（可能與 org 不同）。
 - org：來訪單位的正式名稱（英文為主，name_local 放當地語言名稱）；type 取 government／university／enterprise／school／ngo／other；country 用英文國名。
 - headcount：預計人數；不知道就用 guests 人數。
-- date：**已確定**的參訪日期（YYYY-MM-DD）；未定則留空字串，把候選日期放 candidate_dates。start_time 用 HH:MM（台北時間），未提到留空。duration_minutes 可用時間（分鐘），未提到給 0。
+- date：**已確定**的參訪日期（YYYY-MM-DD）；未定則留空字串，把候選日期放 candidate_dates。start_time、end_time 用 HH:MM（台北時間），未提到留空——**來信通常寫「10:00-12:30」，照抽**。duration_minutes 只有在信裡直接寫分鐘數（例如「兩小時」）時才給，否則 0。
 - contact_teacher：中心這邊負責聯絡的老師，只能是 ${TEACHERS.join("／")} 之一，看不出來留空。
 - purpose：來訪目的一句話；interests：信中透露的研究興趣關鍵字（英文，每項 2–6 字）。
 - language：來賓的第二語言層：台灣／華語團 zh、韓國 ko、日本 ja，其餘 en。
@@ -194,7 +195,7 @@ export async function researchVisitor(visit: Visit): Promise<VisitBackground> {
   const facts = [
     `單位：${visit.org?.name || "（未填）"}${visit.org?.name_local ? `（${visit.org.name_local}）` : ""}`,
     `單位類型：${visit.org?.type || "未知"}　國家：${visit.org?.country || "未知"}`,
-    `日期：${visit.date || "未定"}　可用時間：${visit.duration_minutes || 0} 分鐘　人數：${visit.headcount || 0}`,
+    `日期：${visit.date || "未定"}　時間：${visit.start_time || "未定"}–${visit.end_time || "未定"}（共 ${visit.duration_minutes || 0} 分鐘）　人數：${visit.headcount || 0}`,
     `來訪目的（來信寫的）：${visit.purpose || "（未填）"}`,
     `興趣關鍵字：${(visit.interests || []).join("、") || "（無）"}`,
     `名單：${(visit.guests || []).map((g) => [g.name, g.title, g.affiliation].filter(Boolean).join("／")).join("；") || "（無）"}`,
@@ -524,7 +525,8 @@ function mockExtract(text: string): ExtractedVisit {
     headcount: Math.max(guests.length, 1),
     date,
     start_time: (text.match(/\b([01]?\d|2[0-3]):[0-5]\d\b/) || [])[0] || "",
-    duration_minutes: /half day|半天/i.test(text) ? 180 : 90,
+    end_time: /half day|半天/i.test(text) ? "14:00" : "12:30",
+    duration_minutes: 0,
     contact_teacher: TEACHERS.find((t) => text.includes(t)) || "張俊彥",
     purpose: "（AI_MOCK）依信件內容自動填入的示範目的",
     interests: ["green infrastructure", "health landscape"],

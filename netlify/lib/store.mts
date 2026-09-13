@@ -233,7 +233,7 @@ function blobsStore(): Store {
 /** 工作表欄位：key → 中文表頭。JSON 欄位存字串。 */
 const SHEETS: Record<string, [string, string][]> = {
   visits: [
-    ["visit_id", "visit_id"], ["date", "日期"], ["start_time", "開始時間"], ["duration_minutes", "總分鐘"],
+    ["visit_id", "visit_id"], ["date", "日期"], ["start_time", "開始時間"], ["end_time", "結束時間"], ["duration_minutes", "總分鐘"],
     ["org_name", "單位名稱"], ["org_name_local", "單位（當地語）"], ["org_type", "單位類型"], ["org_country", "國家"],
     ["headcount", "人數"], ["lead_guest", "主要來賓姓名職稱"], ["guests", "隨行名單(JSON)"], ["contact_teacher", "對口老師"],
     ["purpose", "來訪目的"], ["interests", "興趣關鍵字"], ["language", "語言"], ["programme", "議程(JSON)"], ["itinerary", "動線排程(JSON)"],
@@ -316,7 +316,7 @@ function cell(v: unknown): string {
 function visitToRow(v: Visit): string[] {
   const lead = v.guests?.find((g) => g.role === "lead") || v.guests?.[0];
   const m: Record<string, unknown> = {
-    visit_id: v.visit_id, date: v.date, start_time: v.start_time, duration_minutes: v.duration_minutes,
+    visit_id: v.visit_id, date: v.date, start_time: v.start_time, end_time: v.end_time, duration_minutes: v.duration_minutes,
     org_name: v.org?.name, org_name_local: v.org?.name_local, org_type: v.org?.type, org_country: v.org?.country,
     headcount: v.headcount, lead_guest: lead ? `${lead.name} ${lead.title}`.trim() : "", guests: v.guests, contact_teacher: v.contact_teacher,
     purpose: v.purpose, interests: (v.interests || []).join("、"), language: v.language, programme: v.programme, itinerary: v.itinerary,
