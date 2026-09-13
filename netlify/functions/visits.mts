@@ -3,6 +3,7 @@ import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
 import { briefingBlockMinutes, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, toCSV } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
+import { dropDraft, moveDraft } from "./draft.mts";
 
 /**
  * GET  /api/visits?id=X&public=1   來賓端可見子集（不需授權）
@@ -39,7 +40,7 @@ export default async (req: Request) => {
       const responses = await store.listResponses(id);
       return json({ ok: true, visit: v, responses });
     }
-    const list = (await store.listVisits()).map((v) => ({ visit_id: v.visit_id, date: v.date, org: v.org?.name, type: v.org?.type, country: v.org?.country, headcount: v.headcount, status: v.status, language: v.language }));
+    const list = (await store.listVisits()).map((v) => ({ visit_id: v.visit_id, date: v.date, org: v.org?.name, type: v.org?.type, country: v.org?.country, headcount: v.headcount, status: v.status, language: v.language, guests: (v.guests || []).length, slides: (v.slides || []).length, summary: !!v.summary, updated_at: v.updated_at }));
     return json({ ok: true, visits: list, backend: store.backend });
   }
 
@@ -68,7 +69,10 @@ export default async (req: Request) => {
     merged.created_at = existing?.created_at || nowISO();
     merged.updated_at = nowISO();
     await store.putVisit(merged);
-    if (renamedFrom) await store.deleteVisit(renamedFrom);
+    if (renamedFrom) {
+      await store.deleteVisit(renamedFrom);
+      await moveDraft(renamedFrom, merged.visit_id); // 手上還沒交出去的東西不該跟著舊網址消失
+    }
     await triggerDriveSync(merged.visit_id);
     return json({ ok: true, visit: merged, renamed_from: renamedFrom, url_fixed: renameBlocked });
   }
@@ -83,6 +87,7 @@ export default async (req: Request) => {
     if ((await store.listResponses(id)).length) return fail(409, "這一場已經有來賓回覆了，不刪。要清掉請直接改 Google Sheet 或聯絡管理者。");
     if (visit.letters?.thanks?.sent_at) return fail(409, "這一場的感謝信已經寄出去了，不刪。");
     for (const key of mediaKeys(visit)) await store.deleteMedia(key).catch(() => {});
+    await dropDraft(id);
     await store.deleteVisit(id);
     return json({ ok: true, deleted: id });
   }

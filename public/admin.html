@@ -62,6 +62,7 @@
     <select id="visitSelect" class="!w-auto"><option value="">＋ 新的一場</option></select>
     <span class="muted" id="preStatus"></span>
     <span class="muted mr-auto" id="saveInfo"></span>
+    <button class="btn btn-soft" id="draftDiscard" title="把這一份還沒存成一場的草稿清掉，表單回到空白" hidden>不要這份草稿</button>
     <button class="btn btn-soft" id="deleteBtn" title="整場刪掉：來賓專頁跟著消失。已經有人回覆或已寄出感謝信的不給刪；Drive 備份不動" hidden>刪掉這一場</button>
     <div class="w-full flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" id="progress"></div>
   </div>
@@ -80,6 +81,7 @@
         <span class="muted">名單檔：Word（.docx）、Excel（.xlsx）、CSV／文字、PDF、名單照片，最多 8 個共 5 MB；.doc／.xls 請先另存新格式</span>
       </div>
       <ul id="listFilesInfo" class="text-sm text-stone-600 list-disc pl-5"></ul>
+      <p class="muted" id="emailDraftNote" hidden></p>
       <div class="flex flex-wrap items-center gap-2"><button class="btn" id="extractBtn" title="把貼上的信與附件交給 AI，讀出單位、名單、日期、目的，填進下面的欄位給你改">AI 抽取</button><span class="muted" id="extractInfo"></span></div>
       <ul class="text-sm text-amber-700 list-disc pl-5" id="uncertainties"></ul>
     </div>
@@ -155,6 +157,15 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <div class="card space-y-2">
+      <div class="flex flex-wrap items-baseline gap-2">
+        <h2 class="font-semibold mr-auto">以前做過的參訪 <span class="muted font-normal">點一列就叫出來</span></h2>
+        <button class="btn btn-soft" id="pastMore" title="到「資料」分頁看全部歷次參訪、來賓回覆、動線與一頁摘要" type="button">全部歷次參訪</button>
+      </div>
+      <p class="muted">排新的一場之前先看一眼：<b>同類單位上次怎麼排、選了哪幾頁</b>。點開只是切換到那一場，手上這一場不會掉——沒填完的都先暫存著。</p>
+      <div id="pastVisits" class="text-sm"></div>
     </div>
   </section>
 
@@ -240,6 +251,7 @@
         <span class="muted" id="recInfo"></span>
       </div>
       <audio id="recAudio" controls hidden></audio>
+      <p class="muted" id="dictationDraftNote" hidden></p>
       <div>
         <label class="f">逐字稿（沒錄音也可以直接打字，再按「抽取」）</label>
         <textarea id="transcript" rows="4"></textarea>
@@ -286,6 +298,7 @@
     <div class="card space-y-3">
       <div class="flex items-center justify-between"><h2 class="font-semibold">收件人 <span class="muted font-normal">兩封信共用這份勾選</span></h2><button class="btn btn-soft" id="recipientsRefresh" title="重讀收件人清單（名單上每個人 ＋ 當天在專頁留信箱的人）">重新整理</button></div>
       <div id="recipients" class="space-y-1"></div>
+      <p class="muted" id="letterDraftNote" hidden></p>
     </div>
 
     <div class="card space-y-3" id="confirmCard">
@@ -519,6 +532,7 @@
     return state.indexes;
   }
   async function boot() {
+    localPrune();
     await ensureIndexes();
     renderItinerary();
     await loadVisits();
@@ -543,6 +557,7 @@
     const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
     const pick = r.visits.find((v) => v.visit_id === keep) || r.visits.find((v) => v.date === today) || r.visits[0];
     $("visitSelect").value = keep && !r.visits.some((v) => v.visit_id === keep) ? "" : pick ? pick.visit_id : "";
+    renderPastVisits();
   }
   function emptyVisit() {
     return { visit_id: "", date: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10), start_time: "10:00", duration_minutes: 150, org: { name: "", name_local: "", type: "university", country: "" }, guests: [], headcount: 0, contact_teacher: "張俊彥", purpose: "", interests: [], language: "en", programme: [], itinerary: [{ room: "briefing", minutes: 20, location: "302" }, ...ROOMS.map((room) => ({ room, minutes: 20 }))], slides: [], text_edits: [], materials: { deck_pdf: "", photos: [], links: [] }, letters: {}, deck: {}, signbook: {}, dictation: {}, status: "draft" };
@@ -552,6 +567,10 @@
   $("visitSelect").onchange = () => selectVisit($("visitSelect").value);
   /** 換一場：表單先載好，再把現在看的那個分頁重新整理一次。 */
   async function selectVisit(id) {
+    await flushDraft();
+    for (const f of DRAFT_FIELDS) { const el = $(f); if (el) el.value = ""; } // 不要把上一場的信件、逐字稿留在畫面上
+    draftBase = {};
+    await loadDraft(id || "new");
     if (!id) fillForm(emptyVisit());
     else {
       const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
@@ -559,15 +578,16 @@
       state.responses = r.responses || [];
       fillForm(r.visit);
     }
-    reloadTab(currentTab());
+    await reloadTab(currentTab());
   }
   const currentTab = () => document.querySelector('.tab[aria-selected="true"]')?.dataset.tab || "pre";
-  function reloadTab(name) {
-    if (name === "deck") loadDeckTab();
-    if (name === "wrapup") { loadMaterials(); loadCards(); }
-    if (name === "post") loadRecipients();
-    if (name === "data") loadDataTab();
-    if (name === "settings") loadSettingsTab();
+  async function reloadTab(name) {
+    if (name === "deck") await loadDeckTab();
+    if (name === "wrapup") await Promise.all([loadMaterials(), loadCards()]);
+    if (name === "post") await loadRecipients();
+    if (name === "data") await loadDataTab();
+    if (name === "settings") await loadSettingsTab();
+    applyDraft(); // 伺服器那一份填好了，還沒交出去的東西擺回去
   }
   function fillForm(v) {
     state.visit = v; state.saved = !!v.visit_id && state.visits.some((x) => x.visit_id === v.visit_id);
@@ -577,13 +597,14 @@
     $("code").value = v.visit_id ? v.visit_id.slice(11) : ""; $("code").disabled = !!state.urlFixed;
     $("preStatus").textContent = state.saved ? v.visit_id : "";
     $("deleteBtn").hidden = !state.saved;
+    $("draftDiscard").hidden = state.saved || !state.draft?.fields?.form;
     if (!state.saved) $("saveInfo").textContent = "填上單位名稱就會自己建一場，不必按存檔";
     renderGuests(v.guests || []); renderProgramme(v.programme || []); renderItinerary(v.itinerary); renderDeckState(v); renderBackground(v.background);
     $("rationale").textContent = v.plan_rationale || ""; $("uncertainties").innerHTML = (v.uncertainties || []).map((u) => `<li>${esc(u)}</li>`).join("");
     $("afterSave").hidden = !state.saved;
     renderProgress(v);
     if (state.saved) showSaved(v);
-    $("confirmSubject").value = v.letters?.confirmation?.subject || ""; $("confirmBody").value = v.letters?.confirmation?.body || "";
+    renderPastVisits();
   }
   function readForm() {
     const v = { ...(state.visit || emptyVisit()) };
@@ -842,6 +863,7 @@
     if (!out) return;
     $("listFilesInfo").innerHTML = (out.files_read || []).map((f) => `<li>${esc(f.name)} <span class="ok">已讀（${f.kind === "text" ? `${f.chars} 字` : f.kind === "document" ? "PDF 交給 AI 直接讀" : "照片交給 AI 直接讀"}）</span></li>`).join("") + (out.warnings || []).map((w) => `<li class="err">${esc(w)}</li>`).join("");
     state.saved = false; $("visitSelect").value = "";
+    if (state.draft && state.draft.id !== "new") await migrateDraft(state.draft.id, "new"); // 貼進來的那封信是這一場新的，不留在剛才那一場底下
     fillForm({ ...emptyVisit(), ...out.visit, visit_id: "" });
     await saveVisit();
     flash("抽取完成，請逐項確認（尤其是名單的 email）");
@@ -868,7 +890,7 @@
    */
   const AUTOSAVE_DELAY = 1200;
   function scheduleSave() {
-    if (!$("orgName").value.trim()) return; // 連單位名稱都還沒有，沒東西可存
+    if (!$("orgName").value.trim()) return queueDraft(); // 連單位名稱都還沒有，算不出 visit_id：整份表單先暫存
     clearTimeout(scheduleSave.t);
     $("saveInfo").textContent = "存檔中…";
     scheduleSave.t = setTimeout(saveVisit, AUTOSAVE_DELAY);
@@ -889,6 +911,7 @@
       const focused = document.activeElement;
       fillForm(r.visit);
       if (focused && focused.id) $(focused.id)?.focus?.(); // 重畫表單不要把游標從手上搶走
+      if (first || r.renamed_from) await migrateDraft(first ? "new" : r.renamed_from, r.visit.visit_id);
       if (first) flash(`建好這一場了：${r.visit.visit_id}`);
       else if (r.renamed_from) flash(`網址改成 ${r.visit.visit_id}`);
     } finally {
@@ -898,6 +921,163 @@
   // 訪前分頁裡任何一個欄位改動都會自己存（含名單、流程、動線那幾張表）
   $("tab-pre").addEventListener("input", scheduleSave);
   $("tab-pre").addEventListener("change", scheduleSave);
+
+  /**
+   * 暫存：畫面上「還沒交出去」的東西——貼進來的 email、打好的逐字稿、手改過的信件，
+   * 以及還沒有單位名稱（算不出 visit_id、存不成一場）的整份表單。一關網頁就沒了的東西不該存在。
+   *
+   * 怎麼算「還沒交出去」：現在框裡的值 減去 伺服器剛給的值（base）。所以 AI 草擬填進來、
+   * 信寄出去、口述存入回饋之後重新比對一次，這一筆就自然空了，不必到處記得清。
+   * 存兩份：這台瀏覽器（立刻，關掉網頁也還在）＋站台 /api/draft（換台機器打開接得回來）。
+   */
+  const LETTER_FIELDS = ["confirmSubject", "confirmBody", "thanksSubject", "thanksBody"];
+  const DICT_FIELDS = ["transcript", "dWho", "dRooms", "dQuestions", "dCoop", "dFollow"];
+  const DRAFT_GROUPS = [
+    { note: "emailDraftNote", fields: ["emailText"], text: "上次貼進來、還沒抽取的內容留著。不要的話整段刪掉就好。" },
+    { note: "letterDraftNote", fields: LETTER_FIELDS, text: "手改過、還沒寄出的信件內容帶回來了。按「AI 草擬」會換成新的一份。" },
+    { note: "dictationDraftNote", fields: DICT_FIELDS, text: "上次打的口述內容留著；按「確認並存入回饋」才算收進紀錄。" },
+  ];
+  const DRAFT_FIELDS = DRAFT_GROUPS.flatMap((g) => g.fields);
+  const DRAFT_DELAY = 1500;
+  const LOCAL_PREFIX = "ghrc-draft:";
+  const LOCAL_KEEP = 8;
+  let draftBase = {};
+  const fieldVal = (id) => ($(id)?.value ?? "");
+  const draftId = () => $("visitSelect").value || "new";
+  const someDraft = (d) => !!d && !!d.fields && !!Object.keys(d.fields).length;
+  /** 伺服器剛給的值就是新的比較基準：這幾格算「已經交出去」，暫存裡不再留。 */
+  function rebase(ids) { for (const id of ids) draftBase[id] = fieldVal(id); }
+  function collectDraft() {
+    const fields = {};
+    for (const id of DRAFT_FIELDS) { const v = fieldVal(id); if (v.trim() && v !== (draftBase[id] || "")) fields[id] = v; }
+    // 還沒有單位名稱就存不成一場（visit_id 要用它算），整份表單先暫存起來
+    if (!state.saved) {
+      const f = readForm();
+      if (f.org?.name || (f.guests || []).length || f.purpose || (f.interests || []).length || (f.programme || []).length) fields.form = f;
+    }
+    return fields;
+  }
+  const localRead = (id) => { try { return JSON.parse(localStorage.getItem(LOCAL_PREFIX + id) || "null"); } catch (e) { return null; } };
+  const localWrite = (id, draft) => { try { if (draft) localStorage.setItem(LOCAL_PREFIX + id, JSON.stringify(draft)); else localStorage.removeItem(LOCAL_PREFIX + id); } catch (e) {} };
+  /** 這台瀏覽器只留最近幾場的暫存：貼進來的長信一份幾十 KB，放著會把配額吃光。 */
+  function localPrune() {
+    try {
+      Object.keys(localStorage).filter((k) => k.startsWith(LOCAL_PREFIX))
+        .map((k) => [k, localRead(k.slice(LOCAL_PREFIX.length))?.saved_at || ""])
+        .sort((a, b) => String(b[1]).localeCompare(String(a[1])))
+        .slice(LOCAL_KEEP).forEach(([k]) => localStorage.removeItem(k));
+    } catch (e) {}
+  }
+  function queueDraft() {
+    const id = draftId();
+    const draft = { id, saved_at: new Date().toISOString(), fields: collectDraft() };
+    state.draft = draft;
+    localWrite(id, someDraft(draft) ? draft : null); // 立刻寫這一台：關掉網頁的那一瞬間也不會掉
+    clearTimeout(queueDraft.t);
+    queueDraft.pending = true;
+    queueDraft.t = setTimeout(() => pushDraft(id, draft.fields), DRAFT_DELAY); // 站台那一份晚一點寫就好
+  }
+  async function pushDraft(id, fields) {
+    queueDraft.pending = false;
+    const r = await api("/api/draft", { method: "POST", body: { id, fields } });
+    if (!r.ok && r.too_long) flash(r.error, "err"); // 其他失敗不吵人：這台瀏覽器裡還留著
+  }
+  /** 換一場、離開之前：把還在等那一秒半的那一份送上站台（本機那一份是同步寫的，本來就不會掉）。 */
+  async function flushDraft() {
+    if (!queueDraft.pending) return;
+    clearTimeout(queueDraft.t);
+    await pushDraft(state.draft?.id || draftId(), state.draft?.fields || {});
+  }
+  /** 這一場的暫存：站台一份、這台瀏覽器一份，取時間新的那一份。 */
+  async function loadDraft(id) {
+    const local = localRead(id);
+    const r = await api(`/api/draft?id=${encodeURIComponent(id)}`);
+    const remote = r.ok ? r.draft : null;
+    const pick = !remote || (local && String(local.saved_at) > String(remote.saved_at)) ? local : remote;
+    state.draft = someDraft(pick) ? pick : null;
+  }
+  /** 把還沒交出去的東西擺回畫面。各分頁載完（伺服器那一份填好）之後才做，不然會被蓋掉。 */
+  function applyDraft() {
+    const fields = state.draft?.fields || {};
+    if (fields.form && !state.saved && !$("orgName").value.trim() && !$("guestTable").tBodies[0].rows.length) {
+      fillForm({ ...emptyVisit(), ...fields.form, visit_id: "" });
+      $("saveInfo").textContent = "上次沒填完的內容留著了；填上單位名稱就會自己建一場";
+    }
+    for (const g of DRAFT_GROUPS) {
+      for (const id of g.fields) { const el = $(id); if (el && fields[id] && el.value !== fields[id]) el.value = fields[id]; }
+      const note = $(g.note);
+      if (note) { note.hidden = !g.fields.some((id) => fields[id]); note.textContent = note.hidden ? "" : g.text; }
+    }
+    if (DICT_FIELDS.slice(1).some((id) => fields[id])) $("dictationFields").hidden = false; // 抽出來的那幾格要看得到才改得動
+    $("draftDiscard").hidden = state.saved || !fields.form;
+  }
+  async function clearDraft(id) {
+    clearTimeout(queueDraft.t);
+    queueDraft.pending = false;
+    state.draft = null;
+    localWrite(id, null);
+    await api(`/api/draft?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+  /** 存成一場之前打的東西暫存在 new 底下，存成（或改了網址代碼）之後要跟著新的 visit_id 走。 */
+  async function migrateDraft(from, to) {
+    clearTimeout(queueDraft.t); // 還在等的那一次會寫回舊的 id，作廢
+    queueDraft.pending = false;
+    const fields = { ...(state.draft?.fields || {}) };
+    delete fields.form; // 表單已經是一場真的參訪了，不必再暫存
+    localWrite(from, null);
+    await api(`/api/draft?id=${encodeURIComponent(from)}`, { method: "DELETE" });
+    state.draft = Object.keys(fields).length ? { id: to, saved_at: new Date().toISOString(), fields } : null;
+    localWrite(to, state.draft);
+    if (state.draft) await pushDraft(to, fields);
+  }
+  for (const id of DRAFT_FIELDS) $(id)?.addEventListener("input", queueDraft);
+  // 關掉網頁或切到別的 app（手機上很常）：站台那一份可能還在等那一秒半，用 beacon 補送
+  addEventListener("pagehide", () => {
+    if (!queueDraft.pending || !someDraft(state.draft)) return;
+    try { navigator.sendBeacon("/api/draft", new Blob([JSON.stringify({ id: state.draft.id, fields: state.draft.fields })], { type: "application/json" })); } catch (e) {}
+  });
+  $("draftDiscard").onclick = () => busy($("draftDiscard"), async () => {
+    if (!confirm("清掉這一份還沒存成一場的草稿？表單會回到空白。")) return;
+    await clearDraft("new");
+    for (const id of DRAFT_FIELDS) { const el = $(id); if (el) el.value = ""; }
+    draftBase = {};
+    fillForm(emptyVisit());
+    applyDraft();
+    flash("草稿已清掉");
+  });
+
+  /**
+   * 「以前做過的參訪」：訪前分頁最底下。排新的一場之前最想看的就是同類單位上次怎麼排、選了哪幾頁，
+   * 以前得先跳到「資料」分頁才找得到。點一列就把全站共用的「這一場」切過去——手上這一場有暫存，不會掉。
+   */
+  const ORG_TYPE_LABEL = { government: "政府單位", university: "大學", enterprise: "企業", school: "中小學／學生團", ngo: "NGO", other: "其他" };
+  const PAST_SHOW = 8;
+  function renderPastVisits() {
+    const box = $("pastVisits");
+    if (!box) return;
+    const here = $("visitSelect").value;
+    const rows = [...(state.visits || [])].filter((v) => v.visit_id !== here).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    if (!rows.length) { box.innerHTML = `<p class="muted">還沒有別的參訪。做完第一場之後，這裡就會列出來給下一場參考。</p>`; return; }
+    const type = $("orgType").value;
+    box.innerHTML = rows.slice(0, PAST_SHOW).map((v) => {
+      const bits = [ORG_TYPE_LABEL[v.type] || v.type, v.country, v.headcount ? `${v.headcount} 人` : "", v.slides ? `選了 ${v.slides} 頁` : "沒選頁", v.summary ? "有摘要" : ""].filter(Boolean);
+      return `<button type="button" data-past="${esc(v.visit_id)}" title="切換到這一場：行程、選頁、信件、回覆都跟著換過去" class="w-full text-left border-b last:border-0 py-1.5 hover:bg-stone-50 flex flex-wrap items-baseline gap-x-2">
+        <span class="tabular-nums muted">${esc(v.date)}</span>
+        <span class="font-medium">${esc(v.org || v.visit_id)}</span>
+        ${v.type && v.type === type ? `<span class="text-xs px-1.5 rounded bg-stone-900 text-white">同類</span>` : ""}
+        <span class="muted">${esc(bits.join(" · "))}</span>
+      </button>`;
+    }).join("") + (rows.length > PAST_SHOW ? `<p class="muted mt-1">還有 ${rows.length - PAST_SHOW} 場，在「資料」分頁。</p>` : "");
+  }
+  $("pastVisits").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-past]");
+    if (!b) return;
+    $("visitSelect").value = b.dataset.past;
+    selectVisit(b.dataset.past);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+  $("pastMore").onclick = () => showTab("data");
+  $("orgType").addEventListener("change", renderPastVisits);
   $("deleteBtn").onclick = () => busy($("deleteBtn"), async () => {
     const v = state.visit;
     if (!state.saved || !confirm(`刪掉「${v.org?.name || v.visit_id}」這一場？\n來賓專頁 ${v.visit_id} 會跟著消失。Drive 上的備份不會動。`)) return;
@@ -1152,6 +1332,29 @@
     return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//GHRC Visit//EN", "BEGIN:VEVENT", `UID:${v.visit_id}@visit.healsdesign.org`, `DTSTAMP:${f(new Date())}`, `DTSTART:${f(start)}`, `DTEND:${f(end)}`, `SUMMARY:GHRC 參訪收工：${v.org?.name || v.visit_id}`, `DESCRIPTION:來賓離開後：1) 拍一張簽名簿 2) 講三十秒口述。\\n${url}`, `URL:${url}`, "BEGIN:VALARM", "TRIGGER:PT0M", "ACTION:DISPLAY", "DESCRIPTION:拍簽名簿、三十秒口述", "END:VALARM", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
   }
 
+  /**
+   * 已經拍過、AI 讀過的簽名簿擺回畫面。以前重新整理就一片空白，看起來像東西掉了——
+   * 其實原圖與讀出來的留言都在 visit.signbook 裡，只是沒載回來。
+   */
+  function renderSavedSignbook(sb = {}) {
+    state.signbookEntries = sb.entries || [];
+    if (sb.photo_key) $("signbookPreview").src = mediaUrl(sb.photo_key);
+    else $("signbookPreview").removeAttribute("src");
+    $("signbookPreview").hidden = !sb.photo_key;
+    $("signbookInfo").textContent = sb.read_at ? `已經拍過、也讀過字了（${sb.read_at.slice(0, 16).replace("T", " ")}）。改完記得按「存入回饋」。` : "";
+    $("signbookTranscript").textContent = sb.transcript || "";
+    $("signbookEntries").hidden = !state.signbookEntries.length;
+    renderSignbook();
+  }
+  /** 同理：已經轉好的逐字稿與抽出來的那幾格。 */
+  function renderSavedDictation(d = {}) {
+    $("transcript").value = d.transcript || "";
+    if (d.extracted) fillDictation(d.extracted);
+    else { $("dictationFields").hidden = true; for (const id of DICT_FIELDS.slice(1)) $(id).value = ""; }
+    $("recInfo").textContent = d.audio_key ? `音檔已存：${d.audio_key}` : "";
+    rebase(DICT_FIELDS);
+  }
+
   // ── 收工：簽名簿 ──
   $("signbookFile").onchange = async () => {
     const file = $("signbookFile").files[0]; if (!file) return;
@@ -1217,6 +1420,7 @@
     if (!r) return;
     $("transcript").value = r.transcript || "";
     if (r.extracted) fillDictation(r.extracted);
+    rebase(DICT_FIELDS); queueDraft(); applyDraft();
     $("recInfo").textContent = r.audio_key ? `音檔已存：${r.audio_key}` : "";
     if (r.warning) flash(r.warning, "err"); // 逐字稿有了、抽取沒成：下面自己改
   });
@@ -1224,13 +1428,16 @@
     const r = await runJob("/api/transcribe", { visit_id: $("visitSelect").value, transcript: $("transcript").value }, noteInto("recInfo"), "抽取中……大約半分鐘。");
     if (!r) return;
     if (r.extracted) fillDictation(r.extracted);
+    rebase(DICT_FIELDS); queueDraft(); applyDraft();
     if (r.warning) flash(r.warning, "err");
   });
   function fillDictation(x) { $("dictationFields").hidden = false; $("dWho").value = x.who_came || ""; $("dRooms").value = (x.most_wanted_rooms || []).join(", "); $("dQuestions").value = (x.questions || []).join("\n"); $("dCoop").value = x.cooperation || ""; $("dFollow").value = (x.follow_ups || []).join("\n"); }
   $("dictationSave").onclick = () => busy($("dictationSave"), async () => {
     const extracted = { who_came: $("dWho").value.trim(), most_wanted_rooms: $("dRooms").value.split(/[,，\s]+/).filter((r) => ROOMS.includes(r)), questions: $("dQuestions").value.split("\n").map((s) => s.trim()).filter(Boolean), cooperation: $("dCoop").value.trim(), follow_ups: $("dFollow").value.split("\n").map((s) => s.trim()).filter(Boolean), other: "" };
     const r = await api("/api/transcribe", { method: "POST", body: { visit_id: $("visitSelect").value, action: "save", extracted } });
-    if (!r.ok) return flash(r.error, "err"); $("dictationInfo").textContent = "已存入"; flash("口述已存入回饋");
+    if (!r.ok) return flash(r.error, "err");
+    rebase(DICT_FIELDS); queueDraft(); applyDraft();
+    $("dictationInfo").textContent = "已存入"; flash("口述已存入回饋");
   });
 
   // ── 收工：當天資料（專屬頁面的 PDF、合照、連結） ──
@@ -1245,6 +1452,8 @@
     if (!r.ok) { mnote(`讀不到這場參訪：${r.error}`, "err"); return flash(r.error, "err"); }
     mnote("");
     state.wrapVisit = r.visit;
+    renderSavedSignbook(r.visit.signbook || {});
+    renderSavedDictation(r.visit.dictation || {});
     $("materialsPageLink").textContent = r.visit.page_url; $("materialsPageLink").href = r.visit.page_url;
     // 同一個頁面三種用法：訪前給的網址（QR）、當天的留信箱、訪後的三個回應項目。
     // 後兩個是行程走完才用得到的，所以列在「收工」而不是訪前。
@@ -1346,6 +1555,7 @@
     const before = (v.visit.date || "") >= today;
     $("confirmDue").hidden = !(before && !c?.sent_at);
     $("thanksDue").hidden = !(!before && !t?.sent_at);
+    rebase(LETTER_FIELDS); // 伺服器上這一版才是基準；手改過還沒寄的那一版由 applyDraft 擺回來
   }
   function renderRecipients() {
     $("recipients").innerHTML = state.thanksRecipients.length ? state.thanksRecipients.map((r, i) => `<label class="flex gap-2 items-center"><input type="checkbox" checked data-i="${i}"><span>${esc(r.name)} <span class="muted">${esc(r.email)} · ${r.from === "list" ? "名單" : "現場留信箱"}</span></span></label>`).join("") : `<p class="muted">名單上沒有 email。請回「訪前」補上隨行名單的聯絡方式。</p>`;
@@ -1354,6 +1564,7 @@
     const r = await runJob("/api/letter", { visit_id: $("visitSelect").value, kind: "thanks", sender: $("sender").value }, noteInto("thanksInfo"), "AI 草擬中……大約一分鐘。");
     if (!r) return;
     $("thanksSubject").value = r.draft.subject; $("thanksBody").value = r.draft.body; state.thanksRecipients = r.recipients; renderRecipients();
+    rebase(LETTER_FIELDS); queueDraft(); applyDraft();
   });
   $("copyThanks").onclick = () => copy(`${$("thanksSubject").value}\n\n${$("thanksBody").value}`);
   $("copyConfirm").onclick = () => copy(`${$("confirmSubject").value}\n\n${$("confirmBody").value}`);
@@ -1362,6 +1573,7 @@
     if (!r) return;
     $("confirmSubject").value = r.draft.subject; $("confirmBody").value = r.draft.body;
     state.thanksRecipients = r.recipients; renderRecipients();
+    rebase(LETTER_FIELDS); queueDraft(); applyDraft();
   });
   /** 兩封信寄出去是同一件事：同一份勾選、同一支端點，只差 kind。 */
   function sendLetter(kind) {
@@ -1376,7 +1588,7 @@
       const note = (m) => { $(ids.info).textContent = m; };
       const r = await runJob("/api/letter", { visit_id: $("visitSelect").value, action: "send", kind, sender: $(ids.sender).value, subject: $(ids.subject).value, body: $(ids.body).value, recipients }, note, `寄送中……一封一封寄，${recipients.length} 人大約要一分鐘。`);
       if (!r) return;
-      if (r.sent) { $(ids.info).innerHTML = `<span class="ok">已寄給 ${r.sent_to.length} 人${r.failed?.length ? `，${r.failed.length} 人失敗：${esc(r.failed.map((f) => f.email).join("、"))}` : ""}</span>`; $(ids.mailto).hidden = true; flash(`${label}已寄出`); loadVisits(); loadRecipients(); }
+      if (r.sent) { $(ids.info).innerHTML = `<span class="ok">已寄給 ${r.sent_to.length} 人${r.failed?.length ? `，${r.failed.length} 人失敗：${esc(r.failed.map((f) => f.email).join("、"))}` : ""}</span>`; $(ids.mailto).hidden = true; flash(`${label}已寄出`); rebase([ids.subject, ids.body]); queueDraft(); applyDraft(); loadVisits(); loadRecipients(); }
       else if (r.reason === "gmail_not_configured") { $(ids.info).innerHTML = `<span class="err">尚未寄出：Netlify 沒有設定 Gmail（GMAIL_CLIENT_ID／SECRET／REFRESH_TOKEN）。請用右邊的 mailto 或複製信件自行寄送。</span>`; $(ids.mailto).href = r.mailto; $(ids.mailto).hidden = false; }
       else { $(ids.info).innerHTML = `<span class="err">一封都沒寄成功：${esc((r.failed || []).map((f) => `${f.email}（${f.error}）`).join("；")) || "未知原因"}</span>`; flash("寄送失敗", "err"); }
     });

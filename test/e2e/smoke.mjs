@@ -206,6 +206,20 @@ try {
   check(true, "confirmation letter drafted in the background");
   check(await page.isVisible("#confirmDue"), "before the visit, the confirmation letter is the one flagged as due");
   check((await page.locator("#recipients input").count()) === 2, "both letters share one recipient list");
+
+  // 暫存：手改過還沒寄出的信、貼進來的那封 email，關掉網頁再打開都還在（以前一關就沒了）
+  const draftSaved = page.waitForResponse((r) => r.url().includes("/api/draft") && r.request().method() === "POST", { timeout: 20000 });
+  await page.fill("#confirmBody", (await page.inputValue("#confirmBody")) + "\n\nP.S. 停車請走側門。");
+  await draftSaved;
+  await page.reload();
+  await page.waitForFunction(() => document.getElementById("emailText").value.includes("Simon Kilbane"), null, { timeout: 30000 });
+  check(true, "the pasted email is still there after closing the page — and it followed the visit when the url was renamed");
+  check(await page.isVisible("#emailDraftNote"), "…and it says why that text is sitting there");
+  await page.click('[data-tab="post"]');
+  await page.waitForFunction(() => document.querySelectorAll("#recipients input").length === 2);
+  await page.waitForFunction(() => /停車請走側門/.test(document.getElementById("confirmBody").value), null, { timeout: 30000 });
+  check(true, "a hand-edited letter that was never sent comes back instead of being lost");
+  check(await page.isVisible("#letterDraftNote"), "…and the letters tab says so too");
   await page.click('[data-tab="pre"]');
 
   // 收工分頁：用打字的逐字稿
@@ -257,6 +271,9 @@ try {
 
   // ── 收工分頁的動作二：拍名片 → AI 讀 → 確認後併進這場的名單（拍名片是現場的事，跟簽名簿放一起）──
   await page.click('[data-tab="wrapup"]');
+  // 已經轉好、存過的口述要載回來：以前重新整理就一片空白，看起來像東西掉了
+  await page.waitForFunction(() => document.getElementById("transcript").value.length > 0, null, { timeout: 20000 });
+  check((await page.inputValue("#transcript")).includes("校長") && (await page.inputValue("#dRooms")) === "303", "the dictation already saved for this visit is shown again, not blank");
   check((await page.locator('#tab-data #cardFiles').count()) === 0 && (await page.locator('#tab-wrapup #cardFiles').count()) === 1, "photographing cards sits with the visit-day steps, not in the archive tab");
   await page.waitForFunction(() => document.getElementById("cardStatus").textContent.includes("名單目前"));
   const guestsBefore = Number(/名單目前 (\d+) 人/.exec(await page.textContent("#cardStatus"))[1]);
@@ -287,6 +304,18 @@ try {
   await page.fill("#orgName", "Typo Institute");
   await page.waitForFunction((n) => document.querySelectorAll("#visitSelect option").length === n + 1, beforeDelete, { timeout: 30000 });
   check(true, "typing an organisation name is enough to create the visit");
+
+  // 「以前做過的參訪」：列在訪前分頁底下，點一列就把全站的「這一場」切過去
+  const typoId = await page.inputValue("#visitSelect");
+  await page.waitForFunction(() => document.querySelectorAll('#pastVisits [data-past]').length > 0);
+  check((await page.locator('#pastVisits [data-past="2026-10-07-uwa"]').count()) === 1, "past visits are listed at the bottom of the pre-visit tab");
+  check(/選了 \d+ 頁/.test(await page.textContent("#pastVisits")), "…saying what that visit picked, so the next deck has something to go on");
+  check(/同類/.test(await page.textContent("#pastVisits")), "…and marking the ones of the same organisation type");
+  await page.click('#pastVisits [data-past="2026-10-07-uwa"]');
+  await page.waitForFunction(() => document.getElementById("visitSelect").value === "2026-10-07-uwa");
+  check(true, "clicking one pulls it up as the current visit");
+  await page.selectOption("#visitSelect", typoId);
+  await page.waitForFunction((id) => document.getElementById("visitSelect").value === id, typoId);
   page.once("dialog", (d) => d.accept());
   await page.click("#deleteBtn");
   await page.waitForFunction((n) => document.querySelectorAll("#visitSelect option").length === n, beforeDelete, { timeout: 30000 });

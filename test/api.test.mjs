@@ -577,6 +577,60 @@ test("網址還沒用出去就跟著日期與代碼走；不要的那一場直�
   assert.equal((await api(`/api/visits?id=${d.visit_id}`, { headers: admin })).status, 404);
 });
 
+test("暫存：還沒交出去的東西存得住，改網址跟著走，刪掉那一場就一起消失", async () => {
+  const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const save = (id, fields) => api("/api/draft", { method: "POST", headers: admin, body: JSON.stringify({ id, fields }) });
+  const get = (id) => api(`/api/draft?id=${encodeURIComponent(id)}`, { headers: admin });
+
+  assert.equal((await api("/api/draft?id=new")).status, 401, "暫存裡有貼進來的信，一樣要 token");
+  assert.equal((await save("../etc/passwd", { emailText: "x" })).status, 400, "id 只收 visit_id 或 new");
+
+  // 還沒有單位名稱、存不成一場的那一份：先擺在 new 底下
+  assert.equal((await save("new", { emailText: "Dear Prof. Chang, we would like to visit…", form: { org: { name: "" }, date: "2026-11-20" } })).status, 200);
+  const held = (await get("new")).body.draft;
+  assert.equal(held.fields.emailText.startsWith("Dear Prof. Chang"), true);
+  assert.equal(held.fields.form.date, "2026-11-20");
+  assert.ok(held.saved_at, "有時間才比得出站台與這台瀏覽器哪一份新");
+
+  // 存成一場之後改網址代碼：暫存跟著新的 visit_id 走，不然手改過的信會跟著舊網址不見
+  const v = (await put({ org: { name: "Draft Org" }, date: "2026-11-20", code: "dft" })).body.visit;
+  await save(v.visit_id, { thanksBody: "手改過、還沒寄出的感謝信" });
+  const renamed = (await put({ ...v, code: "dft2" })).body.visit;
+  assert.equal(renamed.visit_id, "2026-11-20-dft2");
+  assert.equal((await get(v.visit_id)).body.draft, null, "舊網址底下不留一份");
+  assert.equal((await get(renamed.visit_id)).body.draft.fields.thanksBody, "手改過、還沒寄出的感謝信");
+
+  // 交出去了（寄了、存了）＝前端重新比對，送上來的就是空的 → 這一筆刪掉
+  assert.equal((await save(renamed.visit_id, {})).body.draft, null);
+  assert.equal((await get(renamed.visit_id)).body.draft, null);
+
+  // 一格最多 20 萬字（貼一封長信的上限，跟 /api/extract 一致），整筆太大就不收——
+  // 但要講清楚（前端只在這種情形才吵人，其他失敗有本機那一份頂著）
+  const long = "字".repeat(200000);
+  assert.equal((await save(renamed.visit_id, { emailText: long + "超過的部分會被切掉" })).body.draft.fields.emailText.length, 200000);
+  const tooLong = await save(renamed.visit_id, { emailText: long, transcript: long, confirmBody: long });
+  assert.equal(tooLong.status, 413);
+  assert.equal(tooLong.body.too_long, true);
+
+  // 整場刪掉：暫存不該留在後面
+  await save(renamed.visit_id, { emailText: "還在打的內容" });
+  assert.equal((await api(`/api/visits?id=${renamed.visit_id}`, { method: "DELETE", headers: admin })).status, 200);
+  assert.equal((await get(renamed.visit_id)).body.draft, null);
+  assert.equal((await api(`/api/draft?id=new`, { method: "DELETE", headers: admin })).status, 200);
+  assert.equal((await get("new")).body.draft, null);
+});
+
+test("參訪清單帶得出「以前做過的」那一列要講的話：選了幾頁、有沒有摘要", async () => {
+  const list = (await api("/api/visits", { headers: admin })).body.visits;
+  const row = list.find((v) => v.visit_id === visitId);
+  assert.ok(row, "剛做過的那一場在清單裡");
+  assert.equal(typeof row.slides, "number", "選了幾頁");
+  assert.equal(typeof row.summary, "boolean", "有沒有一頁摘要");
+  assert.equal(typeof row.guests, "number", "名單幾個人");
+  assert.ok(row.slides > 0, "這一場排過行程，選過頁");
+  assert.equal(row.type, "university");
+});
+
 test("背景工作的規矩：每一支跑得久的 AI 都一樣", async () => {
   const started = await api("/api/summary", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId }) });
   assert.equal(started.status, 202, JSON.stringify(started.body));
