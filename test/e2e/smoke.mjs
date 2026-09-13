@@ -71,8 +71,9 @@ try {
 
   // 一場參訪都還沒有的時候，簡報分頁仍要列出母簡報的頁次（只是不能存、不能產檔）
   await page.click('[data-tab="deck"]');
-  await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-slide]").length > 0);
-  check((await page.locator("#slideGrid input[data-slide]").count()) === 72, "the master deck's pages are listed even with no visit yet");
+  await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]").length > 0);
+  check((await page.locator("#slideGrid input[data-block]").count()) === 16, "the master deck's blocks are listed even with no visit yet");
+  check((await page.locator("#slideGrid input[data-slide]").count()) === 0, "…and there is no per-page checkbox to wade through");
   check((await page.$("#slidesSave")) === null, "there is no save-slides button — picking pages saves itself");
   check(await page.isDisabled("#deckBtn") && (await page.isVisible("#deckNeedsVisit")), "…but building is held back until a visit exists, and it says why");
   await page.click('[data-tab="pre"]');
@@ -134,18 +135,20 @@ try {
 
   // ── 簡報分頁：選頁、不用簡報、產檔（從進度線那一格跳過去——訪前不再放跳分頁的按鈕）──
   await page.click('#progress [data-go="deck"]');
-  await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-slide]").length > 0);
+  await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]").length > 0);
   check((await page.inputValue("#visitSelect")) === "2026-10-07-uwa", "the progress line's 簡報 cell opens the deck tab on this visit");
-  check((await page.locator("#slideGrid input[data-slide]:checked").count()) >= 5, "the plan's slides are waiting in the deck tab");
-  check((await page.locator("#slideGrid fieldset[data-group]").count()) >= 10, "slides are grouped into blocks");
+  check((await page.locator("#slideGrid input[data-block]:checked").count()) >= 2, "the plan's blocks are waiting in the deck tab");
+  // 選頁是「一個區塊一個勾」：必選的兩區鎖住，其他的整區進出
+  const slideCount = async () => Number(/、(\d+) 頁/.exec(await page.textContent("#slideCount"))[1]);
+  check((await page.locator("#slideGrid input[data-block][disabled]").count()) === 2, "the two mandatory blocks are locked on");
   await page.click("#slidesNone");
-  check((await page.locator("#slideGrid input[data-slide]:checked").count()) === 5, "全不選 keeps only the five always-slides");
+  check((await slideCount()) === 5, "全不選 keeps only the five always-slides");
   await page.click('#slideGrid [data-group-only="lab302"]');
-  check((await page.locator('#slideGrid [data-group="lab302"] input[data-slide]:checked').count()) === 8 && (await page.locator("#slideGrid input[data-slide]:checked").count()) === 13, "只選這區 selects the whole block plus always-slides");
-  await page.check('#slideGrid [data-group-toggle="ch06"]');
-  check((await page.locator("#slideGrid input[data-slide]:checked").count()) === 19, "block toggle adds the whole block");
+  check((await page.isChecked('#slideGrid [data-block="lab302"]')) && (await slideCount()) === 13, "只選這區 takes the whole block plus the always-slides");
+  await page.check('#slideGrid [data-block="ch06"]');
+  check((await slideCount()) === 19, "ticking a block adds all of its pages at once");
   await page.click("#slidesAll");
-  check((await page.locator("#slideGrid input[data-slide]:checked").count()) === 72, "全選 selects every slide");
+  check((await slideCount()) === 72, "全選 selects every block");
   await page.click("#slidesNone");
   await page.click('#slideGrid [data-group-only="lab303"]');
   await page.waitForFunction(() => /已存 \d+ 頁/.test(document.getElementById("slidesInfo").textContent), null, { timeout: 30000 });
@@ -162,12 +165,12 @@ try {
   check(await page.isChecked("#noDeck"), "「不用簡報」survives a reload of the tab (stored on the visit)");
   await page.uncheck("#noDeck");
   await page.waitForSelector("#deckWork:not([hidden])");
-  await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-slide]:checked").length > 0);
+  await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]:checked").length > 0);
 
   // 一載入就直接點「簡報」分頁（boot 可能還沒跑完）也要看得到選項，不能一片空白
   await page.reload();
   await page.click('[data-tab="deck"]');
-  await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-slide]").length > 0, null, { timeout: 20000 });
+  await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]").length > 0, null, { timeout: 20000 });
   check(true, "the slide options are there even when the deck tab is opened before the page finished booting");
 
   // 直接在瀏覽器產 .pptx：站台沒有母簡報 → 按「產生簡報」直接跳選檔（這裡用合成母簡報）→ 下載 → 結構驗證
@@ -193,7 +196,7 @@ try {
     await page.waitForFunction(() => /場參訪/.test(document.getElementById("backendInfo").textContent));
     await page.click('[data-tab="deck"]');
     await page.selectOption("#visitSelect", "2026-10-07-uwa");
-    await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-slide]").length > 0);
+    await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]").length > 0);
     await page.waitForFunction(() => /移除/.test(document.getElementById("masterRow").textContent));
     const [download2] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), page.click("#deckBtn")]);
     const pptxPath2 = path.join(tmp, "browser2.pptx");
@@ -346,6 +349,7 @@ try {
   // 建錯的那一場：直接刪掉（不必先想「要不要存」）
   await page.click('[data-tab="pre"]');
   await page.selectOption("#visitSelect", "");
+  await page.waitForFunction(() => document.getElementById("preStatus").textContent === "" && document.getElementById("orgName").value === ""); // 表單真的空了才打字
   const beforeDelete = await page.locator("#visitSelect option").count();
   await page.fill("#orgName", "Typo Institute");
   await page.waitForFunction((n) => document.querySelectorAll("#visitSelect option").length === n + 1, beforeDelete, { timeout: 30000 });

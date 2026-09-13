@@ -187,10 +187,10 @@
 
     <div id="deckWork" class="space-y-5">
       <div class="card space-y-3">
-        <div class="flex flex-wrap items-center justify-between gap-2"><h2 class="font-semibold">選用頁次 <span id="slideCount" class="muted font-normal"></span></h2><span class="muted">依區塊勾選：區塊標題的方框整區選；「只選這區」會清掉其他區塊；必選頁（封面、流程、架構、核心宣稱、謝謝）永遠保留。勾完自己會存</span></div>
-        <div class="flex flex-wrap gap-2"><button type="button" class="btn btn-soft" id="slidesAll" title="把母簡報全部 72 頁都選上（很少這樣做，時間不夠）">全選</button><button type="button" class="btn btn-soft" id="slidesNone" title="清掉所有勾選，只留封面、流程、架構、核心宣稱、謝謝這幾頁">全不選（保留必選頁）</button></div>
+        <div class="flex flex-wrap items-center justify-between gap-2"><h2 class="font-semibold">選用頁次 <span id="slideCount" class="muted font-normal"></span></h2><span class="muted">一個區塊一個勾，整區一起進去——不必逐頁挑。「只選這區」會清掉其他區塊；必選頁（封面、流程、架構、核心宣稱、謝謝）永遠保留，畫面上是鎖住的。勾完自己會存</span></div>
+        <div class="flex flex-wrap gap-2"><button type="button" class="btn btn-soft" id="slidesAll" title="把母簡報的每一個區塊都選上（很少這樣做，時間不夠）">全選</button><button type="button" class="btn btn-soft" id="slidesNone" title="清掉所有勾選，只留封面、流程、架構、核心宣稱、謝謝這幾頁">全不選（保留必選頁）</button></div>
         <div class="space-y-2" id="slideGrid"></div>
-        <p class="muted" id="deckNeedsVisit" hidden>這裡列的是母簡報的頁次，先看先勾都可以；但要記得住、產得出 .pptx，得先到「訪前」填一場參訪（填了單位名稱就會自己建一場）。</p>
+        <p class="muted" id="deckNeedsVisit" hidden>這裡列的是母簡報的區塊，先看先勾都可以；但要記得住、產得出 .pptx，得先到「訪前」填一場參訪（填了單位名稱就會自己建一場）。</p>
         <p class="muted" id="slidesInfo"></p>
       </div>
 
@@ -595,13 +595,16 @@
     // 不然慢的那一輪後回來，畫面上的資料會跟上面選的那一場對不起來
     const seq = (selectVisit.seq = (selectVisit.seq || 0) + 1);
     const stale = () => seq !== selectVisit.seq;
-    await flushDraft();
-    if (stale()) return;
+    // **先同步換畫面，再去拿資料**：切到「＋ 新的一場」的人常常馬上就開始打字，
+    // 如果等資料回來才清空表單，剛打的字會被清掉（而且看起來像沒反應——存檔也不會發生）
     for (const f of DRAFT_FIELDS) { const el = $(f); if (el) el.value = ""; } // 不要把上一場的信件、逐字稿留在畫面上
     draftBase = {};
+    if (!id) fillForm(emptyVisit());
+    await flushDraft();
+    if (stale()) return;
     await loadDraft(id || "new");
     if (stale()) return;
-    if (!id) fillForm(emptyVisit());
+    if (!id) { /* 表單前面已經清好了 */ }
     else {
       const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
       if (stale()) return;
@@ -761,8 +764,7 @@
     if (saveSlides.running) { scheduleSlidesSave.t = setTimeout(saveSlides, AUTOSAVE_DELAY); return; }
     saveSlides.running = true;
     try {
-      const slides = slideInputs().filter((i) => i.checked).map((i) => Number(i.value));
-      const r = await api("/api/visits", { method: "POST", body: { ...v, slides } });
+      const r = await api("/api/visits", { method: "POST", body: { ...v, slides: chosenSlides() } });
       if (!r.ok) { $("slidesInfo").textContent = ""; return flash(`選頁存不起來：${r.error}`, "err"); }
       afterDeckSave(r.visit);
       $("slidesInfo").textContent = `已存 ${r.visit.slides.length} 頁 ${(r.visit.updated_at || "").slice(11, 16)}`;
@@ -779,6 +781,11 @@
     const byN = new Map(slides.map((s) => [s.n, s]));
     return groups.map((g) => ({ ...g, items: g.slides.map((n) => byN.get(n)).filter(Boolean) })).filter((g) => g.items.length);
   }
+  /**
+   * 選用頁次：**一個區塊一個勾**（`public/data/slides.json` 的 groups），不勾單頁。
+   * 要決定的是「這一場要不要講 302 規劃室」，不是二十幾個核取方塊；母簡報改版時比對的也是區塊。
+   * required 的區塊（必選頁）鎖住、永遠在。裡面有哪幾頁點開來看，但那只是說明，不是可勾的東西。
+   */
   function renderSlideGrid(selected = []) {
     const set = new Set(selected);
     const groups = slideGroups();
@@ -786,46 +793,46 @@
     $("slideGrid").innerHTML = groups.map((g) => {
       const ns = g.items.map((s) => s.n);
       const range = ns.length > 1 ? `${String(ns[0]).padStart(2, "0")}–${String(ns[ns.length - 1]).padStart(2, "0")}` : String(ns[0]).padStart(2, "0");
-      return `<fieldset class="card !p-3 !rounded-lg" data-group="${g.id}">
-        <div class="flex flex-wrap items-center gap-2 mb-2">
-          <label class="flex items-center gap-2 font-medium"><input type="checkbox" data-group-toggle="${g.id}"> ${esc(g.title)} <span class="muted">${range}</span></label>
-          <span class="muted" data-group-count="${g.id}"></span>
-          <button type="button" class="muted underline ml-auto" data-group-only="${g.id}">只選這區</button>
+      const mins = Math.max(1, Math.round(g.items.reduce((n, x) => n + (x.minutes || 1), 0)));
+      const videos = g.items.filter((x) => x.video).length;
+      const on = g.required || g.items.some((s) => set.has(s.n));
+      return `<div class="card !p-3 !rounded-lg" data-group="${g.id}">
+        <div class="flex flex-wrap items-start gap-2">
+          <label class="flex items-start gap-2 min-w-0 cursor-pointer">
+            <input type="checkbox" data-block="${g.id}" class="mt-1" ${on ? "checked" : ""} ${g.required ? "disabled" : ""}>
+            <span class="min-w-0"><span class="font-medium">${esc(g.title)}</span>
+            <span class="muted">　${range} · ${ns.length} 頁 · 約 ${mins} 分${videos ? ` · ${videos} 段影片` : ""}${g.required ? " · 必選" : ""}</span></span>
+          </label>
+          ${g.required ? "" : `<button type="button" class="muted underline ml-auto" data-group-only="${g.id}">只選這區</button>`}
         </div>
-        <div class="slide-grid">${g.items.map((s) => `<label class="flex gap-1 items-start"><input type="checkbox" data-slide value="${s.n}" ${set.has(s.n) || s.always ? "checked" : ""} ${s.always ? "disabled" : ""}><span><span class="muted">${String(s.n).padStart(2, "0")}</span> ${esc(s.title)}${s.video ? " ▶" : ""}${s.always ? ' <span class="muted">必選</span>' : ""}</span></label>`).join("")}</div>
-      </fieldset>`;
+        <details class="mt-1 ml-6"><summary class="muted cursor-pointer">這一區有哪幾頁</summary><ul class="muted list-disc pl-5 mt-1">${g.items.map((x) => `<li>${String(x.n).padStart(2, "0")} ${esc(x.title)}${x.video ? " ▶" : ""}</li>`).join("")}</ul></details>
+      </div>`;
     }).join("");
-    syncSlideGroups();
+    updateSlideCount();
   }
-  const slideInputs = (groupId) => [...document.querySelectorAll(`#slideGrid ${groupId ? `[data-group="${groupId}"] ` : ""}input[data-slide]`)];
-  const setSlides = (inputs, on) => inputs.forEach((i) => { if (!i.disabled) i.checked = on; });
-  $("slideGrid").addEventListener("change", (e) => {
-    const t = e.target;
-    if (t.matches("[data-group-toggle]")) setSlides(slideInputs(t.dataset.groupToggle), t.checked);
-    syncSlideGroups();
-  });
+  const blockInputs = () => [...document.querySelectorAll("#slideGrid input[data-block]")];
+  /** 勾起來的區塊 → 實際頁次（必選頁永遠在，順序依母簡報頁序）。 */
+  function chosenSlides() {
+    const groups = slideGroups();
+    const picked = new Set(blockInputs().filter((i) => i.checked).map((i) => i.dataset.block));
+    const out = new Set((state.slides?.slides || []).filter((s) => s.always).map((s) => s.n));
+    for (const g of groups) if (g.required || picked.has(g.id)) for (const s of g.items) out.add(s.n);
+    return [...out].sort((a, b) => a - b);
+  }
+  const setBlocks = (on, only) => blockInputs().forEach((i) => { if (!i.disabled) i.checked = only ? i.dataset.block === only : on; });
+  $("slideGrid").addEventListener("change", (e) => { if (e.target.matches("[data-block]")) { updateSlideCount(); scheduleSlidesSave(); } });
   $("slideGrid").addEventListener("click", (e) => {
     const b = e.target.closest("[data-group-only]");
     if (!b) return;
-    setSlides(slideInputs(), false); setSlides(slideInputs(b.dataset.groupOnly), true); syncSlideGroups(); scheduleSlidesSave();
+    setBlocks(false, b.dataset.groupOnly); updateSlideCount(); scheduleSlidesSave();
   });
-  $("slidesAll").onclick = () => { setSlides(slideInputs(), true); syncSlideGroups(); scheduleSlidesSave(); };
-  $("slidesNone").onclick = () => { setSlides(slideInputs(), false); syncSlideGroups(); scheduleSlidesSave(); };
-  function syncSlideGroups() {
-    for (const g of slideGroups()) {
-      const inputs = slideInputs(g.id);
-      const on = inputs.filter((i) => i.checked).length;
-      const toggle = document.querySelector(`#slideGrid [data-group-toggle="${g.id}"]`);
-      if (toggle) { toggle.checked = on === inputs.length; toggle.indeterminate = on > 0 && on < inputs.length; }
-      const count = document.querySelector(`#slideGrid [data-group-count="${g.id}"]`);
-      if (count) count.textContent = `${on}/${inputs.length} 頁`;
-    }
-    updateSlideCount();
-  }
+  $("slidesAll").onclick = () => { setBlocks(true); updateSlideCount(); scheduleSlidesSave(); };
+  $("slidesNone").onclick = () => { setBlocks(false); updateSlideCount(); scheduleSlidesSave(); };
   function updateSlideCount() {
-    const chosen = slideInputs().filter((i) => i.checked).map((i) => Number(i.value));
+    const chosen = chosenSlides();
+    const blocks = blockInputs().filter((i) => i.checked).length;
     const mins = chosen.reduce((s, n) => s + ((state.slides?.slides || []).find((x) => x.n === n)?.minutes || 1), 0);
-    $("slideCount").textContent = `（${chosen.length} 頁，約 ${Math.round(mins)} 分鐘）`;
+    $("slideCount").textContent = `（${blocks} 區、${chosen.length} 頁，約 ${Math.round(mins)} 分鐘）`;
   }
 
   // ── 訪前：訪客背景研判（訪前功課） ──
@@ -1347,7 +1354,7 @@
       $("deckReport").innerHTML = "";
       try {
         // 規格一律用畫面上現在勾的那些頁：不必先按「儲存選頁」，下面存檔時會一起存回去
-        const spec = state.deckVisit && { ...state.deckVisit, slides: slideInputs().filter((i) => i.checked).map((i) => Number(i.value)) };
+        const spec = state.deckVisit && { ...state.deckVisit, slides: chosenSlides() };
         if (!spec) throw new Error("請先選一場參訪");
         const lang = spec.language || "zh";
         const core = await deckCore();
