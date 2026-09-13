@@ -4,7 +4,6 @@ import { getStore } from "../lib/store.mts";
 import { digestSuggestions, summarizeVisit } from "../lib/ai.mts";
 import { backgroundHandler } from "../lib/jobs.mts";
 import type { SlidePerf } from "../lib/types.mts";
-import { reconcileTimeline } from "../../lib/timeline.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
 
 /** 一頁摘要與跨場次彙整（背景函式，15 分鐘上限）。 */
@@ -23,9 +22,8 @@ export default backgroundHandler<{ visit_id?: string; digest?: boolean }>("摘�
 
   const visit = await store.getVisit(String(input.visit_id || ""));
   if (!visit) throw new Error("找不到這次參訪");
-  const [responses, signals, slidesIndex] = await Promise.all([store.listResponses(visit.visit_id), store.listTimeline(visit.visit_id), loadPublicData("slides")]);
-  const timeline = reconcileTimeline(visit, signals);
-  const summary = await summarizeVisit(visit, responses, timeline);
+  const [responses, slidesIndex] = await Promise.all([store.listResponses(visit.visit_id), loadPublicData("slides")]);
+  const summary = await summarizeVisit(visit, responses);
   visit.summary = summary;
   visit.summary_at = nowISO(); // summary-cron 靠這個判斷「回覆比摘要新」→ 自己重寫一份
   visit.updated_at = nowISO();
@@ -50,5 +48,5 @@ export default backgroundHandler<{ visit_id?: string; digest?: boolean }>("摘�
     await store.appendSlidePerformance(rows);
   }
   await triggerDriveSync(visit.visit_id);
-  return { summary, timeline };
+  return { summary };
 });

@@ -46,8 +46,8 @@ export default async (req: Request) => {
     const key = String(body.key || "");
     const item = plan(visit).find((x) => x.key === key);
     if (!item) return fail(400, "這一項不在備份清單裡");
-    const [responses, timeline] = await Promise.all([store.listResponses(visit.visit_id), store.listTimeline(visit.visit_id)]);
-    const payload = await itemBytes(visit, responses, timeline, key);
+    const responses = await store.listResponses(visit.visit_id);
+    const payload = await itemBytes(visit, responses, key);
     if (!payload) return fail(404, `媒體庫裡找不到 ${key}`);
     const folder = await ensureVisitFolder(visit);
     const file = await uploadItem(folder, item.name, payload.mime, payload.bytes);

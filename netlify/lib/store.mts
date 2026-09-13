@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile, readdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { createSign } from "node:crypto";
 import { env } from "./http.mts";
-import type { ResponseRow, SlidePerf, TimelineSignal, Visit } from "./types.mts";
+import type { ResponseRow, SlidePerf, Visit } from "./types.mts";
 
 /**
  * 資料層。三種後端，靠 STORE_BACKEND 切換：
@@ -19,8 +19,6 @@ export interface Store {
   deleteVisit(id: string): Promise<void>;
   listResponses(visitId?: string): Promise<ResponseRow[]>;
   appendResponse(r: ResponseRow): Promise<void>;
-  listTimeline(visitId?: string): Promise<TimelineSignal[]>;
-  appendTimeline(t: TimelineSignal): Promise<void>;
   listSlidePerformance(visitId?: string): Promise<SlidePerf[]>;
   appendSlidePerformance(rows: SlidePerf[]): Promise<void>;
   putMedia(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
@@ -123,15 +121,6 @@ function fileStore(): Store {
       all.push(r);
       await writeJsonFile(f("responses"), all);
     },
-    async listTimeline(visitId) {
-      const all = await readJsonFile<TimelineSignal[]>(f("timeline"), []);
-      return visitId ? all.filter((r) => r.visit_id === visitId) : all;
-    },
-    async appendTimeline(t) {
-      const all = await readJsonFile<TimelineSignal[]>(f("timeline"), []);
-      all.push(t);
-      await writeJsonFile(f("timeline"), all);
-    },
     async listSlidePerformance(visitId) {
       const all = await readJsonFile<SlidePerf[]>(f("slide_performance"), []);
       return visitId ? all.filter((r) => r.visit_id === visitId) : all;
@@ -212,12 +201,6 @@ function blobsStore(): Store {
     async appendResponse(r) {
       await appendJson(`responses/${r.visit_id}/`, r);
     },
-    async listTimeline(visitId) {
-      return listJson<TimelineSignal>(visitId ? `timeline/${visitId}/` : "timeline/");
-    },
-    async appendTimeline(t) {
-      await appendJson(`timeline/${t.visit_id}/`, t);
-    },
     async listSlidePerformance(visitId) {
       return listJson<SlidePerf>(visitId ? `slideperf/${visitId}/` : "slideperf/");
     },
@@ -245,7 +228,6 @@ const SHEETS: Record<string, [string, string][]> = {
     ["most_wanted_rooms", "最想看的研究室"], ["cooperate_rooms", "想合作的研究室"], ["next_actions", "希望我們做什麼"], ["next_other", "自填內容"],
     ["signbook_text", "簽名簿留言"], ["suggestion", "開放建議"], ["note", "備註"], ["submitted_at", "填答時間"],
   ],
-  timeline: [["visit_id", "visit_id"], ["room", "空間"], ["at", "時間"], ["source", "訊號來源"], ["note", "備註"]],
   slide_performance: [["visit_id", "visit_id"], ["org_type", "單位類型"], ["slide", "頁次"], ["used", "選用"], ["asked", "被提問"], ["mentioned", "回饋提及"]],
 };
 
@@ -356,7 +338,6 @@ function parseJSON<T>(s: string, fallback: T): T {
 
 function sheetsStore(media: { putMedia: Store["putMedia"]; getMedia: Store["getMedia"]; deleteMedia: Store["deleteMedia"] }): Store {
   const responseRow = (r: ResponseRow) => SHEETS.responses.map(([k]) => cell((r as any)[k]));
-  const timelineRow = (t: TimelineSignal) => SHEETS.timeline.map(([k]) => cell((t as any)[k]));
   const perfRow = (p: SlidePerf) => SHEETS.slide_performance.map(([k]) => cell((p as any)[k]));
   const toResponse = (o: Record<string, string>): ResponseRow => ({
     visit_id: o.visit_id, source: o.source, anonymous: o.anonymous === "true", name: o.name, email: o.email,
@@ -403,14 +384,6 @@ function sheetsStore(media: { putMedia: Store["putMedia"]; getMedia: Store["getM
     },
     async appendResponse(r) {
       await appendRows("responses", [responseRow(r)]);
-    },
-    async listTimeline(visitId) {
-      const { rows } = await readTable("timeline");
-      const all = rows.map((o) => ({ visit_id: o.visit_id, room: o.room, at: o.at, source: o.source, note: o.note }));
-      return visitId ? all.filter((r) => r.visit_id === visitId) : all;
-    },
-    async appendTimeline(t) {
-      await appendRows("timeline", [timelineRow(t)]);
     },
     async listSlidePerformance(visitId) {
       const { rows } = await readTable("slide_performance");

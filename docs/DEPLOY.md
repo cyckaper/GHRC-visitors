@@ -10,7 +10,6 @@
 |---|---|---|
 | `ANTHROPIC_API_KEY` | ✔ | Claude API。讀信、排程、草擬信件、簽名簿讀字、口述抽取、摘要、翻譯 |
 | `ADMIN_TOKEN` | ✔ | 主辦端登入用的長隨機字串（`openssl rand -hex 24`）。只給承辦與主持人 |
-| `SIGNAL_KEY` | ✔ | 現場訊號（NFC 捷徑、簡報捷徑）的共用金鑰 |
 | `SITE_URL` | 建議 | `https://visit.healsdesign.org`；專屬網址與信裡的連結用它組 |
 | `OPENAI_API_KEY` | 選 | Whisper，只用於主持人的三十秒口述；沒有就在後台打字輸入逐字稿 |
 | `CLAUDE_MODEL` | 選 | 預設 `claude-opus-5` |
@@ -23,20 +22,20 @@
 4. Deploy。部署後：`https://visit.healsdesign.org/admin.html` 用 `ADMIN_TOKEN` 登入。
    「訪前」的 **AI 查訪客背景** 會用 Claude 的伺服器端網路搜尋（每次查幾個網頁，另外計費）；帳號沒開網路搜尋也不會壞，只會退回「只讀來信」的研判並在畫面上標明。**一台裝置只要登入一次**：伺服器會發一個 HttpOnly cookie（180 天，每次打開後台自動續期），換手機或換瀏覽器才要再貼一次；按「登出」就清掉。
 
-**資料在哪**：預設在 Netlify Blobs（store `ghrc-visit`：`visits/`、`responses/`、`timeline/`、`slideperf/`、`media/`）。後台「資料」分頁可匯出四張表的 CSV。Deploy Preview 與分支部署用 deploy-scoped store，不會混進正式資料。
+**資料在哪**：預設在 Netlify Blobs（store `ghrc-visit`：`visits/`、`responses/`、`slideperf/`、`media/`）。後台「資料」分頁可匯出三張表的 CSV。Deploy Preview 與分支部署用 deploy-scoped store，不會混進正式資料。
 
 **排程（Netlify Scheduled Functions，`export const config = { schedule }`）**：`summary-cron`（台北一點：過完又有回饋的參訪自己產一頁摘要）、
 `drive-cron`（兩點：備份補漏）、`reminder-cron`（台北 08:00–21:59 每十五分鐘：參訪結束時寄收工提醒）。
 三支都只接受 Netlify 排程器送來的 `POST {next_run}`，或帶 `ADMIN_TOKEN` 的手動觸發；被擋下來時函式紀錄會寫明原因。
 
-**金鑰安全**：所有金鑰只在 Netlify Functions 裡使用，前端只拿 `ADMIN_TOKEN`（存在瀏覽器 localStorage）。`SIGNAL_KEY` 會出現在 NFC 貼紙的網址裡，它只能寫動線時間、不能讀資料；外洩就換一個。
+**金鑰安全**：所有金鑰只在 Netlify Functions 裡使用，前端只拿 `ADMIN_TOKEN`（登入後換成 HttpOnly cookie）。
 
 ## 2. Google Sheet 當資料庫（選用，工作包第 6 章）
 
 1. Google Cloud Console → 建專案 → 啟用 **Google Sheets API** → IAM → 服務帳戶 → 建立金鑰（JSON）。
 2. 建一份 Google Sheet，分享給服務帳戶的 email（編輯者）。網址裡 `/d/<這一段>/edit` 就是 `GOOGLE_SHEET_ID`。
 3. Netlify 環境變數：`STORE_BACKEND=sheets`、`GOOGLE_SHEET_ID`、`GOOGLE_SERVICE_ACCOUNT_JSON`（整個 JSON 檔內容貼成一行）。
-4. 第一次呼叫時系統會自動建立 `visits`、`responses`、`timeline`、`slide_performance` 四個工作表並寫入中文表頭。JSON 欄位（名單、議程…）以字串存在儲存格；`visits` 最後一欄是完整 JSON。
+4. 第一次呼叫時系統會自動建立 `visits`、`responses`、`slide_performance` 三個工作表並寫入中文表頭。JSON 欄位（名單、議程…）以字串存在儲存格；`visits` 最後一欄是完整 JSON。
 5. 照片與音檔仍存 Netlify Blobs（Sheet 只存 key）。
 
 不具名的回覆：`姓名`、`email` 欄位一律空白，`填答時間` 只有日期。後端不會補回，請不要在 Sheet 上手動比對。
@@ -54,16 +53,11 @@
 列出簽名簿、名片、口述、當天資料還缺哪幾件，附一個直接打開後台「收工」分頁的連結。一場只寄一次，
 四件事都做完了就不寄。收件信箱在後台「設定」分頁填（留空就用 `GMAIL_SENDER`）。
 
-## 4. 現場硬體
 
-```bash
-node scripts/make-shortcuts.mjs --site=https://visit.healsdesign.org --key=<SIGNAL_KEY> --out=dist/shortcuts
-```
+## 4. 現場硬體　⛔ 已移除
 
-- **訊號一 老師開簡報**：`dist/shortcuts/<房號>/今日參訪.bat`（Windows）或 `.command`（macOS）放到研究室電腦，桌面建捷徑；把裡面的簡報路徑改成當天檔案。點開＝送訊號＋開簡報。動線第一站是總體介紹，所以簡報室電腦放 `briefing/` 那一份：開總體簡報就是整場的起點訊號。
-- **訊號二 NFC 貼紙**：六片 NTAG213 貼在門口（簡報室一片用 `briefing/signal.url`，五間研究室各一片）。iPhone「捷徑」→ 自動化 → NFC → 「取得 URL 內容」填 `dist/shortcuts/<房號>/signal.url` 裡的網址 → 關閉「執行前先詢問」。碰一下即送出。
-- 訊號不帶 visit_id，伺服器對到「今天」排定的參訪；同一天多場時取時間窗涵蓋現在的那一場。
-- 備援：研究生 `source=student`；來賓端頁面最下面「我現在在哪一間」。
+現場動線訊號（NFC 貼紙、研究室電腦的簡報捷徑、`SIGNAL_KEY`、`timeline` 表）在 2026-09-13 整套拿掉了
+（明確指示：暫時都不用）。這一節留著只是為了讓後面的編號不變；要找回來翻 git（移除前的最後一版 `191ee60`）。
 
 ## 5. 收工提醒
 
@@ -129,4 +123,4 @@ npm run deck -- --spec=path/to.json --no-pdf     # 不裝 LibreOffice 時
 ## 8. 第一次試跑
 
 - **Bill Sullivan（2026/9/15–22）**：時間太近，先手動試「收工兩動作」——擺一本簽名簿、結束後用手機錄三十秒。後台「收工」分頁就能把這兩份素材存進系統（先在訪前建一筆參訪即可）。
-- **Simon Kilbane（10 月初）**：完整跑一次。訪前貼信、確認名單 email、排行程、產簡報；現場捷徑與 NFC；收工兩動作；訪後信寄全名單，看開放建議欄位收不收得到東西。
+- **Simon Kilbane（10 月初）**：完整跑一次。訪前貼信、確認名單 email、排行程、產簡報、寄確認信；收工五件事；訪後信寄全名單，看開放建議欄位收不收得到東西。

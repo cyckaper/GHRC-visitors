@@ -72,7 +72,6 @@ export default async (req: Request) => {
       whisper: !!env("OPENAI_API_KEY"),
       gmail: gmailConfigured(),
       drive: driveConfigured(),
-      signal: !!env("SIGNAL_KEY"),
       reminder: !!(gmailConfigured() && to),
       store: getStore().backend,
       master: !!master,

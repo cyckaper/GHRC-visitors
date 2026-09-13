@@ -13,7 +13,7 @@ GHRC 參訪系統。臺大生農學院綠色健康研究中心（GHRC）每年�
 
 1. **查來信或相關資料，了解訪客背景** — 讀 email 往來與附件，抽出單位、名單、職稱、來訪目的、興趣、可用時間
 2. **製作客製化雙語簡報** — 依對象與議程時間，從母簡報挑選與重排，產出「英文為主 ＋ 對方語言為輔」的 pptx
-3. **收集訪客回饋及後續資料** — 訪後信、開放建議欄位、簽名簿、主持人口述、動線訊號
+3. **收集訪客回饋及後續資料** — 訪後信、開放建議欄位、簽名簿、主持人口述
 4. **建構長期訪客資料檔案，並回饋下一次簡報** — 歷次參訪累積成檔案，讓下一份簡報的挑選有依據
 5. **建到 GitHub，由 Netlify 發佈**
 
@@ -180,8 +180,10 @@ Google Sheet 一份四個工作表（或等價的 JSON 檔），靠 `visit_id` �
 > 開放建議欄位若選擇不具名，**姓名與 email 必須留空，後端不得補回**。
 > 這不是介面裝飾，是這條管道能不能收到真話的前提。
 
-**timeline** — `visit_id`、空間代號、進入時間、離開時間、停留分鐘、
-訊號來源（簡報捷徑／NFC／排程推補／學生代按／來賓自按）
+> **現場動線訊號（timeline 表、NFC 貼紙、簡報捷徑、來賓自按）已整套移除**（明確指示：暫時都不用）。
+> 當天實際走到哪一間、待多久不再記錄；一頁摘要的「看了哪幾間」改用當天排定的動線（`visit.itinerary`）。
+> 要找回來就翻 git 紀錄（移除前的最後一版在 `191ee60`）。**訪前那張「現場動線」表不是這個**，
+> 那是排程用的 `visit.itinerary`（哪幾間、各幾分鐘），照常留著。
 
 **slide_performance**（功能 4 的核心）— `visit_id`、單位類型、頁次、是否選用、
 該次是否被提問、回饋中是否被提及。這張表是「回饋下一次簡報」的資料來源。
@@ -270,11 +272,6 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
 - **簽名簿**：實體本子，主持人拍照上傳，AI 讀手寫字歸檔（原圖保留）
 - **主持人三十秒口述**：參訪結束後由主持人口述，Whisper 轉文字後抽取
   （誰來、最想看哪一間、問了什麼、有無合作意願）。**依議程結束時間提醒＝寄一封信**（`reminder-cron`，見功能 4 底下那一段）
-- **動線訊號**：老師開簡報的捷徑、門口 NFC 貼紙、排程推補三者擇有。
-  **捷徑與貼紙的網址在後台「資料」分頁自己產**（`GET /api/timeline?shortcuts=1`，admin）：
-  六個房間各給 NFC 網址、Windows `.bat`、macOS `.command` 與可印的 QR，不必開終端機
-  （`scripts/make-shortcuts.mjs` 留著給批次產檔用）。網址裡的 `SIGNAL_KEY` **只能寫動線時間、讀不到任何資料，
-  而且本來就要印在門口的貼紙上**——給登入過的主辦端看比貼在牆上曝光更少；Claude／Google 那些金鑰仍然絕不出前端。
 
 ### 4. 長期檔案與回饋下一次簡報
 
@@ -371,13 +368,13 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 **已完成（P1–P4 最小可用系統 ＋ P5 捷徑 ＋ P6 產檔 ＋ P7 摘要／彙整）**
 
-- `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → 排行程 → 自動存 → QR／.ics → **確認信（草擬、寄出或 mailto）**，**最底下列出「以前做過的參訪」**）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、收工（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁、**動作五 感謝信**）、資料（歷次參訪、回覆、動線、摘要、跨場次彙整、CSV、Drive）、**設定（母簡報、現場動線捷徑與 NFC、預設值、外部服務狀態）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
+- `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → 排行程 → 自動存 → QR／.ics → **確認信（草擬、寄出或 mailto）**，**最底下列出「以前做過的參訪」**）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、收工（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁、**動作五 感謝信**）、資料（歷次參訪、回覆、摘要、跨場次彙整、CSV、Drive）、**設定（母簡報、預設值、外部服務狀態）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
 - `public/index.html`：專屬網址 `/<visit_id>`；全頁英文為主、第二語言為輔（預設中文，ko／ja 來賓用韓／日文）；流程（參訪當天標出「現在」）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
-- `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `timeline` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`）`drive` `drive-sync-background`（自動備份）；**三支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
+- `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`）`drive` `drive-sync-background`（自動備份）；**三支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
   `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，收工提醒）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
 - `public/lib/pptx.mjs`：母簡報子集化核心（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證），零 Node 相依，瀏覽器與 CLI 共用；`cli/lib/pptx.mjs` 只是注入 jszip／xmldom 的 Node 入口；`cli/deck.mjs` 加上 QR（qrcode 套件）與 PDF（LibreOffice）。`--inspect`、`--dump`、`--validate`。
-- `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-shortcuts.mjs`：研究室電腦捷徑與 NFC 網址。`scripts/make-world.mjs`：訪客地圖的陸地輪廓與國家落點（`public/data/world.json`）。
+- `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-world.mjs`：訪客地圖的陸地輪廓與國家落點（`public/data/world.json`）。
 - 介面語言：`public/data/i18n-admin.json`（後台英文；鍵＝畫面上那句中文）、`scripts/i18n-scan.mjs`（掃出沒翻的，`npm test` 會跑）、
   `public/data/i18n.json`（來賓端四語）、`slides.json` 的 `title_en`。
 - 測試：`npm test`（單元、API 走本機 dev server、產檔與瘦身走合成簡報）、`npm run test:e2e`（Chromium）。`AI_MOCK=1` 讓所有 AI 呼叫回固定範例，`MAIL_MOCK=1` 讓寄信不真的打 Gmail（信寫進媒體庫 `mail/last.json`，測試再讀出來對內容）。CI：`.github/workflows/ci.yml` 在每個 PR 與 main 的 push 跑同一套（typecheck → npm test → e2e）。
@@ -392,7 +389,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 **約定**
 
 - API 路徑 `/api/<name>` 由 `netlify.toml` 轉到 `/.netlify/functions/<name>`；函式不設 `config.path`。
-- 主辦端 API 用 `Authorization: Bearer ADMIN_TOKEN`、`?token=`，或**登入後的 session cookie**；現場訊號用 `SIGNAL_KEY`；`respond` 與 `visits?public=1` 公開。
+- 主辦端 API 用 `Authorization: Bearer ADMIN_TOKEN`、`?token=`，或**登入後的 session cookie**；`respond` 與 `visits?public=1` 公開。
 - **登入一次就好**：後台貼一次 ADMIN_TOKEN → `/api/session` 發一個 HttpOnly、SameSite=Strict 的 cookie（值是用 ADMIN_TOKEN 簽的 `v1.<到期>.<HMAC>`，**不是 token 本身**），180 天，每次打開後台自動續期。token 不再存 localStorage（iPad Safari 七天沒互動就清掉，所以以前每次都要重登；舊的會在開場自動換成 cookie）。登出走 `DELETE /api/session`。
 - 老師卡片內容 `public/data/labs.json` 的 `confirmed=false` 表示尚待老師確認；照片 `photo` 為 null 時顯示縮寫。
 - **兩邊都可以切中英文**（明確要求）。做法不一樣，因為兩邊的性質不同：
@@ -418,8 +415,8 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
   訪前（名單／背景研判／今日流程／簡報／確認信）｜當天（簽名簿／名片／口述／當天資料）｜訪後（感謝信／回覆／一頁摘要）。
   綠勾＝做過，灰點＝還沒；點一格跳到該做那件事的分頁，`title` 說明那一步是為了什麼。
   五個分頁是時間順序，但畫面本來沒有任何地方說「這一場做到哪、下一步是什麼」。
-- **「設定」分頁收一次性的東西**：母簡報、現場動線的捷徑與 NFC 貼紙、預設值（訪後信寄件者，存在
-  `settings.json`，`/api/settings`）、外部服務狀態（Claude／Whisper／Gmail／Drive／SIGNAL_KEY／母簡報，
+- **「設定」分頁收一次性的東西**：母簡報、預設值（訪後信寄件者，存在
+  `settings.json`，`/api/settings`）、外部服務狀態（Claude／Whisper／Gmail／Drive／母簡報，
   **只回「接好了沒」，不回任何金鑰內容**）。這些不屬於任何一場參訪，混在每場的分頁裡會讓人以為每場都要做一次。
   老師卡片（`labs.json`）還不能在後台改，設定頁直接說明原因（待確認 1）。
 - **全站一個「這一場」**：後台最上面一個下拉（`#visitSelect`）＋「已存 14:32」＋「刪掉這一場」，

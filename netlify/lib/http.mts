@@ -114,14 +114,6 @@ export async function requireCron(req: Request): Promise<Response | null> {
   return denied;
 }
 
-/** 現場訊號保護：x-signal-key 標頭、body.key 或 ?key=。 */
-export function checkSignalKey(req: Request, bodyKey?: string): boolean {
-  const key = env("SIGNAL_KEY");
-  if (!key) return false;
-  const given = req.headers.get("x-signal-key") || bodyKey || new URL(req.url).searchParams.get("key") || "";
-  return !!given && safeEqual(given, key);
-}
-
 export function siteUrl(req?: Request): string {
   const configured = env("SITE_URL") || env("URL");
   if (configured) return configured.replace(/\/$/, "");
