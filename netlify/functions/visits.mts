@@ -1,7 +1,7 @@
 import { fail, json, nowISO, readJSON, requireAdmin, siteUrl } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
-import { briefingBlockMinutes, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, toCSV, minutesBetween, endTimeOf } from "../../lib/visit.mjs";
+import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, toCSV, minutesBetween, endTimeOf, wrapupNA } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
 import { dropDraft, moveDraft } from "./draft.mts";
 
@@ -38,7 +38,9 @@ export default async (req: Request) => {
       const v = await store.getVisit(id);
       if (!v) return fail(404, "找不到這次參訪");
       const responses = await store.listResponses(id);
-      return json({ ok: true, visit: v, responses });
+      // stale：已經交出去、但行程之後又改過的東西（畫面上要說一句，不能繼續顯示綠勾）。
+      // 算在伺服器這一邊，指紋的算法就只有一份。
+      return json({ ok: true, visit: v, responses, stale: staleOutputs(v) });
     }
     const list = (await store.listVisits()).map((v) => ({ visit_id: v.visit_id, date: v.date, org: v.org?.name, type: v.org?.type, country: v.org?.country, headcount: v.headcount, status: v.status, language: v.language, guests: (v.guests || []).length, slides: (v.slides || []).length, summary: !!v.summary, updated_at: v.updated_at }));
     return json({ ok: true, visits: list, backend: store.backend });
@@ -72,13 +74,16 @@ export default async (req: Request) => {
     if (existing) for (const k of KEPT) if ((body as any)[k] === undefined) (merged as any)[k] = (existing as any)[k];
     merged.created_at = existing?.created_at || nowISO();
     merged.updated_at = nowISO();
+    // 剛產出來的那一份簡報：把**這一刻的行程指紋**記下來，之後行程改了才知道手上那個 .pptx 是舊的。
+    // 指紋由伺服器蓋（前端只送 generated_at），算法就不會有兩份。
+    if (merged.deck?.generated_at && merged.deck.generated_at !== existing?.deck?.generated_at) merged.deck = { ...merged.deck, fingerprint: deckFingerprint(merged) };
     await store.putVisit(merged);
     if (renamedFrom) {
       await store.deleteVisit(renamedFrom);
       await moveDraft(renamedFrom, merged.visit_id); // 手上還沒交出去的東西不該跟著舊網址消失
     }
     await triggerDriveSync(merged.visit_id);
-    return json({ ok: true, visit: merged, renamed_from: renamedFrom, url_fixed: renameBlocked });
+    return json({ ok: true, visit: merged, renamed_from: renamedFrom, url_fixed: renameBlocked, stale: staleOutputs(merged) });
   }
 
   if (req.method === "DELETE") {
@@ -100,7 +105,7 @@ export default async (req: Request) => {
 };
 
 /** 這幾個欄位由別的端點或背景工作維護，一般存檔不該動到。 */
-const KEPT = ["summary", "summary_at", "reminders", "drive", "cards", "signbook", "dictation", "letters", "materials", "background"] as const;
+const KEPT = ["summary", "summary_at", "reminders", "drive", "cards", "signbook", "dictation", "letters", "materials", "background", "wrapup"] as const;
 
 /** 這一場的網址還沒「用出去」：沒人回覆、兩封信都還沒寄出、沒放任何檔案、還沒備份到 Drive。 */
 async function isUnused(store: ReturnType<typeof getStore>, v: Visit): Promise<boolean> {
@@ -124,7 +129,7 @@ export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   const base = emptyVisit() as Visit;
   const v: Visit = { ...base, ...input } as Visit;
   v.org = { ...base.org, ...(input.org || {}) } as Visit["org"];
-  v.guests = Array.isArray(input.guests) ? input.guests.map((g) => ({ name: String(g.name || "").trim(), title: String(g.title || "").trim(), email: String(g.email || "").trim().toLowerCase(), role: (g.role === "lead" ? "lead" : "member") as "lead" | "member", affiliation: g.affiliation ? String(g.affiliation) : "", phone: g.phone ? String(g.phone).slice(0, 60) : "" })).filter((g) => g.name || g.email) : [];
+  v.guests = Array.isArray(input.guests) ? input.guests.map((g) => ({ name: String(g.name || "").trim(), title: String(g.title || "").trim(), email: String(g.email || "").trim().toLowerCase(), role: (g.role === "lead" ? "lead" : "member") as "lead" | "member", affiliation: g.affiliation ? String(g.affiliation) : "", phone: g.phone ? String(g.phone).slice(0, 60) : "", contact: g.contact === true || String(g.contact) === "true" })).filter((g) => g.name || g.email) : [];
   if (v.guests.length && !v.guests.some((g) => g.role === "lead")) v.guests[0].role = "lead";
   v.headcount = Number(input.headcount) || v.guests.length || 0;
   // **主辦端填的是幾點開始、幾點結束**；總分鐘由這兩個算出來（下游的排程、提醒、ICS 都還是吃 duration_minutes）
@@ -148,6 +153,8 @@ export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   v.dictation = input.dictation || {};
   v.letters = input.letters || {};
   v.summary = typeof input.summary === "string" ? input.summary : "";
+  // 後續那四件事裡標了「本次沒有」的（只留認得的那四個 key，其他一律丟掉）
+  (v as any).wrapup = { na: wrapupNA({ wrapup: (input as any).wrapup }) };
   const code = String((input as any).code || "").trim();
   if (!isValidVisitId(v.visit_id) || code) v.visit_id = makeVisitId(v.date, v.org.name, code);
   v.page_url = `${site}/${v.visit_id}`;

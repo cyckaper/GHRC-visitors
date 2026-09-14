@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
-import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, needsSummary, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
+import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -13,6 +13,7 @@ const visit = {
   itinerary: [{ room: "briefing", minutes: 20, location: "304" }, { room: "301", minutes: 10 }, { room: "302", minutes: 10 }, { room: "303", minutes: 10 }, { room: "304", minutes: 10 }],
   guests: [
     { name: "Simon Kilbane", title: "Programme Director", email: "simon@uwa.example", role: "lead" },
+    { name: "Office", title: "Secretary", email: "office@uwa.example", role: "member", contact: true },
     { name: "A. Companion", title: "", email: "companion@uwa.example", role: "member" },
     { name: "No Email", title: "", email: "", role: "member" },
   ],
@@ -172,7 +173,9 @@ test("recipient list = everyone on the list + onsite emails, deduplicated, anony
     { visit_id: "2026-10-07-uwa", anonymous: true, name: "", email: "", suggestion: "x" },
     { visit_id: "other", anonymous: false, name: "Other visit", email: "o@x.example" },
   ]);
-  assert.deepEqual(r.map((x) => x.email), ["simon@uwa.example", "companion@uwa.example", "walkin@x.example"]);
+  assert.deepEqual(r.map((x) => x.email), ["simon@uwa.example", "office@uwa.example", "companion@uwa.example", "walkin@x.example"]);
+  // 確認信只寄給「聯絡人」：協調參訪的人不一定等於參加參訪的人
+  assert.deepEqual(r.filter((x) => x.contact).map((x) => x.email), ["office@uwa.example"]);
 });
 
 test("csv escapes commas and quotes; ics has an alarm at the end time", () => {
@@ -325,4 +328,46 @@ test("幾點開始、幾點結束：總分鐘由這兩個算出來", () => {
   assert.equal(endTimeOf(emptyVisit()), "12:30", "新的一場就先給預設的開始與結束");
   // 後續提醒看的結束時間也跟著走
   assert.equal(visitEndAt({ date: "2026-10-07", start_time: "09:00", end_time: "10:00" }).toISOString(), "2026-10-07T02:00:00.000Z");
+});
+
+test("後續那四件事可以標「本次沒有」：不算未完成，提醒也不再為它寄信", () => {
+  const v = { wrapup: { na: ["signbook", "cards", "夾帶的怪東西"] } };
+  assert.deepEqual(wrapupNA(v), ["signbook", "cards"], "只認得那四個 key");
+  const todo = wrapupTodo(v);
+  assert.deepEqual(todo.filter((t) => t.na).map((t) => t.key), ["signbook", "cards"]);
+  assert.equal(wrapupSettled(v), false, "口述與當天資料還沒處理");
+  const all = { ...v, wrapup: { na: ["signbook", "cards", "dictation", "materials"] } };
+  assert.equal(wrapupSettled(all), true, "四件都標了本次沒有 → 不必再提醒");
+  // 做到了就以做到的為準，不會因為標過而顯示成「沒有」
+  const didIt = wrapupTodo({ wrapup: { na: ["signbook"] }, signbook: { photo_key: "signbook/x/1.jpg" } });
+  assert.equal(didIt[0].done, true);
+  assert.equal(didIt[0].na, false);
+  assert.equal(wrapupSettled({ signbook: { photo_key: "k" }, cards: [{ key: "c" }], dictation: { transcript: "t" }, materials: { links: [{ title: "t", url: "https://x.example" }] } }), true);
+});
+
+test("已經交出去的東西會不會過期：行程指紋對不上就說一句", () => {
+  const base = { ...visit, slides: [1, 2, 3] };
+  const sent = { ...base, letters: { confirmation: { subject: "s", body: "b", drafted_at: "", sent_at: "2026-09-01T00:00:00.000Z", fingerprint: scheduleFingerprint(base) } }, deck: { generated_at: "2026-09-01T00:00:00.000Z", fingerprint: deckFingerprint(base) } };
+  assert.deepEqual(staleOutputs(sent), [], "什麼都沒改 → 沒有過期的東西");
+  // 行程改了：簡報與確認信都舊了
+  const moved = { ...sent, programme: [{ kind: "briefing", start: "11:00", end: "11:20" }] };
+  assert.deepEqual(staleOutputs(moved).map((x) => x.key), ["deck", "confirmation"]);
+  // 只改選頁：簡報舊了，信沒問題（信裡沒有頁次）
+  const reslide = { ...sent, slides: [1, 2, 3, 4] };
+  assert.deepEqual(staleOutputs(reslide).map((x) => x.key), ["deck"]);
+  // 沒產過、沒寄過的不會被說舊
+  assert.deepEqual(staleOutputs(visit), []);
+  // 舊資料沒有指紋（這個功能之前寄的信）也不要亂報
+  assert.deepEqual(staleOutputs({ ...moved, deck: { generated_at: "x" }, letters: { confirmation: { sent_at: "x" } } }), []);
+});
+
+test("新的一場就有一份可以改的流程：總體簡報 → 研究室參訪 → 綜合討論", () => {
+  const p = defaultProgramme({ start_time: "10:00", duration_minutes: 150 });
+  assert.deepEqual(p.map((b) => b.kind), ["briefing", "tour", "discussion"]);
+  assert.deepEqual([p[0].start, p[0].end], ["10:00", "10:20"]);
+  assert.deepEqual([p[1].start, p[1].end], ["10:20", "12:00"], "五間各 20 分");
+  assert.equal(p[2].start, "12:00");
+  // 只去兩間、時間短：研究室那一段跟著縮
+  const two = defaultProgramme({ start_time: "14:00", duration_minutes: 90, itinerary: [{ room: "briefing", minutes: 20 }, { room: "301", minutes: 20 }, { room: "303", minutes: 20 }] });
+  assert.deepEqual([two[1].start, two[1].end], ["14:20", "15:00"]);
 });

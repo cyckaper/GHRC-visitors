@@ -3,7 +3,7 @@ import { nowISO, requireCron, siteUrl } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import { gmailConfigured, gmailSend } from "../lib/mail.mts";
 import { reminderTo } from "./settings.mts";
-import { visitEndAt, visitStartAt, wrapupTodo } from "../../lib/visit.mjs";
+import { visitEndAt, visitStartAt, wrapupSettled, wrapupTodo } from "../../lib/visit.mjs";
 import type { Visit } from "../lib/types.mts";
 
 /**
@@ -13,7 +13,8 @@ import type { Visit } from "../lib/types.mts";
  * 等於沒有提醒。這裡改成：**今日流程結束的時間一到，寄一封信到中心信箱**——手機收信就會跳。
  * 內容是後續那四件事還缺哪幾件，附一個直接打開後續頁的連結。
  *
- * 規矩：一場只寄一次（`visit.reminders.wrapup_sent_at`）；四件事都做完了就不寄；
+ * 規矩：一場只寄一次（`visit.reminders.wrapup_sent_at`）；四件事都處理完了就不寄——**做到了，或標明
+ * 「本次沒有」都算處理完**（`wrapupSettled`）：沒有簽名簿、沒交換名片的場次，不該收到一封永遠滿足不了的提醒；
  * 只看結束後六小時內的場次（功能上線前就過去的參訪不會突然被翻出來提醒）。
  * 寄成功才記，寄失敗下一輪再試。寫回參訪時**不動 `updated_at`**，否則每天的 Drive 備份會被吵醒。
  */
@@ -35,8 +36,8 @@ export default async (req: Request) => {
     if ((v as any).reminders?.wrapup_sent_at) continue;
     const end = visitEndAt(v).getTime();
     if (end > now || now - end > WINDOW_HOURS * 3600_000) continue;
-    const todo = wrapupTodo(v);
-    if (todo.every((t: { done: boolean }) => t.done)) continue; // 四件事都做完了，不必吵
+    if (wrapupSettled(v)) continue; // 四件事都做完、或標了「本次沒有」，不必吵
+    const todo = wrapupTodo(v).filter((t: { na: boolean }) => !t.na); // 本次沒有的那幾件不必列出來
     try {
       await gmailSend(to, subject(v), body(v, todo, site));
       (v as any).reminders = { ...((v as any).reminders || {}), wrapup_sent_at: nowISO(), wrapup_to: to };

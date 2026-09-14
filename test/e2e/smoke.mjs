@@ -117,12 +117,23 @@ try {
   // 排行程也跑在背景（提示詞帶整份頁次索引，10 秒同樣不夠）
   await page.waitForFunction(() => /排行程中/.test(document.getElementById("planInfo").textContent));
   check(true, "排行程 runs in the background too");
-  await page.waitForFunction(() => document.querySelectorAll("#programmeTable tbody tr").length > 0, null, { timeout: 90000 });
+  // 排完的判斷要看 AI 回來了沒（表上本來就有一份預設流程，不能用「有沒有列」判斷）
+  await page.waitForFunction(() => /也挑了/.test(document.getElementById("planInfo").textContent), null, { timeout: 90000 });
   check((await page.locator("#programmeTable tbody tr select").evaluateAll((els) => els.map((e) => e.options[e.selectedIndex].text))).includes("綜合討論"), "programme table shows a 綜合討論 block");
   check((await page.locator("#tab-pre #slideGrid").count()) === 0, "the pre-visit tab no longer carries the slide picker");
-  check((await page.textContent("#itinerary label:first-child")).includes("總體介紹"), "route starts with the overall briefing");
-  check((await page.inputValue('#itinerary input[data-room="briefing"]')) !== "0", "briefing has minutes");
-  check((await page.inputValue("#itinerary [data-briefing-location]")) === "302", "briefing room defaults to 302");
+  // 行程只有一張表：每一間幾分鐘就長在「研究室參訪」那一列底下，總體介紹的地點在 briefing 那一列
+  check((await page.locator("#programmeTable tr[data-rooms-row]").count()) === 1, "the lab minutes live inside the one schedule table");
+  check((await page.inputValue("#programmeTable [data-briefing-location]")) === "302", "briefing room defaults to 302, on the briefing row itself");
+  check((await page.locator("#itinerary input[data-room]").count()) === 5, "one minutes box per lab");
+  check(/五間合計 \d+ 分/.test(await page.textContent("#roomsTotal")), "it adds the lab minutes up");
+  {
+    // 分鐘一改，後面各段的時間就跟著往後推——**時間是算出來的，不是第二個要填的欄位**
+    const before = await page.inputValue("#programmeTable tbody tr:last-child input[type=time]");
+    const box = page.locator('#itinerary input[data-room="301"]');
+    await box.fill(String((Number(await box.inputValue()) || 0) + 30));
+    await page.waitForFunction((was) => document.querySelector("#programmeTable tbody tr:last-child input[type=time]").value !== was, before, { timeout: 15000 });
+    check(/流程排了 \d+ 分/.test(await page.textContent("#programmeTotal")), "and says how long the whole thing runs");
+  }
   // 進度線：這一場到哪一步了，點一格跳到該做那件事的分頁
   check(/名單 2 人/.test(await page.textContent("#progress")), "the progress line counts the guest list");
   check(/·\s*感謝信/.test(await page.textContent("#progress")), "…and shows what has not been done yet");
@@ -297,6 +308,24 @@ try {
   await page.waitForFunction(() => document.getElementById("thanksBody").value.includes("what should we be doing better"), null, { timeout: 60000 });
   await page.waitForFunction(() => document.querySelectorAll("#thanksRecipients input").length === 2);
   check(true, "thanks letter drafted with the 請益 wording and 2 recipients");
+  // 「寄出」兩個字看不出寄給誰：按鈕上直接寫人數，旁邊列出名字
+  check(/寄出感謝信（2 位）/.test(await page.textContent("#sendBtn")), "the send button says how many people it is about to write to");
+  check(/會寄給：/.test(await page.textContent("#thanksWho")), "…and names them");
+  await page.uncheck("#thanksRecipients input:first-child");
+  await page.waitForFunction(() => /1 位/.test(document.getElementById("sendBtn").textContent));
+  check(true, "unticking someone changes the count before anything is sent");
+  await page.check("#thanksRecipients input:first-child");
+
+  // 沒有簽名簿、沒交換名片的場次一樣走完了：標「本次沒有」就不算未完成，提醒也不再催
+  await page.check('[data-na="signbook"]');
+  await page.waitForFunction(() => /不會再提醒/.test(document.getElementById("flash").textContent));
+  await page.click('[data-tab="pre"]');
+  check(/簽名簿 本次沒有/.test(await page.textContent("#progress")), "a step marked “not this time” reads that way in the progress line");
+  await page.click('[data-tab="wrapup"]');
+  await page.waitForFunction(() => document.querySelector('[data-na="signbook"]').checked, null, { timeout: 20000 });
+  check(true, "…and it survives leaving the tab");
+  await page.uncheck('[data-na="signbook"]');
+  await page.waitForFunction(() => /還要做/.test(document.getElementById("flash").textContent));
 
   // ── 後續分頁的動作二：拍名片 → AI 讀 → 確認後併進這場的名單（拍名片是現場的事，跟簽名簿放一起）──
   await page.click('[data-tab="wrapup"]');

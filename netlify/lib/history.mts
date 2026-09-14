@@ -16,8 +16,15 @@ export interface SlideHistory {
   same_type: { org_type: string; visits: number };
   /** 只列有數字的頁：used＝過去選過幾次，asked／mentioned＝那一間被提問／被提到幾次 */
   slides: { n: number; used: number; used_same_type: number; asked: number; mentioned: number }[];
-  /** 來賓自己說的：最想看哪幾間、想合作哪幾間 */
-  rooms: { room: string; wanted: number; cooperate: number }[];
+  /**
+   * 每一間被點名的次數，**來源分開算**（明確要求）：
+   * - `wanted`／`cooperate`：**來賓自己回的**（訪後信的三個回應項目、現場自填）。
+   * - `host_noted`：**主持人口述**裡聽到的「他們最想看那一間」。
+   *
+   * 「主持人覺得對方有興趣」不等於「對方說他有興趣」，合併成一個數字就再也分不出來了。
+   * 兩個都給提示詞，但要說清楚哪一個是誰說的。
+   */
+  rooms: { room: string; wanted: number; cooperate: number; host_noted: number }[];
 }
 
 export async function slideHistory(store: Store, orgType: string, excludeVisitId = ""): Promise<SlideHistory | null> {
@@ -43,10 +50,10 @@ export async function slideHistory(store: Store, orgType: string, excludeVisitId
     if (p.mentioned) r.mentioned++;
   }
 
-  const rooms = new Map<string, { room: string; wanted: number; cooperate: number }>();
-  const bump = (room: string, key: "wanted" | "cooperate") => {
+  const rooms = new Map<string, { room: string; wanted: number; cooperate: number; host_noted: number }>();
+  const bump = (room: string, key: "wanted" | "cooperate" | "host_noted") => {
     if (!/^30[1-5]$/.test(room)) return;
-    if (!rooms.has(room)) rooms.set(room, { room, wanted: 0, cooperate: 0 });
+    if (!rooms.has(room)) rooms.set(room, { room, wanted: 0, cooperate: 0, host_noted: 0 });
     rooms.get(room)![key]++;
   };
   for (const r of responses as ResponseRow[]) {
@@ -54,16 +61,16 @@ export async function slideHistory(store: Store, orgType: string, excludeVisitId
     for (const room of r.most_wanted_rooms || []) bump(room, "wanted");
     for (const room of r.cooperate_rooms || []) bump(room, "cooperate");
   }
-  // 主持人口述裡的「最想看哪一間」也算數（有些場次只有口述、沒有來賓回覆）
+  // 主持人口述裡的「最想看哪一間」記在自己的欄位（有些場次只有口述、沒有來賓回覆），**不併進來賓的數字**
   for (const v of visits) {
     if (v.visit_id === excludeVisitId) continue;
-    for (const room of v.dictation?.extracted?.most_wanted_rooms || []) bump(room, "wanted");
+    for (const room of v.dictation?.extracted?.most_wanted_rooms || []) bump(room, "host_noted");
   }
 
   return {
     visits: past.length,
     same_type: { org_type: orgType, visits: past.filter((v) => (typeOf.get(v.visit_id) || "other") === orgType).length },
     slides: [...slides.values()].filter((s) => s.used || s.asked || s.mentioned).sort((a, b) => a.n - b.n),
-    rooms: [...rooms.values()].sort((a, b) => b.wanted - a.wanted),
+    rooms: [...rooms.values()].sort((a, b) => b.wanted + b.host_noted - (a.wanted + a.host_noted)),
   };
 }

@@ -12,6 +12,11 @@ export interface Guest {
   affiliation?: string;
   /** 名片上讀到的電話（/api/cards）；手打的名單通常沒有。 */
   phone?: string;
+  /**
+   * 這一場的**主要聯絡人**（負責收信、確認行程的那個人）。`role: "lead"` 是禮賓身分（主賓），
+   * 兩者常常不是同一個人：確認信預設只寄給 contact，感謝信才寄給名單上每一位。
+   */
+  contact?: boolean;
 }
 
 export interface ProgrammeBlock {
@@ -83,16 +88,20 @@ export interface Visit {
   cards?: { key: string; names: string[]; read_at: string }[];
   materials: Materials;
   // skip=true：這場不用簡報，只口頭介紹（後台「簡報」分頁勾的）
-  deck: { skip?: boolean; slides?: number; spec_path?: string; pptx_url?: string; pdf_url?: string; generated_at?: string };
+  // skip=true：這場不用簡報；fingerprint＝產檔那一刻的行程指紋（行程之後改了就知道這份 .pptx 是舊的）
+  deck: { skip?: boolean; slides?: number; spec_path?: string; pptx_url?: string; pdf_url?: string; generated_at?: string; fingerprint?: string };
   signbook: { photo_key?: string; transcript?: string; entries?: SignbookEntry[]; read_at?: string };
   dictation: { audio_key?: string; transcript?: string; extracted?: DictationExtract; recorded_at?: string };
   letters: {
-    confirmation?: { subject: string; body: string; sender?: string; drafted_at: string; sent_to?: { name: string; email: string }[]; sent_at?: string };
-    thanks?: { subject: string; body: string; sender: string; drafted_at: string; sent_to?: { name: string; email: string }[]; sent_at?: string };
+    // fingerprint＝寄出那一刻的行程指紋：寄出去的信不會跟著網頁更新，行程改了要說一聲
+    confirmation?: { subject: string; body: string; sender?: string; drafted_at: string; sent_to?: { name: string; email: string }[]; sent_at?: string; fingerprint?: string };
+    thanks?: { subject: string; body: string; sender: string; drafted_at: string; sent_to?: { name: string; email: string }[]; sent_at?: string; fingerprint?: string };
   };
   summary: string;
   /** 產摘要的時間：summary-cron 用它跟最新那筆回覆比，比較舊就自己重寫一份。 */
   summary_at?: string;
+  /** 後續那四件事裡「這一場本來就不會有」的（例如沒有簽名簿、沒交換名片）：標了就不算未完成。 */
+  wrapup?: { na?: string[] };
   /** 自動提醒（reminder-cron）：後續提醒寄出的時間與收件者，一場只寄一次。 */
   reminders?: { wrapup_sent_at?: string; wrapup_to?: string };
   /** Google Drive 備份（/api/drive）：這場參訪在 Drive 上的資料夾。 */

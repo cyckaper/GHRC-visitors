@@ -157,7 +157,7 @@
       </div>
       <div>
         <div class="flex items-center justify-between"><label class="f">參訪名單（每一個人都要留 email：訪後信會寄給名單上每一個人）</label><button class="btn btn-soft" id="addGuest" title="手動補一個人（名單上每個人都要 email，訪後信才寄得到）" type="button">＋ 加一人</button></div>
-        <table id="guestTable"><thead><tr><th>姓名</th><th>職稱</th><th>email</th><th>單位</th><th>主賓</th><th></th></tr></thead><tbody></tbody></table>
+        <table id="guestTable"><thead><tr><th>姓名</th><th>職稱</th><th>email</th><th>單位</th><th title="禮賓身分：封面與信件開頭寫的那個人">主賓</th><th title="負責收信、確認行程的那個人。確認信預設只寄給他——日期還在往返時，把還沒定案的行程寄給全團只會造成困擾">聯絡人</th><th></th></tr></thead><tbody></tbody></table>
       </div>
     </div>
 
@@ -173,19 +173,16 @@
 
     <div class="card space-y-4">
       <h2 class="font-semibold"><span class="num">4</span>行程</h2>
-      <p class="muted">「今日流程」會印在簡報第 2 頁，也會出現在來賓專頁；「現場動線」決定來賓幾點走到哪一間。分鐘數一律照預設重算（總體介紹 20 分、每間研究室 20 分、剩下給綜合討論），不合就直接改。</p>
+      <p class="muted">這一張表就是這一場的行程：會印在簡報第 2 頁，也會出現在來賓專頁。「研究室參訪」那一列底下填每一間幾分鐘（留 0 表示不去），<b>時間會照著往後推算</b>，不必再對一次。預設總體介紹 20 分、每間 20 分，剩下的時間給綜合討論。</p>
       <div class="flex flex-wrap gap-2 items-center">
-        <button class="btn" id="planBtn" title="依人數、時間、興趣排出今日流程與現場動線">AI 排行程</button>
+        <button class="btn" id="planBtn" title="依人數、時間、興趣排出這一場的行程">AI 排行程</button>
         <span class="muted" id="planInfo"></span>
       </div>
       <p class="muted" id="rationale"></p>
       <div>
         <div class="flex items-center justify-between"><label class="f">今日流程（第 2 頁 Programme；固定含總體簡報、研究室參訪、綜合討論）</label><button class="btn btn-soft" id="addBlock" title="自己加一個流程區塊（AI 排的不合就直接改）" type="button">＋ 區塊</button></div>
         <table id="programmeTable"><thead><tr><th>開始</th><th>結束</th><th>類型</th><th>英文</th><th>第二語言</th><th>頁碼</th><th></th></tr></thead><tbody></tbody></table>
-      </div>
-      <div>
-        <label class="f">現場動線（第一站固定是總體介紹，地點預設 302；預設總體介紹 20 分、每間 20 分，剩下的時間排進綜合討論；研究室留 0 表示不去）</label>
-        <div class="flex flex-wrap gap-2" id="itinerary"></div>
+        <p class="muted mt-1" id="programmeTotal"></p>
       </div>
     </div>
 
@@ -226,6 +223,7 @@
         <button class="btn btn-soft" id="confirmRecipientsRefresh" title="重讀收件人清單（名單上每個人 ＋ 當天在專頁留信箱的人）" type="button">重新整理</button>
       </div>
       <div id="confirmRecipients" class="space-y-1"></div>
+      <p class="muted" id="confirmWho"></p>
       <div class="flex flex-wrap gap-2 items-center">
         <button class="btn" id="confirmSendBtn" title="把確認信寄給上面勾選的人（用中心的 Gmail）。沒設定 Gmail 時會給你 mailto 自己寄">寄出確認信</button>
         <button class="btn btn-soft" id="copyConfirm" title="複製主旨與內文，貼到你自己的信箱寄出">複製信件</button>
@@ -270,6 +268,7 @@
       <div class="card space-y-3">
         <h2 class="font-semibold">產生簡報</h2>
         <p class="muted">從母簡報挑出勾選的那幾頁，改好第 1–3 頁與第二語言，直接下載 .pptx。</p>
+        <p class="text-sm" id="deckStale" hidden></p>
         <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="deckBtn" title="用這一場的行程與勾選的頁次，從母簡報做出這一場專屬的 .pptx 並下載">產生簡報 .pptx</button></div>
         <p class="text-sm" id="deckInfo" hidden></p>
         <ul class="text-sm text-stone-600 list-disc pl-5" id="deckReport"></ul>
@@ -293,7 +292,7 @@
       <div id="wrapLinks" class="space-y-2 text-sm"></div>
     </div>
     <div class="card space-y-3">
-      <h2 class="font-semibold">動作一｜拍一張簽名簿</h2>
+      <div class="flex flex-wrap items-baseline gap-2"><h2 class="font-semibold mr-auto">動作一｜拍一張簽名簿</h2><label class="muted flex items-center gap-1" title="這一場本來就沒有這件事（沒有簽名簿、沒交換名片、沒錄口述都很正常）。標了就不算未完成，後續提醒也不會再為它寄信"><input type="checkbox" data-na="signbook"> 本次沒有</label></div>
       <p class="muted">實體本子拍一張就好。AI 把手寫字讀成一則一則留言，讀錯直接改——原圖會一直留著，之後還能回頭核對。</p>
       <input type="file" id="signbookFile" accept="image/*" capture="environment">
       <img id="signbookPreview" class="max-h-64 rounded-lg" hidden alt="">
@@ -306,7 +305,7 @@
       </div>
     </div>
     <div class="card space-y-3">
-      <h2 class="font-semibold">動作二｜拍名片</h2>
+      <div class="flex flex-wrap items-baseline gap-2"><h2 class="font-semibold mr-auto">動作二｜拍名片</h2><label class="muted flex items-center gap-1" title="這一場本來就沒有這件事（沒有簽名簿、沒交換名片、沒錄口述都很正常）。標了就不算未完成，後續提醒也不會再為它寄信"><input type="checkbox" data-na="cards"> 本次沒有</label></div>
       <p class="muted">現場拿到名片就拍一張（手機會直接開相機，可以連拍幾張）。AI 讀成姓名、職稱、單位、email、電話，<b>你確認後</b>才併進這場的名單——訪後信就會寄給他。原圖留著，讀錯可以回頭核對。</p>
       <div class="flex flex-wrap gap-2 items-center">
         <input type="file" id="cardFiles" accept="image/*" capture="environment" multiple>
@@ -318,7 +317,7 @@
     </div>
 
     <div class="card space-y-3">
-      <h2 class="font-semibold">動作三｜三十秒口述</h2>
+      <div class="flex flex-wrap items-baseline gap-2"><h2 class="font-semibold mr-auto">動作三｜三十秒口述</h2><label class="muted flex items-center gap-1" title="這一場本來就沒有這件事（沒有簽名簿、沒交換名片、沒錄口述都很正常）。標了就不算未完成，後續提醒也不會再為它寄信"><input type="checkbox" data-na="dictation"> 本次沒有</label></div>
       <p class="muted">今天誰來、最想看哪一間、問了什麼、有沒有透露合作意願。</p>
       <div class="flex flex-wrap gap-2 items-center">
         <button class="btn" id="recBtn" title="錄下你自己的三十秒口述：誰來、最想看哪一間、問了什麼、有沒有合作意願">● 開始錄音</button>
@@ -343,7 +342,7 @@
       </div>
     </div>
     <div class="card space-y-3">
-      <h2 class="font-semibold">動作四｜當天資料放上專屬頁面</h2>
+      <div class="flex flex-wrap items-baseline gap-2"><h2 class="font-semibold mr-auto">動作四｜當天資料放上專屬頁面</h2><label class="muted flex items-center gap-1" title="這一場本來就沒有這件事（沒有簽名簿、沒交換名片、沒錄口述都很正常）。標了就不算未完成，後續提醒也不會再為它寄信"><input type="checkbox" data-na="materials"> 本次沒有</label></div>
       <p class="muted">感謝信只會承諾頁面上真的有的東西。先把簡報 PDF、合照、相關連結放上來，再草擬感謝信。專頁：<a id="materialsPageLink" class="underline break-all" target="_blank" rel="noopener"></a></p>
       <p class="text-sm" id="materialsStatus"></p>
       <div class="grid sm:grid-cols-2 gap-4">
@@ -387,6 +386,7 @@
       </div>
       <div id="thanksRecipients" class="space-y-1"></div>
       <p class="muted">寄出之後就不必再回來按什麼了：來賓的回覆會自己進「資料」分頁，<b>一頁摘要每天凌晨自己產</b>（回覆陸續進來就自己重寫一份），Drive 備份也是自動的。</p>
+      <p class="muted" id="thanksWho"></p>
       <div class="flex flex-wrap gap-2 items-center">
         <button class="btn" id="sendBtn" title="一封一封寄出去（用中心的 Gmail 帳號）。沒設定 Gmail 時會給你 mailto 自己寄">寄出感謝信</button>
         <button class="btn btn-soft" id="copyThanks" title="複製主旨與內文，貼到你自己的信箱寄出">複製信件</button>
@@ -577,7 +577,7 @@
       }
     }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: I18N_ATTRS });
   }
-  const state = { visits: [], visit: null, slides: null, labs: null, thanksRecipients: [], signbookEntries: [], recBlob: null, saved: false };
+  const state = { visits: [], visit: null, slides: null, labs: null, thanksRecipients: [], signbookEntries: [], recBlob: null, saved: false, stale: [] };
 
   // ── 登入：貼一次 ADMIN_TOKEN，伺服器發一個 HttpOnly cookie，這台裝置 180 天不用再登入 ──
   // （以前把 token 存 localStorage，iPad Safari 會當追蹤資料清掉，七天沒開就要重登；cookie 不受那條規則影響）
@@ -684,7 +684,7 @@
   async function boot() {
     localPrune();
     await ensureIndexes();
-    renderItinerary();
+    renderProgramme([]);
     await loadVisits({ autoPick: true });
     api("/api/settings").then((r) => { if (r.ok) state.settings = r.settings; }); // 預設值（例如訪後信寄件者）一開場就拿，不必等人打開「設定」
     // 打開後台就停在今天（或最近）那一場——不必自己先去選
@@ -717,6 +717,23 @@
   function emptyVisit() {
     return { visit_id: "", date: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10), start_time: "10:00", duration_minutes: 150, org: { name: "", name_local: "", type: "university", country: "" }, guests: [], headcount: 0, contact_teacher: "張俊彥", purpose: "", interests: [], language: "en", programme: [], itinerary: [{ room: "briefing", minutes: 20, location: "302" }, ...ROOMS.map((room) => ({ room, minutes: 20 }))], slides: [], text_edits: [], materials: { deck_pdf: "", photos: [], links: [] }, letters: {}, deck: {}, signbook: {}, dictation: {}, status: "draft" };
   }
+  /**
+   * 預設的今日流程（跟 `lib/visit.mjs defaultProgramme` 同一套規則：總體介紹 20、每間 20、剩下給綜合討論）。
+   * 新的一場一打開表就有三列可以改——空白的表看不出要填什麼。
+   */
+  function defaultProgramme({ start_time, duration_minutes, itinerary } = {}) {
+    const rooms = (itinerary || []).filter((s) => String(s.room) !== "briefing" && (Number(s.minutes) || 0) > 0).length || ROOMS.length;
+    const total = Number(duration_minutes) || 150;
+    const brief = 20;
+    const per = 20;
+    const discussion = Math.max(10, total - brief - rooms * per - (total >= 60 ? 5 : 0));
+    let cur = hhmm(start_time) ?? 600;
+    return [
+      { kind: "briefing", minutes: brief, title_en: "Welcome and centre overview", title_2nd: "歡迎與中心總體介紹" },
+      { kind: "tour", minutes: rooms * per, title_en: "Laboratory visits", title_2nd: "研究室參訪" },
+      { kind: "discussion", minutes: discussion, title_en: "General discussion", title_2nd: "綜合討論" },
+    ].map((b) => { const start = toHHMM(cur); cur += b.minutes; return { start, end: toHHMM(cur), kind: b.kind, title_en: b.title_en, title_2nd: b.title_2nd, slides_range: "", rooms: [] }; });
+  }
 
   // ── 訪前：表單 ──
   $("visitSelect").onchange = () => selectVisit($("visitSelect").value);
@@ -741,6 +758,7 @@
       if (stale()) return;
       if (!r.ok) return flash(r.error, "err");
       state.responses = r.responses || [];
+      state.stale = r.stale || [];
       fillForm(r.visit);
     }
     await reloadTab(currentTab());
@@ -764,7 +782,7 @@
     $("deleteBtn").hidden = !state.saved;
     $("draftDiscard").hidden = state.saved || !state.draft?.fields?.form;
     if (!state.saved) $("saveInfo").textContent = "";
-    renderGuests(v.guests || []); renderProgramme(v.programme || []); renderItinerary(v.itinerary); renderBackground(v.background);
+    renderGuests(v.guests || []); renderProgramme(v.programme || [], v.itinerary); renderBackground(v.background);
     $("rationale").textContent = v.plan_rationale || ""; $("uncertainties").innerHTML = (v.uncertainties || []).map((u) => `<li>${esc(u)}</li>`).join("");
     $("afterSave").hidden = !state.saved;
     renderProgress(v);
@@ -776,8 +794,8 @@
     v.org = { name: $("orgName").value.trim(), name_local: $("orgLocal").value.trim(), type: $("orgType").value, country: $("orgCountry").value.trim() };
     v.language = $("language").value; v.date = $("date").value; v.start_time = $("startTime").value; v.end_time = $("endTime").value; v.duration_minutes = minutesBetween(v.start_time, v.end_time) || Number(state.visit?.duration_minutes) || 90; v.headcount = Number($("headcount").value) || 0;
     v.contact_teacher = $("contactTeacher").value; v.purpose = $("purpose").value.trim(); v.interests = $("interests").value.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
-    v.guests = [...$("guestTable").tBodies[0].rows].map((tr) => ({ name: tr.cells[0].firstChild.value.trim(), title: tr.cells[1].firstChild.value.trim(), email: tr.cells[2].firstChild.value.trim(), affiliation: tr.cells[3].firstChild.value.trim(), role: tr.cells[4].firstChild.checked ? "lead" : "member" })).filter((g) => g.name || g.email);
-    v.programme = [...$("programmeTable").tBodies[0].rows].map((tr) => ({ start: tr.cells[0].firstChild.value, end: tr.cells[1].firstChild.value, kind: tr.cells[2].firstChild.value, title_en: tr.cells[3].firstChild.value, title_2nd: tr.cells[4].firstChild.value, slides_range: tr.cells[5].firstChild.value, rooms: tr.cells[2].firstChild.value === "tour" ? labRoute() : [] }));
+    v.guests = [...$("guestTable").tBodies[0].rows].map((tr) => ({ name: tr.cells[0].firstChild.value.trim(), title: tr.cells[1].firstChild.value.trim(), email: tr.cells[2].firstChild.value.trim(), affiliation: tr.cells[3].firstChild.value.trim(), role: tr.cells[4].firstChild.checked ? "lead" : "member", contact: tr.cells[5].firstChild.checked })).filter((g) => g.name || g.email);
+    v.programme = readProgramme();
     v.itinerary = readItinerary();
     v.slides = Array.isArray(state.visit?.slides) ? state.visit.slides : [];
     if (state.visit?.background) v.background = state.visit.background;
@@ -787,7 +805,7 @@
   function renderGuests(guests) {
     $("guestTable").tBodies[0].innerHTML = guests.map((g) => guestRow(g)).join("");
   }
-  const guestRow = (g = {}) => `<tr><td><input type="text" value="${esc(g.name)}"></td><td><input type="text" value="${esc(g.title)}"></td><td><input type="email" value="${esc(g.email)}"></td><td><input type="text" value="${esc(g.affiliation)}"></td><td class="text-center"><input type="radio" name="lead" ${g.role === "lead" ? "checked" : ""}></td><td><button type="button" class="muted" data-del-row title="刪掉這一列">✕</button></td></tr>`;
+  const guestRow = (g = {}) => `<tr><td><input type="text" value="${esc(g.name)}"></td><td><input type="text" value="${esc(g.title)}"></td><td><input type="email" value="${esc(g.email)}"></td><td><input type="text" value="${esc(g.affiliation)}"></td><td class="text-center"><input type="radio" name="lead" ${g.role === "lead" ? "checked" : ""}></td><td class="text-center"><input type="checkbox" ${g.contact ? "checked" : ""} title="確認信預設只寄給勾起來的人"></td><td><button type="button" class="muted" data-del-row title="刪掉這一列">✕</button></td></tr>`;
   $("addGuest").onclick = () => $("guestTable").tBodies[0].insertAdjacentHTML("beforeend", guestRow());
   /**
    * 每一張表的 ✕：刪掉那一列。**訪前那兩張表（名單、今日流程）刪完要自己叫一次存檔**——
@@ -799,28 +817,93 @@
     if (!btn) return;
     const row = btn.closest("tr");
     const inPre = !!row?.closest("#tab-pre");
+    const inProgramme = !!row?.closest("#programmeTable");
     row?.remove();
+    if (inProgramme) return syncProgramme(); // 研究室那一列跟著搬家（整表重畫），順便存
     if (inPre) scheduleSave();
   });
-  function renderProgramme(blocks) { $("programmeTable").tBodies[0].innerHTML = blocks.map(blockRow).join(""); }
-  const KIND_LABEL = { briefing: "總體簡報", tour: "研究室參訪", discussion: "綜合討論", photo: "合照", other: "其他" };
-  const blockRow = (b = { kind: "discussion", title_en: "General discussion", title_2nd: "綜合討論" }) => `<tr><td><input type="time" value="${esc(b.start)}"></td><td><input type="time" value="${esc(b.end)}"></td><td><select>${Object.entries(KIND_LABEL).map(([k, label]) => `<option value="${k}" ${b.kind === k ? "selected" : ""}>${label}</option>`).join("")}</select></td><td><input type="text" value="${esc(b.title_en)}"></td><td><input type="text" value="${esc(b.title_2nd)}"></td><td><input type="text" value="${esc(b.slides_range || "")}"></td><td><button type="button" class="muted" data-del-row title="刪掉這一列">✕</button></td></tr>`;
-  $("addBlock").onclick = () => $("programmeTable").tBodies[0].insertAdjacentHTML("beforeend", blockRow());
-  function renderItinerary(it) {
-    const by = new Map((it || []).map((s, i) => [String(s.room), { ...s, order: i }]));
-    // 第一站固定是總體介紹（總體簡報）；分鐘數預設取今日流程 briefing 區塊的長度
-    const briefing = by.get("briefing") || { minutes: briefingMinutesFromProgramme() || 20, location: "302" };
-    const rooms = [...ROOMS].sort((a, b) => (by.has(a) ? by.get(a).order : 99) - (by.has(b) ? by.get(b).order : 99));
-    const first = `<label class="card !p-2 !rounded-lg flex items-center gap-2" style="--tone:var(--cbriefing)"><span class="muted">1.</span><span class="font-medium">總體介紹</span><input type="text" class="!w-28" placeholder="地點，預設 302" value="${esc(briefing.location || "302")}" data-briefing-location><input type="number" min="1" class="!w-16" value="${briefing.minutes || 20}" data-room="briefing"> 分</label>`;
-    $("itinerary").innerHTML = first + rooms.map((room, i) => { const s = by.get(room); const lab = (state.labs?.labs || []).find((l) => l.room === room); return `<label class="card !p-2 !rounded-lg flex items-center gap-2" style="--tone:${roomTone(room)}"><span class="muted">${i + 2}.</span><span class="room">${room}</span><span class="muted">${esc(lab?.lead?.name_zh || "")}</span><input type="number" min="0" class="!w-16" value="${s ? s.minutes : 0}" data-room="${room}"> 分</label>`; }).join("");
+  /**
+   * 行程**只有一張表**。以前是兩張：「今日流程」排時間區塊，底下另一張「現場動線」再填每一間幾分鐘——
+   * 同一件事要看懂兩套、改兩個地方。現在每一間的分鐘數就長在「研究室參訪」那一列底下，
+   * 分鐘一改就把後面各段的時間往後推算一次（`retimeProgramme`）：**時間是算出來的，不是第二個要填的欄位**。
+   * 存回去的資料結構沒變（`programme` ＋ `itinerary`），所以簡報第 2 頁、ICS、來賓專頁、摘要都照舊。
+   */
+  function renderProgramme(blocks, itinerary) {
+    const it = itinerary === undefined ? readItinerary() : itinerary && itinerary.length ? itinerary : emptyVisit().itinerary;
+    const rows = (blocks || []).length ? blocks : defaultProgramme({ start_time: $("startTime").value, duration_minutes: minutesBetween($("startTime").value, $("endTime").value), itinerary: it });
+    $("programmeTable").tBodies[0].innerHTML = rows.map((b) => blockRow(b, it) + (b && b.kind === "tour" ? roomsRow(it) : "")).join("");
+    updateProgrammeTotal();
   }
+  const KIND_LABEL = { briefing: "總體簡報", tour: "研究室參訪", discussion: "綜合討論", photo: "合照", other: "其他" };
+  const briefingLocationOf = (it) => ((it || []).find((s) => String(s.room) === "briefing") || {}).location || "";
+  const blockRow = (b = { kind: "discussion", title_en: "General discussion", title_2nd: "綜合討論" }, it) => `<tr><td><input type="time" value="${esc(b.start)}"></td><td><input type="time" value="${esc(b.end)}"></td><td><select>${Object.entries(KIND_LABEL).map(([k, label]) => `<option value="${k}" ${b.kind === k ? "selected" : ""}>${label}</option>`).join("")}</select>${b.kind === "briefing" ? `<input type="text" class="!w-20 ml-1" placeholder="地點 302" title="總體介紹在哪一間（空白就是 302）" value="${esc(briefingLocationOf(it === undefined ? state.visit?.itinerary : it))}" data-briefing-location>` : ""}</td><td><input type="text" value="${esc(b.title_en)}"></td><td><input type="text" value="${esc(b.title_2nd)}"></td><td><input type="text" value="${esc(b.slides_range || "")}"></td><td><button type="button" class="muted" data-del-row title="刪掉這一列">✕</button></td></tr>`;
+  /** 「研究室參訪」那一列底下的五間：一間一個分鐘數，留 0 就是不去。 */
+  const roomsRow = (it) => {
+    const by = new Map((it || []).map((s, i) => [String(s.room), { ...s, order: i }]));
+    const rooms = [...ROOMS].sort((a, b) => (by.has(a) ? by.get(a).order : 99) - (by.has(b) ? by.get(b).order : 99));
+    const chips = rooms.map((room) => {
+      const s = by.get(room);
+      const lab = (state.labs?.labs || []).find((l) => l.room === room);
+      return `<label class="card !p-2 !rounded-lg flex items-center gap-2" style="--tone:${roomTone(room)}"><span class="room">${room}</span><span class="muted">${esc(lab?.lead?.name_zh || "")}</span><input type="number" min="0" class="!w-16" value="${s ? s.minutes : 0}" data-room="${room}"> 分</label>`;
+    }).join("");
+    return `<tr data-rooms-row><td colspan="7" class="!pt-0"><div class="flex flex-wrap gap-2 items-center" id="itinerary">${chips}<span class="muted" id="roomsTotal"></span></div></td></tr>`;
+  };
+  /** 流程區塊那幾列（跳過底下那一列研究室分鐘）。 */
+  const programmeRows = () => [...($("programmeTable").tBodies[0]?.rows || [])].filter((r) => !r.hasAttribute("data-rooms-row"));
+  const rowKind = (tr) => tr.cells[2].querySelector("select").value;
+  const readProgramme = () => programmeRows().map((tr) => ({ start: tr.cells[0].firstChild.value, end: tr.cells[1].firstChild.value, kind: rowKind(tr), title_en: tr.cells[3].firstChild.value, title_2nd: tr.cells[4].firstChild.value, slides_range: tr.cells[5].firstChild.value, rooms: rowKind(tr) === "tour" ? labRoute() : [] }));
+  /** 類型改了、加一列、刪一列：讀出畫面上現在這一份，整表重畫（研究室那一列才會跟著搬家）。 */
+  function syncProgramme() {
+    const blocks = readProgramme();
+    const it = readItinerary();
+    renderProgramme(blocks, it);
+    scheduleSave();
+  }
+  $("addBlock").onclick = () => { $("programmeTable").tBodies[0].insertAdjacentHTML("beforeend", blockRow()); updateProgrammeTotal(); };
   function briefingMinutesFromProgramme() {
-    const tr = [...($("programmeTable").tBodies[0]?.rows || [])].find((r) => r.cells[2].firstChild.value === "briefing");
+    const tr = programmeRows().find((r) => rowKind(r) === "briefing");
     if (!tr) return 0;
-    const [s, e] = [tr.cells[0].firstChild.value, tr.cells[1].firstChild.value].map((v) => { const [h, m] = v.split(":").map(Number); return h * 60 + m; });
+    const [s, e] = [tr.cells[0].firstChild.value, tr.cells[1].firstChild.value].map((v) => { const [h, m] = String(v).split(":").map(Number); return h * 60 + m; });
     return e > s ? e - s : 0;
   }
-  const readItinerary = () => [...document.querySelectorAll("#itinerary input[data-room]")].map((i) => ({ room: i.dataset.room, minutes: Number(i.value) || 0, ...(i.dataset.room === "briefing" ? { location: ($("itinerary").querySelector("[data-briefing-location]") || {}).value || "" } : {}) })).filter((s) => s.room === "briefing" || s.minutes > 0);
+  /**
+   * 分鐘數改了就把整排時間重算一次：從「開始」那一格往後推，研究室參訪那一段的長度＝五間的合計。
+   * 其他區塊維持自己原本的長度（主辦端手改的分鐘照他的意思算），算不出來的用預設值。
+   */
+  function retimeProgramme() {
+    const rows = programmeRows();
+    if (!rows.length) return;
+    const tour = [...document.querySelectorAll("#itinerary input[data-room]")].reduce((n, i) => n + (Number(i.value) || 0), 0);
+    let cur = hhmm($("startTime").value) ?? 600;
+    for (const tr of rows) {
+      const kind = rowKind(tr);
+      const had = hhmm(tr.cells[1].firstChild.value) - hhmm(tr.cells[0].firstChild.value);
+      const len = kind === "tour" ? tour : Number.isFinite(had) && had > 0 ? had : kind === "photo" ? 5 : 20;
+      tr.cells[0].firstChild.value = toHHMM(cur);
+      cur += len;
+      tr.cells[1].firstChild.value = toHHMM(cur);
+    }
+    updateProgrammeTotal();
+  }
+  /** 底下那一行：五間合計幾分、整份流程幾分，跟「幾點到幾點」差多少。差了就直接說差幾分。 */
+  function updateProgrammeTotal() {
+    const rooms = [...document.querySelectorAll("#itinerary input[data-room]")];
+    const roomsTotal = rooms.reduce((n, i) => n + (Number(i.value) || 0), 0);
+    if ($("roomsTotal")) $("roomsTotal").textContent = rooms.length ? `五間合計 ${roomsTotal} 分` : "";
+    const rows = programmeRows();
+    const first = rows[0] && hhmm(rows[0].cells[0].firstChild.value);
+    const last = rows.length && hhmm(rows[rows.length - 1].cells[1].firstChild.value);
+    const planned = rows.length && first != null && last != null && last > first ? last - first : 0;
+    const whole = minutesBetween($("startTime").value, $("endTime").value);
+    const diff = planned && whole ? planned - whole : 0;
+    $("programmeTotal").textContent = !planned ? "" : `流程排了 ${planned} 分${!whole ? "" : diff === 0 ? `，跟「幾點到幾點」一樣` : diff > 0 ? `，比 ${whole} 分多 ${diff} 分` : `，比 ${whole} 分少 ${-diff} 分`}`;
+  }
+  const readItinerary = () => {
+    const rooms = [...document.querySelectorAll("#itinerary input[data-room]")].map((i) => ({ room: i.dataset.room, minutes: Number(i.value) || 0 })).filter((s) => s.minutes > 0);
+    // 總體介紹的分鐘數只有一個地方填——今日流程裡 briefing 那一列的起訖；地點也在那一列
+    const loc = ($("programmeTable").querySelector("[data-briefing-location]") || {}).value || "";
+    return [{ room: "briefing", minutes: briefingMinutesFromProgramme() || 20, location: String(loc).trim() }, ...rooms];
+  };
   const labRoute = () => readItinerary().filter((s) => s.room !== "briefing").map((s) => s.room);
   // ── 簡報分頁：選頁與產檔（獨立一頁——有些參訪不用簡報，只口頭介紹） ──
   const dnote = (msg, cls = "muted") => { const el = $("deckStatus"); el.textContent = msg || ""; el.className = "text-sm " + cls; };
@@ -848,11 +931,13 @@
     const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
     if (!r.ok) { state.deckVisit = null; $("deckWork").hidden = true; dnote(`讀不到這場參訪：${r.error}`, "err"); return flash(r.error, "err"); }
     state.deckVisit = r.visit;
+    state.deckStale = r.stale || [];
     deckNeedsVisit(false);
     $("noDeck").checked = !!r.visit.deck?.skip;
     renderSlideGrid(r.visit.slides || []);
     $("slidesInfo").textContent = "";
     applyNoDeck();
+    renderDeckStale();
     dnote(`${r.visit.date}　${r.visit.org?.name || r.visit.visit_id}`);
     checkMaster();
   }
@@ -867,10 +952,23 @@
     $("deckWork").hidden = skip;
     $("deckSkipNote").hidden = !skip;
   }
+  /**
+   * 產出來的 .pptx 是不是舊的。**網頁會跟著更新，已經下載的簡報不會**：行程或選頁在產檔之後改過，
+   * 手上那個檔案的第 2 頁流程就是錯的。指紋由伺服器比對（`/api/visits` 的 `stale`），這裡只負責說一句。
+   */
+  function renderDeckStale() {
+    const hit = (state.deckStale || []).find((x) => x.key === "deck");
+    const el = $("deckStale");
+    el.hidden = !hit;
+    el.className = "text-sm err";
+    if (hit) el.textContent = `${hit.why}——請再按一次「產生簡報 .pptx」，把新的那一份寄出去。`;
+  }
   /** 存檔後把新的那一份同步回訪前分頁，免得訪前再按儲存時蓋掉。 */
-  function afterDeckSave(visit) {
+  function afterDeckSave(visit, stale) {
     state.deckVisit = visit;
-    if (state.visit?.visit_id === visit.visit_id) { state.visit.slides = visit.slides; state.visit.deck = visit.deck; renderProgress(state.visit); }
+    if (stale) state.deckStale = stale;
+    renderDeckStale();
+    if (state.visit?.visit_id === visit.visit_id) { state.visit.slides = visit.slides; state.visit.deck = visit.deck; state.stale = state.deckStale || []; renderProgress(state.visit); }
   }
   $("noDeck").onchange = async () => {
     applyNoDeck();
@@ -878,7 +976,7 @@
     if (!v) return;
     const r = await api("/api/visits", { method: "POST", body: { ...v, deck: { ...(v.deck || {}), skip: $("noDeck").checked } } });
     if (!r.ok) return flash(r.error, "err");
-    afterDeckSave(r.visit);
+    afterDeckSave(r.visit, r.stale);
     flash($("noDeck").checked ? "這場不做簡報，只口頭介紹" : "這場要做簡報");
   };
   /** 選頁也自己存（跟訪前一樣，畫面上沒有存檔鍵）：勾完一秒多就寫回這一場。 */
@@ -897,7 +995,7 @@
     try {
       const r = await api("/api/visits", { method: "POST", body: { ...v, slides: chosenSlides() } });
       if (!r.ok) { $("slidesInfo").textContent = ""; return flash(`選頁存不起來：${r.error}`, "err"); }
-      afterDeckSave(r.visit);
+      afterDeckSave(r.visit, r.stale);
       $("slidesInfo").textContent = `已存 ${r.visit.slides.length} 頁 ${(r.visit.updated_at || "").slice(11, 16)}`;
     } finally {
       saveSlides.running = false;
@@ -1062,8 +1160,11 @@
   async function pollPlan(jobId) {
     const out = await waitForJob("/api/plan", jobId, noteInto("planInfo"));
     if (!out) return;
-    const v = out.visit; state.visit = { ...state.visit, ...v, visit_id: state.saved ? state.visit.visit_id : "" };
-    renderProgramme(v.programme); renderItinerary(v.itinerary);
+    // 排行程決定的是行程與選頁。**簡報那邊的狀態不歸它管**——等 AI 的那一分鐘裡，人可能已經切到
+    // 「簡報」分頁勾了「這場不用簡報」或產了檔；排完才回來的這一份不該把那些蓋掉。
+    const v = out.visit;
+    state.visit = { ...state.visit, ...v, deck: state.visit?.deck || v.deck || {}, visit_id: state.saved ? state.visit.visit_id : "" };
+    renderProgramme(v.programme, v.itinerary);
     $("rationale").textContent = v.plan_rationale || ""; const hist = out.history ? `；參考了過去 ${out.history.visits} 場（同類單位 ${out.history.same_type.visits} 場）哪幾頁被提問、被提到` : "";
     $("planInfo").textContent = `也挑了 ${(v.slides || []).length} 頁、簡報約 ${out.estimated_briefing_minutes} 分鐘，到「簡報」分頁確認${hist}${out.master_text_available ? "" : "（尚無母簡報文字：第 1–3 頁的替換文字要在產檔時處理）"}`;
     await saveVisit();
@@ -1090,6 +1191,7 @@
       const r = await api("/api/visits", { method: "POST", body: v });
       if (!r.ok) { $("saveInfo").textContent = ""; return flash(`存不起來：${r.error}`, "err"); }
       state.urlFixed = !!r.url_fixed;
+      state.stale = r.stale || [];
       const first = !state.saved;
       await loadVisits();
       $("visitSelect").value = r.visit.visit_id;
@@ -1103,11 +1205,17 @@
       saveVisit.running = false;
     }
   }
-  // 訪前分頁裡任何一個欄位改動都會自己存（含名單、流程、動線那幾張表）
+  // 訪前分頁裡任何一個欄位改動都會自己存（含名單、行程那張表）
   $("startTime").addEventListener("input", showDuration);
   $("endTime").addEventListener("input", showDuration);
   $("tab-pre").addEventListener("input", scheduleSave);
   $("tab-pre").addEventListener("change", scheduleSave);
+  // 行程那張表：研究室的分鐘改了就把後面各段的時間推算一次；類型改了要換這一列有沒有研究室分鐘
+  $("programmeTable").addEventListener("input", (e) => {
+    if (e.target.matches("input[data-room]")) retimeProgramme();
+    else if (e.target.matches('input[type="time"]')) updateProgrammeTotal();
+  });
+  $("programmeTable").addEventListener("change", (e) => { if (e.target.matches("select")) syncProgramme(); });
 
   /**
    * 暫存：畫面上「還沒交出去」的東西——貼進來的 email、打好的逐字稿、手改過的信件，
@@ -1296,19 +1404,24 @@
     if (!v?.visit_id || !state.saved) { box.innerHTML = ""; return; }
     const m = v.materials || {};
     const n = (state.responses || []).length;
+    // 已經交出去、但行程之後又改過的（伺服器算的）：綠勾要收回來，改說「需重新產生」
+    const stale = (key) => (state.stale || []).some((x) => x.key === key);
+    const na = new Set((v.wrapup?.na || []));
+    // 本次沒有的那幾件不算未完成：顯示「本次沒有」，不是灰點
+    const wrap = (key, label, done, why) => ["wrapup", done ? label : na.has(key) ? `${label} 本次沒有` : label, done, why, !done && na.has(key)];
     const groups = [
       ["訪前", [
         ["pre", (v.guests || []).length ? `名單 ${v.guests.length} 人` : "名單", (v.guests || []).length > 0, "訪後信會寄給名單上每一個人，所以名單就是回饋的上限"],
         ["pre", "背景研判", v.background?.status === "done", "查過對方的公開資料，判斷可能的參訪目的"],
-        ["pre", "今日流程", (v.programme || []).length > 0, "排好時間表與現場動線；會印在簡報第 2 頁與來賓專頁"],
-        ["deck", v.deck?.skip ? "不用簡報" : v.deck?.generated_at ? "簡報已產" : `選了 ${(v.slides || []).length} 頁`, !!(v.deck?.skip || v.deck?.generated_at), "挑頁並產出這一場的 .pptx；只口頭介紹的場次可以整頁關掉"],
-        ["pre", v.letters?.confirmation?.sent_at ? "確認信 已寄" : "確認信", !!v.letters?.confirmation?.sent_at, "跟對方確認日期時間，順便把來賓專頁網址交出去"],
+        ["pre", "今日流程", (v.programme || []).length > 0, "這一場的行程：幾點做什麼、每一間幾分鐘。會印在簡報第 2 頁與來賓專頁"],
+        ["deck", v.deck?.skip ? "不用簡報" : stale("deck") ? "簡報 需重產" : v.deck?.generated_at ? "簡報已產" : `選了 ${(v.slides || []).length} 頁`, !!(v.deck?.skip || (v.deck?.generated_at && !stale("deck"))), stale("deck") ? "行程或選頁在產檔之後改過，手上那份 .pptx 是舊的" : "挑頁並產出這一場的 .pptx；只口頭介紹的場次可以整頁關掉"],
+        ["pre", stale("confirmation") ? "確認信 行程已改" : v.letters?.confirmation?.sent_at ? "確認信 已寄" : "確認信", !!(v.letters?.confirmation?.sent_at && !stale("confirmation")), stale("confirmation") ? "寄出之後行程又改過，對方手上的時間是舊的" : "跟對方確認日期時間，順便把來賓專頁網址交出去"],
       ]],
       ["當天", [
-        ["wrapup", "簽名簿", !!v.signbook?.photo_key, "實體本子拍一張，AI 讀成留言"],
-        ["wrapup", (v.cards || []).length ? `名片 ${v.cards.length} 張` : "名片", (v.cards || []).length > 0, "現場拿到的名片變成名單上的人——訪後信才寄得到他"],
-        ["wrapup", "口述", !!v.dictation?.transcript, "主持人三十秒：誰來、最想看哪一間、問了什麼"],
-        ["wrapup", "當天資料", !!(m.deck_pdf || (m.photos || []).length || (m.links || []).length), "PDF、合照、連結放上來賓專頁——感謝信只能承諾頁面上真的有的東西"],
+        wrap("signbook", "簽名簿", !!v.signbook?.photo_key, "實體本子拍一張，AI 讀成留言"),
+        wrap("cards", (v.cards || []).length ? `名片 ${v.cards.length} 張` : "名片", (v.cards || []).length > 0, "現場拿到的名片變成名單上的人——訪後信才寄得到他"),
+        wrap("dictation", "口述", !!v.dictation?.transcript, "主持人三十秒：誰來、最想看哪一間、問了什麼"),
+        wrap("materials", "當天資料", !!(m.deck_pdf || (m.photos || []).length || (m.links || []).length), "PDF、合照、連結放上來賓專頁——感謝信只能承諾頁面上真的有的東西"),
       ]],
       ["訪後", [
         ["wrapup", v.letters?.thanks?.sent_at ? `感謝信 ${v.letters.thanks.sent_to?.length || 0} 人` : "感謝信", !!v.letters?.thanks?.sent_at, "寄給名單上每一個人，並請他們回三個問題"],
@@ -1320,7 +1433,7 @@
     const PHASE_TONE = { "訪前": "#0f766e", "當天": "#b45309", "訪後": "#0369a1" };
     box.innerHTML = groups
       .map(([label, items]) => `<span class="phase" style="--tone:${PHASE_TONE[label]}">${label}</span>` + items
-        .map(([tab, text, done, why]) => `<button type="button" data-go="${tab}" title="${esc(why)}" class="${done ? "text-emerald-700" : "text-stone-400"} hover:underline">${done ? "✓" : "·"} ${esc(text)}</button>`)
+        .map(([tab, text, done, why, skipped]) => `<button type="button" data-go="${tab}" title="${esc(why)}" class="${done ? "text-emerald-700" : "text-stone-400"} hover:underline">${done ? "✓" : skipped ? "–" : "·"} ${esc(text)}</button>`)
         .join(""))
       .join(`<span class="text-stone-300">｜</span>`);
   }
@@ -1516,7 +1629,7 @@
         $("deckReport").innerHTML = lines.map((l) => `<li>${esc(l)}</li>`).join("");
         const deck = { ...(spec.deck || {}), generated_at: new Date().toISOString(), slides: report.output_slides };
         const saved = await api("/api/visits", { method: "POST", body: { ...spec, deck } });
-        if (saved.ok) { afterDeckSave(saved.visit); $("slidesInfo").textContent = `已存 ${saved.visit.slides.length} 頁`; }
+        if (saved.ok) { afterDeckSave(saved.visit, saved.stale); $("slidesInfo").textContent = `已存 ${saved.visit.slides.length} 頁`; }
       } catch (e) { info.textContent = `產檔失敗：${e.message || e}`; flash(String(e.message || e), "err"); }
     });
   }
@@ -1641,6 +1754,27 @@
   $("wrapLinks").addEventListener("click", (e) => { const b = e.target.closest("[data-copy]"); if (b) copy(b.dataset.copy); });
   const mediaUrl = (x) => (/^https?:\/\//i.test(x) ? x : `/api/media?key=${encodeURIComponent(x)}`);
   function mnote(msg, cls = "muted") { const el = $("materialsStatus"); if (!el) return; el.textContent = msg || ""; el.className = "text-sm " + cls; }
+  /**
+   * 「本次沒有」：**沒有簽名簿、沒交換名片、沒錄口述，參訪一樣走完了**，感謝信一樣該寄。
+   * 標了就不算未完成——進度線顯示「本次沒有」，結束時的後續提醒也不再為它寄信。
+   * 存在 `visit.wrapup.na`（`visits.mts` 的 KEPT 有帶著，訪前分頁按存檔不會清掉）。
+   */
+  function renderNA(v) {
+    const na = new Set(v?.wrapup?.na || []);
+    for (const box of document.querySelectorAll("[data-na]")) box.checked = na.has(box.dataset.na);
+  }
+  document.addEventListener("change", async (e) => {
+    const box = e.target.closest("[data-na]");
+    if (!box) return;
+    const v = state.wrapVisit;
+    if (!v) { box.checked = false; return flash("請先在上面選一場參訪", "err"); }
+    const na = [...document.querySelectorAll("[data-na]")].filter((b) => b.checked).map((b) => b.dataset.na);
+    const r = await api("/api/visits", { method: "POST", body: { ...v, wrapup: { ...(v.wrapup || {}), na } } });
+    if (!r.ok) { box.checked = !box.checked; return flash(r.error, "err"); }
+    state.wrapVisit = r.visit;
+    if (state.visit?.visit_id === r.visit.visit_id) { state.visit.wrapup = r.visit.wrapup; renderProgress(state.visit); }
+    flash(box.checked ? "這一場沒有這件事，不會再提醒" : "改回「還要做」");
+  });
   async function loadMaterials() {
     let id = $("visitSelect").value;
     if (!id && !(state.visits || []).length) { await loadVisits(); id = $("visitSelect").value; }
@@ -1649,6 +1783,7 @@
     if (!r.ok) { mnote(`讀不到這場參訪：${r.error}`, "err"); return flash(r.error, "err"); }
     mnote("");
     state.wrapVisit = r.visit;
+    renderNA(r.visit);
     renderSavedSignbook(r.visit.signbook || {});
     renderSavedDictation(r.visit.dictation || {});
     $("materialsPageLink").textContent = r.visit.page_url; $("materialsPageLink").href = r.visit.page_url;
@@ -1734,6 +1869,7 @@
   // ── 信件：兩封信（確認信、感謝信）都在這裡，收件人共用一份 ──
   $("confirmRecipientsRefresh").onclick = loadRecipients;
   $("thanksRecipientsRefresh").onclick = loadRecipients;
+  for (const id of ["confirmRecipients", "thanksRecipients"]) $(id)?.addEventListener("change", updateSendCounts);
   async function loadRecipients() {
     const id = $("visitSelect").value;
     if (!id) { for (const box of recipientBoxes()) box.innerHTML = `<p class="muted">請先在上面選一場參訪。</p>`; return; }
@@ -1743,7 +1879,9 @@
     const c = v.visit.letters?.confirmation;
     const t = v.visit.letters?.thanks;
     $("confirmSubject").value = c?.subject || ""; $("confirmBody").value = c?.body || "";
-    $("confirmSendInfo").innerHTML = c?.sent_at ? `<span class="ok">已於 ${esc(c.sent_at.slice(0, 16).replace("T", " "))} 寄給 ${c.sent_to?.length || 0} 人</span>` : "";
+    // 寄出之後行程又改過：對方手上的時間是舊的，得再寄一次（`stale` 由伺服器比對指紋算出來）
+    const confStale = (v.stale || []).some((x) => x.key === "confirmation");
+    $("confirmSendInfo").innerHTML = !c?.sent_at ? "" : `<span class="${confStale ? "err" : "ok"}">已於 ${esc(c.sent_at.slice(0, 16).replace("T", " "))} 寄給 ${c.sent_to?.length || 0} 人${confStale ? "，但**行程在那之後又改過**：對方手上的時間是舊的，請重新草擬並再寄一次" : ""}</span>`.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
     $("thanksSubject").value = t?.subject || ""; $("thanksBody").value = t?.body || "";
     $("sender").value = t?.sender || state.settings?.sender_default || "director";
     if (c?.sender) $("confirmSender").value = c.sender;
@@ -1757,12 +1895,35 @@
   }
   /** 兩封信各自一份收件人清單（確認信在「訪前」、感謝信在「後續」）。 */
   const recipientBoxes = () => [$("confirmRecipients"), $("thanksRecipients")].filter(Boolean);
+  /**
+   * 兩封信的**預設收件人不一樣**：確認信只勾「聯絡人」，感謝信勾名單上每一位。
+   * 協調參訪的人不一定等於參加參訪的人——日期還在往返時，把還沒定案的行程寄給全團只會造成困擾。
+   * 名單上一個聯絡人都沒標時退回全選（寧可多寄，也不要按了寄出卻一個人都沒寄到）。
+   */
   function renderRecipients() {
-    const html = state.thanksRecipients.length
-      ? state.thanksRecipients.map((r, i) => `<label class="flex gap-2 items-center"><input type="checkbox" checked data-i="${i}"><span>${esc(r.name)} <span class="muted">${esc(r.email)} · <span>${r.from === "list" ? "名單" : "現場留信箱"}</span></span></span></label>`).join("")
-      : `<p class="muted">名單上沒有 email。請回「訪前」補上隨行名單的聯絡方式。</p>`;
-    for (const box of recipientBoxes()) box.innerHTML = html;
+    const list = state.thanksRecipients;
+    const anyContact = list.some((r) => r.contact);
+    const row = (r, i, checked) => `<label class="flex gap-2 items-center"><input type="checkbox" ${checked ? "checked" : ""} data-i="${i}"><span>${esc(r.name)} <span class="muted">${esc(r.email)} · <span>${r.from === "list" ? "名單" : "現場留信箱"}</span>${r.contact ? " · <span>聯絡人</span>" : ""}</span></span></label>`;
+    const empty = `<p class="muted">名單上沒有 email。請回「訪前」補上隨行名單的聯絡方式。</p>`;
+    const hint = anyContact ? "" : `<p class="muted">名單上還沒標「聯絡人」（訪前分頁那張表最後一欄），所以先全部勾起來。</p>`;
+    if ($("confirmRecipients")) $("confirmRecipients").innerHTML = list.length ? hint + list.map((r, i) => row(r, i, anyContact ? !!r.contact : true)).join("") : empty;
+    if ($("thanksRecipients")) $("thanksRecipients").innerHTML = list.length ? list.map((r, i) => row(r, i, true)).join("") : empty;
+    updateSendCounts();
   }
+  /**
+   * 兩顆寄出鍵上直接寫「寄給 N 位」，旁邊列出名字。**「寄出」兩個字看不出寄給誰**——
+   * 勾錯對象（例如確認信寄給全團）要在按下去之前就看得出來。
+   */
+  function updateSendCounts() {
+    for (const [boxId, btnId, label] of [["confirmRecipients", "confirmSendBtn", "寄出確認信"], ["thanksRecipients", "sendBtn", "寄出感謝信"]]) {
+      const picked = checkedRecipients(boxId);
+      const btn = $(btnId);
+      if (btn) btn.textContent = picked.length ? t(`${label}（# 位）`).replace("#", picked.length) : t(label);
+      const who = $(boxId === "confirmRecipients" ? "confirmWho" : "thanksWho");
+      if (who) who.textContent = picked.length ? `${t("會寄給：")}${picked.map((r) => r.name || r.email).join("、")}` : t("一個都沒勾，不會寄出");
+    }
+  }
+  const checkedRecipients = (boxId) => [...document.querySelectorAll(`#${boxId} input[type="checkbox"]:checked`)].map((i) => state.thanksRecipients[Number(i.dataset.i)]).filter(Boolean);
   $("thanksBtn").onclick = () => busy($("thanksBtn"), async () => {
     const r = await runJob("/api/letter", { visit_id: $("visitSelect").value, kind: "thanks", sender: $("sender").value }, noteInto("thanksInfo"), "AI 草擬中……大約一分鐘。");
     if (!r) return;
@@ -1784,7 +1945,7 @@
     const ids = { btn: isThanks ? "sendBtn" : "confirmSendBtn", info: isThanks ? "sendInfo" : "confirmSendInfo", mailto: isThanks ? "mailtoLink" : "confirmMailto", subject: isThanks ? "thanksSubject" : "confirmSubject", body: isThanks ? "thanksBody" : "confirmBody", sender: isThanks ? "sender" : "confirmSender" };
     const label = isThanks ? "感謝信" : "確認信";
     return busy($(ids.btn), async () => {
-      const recipients = [...document.querySelectorAll(`#${isThanks ? "thanksRecipients" : "confirmRecipients"} input:checked`)].map((i) => state.thanksRecipients[Number(i.dataset.i)]);
+      const recipients = checkedRecipients(isThanks ? "thanksRecipients" : "confirmRecipients");
       if (!recipients.length) return flash("沒有勾選收件人", "err");
       if (!$(ids.subject).value.trim() || !$(ids.body).value.trim()) return flash(`${label}還是空的，先按「AI 草擬」`, "err");
       if (!confirm(t(`把${label}寄給 ${recipients.length} 人？`))) return;
