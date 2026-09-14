@@ -81,6 +81,8 @@ const GuestSchema = z.object({
   email: z.string(),
   role: z.enum(["lead", "member"]),
   affiliation: z.string(),
+  /** 這封信的往來對象（承辦人／秘書）：確認信預設只寄給他，不寄給全團。 */
+  contact: z.boolean(),
 });
 
 export const ExtractedSchema = z.object({
@@ -103,7 +105,7 @@ export type ExtractedVisit = z.infer<typeof ExtractedSchema>;
 const EXTRACT_SYSTEM = `你是臺大生農學院綠色健康研究中心（GHRC）的參訪承辦助理。從主辦端貼上的 email 往來（可能中英夾雜、含轉寄與簽名檔）與上傳的相關檔案（名單 Word／Excel／CSV 轉出的文字、PDF、名單照片）抽出參訪資料。
 
 規則：
-- guests：來訪方**每一位**被點名的人都要列出，含職稱與 email（隨行者的 email 是訪後信寄送的關鍵，不要只留主要窗口）。**名單檔（<file> 區塊、PDF、照片）裡的每一列都是一個人**，表格欄位常見順序是姓名／職稱／單位／email，請對應好；沒有 email 的人也要列，email 留空。主要來賓 role=lead，其餘 member。affiliation 填該人的單位（可能與 org 不同）。
+- guests：來訪方**每一位**被點名的人都要列出，含職稱與 email（隨行者的 email 是訪後信寄送的關鍵，不要只留主要窗口）。**名單檔（<file> 區塊、PDF、照片）裡的每一列都是一個人**，表格欄位常見順序是姓名／職稱／單位／email，請對應好；沒有 email 的人也要列，email 留空。主要來賓 role=lead，其餘 member。**contact=true 給真正在往來這件事的人**（寄這封信的人、信裡指定的承辦人或秘書；他常常不是主賓，也可能不在來訪名單上但仍要列）——確認信預設只寄給 contact，所以寧可只標一兩個，不要全部標 true；看不出來就全部 false。affiliation 填該人的單位（可能與 org 不同）。
 - org：來訪單位的正式名稱（英文為主，name_local 放當地語言名稱）；type 取 government／university／enterprise／school／ngo／other；country 用英文國名。
 - headcount：預計人數；不知道就用 guests 人數。
 - date：**已確定**的參訪日期（YYYY-MM-DD）；未定則留空字串，把候選日期放 candidate_dates。start_time、end_time 用 HH:MM（台北時間），未提到留空——**來信通常寫「10:00-12:30」，照抽**。duration_minutes 只有在信裡直接寫分鐘數（例如「兩小時」）時才給，否則 0。
@@ -259,7 +261,7 @@ const PLAN_SYSTEM = `你替 GHRC 排一次參訪的行程並從母簡報挑頁�
 - always=true 的頁（封面、今日流程、簡報架構、核心宣稱、謝謝）永遠保留。
 - 每頁約 40–60 秒（索引裡的 minutes），影片頁另計；總頁數要塞得進「總體簡報」區塊的分鐘數。
 - 選頁偏好：政府單位偏政策與場域落地；大學偏研究與學生交流；企業偏應用與委託研究；學生團偏影片與體驗。以索引的 audience 與 lab 標記為線索，並參考來賓興趣。
-- **history（歷次實際表現，有才給）**：slides[].used／used_same_type 是這一頁過去選過幾次、同類單位選過幾次；asked 是那一場被提問、mentioned 是在回饋中被提到。rooms[] 是來賓自己說最想看／想合作哪幾間。用法：**被提問或被提到過的頁優先留下**，同類單位常選的頁優先考慮，來賓點名多的研究室優先排進動線。但**沒有數字不代表那頁不好**——可能只是沒人選過，該講還是要講；history 是佐證，不是排行榜。
+- **history（歷次實際表現，有才給）**：slides[].used／used_same_type 是這一頁過去選過幾次、同類單位選過幾次；asked 是那一場被提問、mentioned 是在回饋中被提到。rooms[] 每一間分兩種來源：wanted／cooperate 是**來賓自己回的**（最想看、想合作），host_noted 是**主持人口述裡聽到的**——「主持人覺得對方有興趣」不等於「對方說他有興趣」，兩者不要混著講。用法：**被提問或被提到過的頁優先留下**，同類單位常選的頁優先考慮，來賓自己點名多的研究室優先排進動線（host_noted 只當佐證）。但**沒有數字不代表那頁不好**——可能只是沒人選過，該講還是要講；history 是佐證，不是排行榜。
 - **選頁以「區塊」為單位**（groups）：挑到某一區的任何一頁，整個區塊都會進去（後台也只勾區塊、不勾單頁），所以請以區塊為單位思考，不必逐頁斟酌。
 - 實驗室頁：要參訪的房間才放它的頁；分隔頁（role=divider）只在放了該實驗室內容時保留。
 - 最後的「您最想看哪一部分」頁與 QR 頁由產檔程式另外加，不要選。
@@ -477,7 +479,7 @@ export async function summarizeVisit(visit: Visit, responses: ResponseRow[]): Pr
   if (isMock()) return mockSummary(visit, responses);
   const payload = { visit: { ...visit, letters: undefined }, responses };
   return plain(
-    `替 GHRC 寫一頁參訪摘要（繁體中文，Markdown，300 字內）。段落固定：誰來（單位、主要來賓、人數）；看了哪幾間各多久（用 visit.itinerary 當天排定的動線）；最想看什麼（口述抽取）；問了哪些問題；想合作誰（responses 的 cooperate_rooms 與口述）；收到什麼建議（responses 的 suggestion，不具名的不要試圖猜是誰）；待辦。沒有資料的段落寫「（無）」。不要評分、不要用滿意度用語。\n\n${CENTER_FACTS}`,
+    `替 GHRC 寫一頁參訪摘要（繁體中文，Markdown，300 字內）。段落固定：誰來（單位、主要來賓、人數）；看了哪幾間各多久（用 visit.itinerary 當天排定的動線）；最想看什麼——**分兩行寫，來源不能混**：「來賓自己說」（responses 的 most_wanted_rooms）與「主持人聽到的」（visit.dictation 抽取），只有一邊有資料就只寫那一邊；問了哪些問題；想合作誰（來賓回的 cooperate_rooms；口述裡的合作意願另外一行寫「主持人記下」）；收到什麼建議（responses 的 suggestion，不具名的不要試圖猜是誰）；待辦。沒有資料的段落寫「（無）」。不要評分、不要用滿意度用語。\n\n${CENTER_FACTS}`,
     JSON.stringify(payload),
   );
 }
@@ -513,7 +515,7 @@ function mockExtract(text: string): ExtractedVisit {
   const guests: ExtractedVisit["guests"] = emails.map((email, i) => {
     const local = email.split("@")[0];
     const name = local.replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    return { name, title: i === 0 ? "Principal guest" : "Member", email, role: i === 0 ? "lead" : "member", affiliation: "" };
+    return { name, title: i === 0 ? "Principal guest" : "Member", email, role: i === 0 ? "lead" : "member", affiliation: "", contact: i === 0 };
   });
   const orgLine = (text.split(/\r?\n/).find((l) => /university|大學|ministry|部|college|學院|高中|company|公司/i.test(l)) || "").trim();
   const orgMatch = orgLine.match(/(University of [A-Z][A-Za-z ]+|[A-Z][A-Za-z]+ University|[^\s，。、]+大學|[^\s，。、]+高中)/);
@@ -637,9 +639,10 @@ function mockSummary(v: Visit, responses: ResponseRow[]): string {
     "",
     `**誰來**：${v.org?.name || "（無）"}，${lead ? `${lead.name} ${lead.title}` : ""}，${v.headcount || v.guests?.length || 0} 人`,
     `**看了哪幾間**：${(v.itinerary || []).filter((s) => Number(s.minutes) > 0).map((s) => `${s.room}（${s.minutes} 分）`).join("、") || "（無）"}`,
-    `**最想看什麼**：${(v.dictation?.extracted?.most_wanted_rooms || []).join("、") || "（無）"}`,
+    `**最想看什麼（來賓自己說）**：${[...new Set(responses.flatMap((r) => r.most_wanted_rooms || []))].join("、") || "（無）"}`,
+    `**最想看什麼（主持人聽到的）**：${(v.dictation?.extracted?.most_wanted_rooms || []).join("、") || "（無）"}`,
     `**問了哪些問題**：${(v.dictation?.extracted?.questions || []).map((q) => `\n- ${q}`).join("") || "（無）"}`,
-    `**想合作誰**：${[...new Set(responses.flatMap((r) => r.cooperate_rooms))].join("、") || "（無）"}`,
+    `**想合作誰（來賓自己說）**：${[...new Set(responses.flatMap((r) => r.cooperate_rooms))].join("、") || "（無）"}`,
     `**收到什麼建議**：${responses.filter((r) => r.suggestion).map((r) => `\n- ${r.suggestion}${r.anonymous ? "（不具名）" : ""}`).join("") || "（無）"}`,
     "",
     "（AI_MOCK 示範摘要）",

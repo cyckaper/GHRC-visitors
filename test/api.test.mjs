@@ -197,6 +197,24 @@ test("public visit view exists without a token and leaks nothing personal", asyn
   assert.equal((await api(`/api/visits?id=2026-10-07-nope&public=1`)).status, 404);
 });
 
+test("產檔那一刻的行程指紋由伺服器蓋；行程一改就回報簡報過期", async () => {
+  const put = (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const before = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit;
+  assert.deepEqual((await api(`/api/visits?id=${visitId}`, { headers: admin })).body.stale, [], "還沒產過簡報，沒有什麼會過期");
+  // 產檔：前端只送 generated_at，指紋是伺服器蓋的（算法只有一份）
+  const made = await put({ ...before, deck: { ...(before.deck || {}), generated_at: new Date().toISOString(), slides: 12 } });
+  assert.ok(made.body.visit.deck.fingerprint, "伺服器蓋了指紋");
+  assert.deepEqual(made.body.stale, [], "剛產出來的不算舊");
+  // 行程改了：手上那份 .pptx 的第 2 頁就錯了
+  const moved = await put({ ...made.body.visit, programme: [{ kind: "briefing", start: "11:00", end: "11:30", title_en: "Overview", title_2nd: "總體介紹", slides_range: "" }] });
+  assert.deepEqual(moved.body.stale.map((x) => x.key), ["deck"], JSON.stringify(moved.body.stale));
+  assert.equal(moved.body.visit.deck.fingerprint, made.body.visit.deck.fingerprint, "沒有重新產檔就不要偷偷換掉指紋");
+  // 重新產一次就乾淨了
+  const again = await put({ ...moved.body.visit, deck: { ...moved.body.visit.deck, generated_at: new Date(Date.now() + 1000).toISOString() } });
+  assert.deepEqual(again.body.stale, []);
+  await put(before); // 把這一場擺回去，後面的測試照原本那一份跑
+});
+
 test("confirmation letter draft is stored on the visit", async () => {
   const r = await runJob("letter", { visit_id: visitId, kind: "confirmation", sender: "director" });
   assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -597,6 +615,17 @@ test("後續提醒：依結束時間寄信給自己，一場只寄一次；沒�
     done.materials = { deck_pdf: "", photos: [], links: [{ title: "t", url: "https://x.example" }] };
     await put(done);
     assert.ok(!String((await cron()).body).includes(v.visit_id), "後續做完了就不必提醒");
+
+    // 什麼都沒有、但四件事都標了「本次沒有」的那一場，也不該吵——沒有簽名簿、沒交換名片很正常
+    const na = (await put({ org: { name: "Nothing To Collect University" }, date, code: "nna", start_time: hhmm, duration_minutes: 60 })).body.visit;
+    assert.ok(String((await cron()).body).includes(na.visit_id), "先確認它本來會被提醒");
+    const marked = (await api(`/api/visits?id=${na.visit_id}`, { headers: admin })).body.visit;
+    marked.reminders = {};
+    marked.wrapup = { na: ["signbook", "cards", "dictation", "materials"] };
+    const saved = await put(marked);
+    assert.deepEqual(saved.body.visit.wrapup.na, ["signbook", "cards", "dictation", "materials"], "標記存得住");
+    assert.ok(!String((await cron()).body).includes(na.visit_id), "標了本次沒有就不再提醒");
+    await api(`/api/visits?id=${na.visit_id}`, { method: "DELETE", headers: admin });
   } finally {
     delete process.env.MAIL_MOCK;
   }

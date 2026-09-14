@@ -494,7 +494,43 @@
   "——母簡報、預設值，以及「哪些外部服務接好了」。這些不屬於任何一場參訪，所以不放在前面幾個分頁裡。": " — the master deck, the defaults, and which external services are connected. None of it belongs to a particular visit, which is why it is not on the tabs before this one.",
   "看這一場的紀錄：一頁摘要與來賓回覆": "Open this visit's record: the summary and the replies",
   "排好時間表與現場動線；會印在簡報第 2 頁與來賓專頁": "The timetable and the route; printed on slide 2 and shown on the guest page",
-  "「今日流程」會印在簡報第 2 頁，也會出現在來賓專頁；「現場動線」決定來賓幾點走到哪一間。分鐘數一律照預設重算（總體介紹 20 分、每間研究室 20 分、剩下給綜合討論），不合就直接改。": "\"Programme for today\" is printed on slide 2 of the deck and shown on the guest page; \"Route\" decides which laboratory the visitors are in at what time. Minutes are always recalculated from the defaults (20 min overview, 20 min per laboratory, the rest to the open discussion); change them here if that does not fit."
+  "「今日流程」會印在簡報第 2 頁，也會出現在來賓專頁；「現場動線」決定來賓幾點走到哪一間。分鐘數一律照預設重算（總體介紹 20 分、每間研究室 20 分、剩下給綜合討論），不合就直接改。": "\"Programme for today\" is printed on slide 2 of the deck and shown on the guest page; \"Route\" decides which laboratory the visitors are in at what time. Minutes are always recalculated from the defaults (20 min overview, 20 min per laboratory, the rest to the open discussion); change them here if that does not fit.",
+  "聯絡人": "Contact",
+  "禮賓身分：封面與信件開頭寫的那個人": "Guest of honour: the name on the cover and at the top of the letters",
+  "負責收信、確認行程的那個人。確認信預設只寄給他——日期還在往返時，把還沒定案的行程寄給全團只會造成困擾": "The person handling the correspondence and confirming the schedule. The confirmation letter goes only to them by default — while the date is still being settled, sending an unsettled schedule to the whole delegation only causes confusion",
+  "確認信預設只寄給勾起來的人": "The confirmation letter goes only to the people ticked here",
+  "這一張表就是這一場的行程：會印在簡報第 2 頁，也會出現在來賓專頁。「研究室參訪」那一列底下填每一間幾分鐘（留 0 表示不去），": "This one table is the visit's schedule: it prints on slide 2 and appears on the guest page. Under the “Laboratory visits” row, set the minutes for each lab (0 means you are not going there); ",
+  "時間會照著往後推算": "the times follow from there",
+  "，不必再對一次。預設總體介紹 20 分、每間 20 分，剩下的時間給綜合討論。": ", so there is nothing to reconcile twice. Defaults: 20 min overview, 20 min per lab, the rest for the general discussion.",
+  "依人數、時間、興趣排出這一場的行程": "Draws up this visit's schedule from the headcount, the time available and their interests",
+  "總體介紹在哪一間（空白就是 302）": "Which room the overview is in (blank means 302)",
+  "地點 302": "Room 302",
+  "五間合計 # 分": "# min across the labs",
+  "流程排了 # 分": "Schedule runs # min",
+  "流程排了 # 分，跟「幾點到幾點」一樣": "Schedule runs # min — same as the start and end times",
+  "流程排了 # 分，比 # 分多 # 分": "Schedule runs # min; the visit is booked for # min — # min too long",
+  "流程排了 # 分，比 # 分少 # 分": "Schedule runs # min; the visit is booked for # min — # min short",
+  "寄出確認信（# 位）": "Send confirmation letter (# people)",
+  "寄出感謝信（# 位）": "Send thank-you letter (# people)",
+  "會寄給：": "Goes to: ",
+  "一個都沒勾，不會寄出": "Nobody is ticked — nothing will be sent",
+  "名單上還沒標「聯絡人」（訪前分頁那張表最後一欄），所以先全部勾起來。": "Nobody on the list is marked as the contact yet (last column of the table on the Before tab), so everyone is ticked for now.",
+  "簡報 需重產": "Deck needs regenerating",
+  "確認信 行程已改": "Confirmation letter: schedule changed",
+  "行程或選頁在產檔之後改過，手上那份 .pptx 是舊的": "The schedule or the slide choice changed after the deck was generated, so the .pptx you have is out of date",
+  "寄出之後行程又改過，對方手上的時間是舊的": "The schedule changed after it was sent, so the times they have are out of date",
+  "行程或選頁在產檔之後改過，這份 .pptx 是舊的——請再按一次「產生簡報 .pptx」，把新的那一份寄出去。": "The schedule or the slide choice changed after the deck was generated, so this .pptx is out of date — press “Generate deck .pptx” again and send the new one.",
+  "行程在那之後又改過": "the schedule has changed since",
+  "：對方手上的時間是舊的，請重新草擬並再寄一次": ": the times they have are out of date, so draft it again and resend",
+  "本次沒有": "Not this time",
+  "這一場本來就沒有這件事（沒有簽名簿、沒交換名片、沒錄口述都很正常）。標了就不算未完成，後續提醒也不會再為它寄信": "This visit simply does not have this (no signing book, no cards exchanged, no dictation — all perfectly normal). Ticked, it stops counting as outstanding and the follow-up reminder stops asking for it",
+  "這一場沒有這件事，不會再提醒": "Not applicable this time — you will not be reminded again",
+  "改回「還要做」": "Back to still to do",
+  "簽名簿 本次沒有": "Signing book — not this time",
+  "名片 本次沒有": "Cards — not this time",
+  "口述 本次沒有": "Dictation — not this time",
+  "當天資料 本次沒有": "Materials — not this time",
+  "這一場的行程：幾點做什麼、每一間幾分鐘。會印在簡報第 2 頁與來賓專頁": "This visit's schedule: what happens when, and how long in each lab. It prints on slide 2 and appears on the guest page"
  },
  "patterns": [
   [
@@ -772,6 +808,14 @@
   [
    "^(\\d+) 個檔案$",
    "$1 files"
+  ],
+  [
+   "^已於 (.+) 寄給 (\\d+) 人，但$",
+   "Sent $1 to $2 people, but"
+  ],
+  [
+   "^已於 (.+) 寄給 (\\d+) 人$",
+   "Sent $1 to $2 people"
   ]
  ]
 }
