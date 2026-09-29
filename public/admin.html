@@ -2250,11 +2250,13 @@
     $("labPreview").href = `/lab/${room}`;
     const val = (k) => lab[k] || "";
     const lines = (k) => (lab[k] || []).join("\n");
+    // 老師自己簡報上的那一句是原文，不是草稿——旁邊要講出來，不然下一個人會順手「潤飾」掉
+    const hintOf = (f) => (f.key === "one_line" && lab.one_line_source === "lead" ? "這一句是老師自己的簡報上的原文，請照用，不要改寫。" : f.hint);
     const field = (f) => `
       <div class="grid sm:grid-cols-2 gap-2">
         <div><label class="f" for="lf-${f.key}_zh">${esc(f.label)}（中文）</label>${f.type === "text" ? `<input type="text" id="lf-${f.key}_zh" value="${esc(val(f.key + "_zh"))}">` : `<textarea id="lf-${f.key}_zh" rows="${f.type === "list" ? 4 : 5}">${esc(f.type === "list" ? lines(f.key + "_zh") : val(f.key + "_zh"))}</textarea>`}</div>
         <div><label class="f" for="lf-${f.key}_en">${esc(f.label)}（English）</label>${f.type === "text" ? `<input type="text" id="lf-${f.key}_en" value="${esc(val(f.key + "_en"))}">` : `<textarea id="lf-${f.key}_en" rows="${f.type === "list" ? 4 : 5}">${esc(f.type === "list" ? lines(f.key + "_en") : val(f.key + "_en"))}</textarea>`}</div>
-      </div>${f.hint ? `<p class="muted">${esc(f.hint)}</p>` : ""}`;
+      </div>${hintOf(f) ? `<p class="muted">${esc(hintOf(f))}</p>` : ""}`;
     const photo = lab.photo ? (/^https?:/i.test(lab.photo) ? lab.photo : `/api/media?key=${encodeURIComponent(lab.photo)}`) : "";
     box.innerHTML = `
       ${LAB_FIELDS.map(field).join("")}

@@ -1,5 +1,5 @@
 {
-  "_comment": "來賓端老師卡片與 /lab/<房號> 介紹頁。color 是這一間在全站的顏色（來賓端卡片、後台選頁區塊與行程、動線表都用同一色，五間各一色，改這裡就全站跟著改）。303 只列陳惠美（明確指示，與母簡報不同）。one_line／intro／expertise／equipment／background／papers 是草稿：302 與 303 取自老師自己的簡報，其餘由母簡報與公開資料（系網站、國科會獲獎頁、期刊）整理；查不到的一律留空，沒有憑據的學歷、職稱、論文不寫。confirmed=false 表示尚待老師本人確認（待確認事項 1），後台「設定」分頁可以直接改。photo 為 null 時頁面顯示姓名縮寫。",
+  "_comment": "來賓端老師卡片與 /lab/<房號> 介紹頁。color 是這一間在全站的顏色（來賓端卡片、後台選頁區塊與行程、動線表都用同一色，五間各一色，改這裡就全站跟著改）。303 只列陳惠美（明確指示，與母簡報不同）。**`one_line_source` 標成 lead 的那一句是老師自己簡報上的原文，逐字照用，不改寫**（明確指示；目前 302、303 有）。intro／expertise／equipment／background／papers 是草稿：302 與 303 取自老師自己的簡報，其餘由母簡報與公開資料（系網站、國科會獲獎頁、期刊）整理；查不到的一律留空，沒有憑據的學歷、職稱、論文不寫。confirmed=false 表示尚待老師本人確認（待確認事項 1），後台「設定」分頁可以直接改。photo 為 null 時頁面顯示姓名縮寫。",
   "labs": [
     {
       "room": "301",
@@ -38,8 +38,9 @@
       "stage_zh": "設計",
       "color": "#0369a1",
       "lead": { "name_zh": "林寶秀", "name_en": "Bau-Show Lin", "title_en": "Professor", "title_zh": "教授", "email": "" },
-      "one_line_en": "Research focused on urban microclimate, green infrastructure and human thermal comfort, integrating field measurement, numerical simulation and spatial analysis into climate-responsive planning and design strategies.",
-      "one_line_zh": "聚焦都市微氣候、綠色基盤與人體熱舒適，整合現地量測、數值模擬與空間分析，發展氣候調適之規劃與設計策略。",
+      "one_line_source": "lead",
+      "one_line_en": "Our research focuses on urban microclimate, green infrastructure, and human thermal comfort, integrating field measurements, numerical simulation, and spatial analysis to develop climate-responsive planning and design strategies.",
+      "one_line_zh": "本研究室聚焦都市微氣候、綠色基盤與人體熱舒適，整合現地量測、數值模擬與空間分析，發展氣候調適之規劃與設計策略。",
       "intro_en": "The laboratory runs a full ENVI-met microclimate workflow — database preparation, model building, simulation, conversion to human thermal comfort indices, and visualisation of the results — calibrated against its own on-site sensing. The output is applied to two kinds of question: how a park should be laid out, and how green infrastructure performs when read at three different scales. Thermal comfort and wind-field evidence is turned into layouts that can actually be built.",
       "intro_zh": "研究室有一整套 ENVI-met 微氣候模擬流程——資料庫建置、模型建置、軟體模擬、人體熱舒適度換算、成果圖像化——並以自己的現地感測校正。成果用在兩類問題上：公園該怎麼配置，以及綠色基盤在三個不同尺度下的表現如何。熱舒適與風場的證據，最後變成蓋得出來的配置方案。",
       "expertise_en": ["Ecosystem services assessment and mapping", "Landscape planning and design", "Landscape ecology", "Green space systems and green infrastructure", "Green roof design and benefit assessment", "Recreation supply and demand"],
@@ -64,7 +65,8 @@
       "stage_zh": "驗證",
       "color": "#6d28d9",
       "lead": { "name_zh": "陳惠美", "name_en": "Hui-Mei Chen", "title_en": "Distinguished Professor · Department Chair · Co-PI, GHRC", "title_zh": "特聘教授 · 系主任 · 中心 Co-PI", "email": "" },
-      "one_line_en": "Grounded in evidence-based design, the laboratory integrates scientific theory and landscape aesthetics to develop virtual nature-based healing environments and experiential products that address diverse health needs.",
+      "one_line_source": "lead",
+      "one_line_en": "Grounded in evidence-based design, the lab integrates scientific theory and landscape aesthetics to develop virtual nature-based healing environments and experiential products that address diverse health needs.",
       "one_line_zh": "以實證設計為基礎，融合科學理論與景觀美學，開發回應不同健康需求的虛擬自然療癒環境與體驗產品。",
       "intro_en": "Immersive virtual reality is used here to test whether a designed environment really changes what people perceive and feel — work that has reached as far as wound pain. Eye tracking and EEG supply the evidence. Alongside the experiments the laboratory builds a 360-degree VR library for environmental education and for food-and-farming education, so the same virtual environments are also teaching material. Research outcomes cover patient care, older adults and schoolchildren, and green care in the rural north of Taiwan.",
       "intro_zh": "這一間用沉浸式虛擬實境檢驗設計過的環境是不是真的改變了人的知覺與感受——做到過傷口疼痛這麼具體的題目；證據來自眼動與腦波。實驗之外，研究室也建置 360 度環景 VR 教材庫，用於環境教育與食農教育，同一批虛擬環境因此也是教材。研究成果涵蓋病患照護、高齡與學童，以及北區農村的綠色照顧。",
