@@ -529,8 +529,15 @@
     </div>
 
     <div class="card space-y-3">
-      <h2 class="font-semibold">老師卡片</h2>
-      <p class="muted">來賓專頁上那五張卡片（一句話研究主題、專長、學經歷、照片）目前放在 repo 的 <code>public/data/labs.json</code>，還不能在後台改——內容要先經各位老師確認（CLAUDE.md 待確認 1）。確認好的文字給我，我改進去。</p>
+      <h2 class="font-semibold">老師卡片與介紹頁</h2>
+      <p class="muted">這一份同時是<b>來賓專頁上那五張卡片</b>與<b>每一間的介紹頁</b>（<code>/lab/301</code>…<code>/lab/305</code>）的內容。中英文各填一份：英文是主語、中文在下面那一行（來賓端的既有標準）。<b>改完立刻生效</b>，不必等網站重新發佈。<br>房號、顏色、四語名稱留在 repo 的 <code>labs.json</code>，那是底稿；這裡只存您改過的欄位，按「改回原稿」就退回去。</p>
+      <div class="flex flex-wrap gap-2 items-center">
+        <label class="f mb-0" for="labPick">哪一間</label>
+        <select id="labPick" class="!w-auto"></select>
+        <a class="btn btn-soft" id="labPreview" target="_blank" rel="noopener">看介紹頁</a>
+        <span class="muted" id="labsInfo"></span>
+      </div>
+      <div id="labEditor" class="space-y-3"></div>
     </div>
   </section>
 </div>
@@ -2183,6 +2190,7 @@
     $("reminderTo").value = r.settings.reminder_to || "";
     renderVideoLinks(r.settings.video_links || {});
     renderLabEmails(r.settings.lab_emails || {});
+    loadLabsTab();
     $("reminderInfo").textContent = r.settings.reminder_to ? "" : r.effective?.reminder_to ? `留空：現在寄到 ${r.effective.reminder_to}` : "還沒有收件信箱，現在不會寄提醒";
     $("statusList").innerHTML = STATUS_ROWS.map(([k, label, where]) => {
       const on = !!r.status[k];
@@ -2208,6 +2216,116 @@
       $(copyBtn)?.classList.toggle("btn-soft", gmail);
     }
     for (const id of ["confirmGmailOff", "thanksGmailOff"]) if ($(id)) $(id).hidden = gmail;
+  }
+  /**
+   * 老師卡片與介紹頁的內容編輯器（設定分頁）。
+   *
+   * 改的是 `/api/labs`：repo 裡的 `public/data/labs.json` 是底稿，這裡**只存改過的欄位**，
+   * 讀的時候疊上去。站台上的後台寫不進 repo，而老師要修自己那一句話不該走 GitHub——
+   * 這一支就是為了把「待確認事項 1」從「等程式改版」變成「打字就好」。
+   */
+  const LAB_FIELDS = [
+    { key: "one_line", label: "一句話研究主題", type: "text", hint: "卡片與介紹頁最上面那一句" },
+    { key: "intro", label: "研究室簡介", type: "para", hint: "介紹頁專用，可以長一點（卡片不放）" },
+    { key: "expertise", label: "專長領域", type: "list", hint: "一行一個" },
+    { key: "equipment", label: "設備", type: "list", hint: "一行一個；介紹頁專用" },
+    { key: "background", label: "學經歷", type: "para", hint: "" },
+  ];
+  async function loadLabsTab() {
+    const r = await api("/api/labs");
+    if (!r.ok) { $("labsInfo").innerHTML = `<span class="err">${esc(r.error || "讀不到")}</span>`; return; }
+    state.labsFull = r.labs || [];
+    const pick = $("labPick");
+    const keep = pick.value;
+    pick.innerHTML = state.labsFull.map((l) => `<option value="${esc(l.room)}">${esc(l.room)} ${esc(l.name_zh || l.name_en)}（${esc(l.lead?.name_zh || "")}）</option>`).join("");
+    pick.value = keep && state.labsFull.some((l) => String(l.room) === keep) ? keep : state.labsFull[0]?.room || "";
+    renderLabEditor();
+  }
+  $("labPick").onchange = renderLabEditor;
+  function renderLabEditor() {
+    const room = $("labPick").value;
+    const lab = (state.labsFull || []).find((l) => String(l.room) === room);
+    const box = $("labEditor");
+    if (!lab) { box.innerHTML = ""; return; }
+    $("labPreview").href = `/lab/${room}`;
+    const val = (k) => lab[k] || "";
+    const lines = (k) => (lab[k] || []).join("\n");
+    const field = (f) => `
+      <div class="grid sm:grid-cols-2 gap-2">
+        <div><label class="f" for="lf-${f.key}_zh">${esc(f.label)}（中文）</label>${f.type === "text" ? `<input type="text" id="lf-${f.key}_zh" value="${esc(val(f.key + "_zh"))}">` : `<textarea id="lf-${f.key}_zh" rows="${f.type === "list" ? 4 : 5}">${esc(f.type === "list" ? lines(f.key + "_zh") : val(f.key + "_zh"))}</textarea>`}</div>
+        <div><label class="f" for="lf-${f.key}_en">${esc(f.label)}（English）</label>${f.type === "text" ? `<input type="text" id="lf-${f.key}_en" value="${esc(val(f.key + "_en"))}">` : `<textarea id="lf-${f.key}_en" rows="${f.type === "list" ? 4 : 5}">${esc(f.type === "list" ? lines(f.key + "_en") : val(f.key + "_en"))}</textarea>`}</div>
+      </div>${f.hint ? `<p class="muted">${esc(f.hint)}</p>` : ""}`;
+    const photo = lab.photo ? (/^https?:/i.test(lab.photo) ? lab.photo : `/api/media?key=${encodeURIComponent(lab.photo)}`) : "";
+    box.innerHTML = `
+      ${LAB_FIELDS.map(field).join("")}
+      <div>
+        <label class="f">代表論文 <span class="muted font-normal">一行一篇：標題 ｜ 期刊 ｜ 網址</span></label>
+        <textarea id="lf-papers" rows="4" placeholder="Nature-inspired… ｜ Landscape and Urban Planning ｜ https://doi.org/…">${esc((lab.papers || []).map((x) => [x.title, x.venue, x.url].filter(Boolean).join(" ｜ ")).join("\n"))}</textarea>
+      </div>
+      <div class="flex flex-wrap gap-3 items-center">
+        ${photo ? `<img src="${esc(photo)}" alt="" class="w-16 h-16 rounded-full object-cover">` : `<span class="muted">還沒有照片</span>`}
+        <label class="btn btn-soft cursor-pointer">換一張照片<input type="file" id="labPhoto" accept="image/*" hidden></label>
+        <label class="flex items-center gap-1"><input type="checkbox" id="lf-confirmed" ${lab.confirmed ? "checked" : ""}> <span>老師本人確認過了</span></label>
+        <span class="muted">沒勾的話，介紹頁最底下會標「這一段是草稿」。</span>
+      </div>
+      <div class="flex flex-wrap gap-2 items-center">
+        <button class="btn" id="labSave" type="button">儲存這一間</button>
+        <button class="btn btn-soft" id="labReset" type="button" title="把這一間改回 repo 裡的原稿（labs.json）">改回原稿</button>
+      </div>`;
+    $("labSave").onclick = () => busy($("labSave"), saveLab);
+    $("labReset").onclick = async () => {
+      if (!confirm(t("把這一間改回原稿？在後台改的內容會不見。"))) return;
+      const r = await api("/api/labs", { method: "POST", body: { room: $("labPick").value, reset: true } });
+      if (!r.ok) return flash(r.error, "err");
+      state.labsFull = r.labs; renderLabEditor(); flash("已改回原稿");
+    };
+    $("labPhoto").onchange = async () => {
+      const f = $("labPhoto").files[0];
+      if (!f) return;
+      $("labsInfo").textContent = "照片處理中…";
+      try {
+        const data = await shrinkImage(f, 800);
+        const r = await api("/api/labs", { method: "POST", body: { room: $("labPick").value, photo: { data } } });
+        if (!r.ok) throw new Error(r.error);
+        state.labsFull = r.labs; renderLabEditor(); $("labsInfo").textContent = ""; flash("照片換好了");
+      } catch (e) { $("labsInfo").innerHTML = `<span class="err">${esc(e.message || e)}</span>`; }
+    };
+  }
+  async function saveLab() {
+    const room = $("labPick").value;
+    const lines = (id) => ($(id)?.value || "").split("\n").map((x) => x.trim()).filter(Boolean);
+    const fields = { confirmed: $("lf-confirmed").checked };
+    for (const f of LAB_FIELDS) for (const lang of ["zh", "en"]) {
+      const id = `lf-${f.key}_${lang}`;
+      fields[`${f.key}_${lang}`] = f.type === "list" ? lines(id) : ($(id)?.value || "").trim();
+    }
+    // 論文一行一篇：標題 ｜ 期刊 ｜ 網址（全形或半形的直線都吃）
+    fields.papers = lines("lf-papers").map((line) => {
+      const [title, venue, url] = line.split(/\s*[｜|]\s*/);
+      return { title: title || "", venue: venue || "", url: url || "" };
+    });
+    const r = await api("/api/labs", { method: "POST", body: { room, fields } });
+    if (!r.ok) return flash(r.error, "err");
+    state.labsFull = r.labs;
+    // 顏色與卡片在別的分頁也用同一份，重載一次才不會看到舊的
+    state.labs = { ...(state.labs || {}), labs: r.labs };
+    applyLabColors();
+    renderLabEditor();
+    flash(`${room} 存好了`);
+  }
+  /** 照片先在瀏覽器縮到長邊 maxEdge（跟合照同一套做法），縮不動就原檔送。 */
+  async function shrinkImage(file, maxEdge) {
+    const toData = (blob) => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob); });
+    try {
+      const bmp = await createImageBitmap(file);
+      const scale = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
+      const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+      const c = document.createElement("canvas"); c.width = w; c.height = h;
+      c.getContext("2d").drawImage(bmp, 0, 0, w, h); bmp.close();
+      const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.85));
+      if (blob) return await toData(blob);
+    } catch (e) { /* HEIC、壞檔、記憶體不夠：原檔送，伺服器那邊還有 4.5 MB 的門檻擋著 */ }
+    return await toData(file);
   }
   $("senderDefault").onchange = () => saveSettings({ sender_default: $("senderDefault").value }, "settingsInfo");
   $("reminderTo").onchange = () => saveSettings({ reminder_to: $("reminderTo").value.trim() }, "reminderInfo");

@@ -52,7 +52,8 @@
   "programme_after": "Programme of the day",
   "welcome_after": "Thank you for visiting the Green Health Research Center",
   "leave_email_title_before": "Would you like the slides and papers afterwards?",
-  "leave_email_body_before": "Leave your email now and after the visit we will send you the slides, the papers of the laboratories you found most interesting, and the contact details of their leads."
+  "leave_email_body_before": "Leave your email now and after the visit we will send you the slides, the papers of the laboratories you found most interesting, and the contact details of their leads.",
+  "more_about_lab": "More about this laboratory →"
  },
  "zh": {
   "welcome": "歡迎蒞臨綠色健康研究中心",
@@ -106,7 +107,8 @@
   "programme_after": "當天流程",
   "welcome_after": "感謝蒞臨綠色健康研究中心",
   "leave_email_title_before": "想收到當天的簡報與論文嗎？",
-  "leave_email_body_before": "現在留下信箱，參訪之後我們就會寄上簡報、您最感興趣的研究室的論文，以及老師的聯絡方式。"
+  "leave_email_body_before": "現在留下信箱，參訪之後我們就會寄上簡報、您最感興趣的研究室的論文，以及老師的聯絡方式。",
+  "more_about_lab": "更多這一間的介紹 →"
  },
  "ko": {
   "welcome": "녹색건강연구센터에 오신 것을 환영합니다",
@@ -160,7 +162,8 @@
   "programme_after": "당일 일정",
   "welcome_after": "녹색건강연구센터를 방문해 주셔서 감사합니다",
   "leave_email_title_before": "방문 후 발표 자료와 논문을 받아보시겠습니까?",
-  "leave_email_body_before": "지금 이메일을 남겨 주시면 방문이 끝난 뒤 발표 자료와 관심 있으셨던 연구실의 논문, 그리고 담당 교수의 연락처를 보내 드리겠습니다."
+  "leave_email_body_before": "지금 이메일을 남겨 주시면 방문이 끝난 뒤 발표 자료와 관심 있으셨던 연구실의 논문, 그리고 담당 교수의 연락처를 보내 드리겠습니다.",
+  "more_about_lab": "이 연구실 자세히 보기 →"
  },
  "ja": {
   "welcome": "緑色健康研究センターへようこそ",
@@ -214,6 +217,7 @@
   "programme_after": "当日のプログラム",
   "welcome_after": "緑色健康研究センターにご来訪いただきありがとうございました",
   "leave_email_title_before": "当日の資料と論文をお送りしましょうか？",
-  "leave_email_body_before": "いまメールアドレスをご記入いただければ、ご訪問後に資料、ご関心のあった研究室の論文、担当教員の連絡先をお送りします。"
+  "leave_email_body_before": "いまメールアドレスをご記入いただければ、ご訪問後に資料、ご関心のあった研究室の論文、担当教員の連絡先をお送りします。",
+  "more_about_lab": "この研究室について →"
  }
 }

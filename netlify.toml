@@ -16,6 +16,12 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
+# 五間研究室的老師介紹頁 /lab/301 … /lab/305 → lab.html（頁面自己從網址讀房號）
+[[redirects]]
+  from = "/lab/*"
+  to = "/lab.html"
+  status = 200
+
 # 專屬網址 visit.healsdesign.org/<visit_id> → 來賓端專頁（既有靜態檔優先）
 [[redirects]]
   from = "/*"

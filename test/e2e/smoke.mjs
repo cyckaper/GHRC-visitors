@@ -437,6 +437,25 @@ try {
   await page.waitForSelector("#emailSec:not([hidden])");
   check(await page.isHidden("#respond"), "#email link opens the on-site email box on its own, even before the visit");
   check((await page.textContent("#lab-301")).includes("seven-workstation"), "301 describes a seven-workstation array");
+
+  // 老師介紹頁：卡片點過去就是那一間的整頁介紹（內容在後台「設定」改，改完這裡立刻跟著變）
+  await page.click('#lab-303 a[href^="/lab/"]');
+  await page.waitForFunction(() => document.getElementById("labName")?.textContent?.length > 0, null, { timeout: 15000 });
+  check((await page.textContent("#labName")) === "Landscape Simulation Lab", "the card links to that laboratory's own page");
+  check((await page.textContent("#leadName")).includes("陳惠美"), "…with its lead");
+  check((await page.locator("#others a").count()) === 4, "…and the other four labs to jump to");
+  check(!(await page.isHidden("#draftNote")), "…and it admits the text is still a draft until the lead confirms it");
+  {
+    // 後台改一句 → 這一頁立刻不一樣（repo 那一份是底稿，改過的疊上去）
+    const r = await fetch(`${base}/api/labs`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer e2e-token" }, body: JSON.stringify({ room: "303", fields: { one_line_en: "Changed from the admin page.", confirmed: true } }) });
+    check(r.ok, "the admin can edit a lab card without touching the repo");
+    await page.reload();
+    await page.waitForFunction(() => document.getElementById("oneLine")?.textContent?.includes("Changed from the admin"), null, { timeout: 15000 });
+    check(await page.isHidden("#draftNote"), "…and ticking “confirmed” drops the draft note");
+    await fetch(`${base}/api/labs`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer e2e-token" }, body: JSON.stringify({ room: "303", reset: true }) });
+  }
+  await page.goBack();
+  await page.waitForFunction(() => document.getElementById("labsTitle")?.textContent?.length > 0, null, { timeout: 15000 });
   check((await page.locator("#labs article").count()) === 6, "guest page shows the briefing step plus five lab cards");
   check((await page.textContent("#labs article:first-child")).includes("Center overview"), "briefing card comes first");
   check((await page.textContent("#lab-303")).includes("陳惠美") && !(await page.textContent("#lab-303")).includes("鄭佳昆"), "303 lists only 陳惠美");

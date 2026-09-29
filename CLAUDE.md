@@ -378,7 +378,9 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 ## 待確認
 
-1. 各老師的「一句話研究主題」、專長、學經歷（來賓端老師卡片用）與照片
+1. 各老師的「一句話研究主題」、專長、學經歷（來賓端老師卡片與 `/lab/<房號>` 介紹頁用）與照片
+   → **機制已經做好**：後台「設定 → 老師卡片與介紹頁」直接改、直接生效（`/api/labs`），不必再等程式改版。
+   剩下的是內容本身：請各位老師確認自己那一段，確認後在後台勾「老師本人確認過了」（沒勾的頁面會標「草稿」）。
 2. 開放建議欄位的中英文措辭定稿
 3. 簽名簿的形式與擺放位置
 4. ~~隨行名單聯絡方式拿不到時的備案~~ → 現場拍名片（功能 3 的「訪客名片」）
@@ -427,7 +429,16 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - API 路徑 `/api/<name>` 由 `netlify.toml` 轉到 `/.netlify/functions/<name>`；函式不設 `config.path`。
 - 主辦端 API 用 `Authorization: Bearer ADMIN_TOKEN`、`?token=`，或**登入後的 session cookie**；`respond` 與 `visits?public=1` 公開。
 - **登入一次就好**：後台貼一次 ADMIN_TOKEN → `/api/session` 發一個 HttpOnly、SameSite=Strict 的 cookie（值是用 ADMIN_TOKEN 簽的 `v1.<到期>.<HMAC>`，**不是 token 本身**），180 天，每次打開後台自動續期。token 不再存 localStorage（iPad Safari 七天沒互動就清掉，所以以前每次都要重登；舊的會在開場自動換成 cookie）。登出走 `DELETE /api/session`。
-- 老師卡片內容 `public/data/labs.json` 的 `confirmed=false` 表示尚待老師確認；照片 `photo` 為 null 時顯示縮寫。
+- **老師卡片與介紹頁的內容在後台改，不在 repo 改**（`/api/labs`）：`public/data/labs.json` 是**底稿**
+  （房號、顏色、stage、四語名稱只從這裡來），後台「設定 → 老師卡片與介紹頁」改過的欄位
+  （一句話、簡介、專長、設備、學經歷、論文、照片、`confirmed`）存在資料層的 `labs.json`，讀的時候疊上去。
+  站台上的後台寫不進 repo，而老師要修自己那一句話不該走 GitHub——**待確認事項 1 因此不必再等程式改版**。
+  按「改回原稿」就把那一間的覆寫刪掉。`confirmed=false` 時介紹頁最底下標明「這一段是草稿」；
+  照片存 `labs/<房號>/<ts>.jpg`（**公開**，`/api/media` 對 `labs/` 與 `materials/` 開放，名片與簽名簿仍要 token），
+  上傳前在瀏覽器縮到長邊 800px。
+- **每一間一頁介紹**（明確要求）：`/lab/301`…`/lab/305`（`public/lab.html`，`netlify.toml` 把 `/lab/*` 導過去），
+  跟來賓專頁同一套雙語（英文為主、`?ui=zh` 換主語）與同一組顏色。來賓專頁的老師卡片最底下有一行連過去；
+  頁面最後列出其他四間，看完一間可以直接跳下一間。**沒有內容的區塊整塊不顯示**——空標題比沒有更糟。
 - **兩邊都可以切中英文**（明確要求）。做法不一樣，因為兩邊的性質不同：
   - **後台**：中文寫在頁面上，英文是**疊上去的一層**——`public/data/i18n-admin.json` 的**鍵就是畫面上那一句中文**，
     所以 render 出什麼就照那一句查，各處不必改寫成 `t("some.key")`；查不到就維持中文（不會變空白或 key）。

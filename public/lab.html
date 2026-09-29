@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GHRC Laboratory</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  /* 五間各一色，值由 /api/labs 的 color 填進來（來賓專頁與後台同一套）；下面五個只是還沒載到時的備用 */
+  :root { --ink: #1c1917; --accent: #0f766e; --tone: #0f766e;
+          --c301: #047857; --c302: #0369a1; --c303: #6d28d9; --c304: #b45309; --c305: #a21caf; }
+  body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 5px; z-index: 60; background: linear-gradient(90deg, var(--c301), var(--c302) 25%, var(--c303) 50%, var(--c304) 75%, var(--c305)); }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Apple SD Gothic Neo", "Hiragino Sans", sans-serif; background: #fafaf9; color: var(--ink); }
+  .hero { position: relative; overflow: hidden; border-radius: 1.5rem; padding: 2rem 1.5rem; border: 1px solid #e7e5e4; background: #fff; border-top: 6px solid var(--tone); }
+  .card { background: #fff; border: 1px solid #e7e5e4; border-radius: 1rem; padding: 1.25rem; }
+  .pill { display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: .12rem .6rem; border-radius: 9999px; color: #fff; background: var(--tone); }
+  .avatar { width: 112px; height: 112px; border-radius: 9999px; object-fit: cover; background: #e7e5e4; color: #44403c; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 1.6rem; flex: none; box-shadow: inset 0 0 0 4px #fff, 0 0 0 4px var(--tone); }
+  .tag { display: inline-block; font-size: .78rem; padding: .2rem .65rem; border-radius: 9999px; background: #f5f5f4; color: #57534e; margin: .2rem .3rem 0 0; }
+  @supports (color: color-mix(in srgb, #000 10%, #fff)) {
+    .avatar { background: color-mix(in srgb, var(--tone) 14%, #fff); color: var(--tone); }
+    .tag { background: color-mix(in srgb, var(--tone) 13%, #fff); color: var(--tone); }
+    .hero { background: color-mix(in srgb, var(--tone) 5%, #fff); }
+  }
+  section > h2 { border-left: 4px solid var(--tone); padding-left: .6rem; }
+  .second { color: #78716c; font-size: .92em; }
+  .lang-btn { font-size: .8rem; font-weight: 600; padding: .3rem .75rem; border-radius: 9999px; background: #fff; color: var(--tone); border: 1px solid #e7e5e4; }
+  .lab-link { display: flex; gap: .6rem; align-items: center; padding: .55rem .7rem; border: 1px solid #e7e5e4; border-left: 5px solid var(--tone); border-radius: .6rem; background: #fff; }
+  .lab-link:hover { border-color: var(--tone); }
+  a.u { text-decoration: underline; text-decoration-color: #d6d3d1; }
+  a.u:hover { text-decoration-color: var(--ink); }
+</style>
+</head>
+<body class="min-h-screen">
+<main class="max-w-3xl mx-auto px-4 py-10 space-y-6">
+  <div class="flex items-center justify-between gap-3">
+    <a class="text-sm second u" href="/" id="homeLink">← GHRC</a>
+    <button class="lang-btn" id="langToggle" type="button"></button>
+  </div>
+
+  <header class="hero">
+    <p class="text-xs"><span class="pill" id="roomPill"></span></p>
+    <div class="flex flex-wrap gap-5 items-start mt-3">
+      <div id="photoBox"></div>
+      <div class="min-w-0 flex-1">
+        <h1 class="text-2xl sm:text-3xl font-semibold leading-tight" id="labName"></h1>
+        <p class="second mt-0.5" id="labName2"></p>
+        <p class="mt-3"><span class="text-sm text-stone-500" id="leadLabel"></span> <span class="font-medium" id="leadName"></span></p>
+        <p class="text-sm text-stone-500" id="leadTitle"></p>
+        <p class="text-sm mt-1" id="leadContact"></p>
+      </div>
+    </div>
+    <p class="mt-4 text-lg" id="oneLine"></p>
+    <p class="second mt-1" id="oneLine2"></p>
+  </header>
+
+  <section class="card" id="introSec" hidden>
+    <h2 class="font-semibold" id="introTitle"></h2>
+    <p class="mt-2 whitespace-pre-line" id="intro"></p>
+    <p class="second mt-2 whitespace-pre-line" id="intro2"></p>
+  </section>
+
+  <section class="card" id="expertiseSec" hidden>
+    <h2 class="font-semibold" id="expertiseTitle"></h2>
+    <p class="mt-2" id="expertise"></p>
+  </section>
+
+  <section class="card" id="equipmentSec" hidden>
+    <h2 class="font-semibold" id="equipmentTitle"></h2>
+    <ul class="mt-2 list-disc pl-5 space-y-1" id="equipment"></ul>
+  </section>
+
+  <section class="card" id="backgroundSec" hidden>
+    <h2 class="font-semibold" id="backgroundTitle"></h2>
+    <p class="mt-2 whitespace-pre-line" id="background"></p>
+    <p class="second mt-2 whitespace-pre-line" id="background2"></p>
+  </section>
+
+  <section class="card" id="papersSec" hidden>
+    <h2 class="font-semibold" id="papersTitle"></h2>
+    <ul class="mt-2 list-disc pl-5 space-y-1 text-sm" id="papers"></ul>
+  </section>
+
+  <section class="space-y-2">
+    <h2 class="font-semibold" id="othersTitle"></h2>
+    <div class="grid sm:grid-cols-2 gap-2" id="others"></div>
+  </section>
+
+  <p class="text-sm second" id="draftNote" hidden></p>
+  <footer class="text-sm second pt-4 border-t border-stone-200">
+    <p id="centerLine"></p>
+    <p class="mt-1" id="contactLine"></p>
+  </footer>
+</main>
+
+<script>
+(async () => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const qs = new URLSearchParams(location.search);
+  // /lab/301 或 /lab.html?room=301 都認
+  const room = (qs.get("room") || (location.pathname.match(/(30[1-5])/) || [])[1] || "301");
+
+  /**
+   * 跟來賓專頁同一套雙語：**英文永遠是主語**（國際來賓佔多數），中文在下面那一行；
+   * 右上角那顆鍵只是換「哪一個當主語」。記在這台裝置，也可以用 ?ui=zh 帶。
+   */
+  const UI_KEY = "ghrc-ui-lang";
+  let primary = qs.get("ui") === "zh" || qs.get("ui") === "en" ? qs.get("ui") : (() => { try { return localStorage.getItem(UI_KEY) || "en"; } catch (e) { return "en"; } })();
+  const secondary = primary === "en" ? "zh" : "en";
+  const L = {
+    en: { lead: "Lead", intro: "About the laboratory", expertise: "Areas of expertise", equipment: "Facilities", background: "Background", papers: "Selected papers", others: "The other laboratories", contact: "Contact", toggle: "中文", centre: "Green Health Research Center, College of Bioresources and Agriculture, National Taiwan University", where: "3F, Landscape Building, NTU · ntughrc@gmail.com", draft: "This description is a draft and has not yet been confirmed by the lead." },
+    zh: { lead: "負責人", intro: "研究室簡介", expertise: "專長領域", equipment: "設備", background: "學經歷", papers: "代表論文", others: "其他研究室", contact: "聯絡方式", toggle: "English", centre: "國立臺灣大學生物資源暨農學院　綠色健康研究中心", where: "臺大造園館三樓 · ntughrc@gmail.com", draft: "這一段介紹是草稿，尚未經老師本人確認。" },
+  };
+  const T = (k) => L[primary][k];
+  const T2 = (k) => L[secondary][k];
+
+  $("langToggle").textContent = T("toggle");
+  $("langToggle").onclick = () => {
+    try { localStorage.setItem(UI_KEY, secondary); } catch (e) {}
+    const u = new URL(location.href); u.searchParams.delete("ui"); location.href = u.toString();
+  };
+
+  let data;
+  try {
+    data = await (await fetch("/api/labs")).json();
+  } catch (e) {
+    document.querySelector("main").innerHTML = `<p class="card">Could not load the laboratories. 讀不到研究室資料。</p>`;
+    return;
+  }
+  const labs = data.labs || [];
+  for (const l of labs) document.documentElement.style.setProperty(`--c${l.room}`, l.color);
+  const lab = labs.find((l) => String(l.room) === room) || labs[0];
+  if (!lab) return;
+  document.documentElement.style.setProperty("--tone", lab.color || "#0f766e");
+
+  const lead = lab.lead || {};
+  const pick = (base) => lab[`${base}_${primary}`] || lab[`${base}_en`] || "";
+  const pick2 = (base) => (lab[`${base}_${secondary}`] && lab[`${base}_${secondary}`] !== pick(base) ? lab[`${base}_${secondary}`] : "");
+  const labName = () => (primary === "zh" ? lab.name_zh : lab.name_en) || lab.name_en;
+  const labName2 = () => (secondary === "zh" ? lab.name_zh : lab.name_en) || "";
+
+  document.title = `Lab ${lab.room} ${labName()} · GHRC`;
+  $("roomPill").textContent = `Lab ${lab.room} · ${primary === "zh" ? [lab.stage_zh, lab.stage].filter(Boolean).join(" ") : [lab.stage, lab.stage_zh].filter(Boolean).join(" ")}`;
+  $("labName").textContent = labName();
+  $("labName2").textContent = labName2();
+  $("leadLabel").textContent = `${T("lead")} · ${T2("lead")}`;
+  $("leadName").textContent = [lead.name_zh, lead.name_en].filter(Boolean).join(" ");
+  $("leadTitle").innerHTML = lead[`title_${primary}`] || lead.title_en ? `${esc(lead[`title_${primary}`] || lead.title_en)}${lead[`title_${secondary}`] ? ` <span class="second">${esc(lead[`title_${secondary}`])}</span>` : ""}` : "";
+  $("leadContact").innerHTML = lead.email ? `${esc(T("contact"))} <a class="u" href="mailto:${esc(lead.email)}">${esc(lead.email)}</a>` : "";
+
+  const photoUrl = (p) => (!p ? "" : /^https?:/i.test(p) ? p : `/api/media?key=${encodeURIComponent(p)}`);
+  const photo = photoUrl(lead.photo || lab.photo);
+  const initials = (lead.name_en || lead.name_zh || lab.room).split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+  $("photoBox").innerHTML = photo ? `<img class="avatar" src="${esc(photo)}" alt="">` : `<div class="avatar">${esc(initials)}</div>`;
+
+  $("oneLine").textContent = pick("one_line");
+  $("oneLine2").textContent = pick2("one_line");
+
+  const para = (secId, titleKey, base) => {
+    const main = pick(base);
+    if (!main) return;
+    $(secId).hidden = false;
+    $(`${base === "one_line" ? "oneLine" : base}Title`).textContent = `${T(titleKey)}　${T2(titleKey)}`;
+    $(base).textContent = main;
+    $(`${base}2`).textContent = pick2(base);
+  };
+  para("introSec", "intro", "intro");
+  para("backgroundSec", "background", "background");
+
+  const expertise = lab[`expertise_${primary}`] || lab.expertise_en || [];
+  if (expertise.length) {
+    $("expertiseSec").hidden = false;
+    $("expertiseTitle").textContent = `${T("expertise")}　${T2("expertise")}`;
+    $("expertise").innerHTML = expertise.map((e) => `<span class="tag">${esc(e)}</span>`).join("");
+  }
+  const equipment = lab[`equipment_${primary}`] || lab.equipment_en || [];
+  if (equipment.length) {
+    $("equipmentSec").hidden = false;
+    $("equipmentTitle").textContent = `${T("equipment")}　${T2("equipment")}`;
+    $("equipment").innerHTML = equipment.map((e) => `<li>${esc(e)}</li>`).join("");
+  }
+  const papers = lab.papers || [];
+  if (papers.length) {
+    $("papersSec").hidden = false;
+    $("papersTitle").textContent = `${T("papers")}　${T2("papers")}`;
+    $("papers").innerHTML = papers.map((p) => `<li><a class="u" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a>${p.venue ? ` <span class="second">· ${esc(p.venue)}</span>` : ""}</li>`).join("");
+  }
+
+  // 其他四間：五間是一組，看完一間要能直接跳下一間
+  $("othersTitle").textContent = `${T("others")}　${T2("others")}`;
+  $("others").innerHTML = labs
+    .filter((l) => String(l.room) !== String(lab.room))
+    .map((l) => `<a class="lab-link" style="--tone:${esc(l.color || "#0f766e")}" href="/lab/${esc(l.room)}"><span class="pill">${esc(l.room)}</span><span class="min-w-0"><span class="block text-sm font-medium truncate">${esc(primary === "zh" ? l.name_zh : l.name_en)}</span><span class="block text-xs second truncate">${esc([l.lead?.name_zh, l.lead?.name_en].filter(Boolean).join(" "))}</span></span></a>`)
+    .join("");
+
+  // 草稿要說是草稿：待確認事項 1 沒解掉之前，這幾段是照母簡報擬的
+  $("draftNote").hidden = lab.confirmed !== false;
+  $("draftNote").textContent = `${T("draft")}　${T2("draft")}`;
+  $("centerLine").textContent = T("centre");
+  $("contactLine").textContent = T("where");
+})();
+</script>
+</body>
+</html>
