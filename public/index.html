@@ -255,7 +255,10 @@
   //   /<visit_id>#respond  訪後三個回應項目（感謝信用）
   const applySections = () => {
     const w = (location.hash.replace("#", "") || qs.get("mode") || "").toLowerCase();
-    $("emailSec").hidden = !(w === "email" || phase === "today");
+    // 留信箱：**訪前就要看得到**。專頁的網址是寫在訪前的確認信裡寄出去的，對方點進來時
+    // 參訪還沒發生——以前只有當天才顯示，所以那個連結點進去根本沒有地方可以留信箱。
+    // 訪後不放（那時候該填的是三個回應項目），要用還是可以帶 #email 進來。
+    $("emailSec").hidden = !(w === "email" || (visit && phase !== "after"));
     $("respond").hidden = !(w === "respond" || phase !== "before");
     return w;
   };
@@ -367,8 +370,9 @@
   }).join("");
 
   // 留信箱（現場）
-  $("emailTitle").textContent = bi("leave_email_title");
-  $("emailBody").textContent = bi("leave_email_body", "\n");
+  // 訪前的措辭不一樣：那時候還沒有「今天的簡報」，要說「參訪之後會寄給您」
+  $("emailTitle").textContent = bi(phase === "before" ? "leave_email_title_before" : "leave_email_title");
+  $("emailBody").textContent = bi(phase === "before" ? "leave_email_body_before" : "leave_email_body", "\n");
   $("emailName").placeholder = T("name_optional");
   $("emailEmail").placeholder = T("email");
   $("emailNote").placeholder = T("note_optional");

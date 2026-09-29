@@ -50,8 +50,10 @@ export default async (req: Request) => {
     const text = String(body.body || "").trim();
     if (!recipients.length || !subject || !text) return fail(400, "需要 subject、body、recipients");
     if (!gmailConfigured()) {
-      // 沒設定 Gmail 就沒有等待可言，當場把 mailto 交回去
-      const mailto = `mailto:?bcc=${encodeURIComponent(recipients.map((r) => r.email).join(","))}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+      // 沒設定 Gmail 就沒有等待可言，當場把 mailto 交回去。
+      // **內文不放進 mailto**：整封信 percent-encode 之後輕易破兩千字元，作業系統的信件程式
+      // 會直接不開（按了沒反應，實際踩過）。收件人與主旨夠短，內文由後台複製到剪貼簿讓人貼上。
+      const mailto = `mailto:?bcc=${encodeURIComponent(recipients.map((r) => r.email).join(","))}&subject=${encodeURIComponent(subject)}`;
       return json({ ok: true, sent: false, reason: "gmail_not_configured", mailto, recipients });
     }
     return startBackground("letter", { mode: "send", visit_id: visit.visit_id, kind, sender: body.sender, subject, body: text, recipients }, req);
