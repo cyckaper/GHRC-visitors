@@ -197,16 +197,64 @@
               <button class="btn" id="copyLink" title="複製來賓專頁網址，貼到信裡或 LINE 給對方">複製網址</button>
               <button class="btn btn-soft" id="downloadIcs" title="把這一場加進行事曆，結束時間跳出來提醒你拍簽名簿、講三十秒口述。系統本來就會在那個時間寄一封提醒信，這顆是給想在行事曆上也看到的人">下載後續提醒 .ics</button>
             </div>
-            <p class="muted">確認信在下面那一張卡片。其他要做的事（選頁、後續）看上面那一排進度：綠勾是做過了，點一格就跳到該做那件事的分頁。</p>
+            <p class="muted">通告研究室與確認信在下面兩張卡片。其他要做的事（選頁、後續）看上面那一排進度：綠勾是做過了，點一格就跳到該做那件事的分頁。</p>
           </div>
         </div>
       </div>
     </div>
 
 
+    <div class="card space-y-3" id="noticeCard">
+      <h2 class="font-semibold"><span class="num">5</span>通告研究室 <span class="muted font-normal">多半是貼到 LINE 群組</span></h2>
+      <p class="muted">排好行程之後先告訴各研究室：哪個單位什麼時候來、幾點走到你那一間，<b>請各室安排簡報人員</b>。收到回覆就把人填回下面那張表，定案之後再回報一次。<br>這幾則是寫給中心同事看的，所以一律中文、條列、貼得進 LINE；也可以用中心的 Gmail 寄出。</p>
+
+      <div class="space-y-2">
+        <div class="f mb-0">一、通告與徵詢簡報人員</div>
+        <div class="flex flex-wrap gap-2 items-center">
+          <select id="noticeSender" title="通告的署名"><option value="director">中心主任 張俊彥</option><option value="contact">對口老師</option></select>
+          <button class="btn" id="noticeBtn" title="依這一場的動線擬一則通告：哪個單位什麼時候來、幾點到哪一間，請各室安排簡報人員">AI 擬通告</button>
+          <span class="muted" id="noticeInfo"></span>
+        </div>
+        <input type="text" id="noticeSubject" placeholder="主旨（寄 email 才用得到）">
+        <textarea id="noticeBody" rows="12" placeholder="通告內容會出現在這裡，可以直接改"></textarea>
+        <p class="muted" id="noticeDraftNote" hidden></p>
+        <div class="flex flex-wrap gap-2 items-center">
+          <button class="btn" id="copyNotice" title="複製整則通告，貼到 LINE 群組">複製（貼到 LINE）</button>
+          <button class="btn btn-soft" id="noticeSendBtn" title="用中心的 Gmail 寄給下面勾選的老師。沒設定 Gmail 時會給你 mailto 自己寄">寄出通告</button>
+          <a class="btn btn-soft" id="noticeMailto" hidden target="_blank" rel="noopener">用自己的信箱寄（mailto）</a>
+          <span id="noticeSendInfo"></span>
+        </div>
+        <div id="noticeRecipients" class="space-y-1"></div>
+        <p class="muted" id="noticeWho"></p>
+      </div>
+
+      <div class="space-y-2">
+        <div class="f mb-0">二、各室回覆的簡報人員</div>
+        <p class="muted">收到回覆（LINE 或 email）就填在這裡。下一步的回報會照這張表寫，一頁摘要也看得到。</p>
+        <div class="space-y-1" id="presenters"></div>
+      </div>
+
+      <div class="space-y-2">
+        <div class="f mb-0">三、把定案的時間與內容回報給各室</div>
+        <div class="flex flex-wrap gap-2 items-center">
+          <button class="btn" id="rundownBtn" title="把定案的動線與簡報人員整理成一則訊息，回報給各研究室">AI 擬回報</button>
+          <span class="muted" id="rundownInfo"></span>
+        </div>
+        <input type="text" id="rundownSubject" placeholder="主旨（寄 email 才用得到）">
+        <textarea id="rundownBody" rows="10" placeholder="回報內容會出現在這裡"></textarea>
+        <p class="muted" id="rundownDraftNote" hidden></p>
+        <div class="flex flex-wrap gap-2 items-center">
+          <button class="btn" id="copyRundown" title="複製整則回報，貼到 LINE 群組">複製（貼到 LINE）</button>
+          <button class="btn btn-soft" id="rundownSendBtn" title="用中心的 Gmail 寄給上面勾選的老師">寄出回報</button>
+          <a class="btn btn-soft" id="rundownMailto" hidden target="_blank" rel="noopener">用自己的信箱寄（mailto）</a>
+          <span id="rundownSendInfo"></span>
+        </div>
+      </div>
+    </div>
+
     <div class="card space-y-3" id="confirmCard">
       <div class="flex flex-wrap items-center gap-2">
-        <h2 class="font-semibold mr-auto"><span class="num">5</span>確認信 <span class="muted font-normal">參訪前寄</span></h2>
+        <h2 class="font-semibold mr-auto"><span class="num">6</span>確認信 <span class="muted font-normal">參訪前寄</span></h2>
         <span class="text-sm px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-900" id="confirmDue" hidden>現在該寄這一封</span>
       </div>
       <p class="muted">跟對方確認日期時間，順便把來賓專頁網址交出去——當天他們掃 QR 打開的就是那一頁。</p>
@@ -440,6 +488,13 @@
       <h2 class="font-semibold">母簡報</h2>
       <p class="muted">站台存一份，之後每場產簡報就不必再選檔。可以直接選原始的母簡報（含影片、幾百 MB 都行）——會先在瀏覽器裡瘦身再上傳。</p>
       <p class="text-sm flex flex-wrap items-center gap-2" id="masterRow"></p>
+    </div>
+
+    <div class="card space-y-3">
+      <h2 class="font-semibold">研究室老師的信箱</h2>
+      <p class="muted">行前通告要寄 email 時用（多半是貼 LINE 群組，這裡留空也沒關係）。<b>這一份只有主辦端看得到</b>，不會出現在來賓專頁上——來賓專頁那邊的聯絡方式是 <code>labs.json</code> 裡另外一個欄位，那個本來就是要公開的。</p>
+      <div class="space-y-2" id="labEmails"></div>
+      <span class="muted" id="labEmailsInfo"></span>
     </div>
 
     <div class="card space-y-3">
@@ -794,7 +849,7 @@
     $("deleteBtn").hidden = !state.saved;
     $("draftDiscard").hidden = state.saved || !state.draft?.fields?.form;
     if (!state.saved) $("saveInfo").textContent = "";
-    renderGuests(v.guests || []); renderProgramme(v.programme || [], v.itinerary); renderBackground(v.background);
+    renderGuests(v.guests || []); renderProgramme(v.programme || [], v.itinerary); renderBackground(v.background); renderPresenters(v);
     $("rationale").textContent = v.plan_rationale || ""; $("uncertainties").innerHTML = (v.uncertainties || []).map((u) => `<li>${esc(u)}</li>`).join("");
     $("afterSave").hidden = !state.saved;
     renderProgress(v);
@@ -809,6 +864,7 @@
     v.guests = [...$("guestTable").tBodies[0].rows].map((tr) => ({ name: tr.cells[0].firstChild.value.trim(), title: tr.cells[1].firstChild.value.trim(), email: tr.cells[2].firstChild.value.trim(), affiliation: tr.cells[3].firstChild.value.trim(), role: tr.cells[4].firstChild.checked ? "lead" : "member", contact: tr.cells[5].firstChild.checked })).filter((g) => g.name || g.email);
     v.programme = readProgramme();
     v.itinerary = readItinerary();
+    v.presenters = Object.fromEntries([...document.querySelectorAll("[data-presenter]")].map((el) => [el.dataset.presenter, el.value.trim()]).filter(([, who]) => who));
     v.slides = Array.isArray(state.visit?.slides) ? state.visit.slides : [];
     if (state.visit?.background) v.background = state.visit.background;
     if (!state.urlFixed && $("code").value.trim()) v.code = $("code").value.trim().toLowerCase();
@@ -1237,12 +1293,14 @@
    * 信寄出去、口述存入回饋之後重新比對一次，這一筆就自然空了，不必到處記得清。
    * 存兩份：這台瀏覽器（立刻，關掉網頁也還在）＋站台 /api/draft（換台機器打開接得回來）。
    */
-  const LETTER_FIELDS = ["confirmSubject", "confirmBody", "thanksSubject", "thanksBody"];
+  const LETTER_FIELDS = ["confirmSubject", "confirmBody", "thanksSubject", "thanksBody", "noticeSubject", "noticeBody", "rundownSubject", "rundownBody"];
   const DICT_FIELDS = ["transcript", "dWho", "dRooms", "dQuestions", "dCoop", "dFollow"];
   const DRAFT_GROUPS = [
     { note: "emailDraftNote", fields: ["emailText"], text: "上次貼進來、還沒抽取的內容留著。不要的話整段刪掉就好。" },
     { note: "confirmDraftNote", fields: ["confirmSubject", "confirmBody"], text: "手改過、還沒寄出的確認信帶回來了。按「AI 草擬」會換成新的一份。" },
     { note: "thanksDraftNote", fields: ["thanksSubject", "thanksBody"], text: "手改過、還沒寄出的感謝信帶回來了。按「AI 草擬」會換成新的一份。" },
+    { note: "noticeDraftNote", fields: ["noticeSubject", "noticeBody"], text: "手改過、還沒發出的通告帶回來了。按「AI 擬通告」會換成新的一份。" },
+    { note: "rundownDraftNote", fields: ["rundownSubject", "rundownBody"], text: "手改過、還沒發出的回報帶回來了。按「AI 擬回報」會換成新的一份。" },
     { note: "dictationDraftNote", fields: DICT_FIELDS, text: "上次打的口述內容留著；按「確認並存入回饋」才算收進紀錄。" },
   ];
   const DRAFT_FIELDS = DRAFT_GROUPS.flatMap((g) => g.fields);
@@ -1426,6 +1484,7 @@
         ["pre", (v.guests || []).length ? `名單 ${v.guests.length} 人` : "名單", (v.guests || []).length > 0, "訪後信會寄給名單上每一個人，所以名單就是回饋的上限"],
         ["pre", "背景研判", v.background?.status === "done", "查過對方的公開資料，判斷可能的參訪目的"],
         ["pre", "今日流程", (v.programme || []).length > 0, "這一場的行程：幾點做什麼、每一間幾分鐘。會印在簡報第 2 頁與來賓專頁"],
+        ["pre", Object.keys(v.presenters || {}).length ? `通告 簡報人員 ${Object.keys(v.presenters).length} 間` : "通告研究室", !!(v.letters?.notice?.body && Object.keys(v.presenters || {}).length), "告訴各研究室哪個單位什麼時候來，請他們安排簡報人員；回覆填回來之後再回報定案的時間"],
         ["deck", v.deck?.skip ? "不用簡報" : stale("deck") ? "簡報 需重產" : v.deck?.generated_at ? "簡報已產" : `選了 ${(v.slides || []).length} 頁`, !!(v.deck?.skip || (v.deck?.generated_at && !stale("deck"))), stale("deck") ? "行程或選頁在產檔之後改過，手上那份 .pptx 是舊的" : "挑頁並產出這一場的 .pptx；只口頭介紹的場次可以整頁關掉"],
         ["pre", stale("confirmation") ? "確認信 行程已改" : v.letters?.confirmation?.sent_at ? "確認信 已寄" : "確認信", !!(v.letters?.confirmation?.sent_at && !stale("confirmation")), stale("confirmation") ? "寄出之後行程又改過，對方手上的時間是舊的" : "跟對方確認日期時間，順便把來賓專頁網址交出去"],
       ]],
@@ -1918,7 +1977,72 @@
     const before = (v.visit.date || "") >= today;
     $("confirmDue").hidden = !(before && !c?.sent_at);
     $("thanksDue").hidden = !(!before && !t?.sent_at);
+    // 研究室通告與回報（寫給中心自己的，多半是貼 LINE）
+    for (const kind of ["notice", "rundown"]) {
+      const l = v.visit.letters?.[kind];
+      $(`${kind}Subject`).value = l?.subject || "";
+      $(`${kind}Body`).value = l?.body || "";
+      $(`${kind}SendInfo`).innerHTML = l?.sent_at ? `<span class="ok">已於 ${esc(l.sent_at.slice(0, 16).replace("T", " "))} 寄給 ${l.sent_to?.length || 0} 人</span>` : "";
+    }
+    if (v.visit.letters?.notice?.sender) $("noticeSender").value = v.visit.letters.notice.sender;
+    renderPresenters(v.visit);
+    await loadLabRecipients();
     rebase(LETTER_FIELDS); // 伺服器上這一版才是基準；手改過還沒寄的那一版由 applyDraft 擺回來
+  }
+  /**
+   * 通告的收件人＝**這一場動線上的那幾間**的老師（不是五間全寄）。信箱在「設定」分頁填，
+   * 沒填就退回 labs.json 上那個公開的；兩個都沒有的照樣列出來、標明「還沒有信箱」——
+   * 少寄一個人比看不出來少寄好。
+   */
+  async function loadLabRecipients() {
+    const id = $("visitSelect").value;
+    const box = $("noticeRecipients");
+    if (!box) return;
+    if (!id) { box.innerHTML = `<p class="muted">請先在上面選一場參訪。</p>`; state.labRecipients = []; return; }
+    const r = await api("/api/letter", { method: "POST", body: { visit_id: id, action: "recipients", kind: "notice" } });
+    state.labRecipients = r.ok ? r.recipients : [];
+    renderLabRecipients();
+  }
+  function renderLabRecipients() {
+    const list = state.labRecipients || [];
+    const box = $("noticeRecipients");
+    if (!box) return;
+    const withEmail = list.filter((r) => r.email);
+    const without = list.filter((r) => !r.email);
+    box.innerHTML = !list.length
+      ? `<p class="muted">這一場的行程還沒排到任何研究室，先回上面排行程。</p>`
+      : [
+          ...list.map((r, i) => (r.email ? `<label class="flex gap-2 items-center"><input type="checkbox" checked data-i="${i}"><span>${esc(r.name)} <span class="muted">${esc(r.room)} · ${esc(r.email)} · ${esc(r.start)}–${esc(r.end)}</span></span></label>` : "")).filter(Boolean),
+          // 沒信箱的合成一句：同一句講五遍只是雜訊，重點是「這幾間要自己貼 LINE」
+          without.length ? `<p class="muted">${!withEmail.length ? "五間都" : `${esc(without.map((r) => r.room).join("、"))} `}還沒有信箱——到「設定」分頁補，或直接把上面那一則貼到 LINE 群組。</p>` : "",
+        ].filter(Boolean).join("");
+    updateLabSendCounts();
+  }
+  function updateLabSendCounts() {
+    for (const kind of ["notice", "rundown"]) {
+      const picked = checkedLabRecipients();
+      const btn = $(`${kind}SendBtn`);
+      if (btn) btn.disabled = !picked.length;
+    }
+    const picked = checkedLabRecipients();
+    const anyEmail = (state.labRecipients || []).some((r) => r.email);
+    $("noticeWho").textContent = picked.length ? `${t("會寄給：")}${picked.map((r) => r.name).join("、")}` : anyEmail ? t("沒有勾到任何有信箱的老師——複製到 LINE 群組就好") : "";
+  }
+  const checkedLabRecipients = () => [...document.querySelectorAll('#noticeRecipients input[type="checkbox"]:checked')].map((i) => state.labRecipients[Number(i.dataset.i)]).filter(Boolean);
+  /** 各研究室回覆的簡報人員：一間一列，填了就會出現在回報那一則訊息裡。 */
+  function renderPresenters(v) {
+    const box = $("presenters");
+    if (!box) return;
+    const stops = (state.labRecipients || []).length ? state.labRecipients : [];
+    const rows = stops.length
+      ? stops
+      : (v?.itinerary || [])
+          .filter((x) => String(x.room) !== "briefing" && Number(x.minutes) > 0)
+          .map((x) => ({ room: String(x.room), name: (state.labs?.labs || []).find((l) => String(l.room) === String(x.room))?.lead?.name_zh || "", start: "", end: "" }));
+    const who = v?.presenters || {};
+    box.innerHTML = rows.length
+      ? rows.map((r) => `<div class="flex flex-wrap items-center gap-2"><span class="room" style="--tone:${roomTone(r.room)}">${esc(r.room)}</span><span class="muted !w-44">${esc(r.name || "")}${r.start ? ` ${esc(r.start)}–${esc(r.end)}` : ""}</span><input type="text" data-presenter="${esc(r.room)}" class="!w-64" placeholder="簡報人員（可多位）" value="${esc(who[r.room] || "")}"></div>`).join("")
+      : `<p class="muted">這一場的行程還沒排到任何研究室。</p>`;
   }
   /** 兩封信各自一份收件人清單（確認信在「訪前」、感謝信在「後續」）。 */
   const recipientBoxes = () => [$("confirmRecipients"), $("thanksRecipients")].filter(Boolean);
@@ -1987,6 +2111,38 @@
   $("sendBtn").onclick = () => sendLetter("thanks");
   $("confirmSendBtn").onclick = () => sendLetter("confirmation");
 
+  // ── 研究室通告與回報（寫給中心自己的，多半是貼 LINE，寄 email 只是備援）──
+  const draftInternal = (kind) => busy($(`${kind}Btn`), async () => {
+    const id = $("visitSelect").value;
+    if (!id) return flash("請先選一場參訪", "err");
+    const r = await runJob("/api/letter", { visit_id: id, kind, sender: $("noticeSender").value }, noteInto(`${kind}Info`), "AI 擬稿中……大約一分鐘。");
+    if (!r) return;
+    $(`${kind}Subject`).value = r.draft.subject; $(`${kind}Body`).value = r.draft.body;
+    state.labRecipients = r.recipients || state.labRecipients; renderLabRecipients();
+    rebase(LETTER_FIELDS); queueDraft(); applyDraft();
+  });
+  $("noticeBtn").onclick = () => draftInternal("notice");
+  $("rundownBtn").onclick = () => draftInternal("rundown");
+  $("copyNotice").onclick = () => copy($("noticeBody").value);
+  $("copyRundown").onclick = () => copy($("rundownBody").value);
+  $("noticeRecipients").addEventListener("change", updateLabSendCounts);
+  /** 寄出通告／回報：跟兩封來賓信同一支端點，只差 kind 與收件人來源。 */
+  const sendInternal = (kind) => busy($(`${kind}SendBtn`), async () => {
+    const recipients = checkedLabRecipients();
+    if (!recipients.length) return flash("沒有勾選收件人（也可以直接複製貼到 LINE）", "err");
+    if (!$(`${kind}Subject`).value.trim() || !$(`${kind}Body`).value.trim()) return flash("內容還是空的，先按上面那顆 AI", "err");
+    const label = kind === "notice" ? "通告" : "回報";
+    if (!confirm(t(`把${label}寄給 ${recipients.length} 位老師？`))) return;
+    const note = (m) => { $(`${kind}SendInfo`).textContent = m; };
+    const r = await runJob("/api/letter", { visit_id: $("visitSelect").value, action: "send", kind, sender: $("noticeSender").value, subject: $(`${kind}Subject`).value, body: $(`${kind}Body`).value, recipients }, note, `寄送中……${recipients.length} 位。`);
+    if (!r) return;
+    if (r.sent) { $(`${kind}SendInfo`).innerHTML = `<span class="ok">已寄給 ${r.sent_to.length} 人</span>`; $(`${kind}Mailto`).hidden = true; flash(`${label}已寄出`); rebase(LETTER_FIELDS); queueDraft(); applyDraft(); loadVisits(); }
+    else if (r.reason === "gmail_not_configured") { $(`${kind}SendInfo`).innerHTML = `<span class="err">尚未寄出：Netlify 沒有設定 Gmail。請用右邊的 mailto，或直接複製貼到 LINE 群組。</span>`; $(`${kind}Mailto`).href = r.mailto; $(`${kind}Mailto`).hidden = false; }
+    else { $(`${kind}SendInfo`).innerHTML = `<span class="err">一封都沒寄成功：${esc((r.failed || []).map((f) => `${f.email}（${f.error}）`).join("；")) || "未知原因"}</span>`; flash("寄送失敗", "err"); }
+  });
+  $("noticeSendBtn").onclick = () => sendInternal("notice");
+  $("rundownSendBtn").onclick = () => sendInternal("rundown");
+
   // ── 資料 ──
 
   // ── 設定：一次做完就不用再碰的東西 ──
@@ -2006,6 +2162,7 @@
     $("senderDefault").value = r.settings.sender_default || "director";
     $("reminderTo").value = r.settings.reminder_to || "";
     renderVideoLinks(r.settings.video_links || {});
+    renderLabEmails(r.settings.lab_emails || {});
     $("reminderInfo").textContent = r.settings.reminder_to ? "" : r.effective?.reminder_to ? `留空：現在寄到 ${r.effective.reminder_to}` : "還沒有收件信箱，現在不會寄提醒";
     $("statusList").innerHTML = STATUS_ROWS.map(([k, label, where]) => {
       const on = !!r.status[k];
@@ -2025,6 +2182,18 @@
       ? vids.map((s) => `<div class="flex flex-wrap items-center gap-2"><label class="f mb-0 !w-40" for="vl${s.n}">第 ${s.n} 頁 <span class="muted">${esc(slideTitle(s))}</span></label><input type="url" id="vl${s.n}" data-video-slide="${s.n}" class="!w-96" placeholder="https://drive.google.com/… 或 https://youtu.be/…" value="${esc(links[String(s.n)] || "")}"></div>`).join("")
       : `<p class="muted">母簡報索引裡沒有標任何影片頁。</p>`;
   }
+  /** 五間研究室老師的信箱（行前通告寄 email 用；只有主辦端看得到）。 */
+  function renderLabEmails(emails) {
+    const labs = state.labs?.labs || [];
+    $("labEmails").innerHTML = labs.length
+      ? labs.map((l) => `<div class="flex flex-wrap items-center gap-2"><span class="room" style="--tone:${roomTone(l.room)}">${esc(l.room)}</span><label class="f mb-0 !w-28" for="le${l.room}">${esc(l.lead?.name_zh || "")}</label><input type="email" id="le${l.room}" data-lab-email="${esc(l.room)}" class="!w-72" placeholder="${esc(l.lead?.email || "留空就用公開的那個")}" value="${esc(emails[l.room] || "")}"></div>`).join("")
+      : `<p class="muted">老師名單還沒載入。</p>`;
+  }
+  $("labEmails").addEventListener("change", () => {
+    const out = {};
+    for (const el of document.querySelectorAll("[data-lab-email]")) out[el.dataset.labEmail] = el.value.trim();
+    saveSettings({ lab_emails: out }, "labEmailsInfo");
+  });
   $("videoLinks").addEventListener("change", () => {
     const out = {};
     for (const el of document.querySelectorAll("[data-video-slide]")) out[el.dataset.videoSlide] = el.value.trim();

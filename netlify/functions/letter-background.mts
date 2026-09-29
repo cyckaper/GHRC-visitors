@@ -3,14 +3,15 @@ import { loadPublicData } from "../lib/data.mts";
 import { getStore } from "../lib/store.mts";
 import { draftLetter } from "../lib/ai.mts";
 import { backgroundHandler } from "../lib/jobs.mts";
-import { recipientList, scheduleFingerprint } from "../../lib/visit.mjs";
+import { labRecipients, recipientList, scheduleFingerprint } from "../../lib/visit.mjs";
+import { loadSettings } from "./settings.mts";
 import { triggerDriveSync } from "../lib/drive.mts";
 import { gmailSend } from "../lib/mail.mts";
 
 type Input = {
   mode: "draft" | "send";
   visit_id: string;
-  kind: "confirmation" | "thanks";
+  kind: "confirmation" | "thanks" | "notice" | "rundown";
   sender?: string;
   subject?: string;
   body?: string;
@@ -26,7 +27,8 @@ export default backgroundHandler<Input>("信件", async (input, req) => {
   const visit = await store.getVisit(String(input.visit_id));
   if (!visit) throw new Error("找不到這次參訪");
   const responses = await store.listResponses(visit.visit_id);
-  const kind = input.kind === "confirmation" ? "confirmation" : "thanks";
+  const KINDS = ["confirmation", "thanks", "notice", "rundown"] as const;
+  const kind = (KINDS as readonly string[]).includes(input.kind) ? input.kind : "thanks";
 
   if (input.mode === "send") {
     const recipients = (input.recipients || []).filter((r) => r?.email);
@@ -42,7 +44,11 @@ export default backgroundHandler<Input>("信件", async (input, req) => {
         failed.push({ email: r.email, error: String(e?.message || e) });
       }
     }
-    if (kind === "thanks") {
+    if (kind === "notice" || kind === "rundown") {
+      // 內部通告：寄 email 只是備援（多半是複製到 LINE 群組），一樣記下寄給誰、什麼時候寄的
+      const prev = visit.letters[kind];
+      visit.letters[kind] = { subject, body: text, sender: input.sender || prev?.sender || "director", drafted_at: prev?.drafted_at || nowISO(), sent_to: [...(prev?.sent_to || []), ...sent], sent_at: nowISO() };
+    } else if (kind === "thanks") {
       visit.letters.thanks = { subject, body: text, sender: input.sender || visit.letters.thanks?.sender || "director", drafted_at: visit.letters.thanks?.drafted_at || nowISO(), sent_to: [...(visit.letters.thanks?.sent_to || []), ...sent], sent_at: nowISO() };
       if (!failed.length) visit.status = "done";
     } else {
@@ -61,9 +67,13 @@ export default backgroundHandler<Input>("信件", async (input, req) => {
   const [labs, i18n] = await Promise.all([loadPublicData("labs"), loadPublicData("i18n")]);
   const mostWanted = [...new Set([...(visit.dictation?.extracted?.most_wanted_rooms || []), ...responses.flatMap((r) => r.most_wanted_rooms || [])])];
   const draft = await draftLetter({ kind, visit, labs, i18n, sender, siteUrl: siteUrl(req), mostWantedRooms: mostWanted });
-  if (kind === "thanks") visit.letters.thanks = { ...draft, sender, drafted_at: nowISO(), sent_to: visit.letters.thanks?.sent_to, sent_at: visit.letters.thanks?.sent_at };
+  if (kind === "notice" || kind === "rundown") {
+    const prev = visit.letters[kind];
+    visit.letters[kind] = { ...draft, sender, drafted_at: nowISO(), sent_to: prev?.sent_to, sent_at: prev?.sent_at };
+  } else if (kind === "thanks") visit.letters.thanks = { ...draft, sender, drafted_at: nowISO(), sent_to: visit.letters.thanks?.sent_to, sent_at: visit.letters.thanks?.sent_at };
   else visit.letters.confirmation = { ...draft, drafted_at: nowISO() };
   visit.updated_at = nowISO();
   await store.putVisit(visit);
-  return { kind, sender, draft, recipients: recipientList(visit, responses) };
+  const recipients = kind === "notice" || kind === "rundown" ? labRecipients(visit, labs, (await loadSettings()).lab_emails) : recipientList(visit, responses);
+  return { kind, sender, draft, recipients };
 });

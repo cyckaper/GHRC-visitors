@@ -71,7 +71,8 @@ try {
   // 一場參訪都還沒有的時候，簡報分頁仍要列出母簡報的頁次（只是不能存、不能產檔）
   await page.click('[data-tab="deck"]');
   await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]").length > 0);
-  check((await page.locator("#slideGrid input[data-block]").count()) === 16, "the master deck's blocks are listed even with no visit yet");
+  // 15 個區塊：研究成果 39–42 併進了 Lab 303（明確指示），所以比以前少一個
+  check((await page.locator("#slideGrid input[data-block]").count()) === 15, "the master deck's blocks are listed even with no visit yet");
   check((await page.locator("#slideGrid input[data-slide]").count()) === 0, "…and there is no per-page checkbox to wade through");
   check((await page.$("#slidesSave")) === null, "there is no save-slides button — picking pages saves itself");
   check(await page.isDisabled("#deckBtn") && (await page.isVisible("#deckNeedsVisit")), "…but building is held back until a visit exists, and it says why");

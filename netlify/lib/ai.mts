@@ -5,7 +5,7 @@ import { env } from "./http.mts";
 import { isMock } from "./data.mts";
 import type { DictationExtract, ResponseRow, SignbookEntry, Visit } from "./types.mts";
 import type { Extracted } from "./files.mts";
-import { allocateProgramme, pageContents } from "../../lib/visit.mjs";
+import { allocateProgramme, endTimeOf, labStops, pageContents } from "../../lib/visit.mjs";
 
 /**
  * 所有 AI 呼叫集中在這裡（工作包第 5 章）。
@@ -301,13 +301,26 @@ export async function planVisit(visit: Visit, slidesIndex: any, labs: any, maste
 const LetterSchema = z.object({ subject: z.string(), body: z.string() });
 
 export interface LetterContext {
-  kind: "confirmation" | "thanks";
+  /**
+   * 寄給來賓的：confirmation（訪前確認）、thanks（訪後感謝）。
+   * 寄給**中心自己**各研究室的：notice（行前通告，請各室安排簡報人員）、
+   * rundown（通告的下一步：定案的時間、簡報人員與內容再回報一次）。
+   */
+  kind: "confirmation" | "thanks" | "notice" | "rundown";
   visit: Visit;
   labs: any;
   i18n: any;
   sender: "director" | "contact";
   siteUrl: string;
   mostWantedRooms: string[];
+}
+
+/** 回覆期限：參訪前一天（通告裡寫「請在這一天前回覆」）。 */
+function dayBefore(date: string): string {
+  const d = new Date(`${date}T00:00:00+08:00`);
+  if (Number.isNaN(d.getTime())) return "";
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
 }
 
 function senderBlock(ctx: LetterContext): string {
@@ -344,10 +357,25 @@ export async function draftLetter(ctx: LetterContext): Promise<{ subject: string
   const respondUrl = `${pageUrl}#respond`;
   const wanted = (ctx.labs.labs || []).filter((l: any) => ctx.mostWantedRooms.includes(l.room));
   const contents = pageContents(v, ctx.labs);
+  const internal = ctx.kind === "notice" || ctx.kind === "rundown"; // 寄給中心自己的研究室，不是來賓
   const briefingLocation = v.itinerary?.find((s) => s.room === "briefing")?.location || "302";
   if (isMock()) return mockLetter(ctx, pageUrl, respondUrl, contents);
   const system =
-    ctx.kind === "confirmation"
+    ctx.kind === "rundown"
+      ? `你替 GHRC 草擬一則**回報給中心自己五間研究室**的訊息：通告發出去、各室回覆簡報人員之後，把定案的安排再送回去一次。收信的是同事，**一律用繁體中文**。
+語氣：同事之間，簡短、條列、看一眼就知道自己幾點要做什麼。不要客套話，不要感謝詞，不要公文腔。
+結構：1) 一句話說哪個單位、什麼時候來、幾位；2) **定案動線**——照 lab_stops 逐條列「幾點–幾點　房號　研究室　簡報人員　N 分鐘」，presenter 是空的就寫「（待補）」；3) 一兩句提醒當天的重點（來賓想看什麼、簡報大概講多久）；4) 一句「有問題直接回這則訊息」；5) 署名 sender。
+時間與人員一律照提供的資料，不要自己改也不要補上沒有的人。回傳 subject 與純文字 body。
+
+${CENTER_FACTS}`
+      : ctx.kind === "notice"
+      ? `你替 GHRC 草擬一封**寄給中心自己五間研究室老師**的行前通告。收信的是同事，不是來賓——**一律用繁體中文**，不管來賓講什麼語言。
+語氣：同事之間，簡短、好讀、好回。不要客套話堆疊，不要感謝詞，不要「敬請惠予協助」這種公文腔。
+結構：1) 一句話說哪個單位、什麼時候來、幾位；2) 一兩句來賓背景與他們想看什麼（purpose／interests，沒有就省略）；3) **當天動線**——照 lab_stops 逐條列出「幾點–幾點　房號　研究室　老師　N 分鐘」，時間是排定的，不要自己改；4) **要請各研究室回覆的事**，條列四點：那個時段由誰接待、要不要準備 demo 或設備、需不需要研究生幫忙（幾位）、時間上有沒有困難；5) 一句「直接回這封信就可以」與截止日（參訪前一天）；6) 署名 sender。
+只寫這一場真的有的資訊：沒有的欄位就不要提，不要自己補上參觀路線以外的安排。回傳 subject 與純文字 body。
+
+${CENTER_FACTS}`
+      : ctx.kind === "confirmation"
       ? `你替 GHRC 草擬參訪確認信。語氣：同行學者之間的誠懇與簡潔，不是服務業。用來賓的語言寫（language=zh 用繁體中文；en 用英文；ko／ja 用英文為主並在開頭與結尾附一句該語言問候）。
 內容：確認日期時間與地點（臺大園藝系造園館三樓；總體介紹在 briefing_location 那一間，之後依序走訪研究室）、當天流程（附 programme）、專屬網頁連結（訪前可先看五間研究室的老師背景）、對口老師。
 不要問來賓任何問題；不要加交通、步行、穿著、天氣之類的提醒；不要提到中心以外的地點或單位。署名用提供的 sender。回傳 subject 與純文字 body。
@@ -364,6 +392,14 @@ ${CENTER_FACTS}`;
     page_url: pageUrl,
     page_contents: ctx.kind === "thanks" ? contents.map((c) => c.zh) : undefined,
     most_wanted_labs: wanted.map((l: any) => ({ room: l.room, name_en: l.name_en, lead: `${l.lead.name_zh} ${l.lead.name_en}` })),
+    // 行前通告：當天幾點走到哪一間、各幾分鐘、誰負責（通告的主體就是這一份）
+    // 行前通告／回報：當天幾點走到哪一間、各幾分鐘、誰負責、各室回覆的簡報人員
+    lab_stops: internal
+      ? labStops(v, ctx.labs).map((x: any) => ({ ...x, presenter: (v as any).presenters?.[x.room] || "", label: `${x.start}–${x.end}　${x.room} ${x.name_zh}　${x.lead}　${x.minutes} 分` }))
+      : undefined,
+    interests: internal ? v.interests : undefined,
+    headcount: internal ? v.headcount : undefined,
+    reply_by: ctx.kind === "notice" ? dayBefore(v.date) : undefined,
     response_block: ctx.kind === "thanks" ? responseBlock(v.language, ctx.i18n, respondUrl) : undefined,
     sender: senderBlock(ctx),
   };
@@ -603,6 +639,22 @@ function span(x: { start: string; end: string }): number {
 function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, contents: { key: string; zh: string }[]): { subject: string; body: string } {
   const v = ctx.visit;
   const location = v.itinerary?.find((s) => s.room === "briefing")?.location || "302";
+  if (ctx.kind === "notice" || ctx.kind === "rundown") {
+    // 內部通告：中文、條列、貼得進 LINE。真提示詞同一個結構
+    const stops = labStops(v, ctx.labs) as any[];
+    const line = (x: any) => `${x.start}–${x.end}　${x.room} ${x.name_zh}　${ctx.kind === "rundown" ? (v as any).presenters?.[x.room] || "（待補）" : x.lead}　${x.minutes} 分`;
+    const n = v.headcount || v.guests?.length || 0;
+    const head = `${v.org?.name || "（單位待補）"}　${v.date} ${v.start_time}–${endTimeOf(v)}${n ? `　${n} 位` : ""}`;
+    return ctx.kind === "notice"
+      ? {
+          subject: `（AI_MOCK）行前通告：${v.org?.name || v.visit_id} ${v.date} 來訪`,
+          body: `各位老師好：\n\n${head}\n\n當天動線：\n${stops.map(line).join("\n")}\n\n請各室協助回覆：\n1. 這個時段由哪一位簡報\n2. 要不要準備 demo 或設備\n3. 需不需要研究生幫忙（幾位）\n4. 時間上有沒有困難\n\n請於 ${dayBefore(v.date)} 前回覆，直接回這則訊息就可以。\n\n${senderBlock(ctx)}`,
+        }
+      : {
+          subject: `（AI_MOCK）定案回報：${v.org?.name || v.visit_id} ${v.date}`,
+          body: `各位老師好：\n\n${head}\n\n定案動線與簡報人員：\n${stops.map(line).join("\n")}\n\n有問題直接回這則訊息。\n\n${senderBlock(ctx)}`,
+        };
+  }
   if (ctx.kind === "confirmation") {
     return {
       subject: `(AI_MOCK) Your visit to the Green Health Research Center, ${v.date}`,

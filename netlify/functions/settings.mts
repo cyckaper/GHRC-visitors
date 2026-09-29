@@ -19,7 +19,12 @@ const KEY = "settings.json";
  * （5 支就 302 MB，Blobs 與信箱都塞不下），抽掉之後那一頁只剩海報影格；填了網址，海報旁邊
  * 那一行「▶ Video」就會變成點得開的連結。改了網址要重新上傳一次母簡報才會生效。
  */
-const DEFAULTS = { sender_default: "director" as "director" | "contact", reminder_to: "", video_links: {} as Record<string, string> };
+/**
+ * `lab_emails`：五間研究室老師的信箱（房號 → email），**行前通告寄 email 時用**。
+ * 放在這裡而不是 `labs.json`，是因為 `labs.json` 會送到來賓專頁上（那裡的 email 本來就是要公開的）；
+ * 內部通告用的信箱只有主辦端看得到。這裡沒填就退回 `labs.json` 的公開信箱。
+ */
+const DEFAULTS = { sender_default: "director" as "director" | "contact", reminder_to: "", video_links: {} as Record<string, string>, lab_emails: {} as Record<string, string> };
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 export type Settings = typeof DEFAULTS;
@@ -71,6 +76,18 @@ export default async (req: Request) => {
         out[String(n)] = url;
       }
       next.video_links = out;
+    }
+    const labEmails = body?.settings?.lab_emails;
+    if (labEmails && typeof labEmails === "object") {
+      const out: Record<string, string> = {};
+      for (const [room, v] of Object.entries(labEmails)) {
+        if (!/^30[1-5]$/.test(room)) continue;
+        const to = String(v || "").trim().slice(0, 200).toLowerCase();
+        if (!to) continue; // 清空就是拿掉這一條
+        if (!EMAIL.test(to)) return fail(400, `${room} 的信箱格式不對`);
+        out[room] = to;
+      }
+      next.lab_emails = out;
     }
     await getStore().putMedia(KEY, new TextEncoder().encode(JSON.stringify(next)), "application/json");
     return json({ ok: true, settings: next, effective: { reminder_to: await reminderTo() } });

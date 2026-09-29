@@ -155,6 +155,14 @@ export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   v.summary = typeof input.summary === "string" ? input.summary : "";
   // 後續那四件事裡標了「本次沒有」的（只留認得的那四個 key，其他一律丟掉）
   (v as any).wrapup = { na: wrapupNA({ wrapup: (input as any).wrapup }) };
+  // 各研究室回覆的簡報人員（房號 → 姓名）：只留 301–305
+  const presenters: Record<string, string> = {};
+  for (const [room, who] of Object.entries((input as any).presenters || {})) {
+    if (!/^30[1-5]$/.test(room)) continue;
+    const name = String(who || "").trim().slice(0, 200);
+    if (name) presenters[room] = name;
+  }
+  (v as any).presenters = presenters;
   const code = String((input as any).code || "").trim();
   if (!isValidVisitId(v.visit_id) || code) v.visit_id = makeVisitId(v.date, v.org.name, code);
   v.page_url = `${site}/${v.visit_id}`;

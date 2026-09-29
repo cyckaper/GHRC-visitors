@@ -263,6 +263,17 @@ test("選頁以區塊為單位：挑到一頁就整區進去，必選頁永遠�
   for (const n of lab301.slides) assert.ok(picked.includes(n), `301 的第 ${n} 頁要一起進去`);
   for (const n of always) assert.ok(picked.includes(n));
   assert.equal(picked.length, lab301.slides.length + always.length, "不會多帶別區的頁");
+
+  // **輸出的頁序照區塊順序**，不是母簡報的頁碼順序：母簡報把 Lab 304 放在 49–53、Lab 305 放在 43–48，
+  // 但講的時候 304 在 305 前面。要改講述順序就調 slides.json 的區塊順序，不必動母簡報。
+  const three = snapSlidesToGroups([29, 43, 49], index);
+  const at = (n) => three.indexOf(n);
+  assert.ok(at(49) < at(43), `304（49）要排在 305（43）前面：${three.join(",")}`);
+  assert.ok(at(29) < at(49), "303 還是在 304 前面");
+  assert.equal(three[0], 1, "封面永遠第一");
+  assert.equal(three[three.length - 1], 72, "謝謝永遠最後");
+  // 研究成果 39–42 併進 Lab 303：挑 303 就跟著進去
+  for (const n of [39, 40, 41, 42]) assert.ok(three.includes(n), `研究成果第 ${n} 頁跟著 Lab 303 一起進去`);
   assert.deepEqual(picked, [...picked].sort((a, b) => a - b), "依母簡報頁序");
 
   // 再挑一頁 302 → 兩區都在

@@ -223,6 +223,38 @@ test("confirmation letter draft is stored on the visit", async () => {
   assert.ok(v.body.visit.letters.confirmation.subject);
 });
 
+test("行前通告：收件人是這一場動線上的研究室，內容照動線寫；簡報人員回填後回報那一則帶著走", async () => {
+  const put = (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const before = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit;
+
+  // 收件人＝動線上那幾間的老師（不是五間全寄）
+  const rec = await api("/api/letter", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "recipients", kind: "notice" }) });
+  assert.equal(rec.status, 200, JSON.stringify(rec.body));
+  const rooms = rec.body.recipients.map((r) => r.room);
+  const onRoute = before.itinerary.filter((s) => s.room !== "briefing" && s.minutes > 0).map((s) => s.room);
+  assert.deepEqual(rooms, onRoute, "只寄給這一場會走到的那幾間");
+  assert.ok(rec.body.recipients.every((r) => r.start && r.end), "每一間都帶自己的時段，通告才寫得出來");
+
+  // 通告：中文、條列、貼得進 LINE；動線每一間都在
+  const notice = await runJob("letter", { visit_id: visitId, kind: "notice", sender: "director" });
+  assert.equal(notice.status, 200, JSON.stringify(notice.body));
+  const body = notice.body.draft.body;
+  for (const room of onRoute) assert.ok(body.includes(room), `通告要列出 ${room}`);
+  assert.ok(/簡報/.test(body), "要請各室安排簡報人員");
+  const saved = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit;
+  assert.ok(saved.letters.notice.body, "草稿存回這一場");
+  assert.ok(!saved.letters.notice.sent_at, "草擬不算寄出");
+
+  // 回填簡報人員 → 回報那一則就帶著走
+  const withWho = await put({ ...saved, presenters: { [onRoute[0]]: "王小明", zzz: "不該存的" } });
+  assert.deepEqual(withWho.body.visit.presenters, { [onRoute[0]]: "王小明" }, "只留 301–305");
+  const rundown = await runJob("letter", { visit_id: visitId, kind: "rundown", sender: "director" });
+  assert.ok(rundown.body.draft.body.includes("王小明"), "回報那一則要寫出簡報人員");
+  assert.ok(rundown.body.draft.body.includes("（待補）"), "還沒回覆的那幾間標待補，不要留白");
+
+  await put(before); // 擺回去，後面的測試照原本那一份跑
+});
+
 test("respond: anonymous suggestion is stored with no identity; named onsite email is kept", async () => {
   const anon = await api("/api/respond", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visit_id: visitId, anonymous: true, name: "Simon", email: "simon.kilbane@uwa.edu.au", suggestion: "Room 302 was hard to follow.", cooperate_rooms: ["301", "303"], next_actions: ["papers"] }) });
   assert.equal(anon.status, 200, JSON.stringify(anon.body));
