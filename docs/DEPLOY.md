@@ -75,7 +75,9 @@ python3 scripts/slim-master.py "GHRC 介紹簡報2026-9.pptx" --out public/asset
 ```
 
 - 影片改成「海報影格 ＋ ▶ Video 連結」（影片放 Drive／YouTube 不公開）；超過 3 MB 或長邊超過 2000px 的圖縮到 2000px、轉 JPEG；清掉沒被引用的媒體；目標 < 30 MB（超過會提示 `--all-images`、`--max-edge 1600`）。
-- 把 slim master 放上站台有兩種方式：**後台「上傳母簡報 .pptx」一次**（切成 4 MB 分塊存進 Netlify Blobs，`/api/master`，要 ADMIN_TOKEN，不公開；之後「產生簡報」直接抓），或 commit 到 `public/assets/master/slim-master.pptx`（Netlify 公開發佈，知道網址的人都能下載）。兩者都沒有時，按「產生簡報」會當場請你從電腦選檔，產完可一鍵存到站台。**可以直接選 396 MB 的原始母簡報**：含影片或超過 60 MB 的檔會先在瀏覽器裡瘦身（抽影片留海報、大圖縮到 2000px），大約一兩分鐘，存到站台的是瘦身後的版本。原始母檔留在 Drive 當備份。
+- 把 slim master 放上站台有兩種方式：**後台「上傳母簡報 .pptx」一次**（切成 4 MB 分塊存進 Netlify Blobs，`/api/master`，要 ADMIN_TOKEN，不公開；之後「產生簡報」直接抓），或 commit 到 `public/assets/master/slim-master.pptx`（Netlify 公開發佈，知道網址的人都能下載）。兩者都沒有時，按「產生簡報」會當場請你從電腦選檔，產完可一鍵存到站台。**可以直接選 396 MB 的原始母簡報**：當場選的那一份**原封不動拿去產檔**（影片留在產出的簡報裡，現場播得動），按「把這份母簡報存到站台」時才瘦身（抽影片留海報、大圖縮到 2000px，大約一兩分鐘）。原始母檔留在 Drive 當備份。
+
+> **影片**：站台上的母簡報不含影片，用它產出來的簡報那幾頁只有海報影格。把影片放到 Drive 或 YouTube 不公開連結，網址填進後台「設定 → 影片連結」（第 19、35、37、38、52 頁），**再重新上傳一次母簡報**，海報那一頁就會有點得開的連結。現場要真的播影片，產簡報時當場選原始的母簡報。
 - 產出後：`npm run deck -- --inspect` 看頁次是否與 `public/data/slides.json` 的索引一致（章節編號與實體頁序不一致是已知現象，索引以頁序為準）；`npm run deck -- --dump` 寫 `data/master-text.json` 並 commit，之後 `/api/plan` 就能產生第 1–3 頁（封面、流程、架構）逐字替換的 `text_edits`。
 
 ## 6.5 另存 Google Drive（長期檔案）

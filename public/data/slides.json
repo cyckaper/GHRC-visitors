@@ -732,7 +732,7 @@
   },
   {
    "id": "lab303",
-   "title": "Lab 303 景觀環境模擬室（陳惠美）",
+   "title": "Lab 303 景觀環境模擬室（陳惠美）＋ 研究成果：病患照護、高齡與學童、北區農村綠色照顧",
    "slides": [
     29,
     30,
@@ -743,20 +743,25 @@
     35,
     36,
     37,
-    38
-   ],
-   "title_en": "Lab 303 Landscape Simulation Lab (Hui-Mei Chen)"
-  },
-  {
-   "id": "outcome",
-   "title": "04 研究成果：病患照護、高齡與學童、北區農村綠色照顧",
-   "slides": [
+    38,
     39,
     40,
     41,
     42
    ],
-   "title_en": "04 Research: patient care, older adults and schoolchildren, rural green care"
+   "title_en": "Lab 303 Landscape Simulation Lab (Hui-Mei Chen) + research outcomes: patient care, older adults and schoolchildren, rural green care"
+  },
+  {
+   "id": "lab304",
+   "title": "Lab 304 全景影院（張伯茹）＋ 旗艦案例 CAVE 超慢跑",
+   "slides": [
+    49,
+    50,
+    51,
+    52,
+    53
+   ],
+   "title_en": "Lab 304 Panoramic Cinema Lab (Po-Ju Chang) + flagship case, CAVE super-slow jogging"
   },
   {
    "id": "lab305",
@@ -770,18 +775,6 @@
     48
    ],
    "title_en": "Lab 305 IVR Research Lab (Chia-Kuen Cheng)"
-  },
-  {
-   "id": "lab304",
-   "title": "Lab 304 全景影院（張伯茹）＋ 旗艦案例 CAVE 超慢跑",
-   "slides": [
-    49,
-    50,
-    51,
-    52,
-    53
-   ],
-   "title_en": "Lab 304 Panoramic Cinema Lab (Po-Ju Chang) + flagship case, CAVE super-slow jogging"
   },
   {
    "id": "ch05",

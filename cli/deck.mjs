@@ -110,6 +110,9 @@ async function main() {
   const spec = await readJson(specPath);
   if (!spec.visit_id) throw new Error(`${specPath} 沒有 visit_id`);
   const slidesIndex = existsSync(path.join(ROOT, "public/data/slides.json")) ? await readJson(path.join(ROOT, "public/data/slides.json")) : null;
+  // 母簡報內文的標準更正（「四間研究室」→「五間」、301-304 → 301-305），瀏覽器與 CLI 同一份
+  const fixesPath = path.join(ROOT, "public/data/master-fixes.json");
+  const masterFixes = existsSync(fixesPath) ? (await readJson(fixesPath)).fixes || [] : [];
   const lang = args.lang || spec.language || "zh";
 
   // 翻譯器與快取（data/translations/<lang>.json）
@@ -122,7 +125,7 @@ async function main() {
     translate = (texts, target) => ai.translateTexts(texts, target);
   }
 
-  const { pptx, report, dump } = await buildDeck(spec, masterBuf, { slidesIndex, lang, site: args.site || process.env.SITE_URL, translate, translationCache: cache, log: (m) => console.log(m) });
+  const { pptx, report, dump } = await buildDeck(spec, masterBuf, { slidesIndex, masterFixes, lang, site: args.site || process.env.SITE_URL, translate, translationCache: cache, log: (m) => console.log(m) });
   if (cache.size && (lang === "ko" || lang === "ja")) {
     await fs.mkdir(path.dirname(cachePath), { recursive: true });
     await fs.writeFile(cachePath, JSON.stringify(Object.fromEntries(cache), null, 2));
@@ -133,6 +136,7 @@ async function main() {
   await fs.writeFile(path.join(outDir, `${spec.visit_id}.txt`), dump.map((s) => `--- ${s.n} ${s.title}\n${s.paragraphs.join("\n")}`).join("\n\n"));
   await fs.writeFile(path.join(outDir, `${spec.visit_id}.report.json`), JSON.stringify(report, null, 2));
   console.log(`✔ ${path.relative(ROOT, pptxPath)}（${report.output_slides} 頁，${(pptx.length / 1e6).toFixed(1)} MB；文字取代 ${report.edits.applied} 處${report.edits.missed.length ? `，${report.edits.missed.length} 處沒找到` : ""}）`);
+  for (const f of report.fixes || []) console.log(`  · 更正母簡報內文：「${f.find}」→「${f.replace}」${f.count} 處`);
   for (const w of report.warnings) console.log(`  ⚠ ${w}`);
   for (const m of report.edits.missed) console.log(`  ⚠ 第 ${m.slide} 頁找不到「${m.find.slice(0, 40)}」`);
   if (!args["no-pdf"]) {

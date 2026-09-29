@@ -71,7 +71,8 @@ try {
   // 一場參訪都還沒有的時候，簡報分頁仍要列出母簡報的頁次（只是不能存、不能產檔）
   await page.click('[data-tab="deck"]');
   await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]").length > 0);
-  check((await page.locator("#slideGrid input[data-block]").count()) === 16, "the master deck's blocks are listed even with no visit yet");
+  // 15 個區塊：研究成果 39–42 併進了 Lab 303（明確指示），所以比以前少一個
+  check((await page.locator("#slideGrid input[data-block]").count()) === 15, "the master deck's blocks are listed even with no visit yet");
   check((await page.locator("#slideGrid input[data-slide]").count()) === 0, "…and there is no per-page checkbox to wade through");
   check((await page.$("#slidesSave")) === null, "there is no save-slides button — picking pages saves itself");
   check(await page.isDisabled("#deckBtn") && (await page.isVisible("#deckNeedsVisit")), "…but building is held back until a visit exists, and it says why");
@@ -215,7 +216,10 @@ try {
     await page.waitForFunction(() => /移除/.test(document.getElementById("masterRow").textContent), null, { timeout: 60000 });
     const storedMb = parseFloat((/([\d.]+) MB/.exec(await page.textContent("#masterRow")) || [])[1] || "99");
     check(storedMb < 3, `master was slimmed in the browser before storing (${storedMb} MB, fixture is 11.3 MB with a video)`);
-    check(/瘦身：抽掉 1 個影片/.test(await page.textContent("#deckReport")), "slim report shown: 1 video stripped");
+    // 瘦身改成「存到站台時才做」：產出來的那一份影片還在（現場播得動），站台上那一份才抽掉
+    await page.waitForFunction(() => /瘦身：抽掉 1 個影片/.test(document.getElementById("deckInfo").textContent), null, { timeout: 30000 });
+    check(true, "the copy saved to the site is slimmed: 1 video stripped");
+    check((await built.files()).some((f) => /\.mp4$/i.test(f)) === false, "…while this visit's deck has no video because no video slide was picked");
     check((await page.locator("#subLinks").count()) === 0, "the pre-visit block does not carry the two interaction links");
     await page.reload();
     await page.waitForFunction(() => /場參訪/.test(document.getElementById("backendInfo").textContent));

@@ -96,7 +96,13 @@ export interface Visit {
     // fingerprint＝寄出那一刻的行程指紋：寄出去的信不會跟著網頁更新，行程改了要說一聲
     confirmation?: { subject: string; body: string; sender?: string; drafted_at: string; sent_to?: { name: string; email: string }[]; sent_at?: string; fingerprint?: string };
     thanks?: { subject: string; body: string; sender: string; drafted_at: string; sent_to?: { name: string; email: string }[]; sent_at?: string; fingerprint?: string };
+    /** 行前通告（寄給中心自己的研究室）：哪個單位什麼時候來，請各室安排簡報人員。 */
+    notice?: { subject: string; body: string; sender?: string; drafted_at: string; sent_to?: { name: string; email: string }[]; sent_at?: string; fingerprint?: string };
+    /** 回報（通告的下一步）：定案的時間、各室的簡報人員與內容。 */
+    rundown?: { subject: string; body: string; sender?: string; drafted_at: string; sent_to?: { name: string; email: string }[]; sent_at?: string; fingerprint?: string };
   };
+  /** 各研究室回覆的**簡報人員**（房號 → 姓名，可能不只一位）：通告收到回覆後由主辦端回填。 */
+  presenters?: Record<string, string>;
   summary: string;
   /** 產摘要的時間：summary-cron 用它跟最新那筆回覆比，比較舊就自己重寫一份。 */
   summary_at?: string;

@@ -385,7 +385,7 @@
   "這不是 .pptx 檔": "That is not a .pptx file",
   "沒有母簡報": "No master deck",
   "抓不到站台上的母簡報": "Could not fetch the master deck from the site",
-  "母簡報已放上站台": "The master deck is on the site",
+  "母簡報已放上站台": "Master deck saved to the site",
   "母簡報已放上站台，以後直接按「產生簡報」": "The master deck is on the site; from now on just press Generate",
   "母簡報：用站台靜態檔那一份": "Master deck: the static copy on the site",
   "母簡報：站台上的 slim-master.pptx": "Master deck: slim-master.pptx on the site",
@@ -530,7 +530,68 @@
   "名片 本次沒有": "Cards — not this time",
   "口述 本次沒有": "Dictation — not this time",
   "當天資料 本次沒有": "Materials — not this time",
-  "這一場的行程：幾點做什麼、每一間幾分鐘。會印在簡報第 2 頁與來賓專頁": "This visit's schedule: what happens when, and how long in each lab. It prints on slide 2 and appears on the guest page"
+  "這一場的行程：幾點做什麼、每一間幾分鐘。會印在簡報第 2 頁與來賓專頁": "This visit's schedule: what happens when, and how long in each lab. It prints on slide 2 and appears on the guest page",
+  "影片連結": "Video links",
+  "放上站台的母簡報": "The master deck stored on the site",
+  "不含影片": "has no videos",
+  "（五支就三百多 MB，寄不出去也存不下），那幾頁只留海報影格。把影片放到 Drive 或 YouTube 不公開連結，網址填在這裡，海報那一頁就會有一個點得開的連結。": " (all five come to over 300 MB — too big to store or to email), so those slides keep only the poster frame. Put the videos on Drive or an unlisted YouTube link, paste the addresses here, and the poster slide gets a link people can click.",
+  "改完要重新上傳一次母簡報": "Change these and you have to upload the master deck again",
+  "才會生效。": "for them to take effect.",
+  "現場要真的播影片：產簡報時當場選": "To actually play a video on the day: pick the",
+  "原始的母簡報": "original master deck",
+  "，影片會留在產出的檔案裡。": " when you generate the deck, and the videos stay in the file.",
+  "母簡報索引裡沒有標任何影片頁。": "No slide in the master index is marked as a video.",
+  "保留了 # 支影片，現場直接播。檔案大，寄給對方請改寄 PDF 或雲端連結": "# videos kept, so they play on the day. The file is large — send a PDF or a cloud link instead of emailing it",
+  "這一場選到了影片頁，但母簡報裡沒有影片（站台上那份是瘦過的）：海報那一頁會放「設定」填的影片連結；現場要真的播，產簡報時當場選原始的母簡報": "This visit includes a video slide, but the master deck has no videos (the copy on the site is the slimmed one): the poster slide carries the link from Settings. To play it on the day, pick the original master deck when you generate.",
+  "母簡報 # MB（含影片，會留在產出的簡報裡）": "Master deck # MB (with videos — they stay in the deck you generate)",
+  "通告研究室與確認信在下面兩張卡片。其他要做的事（選頁、後續）看上面那一排進度：綠勾是做過了，點一格就跳到該做那件事的分頁。": "The lab notice and the confirmation letter are in the two cards below. For everything else (slides, follow-up) read the progress line above: a green tick means done, and clicking a step jumps to the tab where it happens.",
+  "通告研究室": "Notify the labs",
+  "多半是貼到 LINE 群組": "usually pasted into the LINE group",
+  "排好行程之後先告訴各研究室：哪個單位什麼時候來、幾點走到你那一間，": "Once the schedule is set, tell the labs: which organisation is coming, when, and what time the group reaches each of them — and ",
+  "請各室安排簡報人員": "ask each lab to name who will present",
+  "。收到回覆就把人填回下面那張表，定案之後再回報一次。": ". As replies come in, type the names into the table below; once it is settled, send the labs one more message.",
+  "這幾則是寫給中心同事看的，所以一律中文、條列、貼得進 LINE；也可以用中心的 Gmail 寄出。": "These messages are for colleagues inside the centre, so they are always in Chinese, in short lines, ready to paste into LINE. You can also send them from the centre's Gmail.",
+  "一、通告與徵詢簡報人員": "1. The notice, asking who will present",
+  "AI 擬通告": "AI: draft the notice",
+  "複製（貼到 LINE）": "Copy (for LINE)",
+  "寄出通告": "Send the notice",
+  "二、各室回覆的簡報人員": "2. Who each lab is sending",
+  "收到回覆（LINE 或 email）就填在這裡。下一步的回報會照這張表寫，一頁摘要也看得到。": "Type the replies (from LINE or email) here. The message in step 3 is written from this table, and the one-page summary shows it too.",
+  "三、把定案的時間與內容回報給各室": "3. Send the settled times and content back to the labs",
+  "AI 擬回報": "AI: draft the report back",
+  "寄出回報": "Send the report back",
+  "研究室老師的信箱": "Lab leads' email addresses",
+  "行前通告要寄 email 時用（多半是貼 LINE 群組，這裡留空也沒關係）。": "Used when the pre-visit notice goes out by email (it usually goes to the LINE group instead, so leaving these blank is fine). ",
+  "這一份只有主辦端看得到": "This list is visible only to you",
+  "，不會出現在來賓專頁上——來賓專頁那邊的聯絡方式是": " and never appears on the guest page — the contact details there come from a separate field in ",
+  "裡另外一個欄位，那個本來就是要公開的。": ", which is meant to be public.",
+  "通告的署名": "Who the notice is signed by",
+  "依這一場的動線擬一則通告：哪個單位什麼時候來、幾點到哪一間，請各室安排簡報人員": "Drafts a notice from this visit's route: who is coming, when, what time the group reaches each lab, and a request to name a presenter",
+  "主旨（寄 email 才用得到）": "Subject (only needed when sending by email)",
+  "通告內容會出現在這裡，可以直接改": "The notice will appear here, ready to edit",
+  "複製整則通告，貼到 LINE 群組": "Copies the whole notice, ready to paste into the LINE group",
+  "用中心的 Gmail 寄給下面勾選的老師。沒設定 Gmail 時會給你 mailto 自己寄": "Sends it from the centre's Gmail to the leads ticked below. Without Gmail set up you get a mailto link to send it yourself",
+  "把定案的動線與簡報人員整理成一則訊息，回報給各研究室": "Turns the settled route and presenters into one message to send back to the labs",
+  "回報內容會出現在這裡": "The report back will appear here",
+  "複製整則回報，貼到 LINE 群組": "Copies the whole message, ready to paste into the LINE group",
+  "用中心的 Gmail 寄給上面勾選的老師": "Sends it from the centre's Gmail to the leads ticked above",
+  "沒有勾到任何有信箱的老師——複製到 LINE 群組就好": "No lead with an email is ticked — just copy it into the LINE group",
+  "這一場的行程還沒排到任何研究室，先回上面排行程。": "This visit's schedule has no labs in it yet — set the schedule above first.",
+  "這一場的行程還沒排到任何研究室。": "This visit's schedule has no labs in it yet.",
+  "簡報人員（可多位）": "Presenter(s)",
+  "留空就用公開的那個": "blank = use the public one",
+  "老師名單還沒載入。": "The lab list has not loaded yet.",
+  "告訴各研究室哪個單位什麼時候來，請他們安排簡報人員；回覆填回來之後再回報定案的時間": "Tells the labs who is coming and when, and asks them to name a presenter; once the replies are in, the settled times go back to them",
+  "通告 簡報人員 # 間": "Notice — presenters from # labs",
+  "AI 擬稿中……大約一分鐘。": "AI is drafting… about a minute.",
+  "沒有勾選收件人（也可以直接複製貼到 LINE）": "Nobody is ticked (you can also just copy it into LINE)",
+  "內容還是空的，先按上面那顆 AI": "There is nothing to send yet — press the AI button above first",
+  "通告已寄出": "Notice sent",
+  "回報已寄出": "Report back sent",
+  "尚未寄出：Netlify 沒有設定 Gmail。請用右邊的 mailto，或直接複製貼到 LINE 群組。": "Not sent: Gmail is not set up in Netlify. Use the mailto link, or just copy it into the LINE group.",
+  "手改過、還沒發出的通告帶回來了。按「AI 擬通告」會換成新的一份。": "Your edited, unsent notice is back. Pressing “AI: draft the notice” replaces it.",
+  "手改過、還沒發出的回報帶回來了。按「AI 擬回報」會換成新的一份。": "Your edited, unsent report back is back. Pressing “AI: draft the report back” replaces it.",
+  "寄送中……# 位。": "Sending… # people."
  },
  "patterns": [
   [
@@ -816,6 +877,26 @@
   [
    "^已於 (.+) 寄給 (\\d+) 人$",
    "Sent $1 to $2 people"
+  ],
+  [
+   "^第 (\\d+) 頁 (.+)$",
+   "Slide $1 $2"
+  ],
+  [
+   "^更正母簡報內文：「(.+)」→「(.+)」(\\d+) 處$",
+   "Corrected the master deck text: “$1” → “$2”, $3 place(s)"
+  ],
+  [
+   "^把(通告|回報)寄給 (\\d+) 位老師？$",
+   "Send the $1 to $2 lab leads?"
+  ],
+  [
+   "^([✓·–]) 通告研究室$",
+   "$1 Notify the labs"
+  ],
+  [
+   "^([✓·–]) 通告 簡報人員 (\\d+) 間$",
+   "$1 Notice — presenters from $2 labs"
   ]
  ]
 }
