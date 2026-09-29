@@ -22,8 +22,12 @@
     .hero { background: color-mix(in srgb, var(--tone) 5%, #fff); }
   }
   section > h2 { border-left: 4px solid var(--tone); padding-left: .6rem; }
-  .second { color: #78716c; font-size: .92em; }
-  .lang-btn { font-size: .8rem; font-weight: 600; padding: .3rem .75rem; border-radius: 9999px; background: #fff; color: var(--tone); border: 1px solid #e7e5e4; }
+  /* 輔助語言是注腳，不是第二份正文：小一號、淡一階（主語言才是頁面的語言） */
+  .second { color: #a8a29e; font-size: .84em; }
+  .name-2nd { color: #78716c; font-size: .9em; font-weight: 400; }
+  .lang-btn { font-size: .8rem; font-weight: 600; padding: .25rem .3rem; border-radius: 9999px; background: #fff; color: #a8a29e; border: 1px solid #e7e5e4; display: inline-flex; gap: .15rem; }
+  .lang-btn span { padding: .05rem .6rem; border-radius: 9999px; }
+  .lang-btn .on { background: var(--tone); color: #fff; }
   .lab-link { display: flex; gap: .6rem; align-items: center; padding: .55rem .7rem; border: 1px solid #e7e5e4; border-left: 5px solid var(--tone); border-radius: .6rem; background: #fff; }
   .lab-link:hover { border-color: var(--tone); }
   a.u { text-decoration: underline; text-decoration-color: #d6d3d1; }
@@ -43,20 +47,18 @@
       <div id="photoBox"></div>
       <div class="min-w-0 flex-1">
         <h1 class="text-2xl sm:text-3xl font-semibold leading-tight" id="labName"></h1>
-        <p class="second mt-0.5" id="labName2"></p>
+        <p class="name-2nd mt-0.5" id="labName2"></p>
         <p class="mt-3"><span class="text-sm text-stone-500" id="leadLabel"></span> <span class="font-medium" id="leadName"></span></p>
         <p class="text-sm text-stone-500" id="leadTitle"></p>
         <p class="text-sm mt-1" id="leadContact"></p>
       </div>
     </div>
     <p class="mt-4 text-lg" id="oneLine"></p>
-    <p class="second mt-1" id="oneLine2"></p>
   </header>
 
   <section class="card" id="introSec" hidden>
     <h2 class="font-semibold" id="introTitle"></h2>
     <p class="mt-2 whitespace-pre-line" id="intro"></p>
-    <p class="second mt-2 whitespace-pre-line" id="intro2"></p>
   </section>
 
   <section class="card" id="expertiseSec" hidden>
@@ -72,7 +74,6 @@
   <section class="card" id="backgroundSec" hidden>
     <h2 class="font-semibold" id="backgroundTitle"></h2>
     <p class="mt-2 whitespace-pre-line" id="background"></p>
-    <p class="second mt-2 whitespace-pre-line" id="background2"></p>
   </section>
 
   <section class="card" id="papersSec" hidden>
@@ -107,14 +108,15 @@
   const UI_KEY = "ghrc-ui-lang";
   let primary = qs.get("ui") === "zh" || qs.get("ui") === "en" ? qs.get("ui") : (() => { try { return localStorage.getItem(UI_KEY) || "en"; } catch (e) { return "en"; } })();
   const secondary = primary === "en" ? "zh" : "en";
+  document.documentElement.lang = primary === "zh" ? "zh-Hant" : "en";
   const L = {
-    en: { lead: "Lead", intro: "About the laboratory", expertise: "Areas of expertise", equipment: "Facilities", background: "Background", papers: "Selected papers", others: "The other laboratories", contact: "Contact", toggle: "中文", centre: "Green Health Research Center, College of Bioresources and Agriculture, National Taiwan University", where: "3F, Landscape Building, NTU · ntughrc@gmail.com", draft: "This description is a draft and has not yet been confirmed by the lead." },
-    zh: { lead: "負責人", intro: "研究室簡介", expertise: "專長領域", equipment: "設備", background: "學經歷", papers: "代表論文", others: "其他研究室", contact: "聯絡方式", toggle: "English", centre: "國立臺灣大學生物資源暨農學院　綠色健康研究中心", where: "臺大造園館三樓 · ntughrc@gmail.com", draft: "這一段介紹是草稿，尚未經老師本人確認。" },
+    en: { lead: "Lead", intro: "About the laboratory", expertise: "Areas of expertise", equipment: "Facilities", background: "Background", papers: "Selected papers", others: "The other laboratories", contact: "Contact", centre: "Green Health Research Center, College of Bioresources and Agriculture, National Taiwan University", where: "3F, Landscape Building, NTU · ntughrc@gmail.com", draft: "This description is a draft and has not yet been confirmed by the lead." },
+    zh: { lead: "負責人", intro: "研究室簡介", expertise: "專長領域", equipment: "設備", background: "學經歷", papers: "代表論文", others: "其他研究室", contact: "聯絡方式", centre: "國立臺灣大學生物資源暨農學院　綠色健康研究中心", where: "臺大造園館三樓 · ntughrc@gmail.com", draft: "這一段介紹是草稿，尚未經老師本人確認。" },
   };
   const T = (k) => L[primary][k];
-  const T2 = (k) => L[secondary][k];
 
-  $("langToggle").textContent = T("toggle");
+  // 兩個都列出來、亮著的那一個是現在的語言（只寫「中文」看不出按下去會變成什麼）
+  $("langToggle").innerHTML = `<span class="${primary === "en" ? "on" : ""}">EN</span><span class="${primary === "zh" ? "on" : ""}">中文</span>`;
   $("langToggle").onclick = () => {
     try { localStorage.setItem(UI_KEY, secondary); } catch (e) {}
     const u = new URL(location.href); u.searchParams.delete("ui"); location.href = u.toString();
@@ -135,17 +137,16 @@
 
   const lead = lab.lead || {};
   const pick = (base) => lab[`${base}_${primary}`] || lab[`${base}_en`] || "";
-  const pick2 = (base) => (lab[`${base}_${secondary}`] && lab[`${base}_${secondary}`] !== pick(base) ? lab[`${base}_${secondary}`] : "");
   const labName = () => (primary === "zh" ? lab.name_zh : lab.name_en) || lab.name_en;
   const labName2 = () => (secondary === "zh" ? lab.name_zh : lab.name_en) || "";
 
   document.title = `Lab ${lab.room} ${labName()} · GHRC`;
-  $("roomPill").textContent = `Lab ${lab.room} · ${primary === "zh" ? [lab.stage_zh, lab.stage].filter(Boolean).join(" ") : [lab.stage, lab.stage_zh].filter(Boolean).join(" ")}`;
+  $("roomPill").textContent = `Lab ${lab.room} · ${(primary === "zh" ? lab.stage_zh : lab.stage) || lab.stage || ""}`;
   $("labName").textContent = labName();
   $("labName2").textContent = labName2();
-  $("leadLabel").textContent = `${T("lead")} · ${T2("lead")}`;
+  $("leadLabel").textContent = T("lead");
   $("leadName").textContent = [lead.name_zh, lead.name_en].filter(Boolean).join(" ");
-  $("leadTitle").innerHTML = lead[`title_${primary}`] || lead.title_en ? `${esc(lead[`title_${primary}`] || lead.title_en)}${lead[`title_${secondary}`] ? ` <span class="second">${esc(lead[`title_${secondary}`])}</span>` : ""}` : "";
+  $("leadTitle").textContent = lead[`title_${primary}`] || lead.title_en || "";
   $("leadContact").innerHTML = lead.email ? `${esc(T("contact"))} <a class="u" href="mailto:${esc(lead.email)}">${esc(lead.email)}</a>` : "";
 
   const photoUrl = (p) => (!p ? "" : /^https?:/i.test(p) ? p : `/api/media?key=${encodeURIComponent(p)}`);
@@ -154,15 +155,13 @@
   $("photoBox").innerHTML = photo ? `<img class="avatar" src="${esc(photo)}" alt="">` : `<div class="avatar">${esc(initials)}</div>`;
 
   $("oneLine").textContent = pick("one_line");
-  $("oneLine2").textContent = pick2("one_line");
 
   const para = (secId, titleKey, base) => {
     const main = pick(base);
     if (!main) return;
     $(secId).hidden = false;
-    $(`${base === "one_line" ? "oneLine" : base}Title`).textContent = `${T(titleKey)}　${T2(titleKey)}`;
+    $(`${base === "one_line" ? "oneLine" : base}Title`).textContent = T(titleKey);
     $(base).textContent = main;
-    $(`${base}2`).textContent = pick2(base);
   };
   para("introSec", "intro", "intro");
   para("backgroundSec", "background", "background");
@@ -170,32 +169,32 @@
   const expertise = lab[`expertise_${primary}`] || lab.expertise_en || [];
   if (expertise.length) {
     $("expertiseSec").hidden = false;
-    $("expertiseTitle").textContent = `${T("expertise")}　${T2("expertise")}`;
+    $("expertiseTitle").textContent = T("expertise");
     $("expertise").innerHTML = expertise.map((e) => `<span class="tag">${esc(e)}</span>`).join("");
   }
   const equipment = lab[`equipment_${primary}`] || lab.equipment_en || [];
   if (equipment.length) {
     $("equipmentSec").hidden = false;
-    $("equipmentTitle").textContent = `${T("equipment")}　${T2("equipment")}`;
+    $("equipmentTitle").textContent = T("equipment");
     $("equipment").innerHTML = equipment.map((e) => `<li>${esc(e)}</li>`).join("");
   }
   const papers = lab.papers || [];
   if (papers.length) {
     $("papersSec").hidden = false;
-    $("papersTitle").textContent = `${T("papers")}　${T2("papers")}`;
-    $("papers").innerHTML = papers.map((p) => `<li><a class="u" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a>${p.venue ? ` <span class="second">· ${esc(p.venue)}</span>` : ""}</li>`).join("");
+    $("papersTitle").textContent = T("papers");
+    $("papers").innerHTML = papers.map((p) => `<li><a class="u" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a>${p.venue ? `<span class="second block">${esc(p.venue)}</span>` : ""}</li>`).join("");
   }
 
   // 其他四間：五間是一組，看完一間要能直接跳下一間
-  $("othersTitle").textContent = `${T("others")}　${T2("others")}`;
+  $("othersTitle").textContent = T("others");
   $("others").innerHTML = labs
     .filter((l) => String(l.room) !== String(lab.room))
-    .map((l) => `<a class="lab-link" style="--tone:${esc(l.color || "#0f766e")}" href="/lab/${esc(l.room)}"><span class="pill">${esc(l.room)}</span><span class="min-w-0"><span class="block text-sm font-medium truncate">${esc(primary === "zh" ? l.name_zh : l.name_en)}</span><span class="block text-xs second truncate">${esc([l.lead?.name_zh, l.lead?.name_en].filter(Boolean).join(" "))}</span></span></a>`)
+    .map((l) => `<a class="lab-link" style="--tone:${esc(l.color || "#0f766e")}" href="/lab/${esc(l.room)}${primary === "zh" ? "?ui=zh" : ""}"><span class="pill">${esc(l.room)}</span><span class="min-w-0"><span class="block text-sm font-medium truncate">${esc(primary === "zh" ? l.name_zh : l.name_en)}</span><span class="block text-xs name-2nd truncate">${esc([l.lead?.name_zh, l.lead?.name_en].filter(Boolean).join(" "))}</span></span></a>`)
     .join("");
 
   // 草稿要說是草稿：待確認事項 1 沒解掉之前，這幾段是照母簡報擬的
   $("draftNote").hidden = lab.confirmed !== false;
-  $("draftNote").textContent = `${T("draft")}　${T2("draft")}`;
+  $("draftNote").textContent = T("draft");
   $("centerLine").textContent = T("centre");
   $("contactLine").textContent = T("where");
 })();
