@@ -177,7 +177,8 @@
   const visitId = qs.get("visit") || (/^\d{4}-\d{2}-\d{2}-[a-z0-9-]+$/.test(pathId) ? pathId : "");
 
   const [labsData, i18n] = await Promise.all([
-    fetch("/data/labs.json").then((r) => r.json()),
+    // /api/labs＝repo 裡的 labs.json ＋ 後台「設定」改過的部分；抓不到就退回靜態那一份（頁面不能因此開天窗）
+    fetch("/api/labs").then((r) => r.json()).catch(() => fetch("/data/labs.json").then((r) => r.json())),
     fetch("/data/i18n.json").then((r) => r.json()),
   ]);
   // 五間研究室的顏色來自 labs.json；寫進 CSS 變數，卡片、時間軸的點、勾選項目都吃同一組
@@ -366,6 +367,7 @@
         ${(primary === "zh" ? lab.background_en : secondary === "zh" ? lab.background_zh : "") ? `<p class="mt-1 text-sm second">${esc(primary === "zh" ? lab.background_en : lab.background_zh)}</p>` : ""}
         ${papers ? `<p class="mt-3 text-sm text-stone-500">${esc(T("papers"))}</p><ul class="text-sm list-disc pl-5 space-y-0.5">${papers}</ul>` : ""}
         ${contact}
+        <p class="mt-3 text-sm"><a class="underline decoration-stone-300 hover:decoration-stone-900" href="/lab/${esc(lab.room)}${primary === "zh" ? "?ui=zh" : ""}">${esc(T("more_about_lab"))}${T2("more_about_lab") ? ` <span class="second">${esc(T2("more_about_lab"))}</span>` : ""}</a></p>
       </article>`;
   }).join("");
 

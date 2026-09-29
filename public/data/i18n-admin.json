@@ -600,7 +600,45 @@
   "尚未寄出：Netlify 沒有設定 Gmail。用右邊那顆自己寄，或直接複製貼到 LINE 群組。": "Not sent: Gmail is not set up in Netlify. Use the button on the right to send it yourself, or just copy it into the LINE group.",
   "這一場專屬的頁面：當天的流程、五間老師卡片，": "This visit's own page: the programme for the day, the five lab cards, and ",
   "來賓從現在就可以在上面留 email": "guests can leave their email on it from now on",
-  "（參訪之後寄簡報與論文給他）。": " (so you can send them the slides and papers after the visit)."
+  "（參訪之後寄簡報與論文給他）。": " (so you can send them the slides and papers after the visit).",
+  "還沒接 Gmail：按「複製信件」貼到你自己的信箱寄。": "Gmail is not connected: press “Copy letter” and send it from your own mailbox.",
+  "Gmail 還沒接，所以這封提醒": "Gmail is not connected, so this reminder ",
+  "目前不會寄": "will not be sent",
+  "——請自己記得，或用訪前那顆「下載後續提醒 .ics」放進行事曆。": " — keep it in mind yourself, or use “Download follow-up reminder .ics” on the Before tab to put it in your calendar.",
+  "老師卡片與介紹頁": "Lab cards and laboratory pages",
+  "這一份同時是": "This is the content of both ",
+  "來賓專頁上那五張卡片": "the five cards on the guest page",
+  "與": " and ",
+  "每一間的介紹頁": "each laboratory's own page",
+  "）的內容。中英文各填一份：英文是主語、中文在下面那一行（來賓端的既有標準）。": "). Fill in Chinese and English: English leads, Chinese sits on the line below (the guest-page standard). ",
+  "改完立刻生效": "Changes take effect immediately",
+  "，不必等網站重新發佈。": " — no need to wait for the site to be rebuilt.",
+  "房號、顏色、四語名稱留在 repo 的": "Room numbers, colours and the four-language names stay in the repo's ",
+  "，那是底稿；這裡只存您改過的欄位，按「改回原稿」就退回去。": ", which is the base text; only the fields you change are stored here, and “Back to the original” puts them back.",
+  "哪一間": "Which lab",
+  "看介紹頁": "Open the page",
+  "一句話研究主題": "Research topic in one line",
+  "研究室簡介": "About the laboratory",
+  "專長領域": "Areas of expertise",
+  "設備": "Facilities",
+  "學經歷": "Background",
+  "卡片與介紹頁最上面那一句": "The first line on both the card and the page",
+  "介紹頁專用，可以長一點（卡片不放）": "For the laboratory page only — it can be longer (not shown on the card)",
+  "一行一個": "One per line",
+  "一行一個；介紹頁專用": "One per line; shown on the laboratory page only",
+  "代表論文": "Selected papers",
+  "一行一篇：標題 ｜ 期刊 ｜ 網址": "one per line: title | journal | URL",
+  "還沒有照片": "No photo yet",
+  "換一張照片": "Change the photo",
+  "老師本人確認過了": "Confirmed by the lead",
+  "沒勾的話，介紹頁最底下會標「這一段是草稿」。": "Leave it unticked and the page says the text is still a draft.",
+  "儲存這一間": "Save this lab",
+  "改回原稿": "Back to the original",
+  "把這一間改回 repo 裡的原稿（labs.json）": "Puts this lab back to the base text in the repo (labs.json)",
+  "把這一間改回原稿？在後台改的內容會不見。": "Put this lab back to the original? What you changed here will be lost.",
+  "已改回原稿": "Back to the original",
+  "照片處理中…": "Working on the photo…",
+  "照片換好了": "Photo changed"
  },
  "patterns": [
   [
@@ -906,6 +944,18 @@
   [
    "^([✓·–]) 通告 簡報人員 (\\d+) 間$",
    "$1 Notice — presenters from $2 labs"
+  ],
+  [
+   "^(30[1-5]) 存好了$",
+   "$1 saved"
+  ],
+  [
+   "^(.+)（中文）$",
+   "$1 (Chinese)"
+  ],
+  [
+   "^(.+)（English）$",
+   "$1 (English)"
   ]
  ]
 }

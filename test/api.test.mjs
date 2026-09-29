@@ -255,6 +255,48 @@ test("行前通告：收件人是這一場動線上的研究室，內容照動�
   await put(before); // 擺回去，後面的測試照原本那一份跑
 });
 
+test("老師卡片：公開讀得到，後台改過的疊在 repo 那一份上面，改回原稿就退回去", async () => {
+  // 公開（來賓專頁與 /lab/<房號> 都讀這一支）
+  const pub = await api("/api/labs");
+  assert.equal(pub.status, 200);
+  assert.equal(pub.body.labs.length, 5);
+  const before = pub.body.labs.find((l) => l.room === "303");
+  assert.equal(before.lead.name_zh, "陳惠美");
+
+  // 沒有 token 不給改
+  assert.equal((await api("/api/labs", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ room: "303", fields: { one_line_zh: "x" } }) })).status, 401);
+
+  const save = (body) => api("/api/labs", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const r = await save({
+    room: "303",
+    fields: {
+      one_line_zh: "在模擬室裡把療癒環境做成可以驗證的東西。",
+      expertise_zh: ["景觀模擬", "  ", "VR 教材"],
+      papers: [{ title: "A paper", venue: "LUP", url: "https://doi.org/10.1/x" }, { title: "沒有網址的不要", venue: "", url: "" }],
+      confirmed: true,
+      room: "999", // 改不到房號：不在可改欄位裡
+    },
+  });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const after = r.body.labs.find((l) => l.room === "303");
+  assert.equal(after.one_line_zh, "在模擬室裡把療癒環境做成可以驗證的東西。");
+  assert.deepEqual(after.expertise_zh, ["景觀模擬", "VR 教材"], "空白那一行丟掉");
+  assert.equal(after.papers.length, 1, "沒有網址的論文不收");
+  assert.equal(after.confirmed, true);
+  assert.equal(after.room, "303", "房號、顏色、名稱只跟 repo 那一份走");
+  assert.equal(after.color, before.color);
+  assert.equal(after.one_line_en, before.one_line_en, "沒改的欄位不動");
+
+  // 照片的 key 要長得對，/api/media 才給公開
+  const bad = await save({ room: "303", fields: { photo: "cards/2026-10-07-uwa/1.jpg" } });
+  assert.equal(bad.body.labs.find((l) => l.room === "303").photo, "", "只收 labs/<房號>/<檔名> 或 https");
+
+  assert.equal((await save({ room: "399", fields: {} })).status, 400, "只有 301–305");
+
+  const reset = await save({ room: "303", reset: true });
+  assert.equal(reset.body.labs.find((l) => l.room === "303").one_line_zh, before.one_line_zh, "改回原稿");
+});
+
 test("respond: anonymous suggestion is stored with no identity; named onsite email is kept", async () => {
   const anon = await api("/api/respond", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visit_id: visitId, anonymous: true, name: "Simon", email: "simon.kilbane@uwa.edu.au", suggestion: "Room 302 was hard to follow.", cooperate_rooms: ["301", "303"], next_actions: ["papers"] }) });
   assert.equal(anon.status, 200, JSON.stringify(anon.body));
