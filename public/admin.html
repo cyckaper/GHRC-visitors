@@ -276,6 +276,7 @@
         <button class="btn" id="confirmSendBtn" title="把確認信寄給上面勾選的人（用中心的 Gmail）。沒設定 Gmail 時會給你 mailto 自己寄">寄出確認信</button>
         <button class="btn btn-soft" id="copyConfirm" title="複製主旨與內文，貼到你自己的信箱寄出">複製信件</button>
         <button type="button" class="btn btn-soft" id="confirmMailto" hidden title="把內文複製起來，再開你自己的信件程式（收件人與主旨會帶過去，內文貼上就好）">用自己的信箱寄</button>
+        <span class="muted" id="confirmGmailOff" hidden>還沒接 Gmail：按「複製信件」貼到你自己的信箱寄。</span>
         <span id="confirmSendInfo"></span>
       </div>
     </div>
@@ -331,7 +332,7 @@
     <p class="lede text-sm"><b>這一頁：來賓離開後五件事</b>——簽名簿、名片、三十秒口述、當天資料，做完就寄感謝信。前四件直接決定感謝信寄得到誰、寫得出什麼，所以當天做完最省力；隔一天記憶就掉了。</p>
     <div class="card space-y-2">
       <p class="muted">來賓離開後這幾件事，幾分鐘做完。受訪的是主持人自己。</p>
-      <p class="muted">不必記得：<b>參訪的結束時間一到，系統會寄一封提醒</b>到中心信箱（還缺哪幾件、附一個直接打開這一頁的連結）。收件信箱在「設定」分頁。</p>
+      <p class="muted">不必記得：<b>參訪的結束時間一到，系統會寄一封提醒</b>到中心信箱（還缺哪幾件、附一個直接打開這一頁的連結）。收件信箱在「設定」分頁。<span id="reminderOff" class="err" hidden>Gmail 還沒接，所以這封提醒<b>目前不會寄</b>——請自己記得，或用訪前那顆「下載後續提醒 .ics」放進行事曆。</span></p>
     </div>
 
     <div class="card space-y-2">
@@ -439,6 +440,7 @@
         <button class="btn" id="sendBtn" title="一封一封寄出去（用中心的 Gmail 帳號）。沒設定 Gmail 時會給你 mailto 自己寄">寄出感謝信</button>
         <button class="btn btn-soft" id="copyThanks" title="複製主旨與內文，貼到你自己的信箱寄出">複製信件</button>
         <button type="button" class="btn btn-soft" id="mailtoLink" hidden title="把內文複製起來，再開你自己的信件程式（收件人與主旨會帶過去，內文貼上就好）">用自己的信箱寄</button>
+        <span class="muted" id="thanksGmailOff" hidden>還沒接 Gmail：按「複製信件」貼到你自己的信箱寄。</span>
         <span id="sendInfo"></span>
       </div>
     </div>
@@ -768,7 +770,8 @@
     await ensureIndexes();
     renderProgramme([]);
     await loadVisits({ autoPick: true });
-    api("/api/settings").then((r) => { if (r.ok) state.settings = r.settings; }); // 預設值（例如訪後信寄件者）一開場就拿，不必等人打開「設定」
+    // 預設值（例如訪後信寄件者）與「哪些外部服務接好了」一開場就拿，不必等人打開「設定」
+    api("/api/settings").then((r) => { if (r.ok) { state.settings = r.settings; state.services = r.status; renderServiceNotes(); } });
     // 打開後台就停在今天（或最近）那一場——不必自己先去選
     const m = /wrapup=([\w-]+)/.exec(location.hash);
     if (m) $("visitSelect").value = m[1];
@@ -2174,6 +2177,8 @@
     const r = await api("/api/settings");
     if (!r.ok) { $("statusList").innerHTML = `<li class="err">${esc(r.error)}</li>`; return; }
     state.settings = r.settings;
+    state.services = r.status;
+    renderServiceNotes();
     $("senderDefault").value = r.settings.sender_default || "director";
     $("reminderTo").value = r.settings.reminder_to || "";
     renderVideoLinks(r.settings.video_links || {});
@@ -2184,6 +2189,25 @@
       const note = k === "ai" && r.status.ai_mock ? "（AI_MOCK：回固定範例，不會真的問 Claude）" : "";
       return `<li><span class="${on ? "ok" : "err"}">${on ? "已設定" : "未設定"}</span> ${esc(label)}${note ? `<span class="muted">${note}</span>` : ""} <span class="muted">· ${esc(where)}</span></li>`;
     }).join("") + `<li class="muted">資料存在：${esc(r.status.store)}</li>`;
+  }
+  /**
+   * **系統答應要自己做、但少了某個外部服務就不會做的事，要在答應的那一句旁邊講出來。**
+   * 目前只有一件：結束時間一到的後續提醒信要 Gmail。沒接的話那封信不會寄，而畫面上
+   * 「不必記得」那一句仍然寫著——等於答應了一件不會發生的事（「留 email」那個洞就是這樣來的）。
+   * 寄信與通告按下去當場就會說沒接 Gmail，所以不必再多一句。
+   */
+  function renderServiceNotes() {
+    if (!state.services) return;
+    const gmail = !!state.services.gmail;
+    const el = $("reminderOff");
+    if (el) el.hidden = gmail;
+    // 沒接 Gmail 時「寄出」按下去只會說沒接，真正會用的是「複製信件」——那就讓複製當主鈕。
+    // （通告與回報本來就是複製優先：那兩則是貼到 LINE 群組的。）
+    for (const [send, copyBtn] of [["confirmSendBtn", "copyConfirm"], ["sendBtn", "copyThanks"]]) {
+      $(send)?.classList.toggle("btn-soft", !gmail);
+      $(copyBtn)?.classList.toggle("btn-soft", gmail);
+    }
+    for (const id of ["confirmGmailOff", "thanksGmailOff"]) if ($(id)) $(id).hidden = gmail;
   }
   $("senderDefault").onchange = () => saveSettings({ sender_default: $("senderDefault").value }, "settingsInfo");
   $("reminderTo").onchange = () => saveSettings({ reminder_to: $("reminderTo").value.trim() }, "reminderInfo");

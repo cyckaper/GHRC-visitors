@@ -600,7 +600,11 @@
   "尚未寄出：Netlify 沒有設定 Gmail。用右邊那顆自己寄，或直接複製貼到 LINE 群組。": "Not sent: Gmail is not set up in Netlify. Use the button on the right to send it yourself, or just copy it into the LINE group.",
   "這一場專屬的頁面：當天的流程、五間老師卡片，": "This visit's own page: the programme for the day, the five lab cards, and ",
   "來賓從現在就可以在上面留 email": "guests can leave their email on it from now on",
-  "（參訪之後寄簡報與論文給他）。": " (so you can send them the slides and papers after the visit)."
+  "（參訪之後寄簡報與論文給他）。": " (so you can send them the slides and papers after the visit).",
+  "還沒接 Gmail：按「複製信件」貼到你自己的信箱寄。": "Gmail is not connected: press “Copy letter” and send it from your own mailbox.",
+  "Gmail 還沒接，所以這封提醒": "Gmail is not connected, so this reminder ",
+  "目前不會寄": "will not be sent",
+  "——請自己記得，或用訪前那顆「下載後續提醒 .ics」放進行事曆。": " — keep it in mind yourself, or use “Download follow-up reminder .ics” on the Before tab to put it in your calendar."
  },
  "patterns": [
   [
