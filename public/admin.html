@@ -2257,15 +2257,29 @@
         <div><label class="f" for="lf-${f.key}_zh">${esc(f.label)}（中文）</label>${f.type === "text" ? `<input type="text" id="lf-${f.key}_zh" value="${esc(val(f.key + "_zh"))}">` : `<textarea id="lf-${f.key}_zh" rows="${f.type === "list" ? 4 : 5}">${esc(f.type === "list" ? lines(f.key + "_zh") : val(f.key + "_zh"))}</textarea>`}</div>
         <div><label class="f" for="lf-${f.key}_en">${esc(f.label)}（English）</label>${f.type === "text" ? `<input type="text" id="lf-${f.key}_en" value="${esc(val(f.key + "_en"))}">` : `<textarea id="lf-${f.key}_en" rows="${f.type === "list" ? 4 : 5}">${esc(f.type === "list" ? lines(f.key + "_en") : val(f.key + "_en"))}</textarea>`}</div>
       </div>${hintOf(f) ? `<p class="muted">${esc(hintOf(f))}</p>` : ""}`;
-    const photo = lab.photo ? (/^https?:/i.test(lab.photo) ? lab.photo : `/api/media?key=${encodeURIComponent(lab.photo)}`) : "";
+    const shot = (x) => (!x ? "" : /^https?:/i.test(x) ? x : String(x).startsWith("assets/") ? `/${x}` : `/api/media?key=${encodeURIComponent(x)}`);
+    const photo = shot(lab.photo);
     box.innerHTML = `
       ${LAB_FIELDS.map(field).join("")}
       <div>
         <label class="f">代表論文 <span class="muted font-normal">一行一篇：標題 ｜ 期刊 ｜ 網址</span></label>
         <textarea id="lf-papers" rows="4" placeholder="Nature-inspired… ｜ Landscape and Urban Planning ｜ https://doi.org/…">${esc((lab.papers || []).map((x) => [x.title, x.venue, x.url].filter(Boolean).join(" ｜ ")).join("\n"))}</textarea>
       </div>
+      <div>
+        <label class="f">介紹頁的照片 <span class="muted font-normal">圖說一張一行；移除按 ✕，按「儲存這一間」才生效</span></label>
+        <div class="grid sm:grid-cols-2 gap-3" id="labShots">
+          ${(lab.photos || []).map((x, i) => `
+            <figure class="border border-stone-200 rounded-lg p-2" data-shot="${i}" data-src="${esc(x.src)}">
+              <img src="${esc(shot(x.src))}" alt="" class="w-full rounded">
+              <input type="text" class="mt-2" data-cap="zh" value="${esc(x.caption_zh || "")}" placeholder="圖說（中文）">
+              <input type="text" class="mt-1" data-cap="en" value="${esc(x.caption_en || "")}" placeholder="Caption (English)">
+              <button class="btn btn-soft mt-2" type="button" data-drop-shot>✕ 移除這一張</button>
+            </figure>`).join("") || `<span class="muted">還沒有照片</span>`}
+        </div>
+        <label class="btn btn-soft cursor-pointer mt-2 inline-block">加照片<input type="file" id="labShotAdd" accept="image/*" multiple hidden></label>
+      </div>
       <div class="flex flex-wrap gap-3 items-center">
-        ${photo ? `<img src="${esc(photo)}" alt="" class="w-16 h-16 rounded-full object-cover">` : `<span class="muted">還沒有照片</span>`}
+        ${photo ? `<img src="${esc(photo)}" alt="" class="w-16 h-16 rounded-full object-cover">` : `<span class="muted">還沒有老師照片</span>`}
         <label class="btn btn-soft cursor-pointer">換一張照片<input type="file" id="labPhoto" accept="image/*" hidden></label>
         <label class="flex items-center gap-1"><input type="checkbox" id="lf-confirmed" ${lab.confirmed ? "checked" : ""}> <span>老師本人確認過了</span></label>
         <span class="muted">沒勾的話，介紹頁最底下會標「這一段是草稿」。</span>
@@ -2281,20 +2295,44 @@
       if (!r.ok) return flash(r.error, "err");
       state.labsFull = r.labs; renderLabEditor(); flash("已改回原稿");
     };
+    for (const b of box.querySelectorAll("[data-drop-shot]")) {
+      b.onclick = () => { const fig = b.closest("[data-shot]"); fig.hidden = true; fig.dataset.dropped = "1"; };
+    }
+    $("labShotAdd").onchange = async () => {
+      const files = [...($("labShotAdd").files || [])];
+      if (!files.length) return;
+      // 先把畫面上打到一半的字收起來，上傳完重畫再放回去（不然剛打的介紹就沒了）
+      const keep = readLabFields();
+      $("labsInfo").textContent = t("照片處理中…");
+      try {
+        let r;
+        for (const f of files) {
+          r = await api("/api/labs", { method: "POST", body: { room: $("labPick").value, photo: { data: await shrinkImage(f, 1600), gallery: true } } });
+          if (!r.ok) throw new Error(r.error);
+        }
+        state.labsFull = r.labs; renderLabEditor(); applyLabFields(keep);
+        $("labsInfo").textContent = ""; flash("照片加好了");
+      } catch (e) { $("labsInfo").innerHTML = `<span class="err">${esc(e.message || e)}</span>`; }
+    };
     $("labPhoto").onchange = async () => {
       const f = $("labPhoto").files[0];
       if (!f) return;
       $("labsInfo").textContent = "照片處理中…";
       try {
         const data = await shrinkImage(f, 800);
+        const keep = readLabFields();
         const r = await api("/api/labs", { method: "POST", body: { room: $("labPick").value, photo: { data } } });
         if (!r.ok) throw new Error(r.error);
-        state.labsFull = r.labs; renderLabEditor(); $("labsInfo").textContent = ""; flash("照片換好了");
+        state.labsFull = r.labs; renderLabEditor(); applyLabFields(keep);
+        $("labsInfo").textContent = ""; flash("照片換好了");
       } catch (e) { $("labsInfo").innerHTML = `<span class="err">${esc(e.message || e)}</span>`; }
     };
   }
-  async function saveLab() {
-    const room = $("labPick").value;
+  /**
+   * 把畫面上這一間的所有欄位讀成一包。存檔用它，上傳照片前也用它——
+   * 上傳完要重畫整塊，不先收起來的話，打到一半的介紹就沒了。
+   */
+  function readLabFields() {
     const lines = (id) => ($(id)?.value || "").split("\n").map((x) => x.trim()).filter(Boolean);
     const fields = { confirmed: $("lf-confirmed").checked };
     for (const f of LAB_FIELDS) for (const lang of ["zh", "en"]) {
@@ -2306,6 +2344,36 @@
       const [title, venue, url] = line.split(/\s*[｜|]\s*/);
       return { title: title || "", venue: venue || "", url: url || "" };
     });
+    // 照片牆：按過 ✕ 的那幾張不送回去，等於刪掉
+    fields.photos = [...document.querySelectorAll("#labShots [data-shot]")]
+      .filter((fig) => !fig.dataset.dropped)
+      .map((fig) => ({
+        src: fig.dataset.src,
+        caption_zh: fig.querySelector('[data-cap="zh"]')?.value.trim() || "",
+        caption_en: fig.querySelector('[data-cap="en"]')?.value.trim() || "",
+      }));
+    return fields;
+  }
+  /** 重畫之後把剛剛收起來的值放回去（照片牆的圖說照 src 對，順序變了也對得上）。 */
+  function applyLabFields(keep) {
+    if (!keep) return;
+    if ($("lf-confirmed")) $("lf-confirmed").checked = !!keep.confirmed;
+    for (const f of LAB_FIELDS) for (const lang of ["zh", "en"]) {
+      const el = $(`lf-${f.key}_${lang}`);
+      if (el) el.value = f.type === "list" ? (keep[`${f.key}_${lang}`] || []).join("\n") : keep[`${f.key}_${lang}`] || "";
+    }
+    if ($("lf-papers")) $("lf-papers").value = (keep.papers || []).map((x) => [x.title, x.venue, x.url].filter(Boolean).join(" ｜ ")).join("\n");
+    const caps = new Map((keep.photos || []).map((x) => [x.src, x]));
+    for (const fig of document.querySelectorAll("#labShots [data-shot]")) {
+      const was = caps.get(fig.dataset.src);
+      if (!was) continue;
+      fig.querySelector('[data-cap="zh"]').value = was.caption_zh || "";
+      fig.querySelector('[data-cap="en"]').value = was.caption_en || "";
+    }
+  }
+  async function saveLab() {
+    const room = $("labPick").value;
+    const fields = readLabFields();
     const r = await api("/api/labs", { method: "POST", body: { room, fields } });
     if (!r.ok) return flash(r.error, "err");
     state.labsFull = r.labs;

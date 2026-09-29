@@ -30,6 +30,8 @@
   .lang-btn .on { background: var(--tone); color: #fff; }
   .lab-link { display: flex; gap: .6rem; align-items: center; padding: .55rem .7rem; border: 1px solid #e7e5e4; border-left: 5px solid var(--tone); border-radius: .6rem; background: #fff; }
   .lab-link:hover { border-color: var(--tone); }
+  /* 照片維持真實比例：不裁切、不變形（既有標準），所以只給寬度，高度自己算 */
+  .shot { display: block; width: 100%; height: auto; border-radius: .6rem; border: 1px solid #e7e5e4; background: #f5f5f4; }
   a.u { text-decoration: underline; text-decoration-color: #d6d3d1; }
   a.u:hover { text-decoration-color: var(--ink); }
 </style>
@@ -59,6 +61,11 @@
   <section class="card" id="introSec" hidden>
     <h2 class="font-semibold" id="introTitle"></h2>
     <p class="mt-2 whitespace-pre-line" id="intro"></p>
+  </section>
+
+  <section class="card" id="photosSec" hidden>
+    <h2 class="font-semibold" id="photosTitle"></h2>
+    <div class="grid sm:grid-cols-2 gap-3 mt-3" id="photos"></div>
   </section>
 
   <section class="card" id="expertiseSec" hidden>
@@ -110,8 +117,8 @@
   const secondary = primary === "en" ? "zh" : "en";
   document.documentElement.lang = primary === "zh" ? "zh-Hant" : "en";
   const L = {
-    en: { lead: "Lead", intro: "About the laboratory", expertise: "Areas of expertise", equipment: "Facilities", background: "Background", papers: "Selected papers", others: "The other laboratories", contact: "Contact", centre: "Green Health Research Center, College of Bioresources and Agriculture, National Taiwan University", where: "3F, Landscape Building, NTU · ntughrc@gmail.com", draft: "This description is a draft and has not yet been confirmed by the lead." },
-    zh: { lead: "負責人", intro: "研究室簡介", expertise: "專長領域", equipment: "設備", background: "學經歷", papers: "代表論文", others: "其他研究室", contact: "聯絡方式", centre: "國立臺灣大學生物資源暨農學院　綠色健康研究中心", where: "臺大造園館三樓 · ntughrc@gmail.com", draft: "這一段介紹是草稿，尚未經老師本人確認。" },
+    en: { lead: "Lead", intro: "About the laboratory", photos: "Photos", expertise: "Areas of expertise", equipment: "Facilities", background: "Background", papers: "Selected papers", others: "The other laboratories", contact: "Contact", centre: "Green Health Research Center, College of Bioresources and Agriculture, National Taiwan University", where: "3F, Landscape Building, NTU · ntughrc@gmail.com", draft: "This description is a draft and has not yet been confirmed by the lead." },
+    zh: { lead: "負責人", intro: "研究室簡介", photos: "照片", expertise: "專長領域", equipment: "設備", background: "學經歷", papers: "代表論文", others: "其他研究室", contact: "聯絡方式", centre: "國立臺灣大學生物資源暨農學院　綠色健康研究中心", where: "臺大造園館三樓 · ntughrc@gmail.com", draft: "這一段介紹是草稿，尚未經老師本人確認。" },
   };
   const T = (k) => L[primary][k];
 
@@ -149,7 +156,7 @@
   $("leadTitle").textContent = lead[`title_${primary}`] || lead.title_en || "";
   $("leadContact").innerHTML = lead.email ? `${esc(T("contact"))} <a class="u" href="mailto:${esc(lead.email)}">${esc(lead.email)}</a>` : "";
 
-  const photoUrl = (p) => (!p ? "" : /^https?:/i.test(p) ? p : `/api/media?key=${encodeURIComponent(p)}`);
+  const photoUrl = (p) => (!p ? "" : /^https?:/i.test(p) ? p : p.startsWith("assets/") ? `/${p}` : `/api/media?key=${encodeURIComponent(p)}`);
   const photo = photoUrl(lead.photo || lab.photo);
   const initials = (lead.name_en || lead.name_zh || lab.room).split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
   $("photoBox").innerHTML = photo ? `<img class="avatar" src="${esc(photo)}" alt="">` : `<div class="avatar">${esc(initials)}</div>`;
@@ -165,6 +172,20 @@
   };
   para("introSec", "intro", "intro");
   para("backgroundSec", "background", "background");
+
+  // 研究室的照片牆（老師簡報上那幾張就在這裡）。圖說是老師自己標的，只挑主語言那一份。
+  const photos = (lab.photos || []).filter((x) => x && x.src);
+  if (photos.length) {
+    $("photosSec").hidden = false;
+    $("photosTitle").textContent = T("photos");
+    $("photos").innerHTML = photos
+      .map((x) => {
+        const cap = x[`caption_${primary}`] || x.caption_en || x.caption_zh || "";
+        const url = photoUrl(x.src);
+        return `<figure><a href="${esc(url)}" target="_blank" rel="noopener"><img class="shot" src="${esc(url)}" alt="${esc(cap)}" loading="lazy"></a>${cap ? `<figcaption class="text-sm text-stone-500 mt-1">${esc(cap)}</figcaption>` : ""}</figure>`;
+      })
+      .join("");
+  }
 
   const expertise = lab[`expertise_${primary}`] || lab.expertise_en || [];
   if (expertise.length) {

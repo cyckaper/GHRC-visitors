@@ -218,7 +218,7 @@
   const labName = (lab) => lab["name_" + (primary === "zh" ? "zh" : "en")] || lab.name_en;
   const labName2 = (lab) => lab["name_" + secondary] || "";
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const mediaUrl = (x) => (/^https?:\/\//i.test(x) ? x : `/api/media?key=${encodeURIComponent(x)}`);
+  const mediaUrl = (x) => (/^https?:\/\//i.test(x) ? x : String(x).startsWith("assets/") ? `/${x}` : `/api/media?key=${encodeURIComponent(x)}`);
   // 頁面階段：訪前（將參訪，不放留信箱與感謝表單）、當天（留信箱、備援按鍵）、訪後（過去式、三個回應項目）。
   // 沒有參訪代碼的首頁一律從訪前開始；感謝信的 #respond 連結一律當訪後；?phase=before|today|after 可強制（預覽用）。
   const today = taipeiToday();
@@ -361,7 +361,7 @@
     return `
       <article class="card lab-card reveal ${onRoute ? "" : "opacity-60"}" id="lab-${lab.room}" style="--d:${(idx + 1) * 60}ms; --tone:${roomTone(lab.room)}">
         <div class="flex gap-4">
-          ${lead.photo || lab.photo ? `<img class="avatar" src="${esc(lead.photo || lab.photo)}" alt="">` : `<div class="avatar">${esc(initials)}</div>`}
+          ${lead.photo || lab.photo ? `<img class="avatar" src="${esc(mediaUrl(lead.photo || lab.photo))}" alt="">` : `<div class="avatar">${esc(initials)}</div>`}
           <div class="min-w-0 flex-1">
             <p class="text-xs flex items-center gap-2">${stepNo ? `<span class="step">${stepNo}</span>` : ""}<span class="pill">Lab ${esc(lab.room)} · ${esc((primary === "zh" ? lab.stage_zh : lab.stage) || lab.stage || "")}</span></p>
             <h3 class="font-semibold text-lg leading-snug mt-1">${esc(labName(lab))}${labName2(lab) ? ` <span class="name-2nd">${esc(labName2(lab))}</span>` : ""}</h3>

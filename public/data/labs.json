@@ -1,5 +1,5 @@
 {
-  "_comment": "來賓端老師卡片與 /lab/<房號> 介紹頁。color 是這一間在全站的顏色（來賓端卡片、後台選頁區塊與行程、動線表都用同一色，五間各一色，改這裡就全站跟著改）。303 只列陳惠美（明確指示，與母簡報不同）。**`one_line_source` 標成 lead 的那一句是老師自己簡報上的原文，逐字照用，不改寫**（明確指示；目前 302、303 有）。intro／expertise／equipment／background／papers 是草稿：302 與 303 取自老師自己的簡報，其餘由母簡報與公開資料（系網站、國科會獲獎頁、期刊）整理；查不到的一律留空，沒有憑據的學歷、職稱、論文不寫。confirmed=false 表示尚待老師本人確認（待確認事項 1），後台「設定」分頁可以直接改。photo 為 null 時頁面顯示姓名縮寫。",
+  "_comment": "來賓端老師卡片與 /lab/<房號> 介紹頁。color 是這一間在全站的顏色（來賓端卡片、後台選頁區塊與行程、動線表都用同一色，五間各一色，改這裡就全站跟著改）。303 只列陳惠美（明確指示，與母簡報不同）。**`one_line_source` 標成 lead 的那一句是老師自己簡報上的原文，逐字照用，不改寫**（明確指示；目前 302、303 有）。intro／expertise／equipment／background／papers 是草稿：302 與 303 取自老師自己的簡報，其餘由母簡報與公開資料（系網站、國科會獲獎頁、期刊）整理；查不到的一律留空，沒有憑據的學歷、職稱、論文不寫。confirmed=false 表示尚待老師本人確認（待確認事項 1），後台「設定」分頁可以直接改。photo 為 null 時頁面顯示姓名縮寫；photo／photos[].src 是 assets/… 的站台檔、labs/… 的媒體庫 key，或 https 網址。302 與 303 的照片取自老師自己的簡報（302 的圖說也是簡報上原本的標法，照抄）。",
   "labs": [
     {
       "room": "301",
@@ -52,7 +52,15 @@
       "papers": [
         { "title": "The plant and faunal species composition and diversity on rooftop farms: Seasonal variation and the effects of site and surrounding characteristics", "venue": "Landscape and Urban Planning, 2022", "url": "https://doi.org/10.1016/j.landurbplan.2022.104483" }
       ],
-      "photo": null,
+      "photos": [
+        { "src": "assets/labs/302/interior.jpg", "caption_en": "Planning Lab interior", "caption_zh": "302 規劃室環境照" },
+        { "src": "assets/labs/302/workspace.jpg", "caption_en": "Workspace", "caption_zh": "工作區" },
+        { "src": "assets/labs/302/discussion.jpg", "caption_en": "Discussion area", "caption_zh": "討論區" },
+        { "src": "assets/labs/302/office.jpg", "caption_en": "Center office", "caption_zh": "中心辦公室" },
+        { "src": "assets/labs/302/prediction.jpg", "caption_en": "Environment prediction", "caption_zh": "環境組合預測作業" },
+        { "src": "assets/labs/302/envi-met.jpg", "caption_en": "ENVI-met microclimate simulation", "caption_zh": "ENVI-met 微氣候模擬" }
+      ],
+      "photo": "assets/labs/302/lead.jpg",
       "confirmed": false
     },
     {
@@ -79,7 +87,7 @@
       "papers": [
         { "title": "Feasibility assessment and implementation strategies of green care in rural Taiwan", "venue": "Landscape and Ecological Engineering, 2021", "url": "https://doi.org/10.1007/s11355-020-00426-7" }
       ],
-      "photo": null,
+      "photo": "assets/labs/303/lead.jpg",
       "confirmed": false
     },
     {

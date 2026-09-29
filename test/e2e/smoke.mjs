@@ -454,7 +454,36 @@ try {
     check(await page.isHidden("#draftNote"), "…and ticking “confirmed” drops the draft note");
     await fetch(`${base}/api/labs`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer e2e-token" }, body: JSON.stringify({ room: "303", reset: true }) });
   }
-  await page.goBack();
+  {
+    // 老師簡報上的照片：302 有一整面照片牆，圖說是簡報上原本的標法
+    await page.goto(`${base}/lab/302`);
+    await page.waitForFunction(() => document.getElementById("labName")?.textContent?.length > 0, null, { timeout: 15000 });
+    check((await page.getAttribute(".avatar", "src")) === "/assets/labs/302/lead.jpg", "the lead photo from the lab's own slides shows up instead of the initials");
+    check((await page.locator("#photos figure").count()) === 6, "…and so do the six pictures from those slides");
+    check((await page.textContent("#photos")).includes("Environment prediction"), "…with the captions the slides gave them");
+    // 站台上真的有那幾個檔（路徑打錯的話這裡就會抓到；圖片是 lazy 的，不能只看 naturalWidth）
+    await page.waitForFunction(() => document.querySelector(".avatar")?.naturalWidth > 0, null, { timeout: 15000 });
+    const srcs = await page.$$eval("#photos img", (els) => els.map((e) => e.getAttribute("src")));
+    const codes = await Promise.all(srcs.map(async (u) => (await fetch(base + u)).status));
+    check(codes.every((c) => c === 200), `every one of them is actually served (${codes.join(",")})`);
+    // 照片牆也走後台：加一張、給圖說、再拿掉
+    const put = async (body) => (await fetch(`${base}/api/labs`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer e2e-token" }, body: JSON.stringify(body) })).json();
+    const dot = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const added = await put({ room: "302", photo: { data: dot, gallery: true } });
+    const shots = added.labs.find((l) => l.room === "302").photos;
+    check(shots.length === 7 && /^labs\/302\//.test(shots[6].src), "the admin can add a picture to that wall");
+    const captioned = await put({ room: "302", fields: { photos: shots.map((x, i) => (i === 6 ? { ...x, caption_en: "Added from the admin page" } : x)) } });
+    check(captioned.labs.find((l) => l.room === "302").photos[6].caption_en === "Added from the admin page", "…and caption it");
+    await page.reload();
+    await page.waitForFunction(() => document.querySelectorAll("#photos figure").length === 7, null, { timeout: 15000 });
+    check((await page.textContent("#photos")).includes("Added from the admin page"), "…and the introduction page shows it");
+    const dropped = await put({ room: "302", fields: { photos: shots.slice(0, 6) } });
+    check(dropped.labs.find((l) => l.room === "302").photos.length === 6, "…and take it off again");
+    await fetch(`${base}/api/labs`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer e2e-token" }, body: JSON.stringify({ room: "302", reset: true }) });
+  }
+  // 回到來賓專頁（上面跑過幾個 /lab/… 的分頁，所以直接指定網址，不靠上一頁）
+  await page.goto(`${base}/2026-10-07-uwa#email`);
+  await page.waitForSelector("#emailSec:not([hidden])");
   await page.waitForFunction(() => document.getElementById("labsTitle")?.textContent?.length > 0, null, { timeout: 15000 });
   check((await page.locator("#labs article").count()) === 6, "guest page shows the briefing step plus five lab cards");
   check((await page.textContent("#labs article:first-child")).includes("Center overview"), "briefing card comes first");
