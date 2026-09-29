@@ -14,7 +14,12 @@ import { aiConfigured } from "../lib/ai.mts";
  * 設定本身存在媒體庫的 `settings.json`（全站一份，不屬於任何一場參訪）。
  */
 const KEY = "settings.json";
-const DEFAULTS = { sender_default: "director" as "director" | "contact", reminder_to: "" };
+/**
+ * `video_links`：母簡報那幾支影片放在雲端的網址（頁次 → 網址）。**站台上的母簡報不放影片**
+ * （5 支就 302 MB，Blobs 與信箱都塞不下），抽掉之後那一頁只剩海報影格；填了網址，海報旁邊
+ * 那一行「▶ Video」就會變成點得開的連結。改了網址要重新上傳一次母簡報才會生效。
+ */
+const DEFAULTS = { sender_default: "director" as "director" | "contact", reminder_to: "", video_links: {} as Record<string, string> };
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 export type Settings = typeof DEFAULTS;
@@ -53,6 +58,19 @@ export default async (req: Request) => {
       const to = body.settings.reminder_to.trim().slice(0, 200).toLowerCase();
       if (to && !EMAIL.test(to)) return fail(400, "後續提醒的收件者要填一個 email 位址（留空就用 Netlify 設的寄件帳號）");
       next.reminder_to = to;
+    }
+    const links = body?.settings?.video_links;
+    if (links && typeof links === "object") {
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(links)) {
+        const n = Number(k);
+        const url = String(v || "").trim().slice(0, 500);
+        if (!Number.isInteger(n) || n < 1 || n > 500) continue; // 頁次以外的鍵一律丟掉
+        if (!url) continue; // 清空就是拿掉這一條
+        if (!/^https:\/\/\S+$/i.test(url)) return fail(400, `第 ${n} 頁的影片連結要是 https 網址`);
+        out[String(n)] = url;
+      }
+      next.video_links = out;
     }
     await getStore().putMedia(KEY, new TextEncoder().encode(JSON.stringify(next)), "application/json");
     return json({ ok: true, settings: next, effective: { reminder_to: await reminderTo() } });

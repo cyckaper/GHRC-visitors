@@ -442,6 +442,13 @@
       <p class="text-sm flex flex-wrap items-center gap-2" id="masterRow"></p>
     </div>
 
+    <div class="card space-y-3">
+      <h2 class="font-semibold">影片連結</h2>
+      <p class="muted">放上站台的母簡報<b>不含影片</b>（五支就三百多 MB，寄不出去也存不下），那幾頁只留海報影格。把影片放到 Drive 或 YouTube 不公開連結，網址填在這裡，海報那一頁就會有一個點得開的連結。<b>改完要重新上傳一次母簡報</b>才會生效。<br>現場要真的播影片：產簡報時當場選<b>原始的母簡報</b>，影片會留在產出的檔案裡。</p>
+      <div class="space-y-2" id="videoLinks"></div>
+      <span class="muted" id="videoLinksInfo"></span>
+    </div>
+
 
     <div class="card space-y-3">
       <h2 class="font-semibold">預設值</h2>
@@ -675,8 +682,13 @@
   /** 頁次索引與老師資料：訪前與簡報兩個分頁都要用，誰先要就誰載（只載一次）。 */
   function ensureIndexes() {
     if (!state.indexes) {
-      state.indexes = Promise.all([fetch("/data/slides.json").then((r) => r.json()), fetch("/data/labs.json").then((r) => r.json())])
-        .then(([slides, labs]) => { state.slides = slides; state.labs = labs; applyLabColors(); })
+      state.indexes = Promise.all([
+        fetch("/data/slides.json").then((r) => r.json()),
+        fetch("/data/labs.json").then((r) => r.json()),
+        // 母簡報內文的標準更正（「四間研究室」→「五間」、301-304 → 301-305）。抓不到就當沒有，不要害產檔停下來
+        fetch("/data/master-fixes.json").then((r) => r.json()).catch(() => ({ fixes: [] })),
+      ])
+        .then(([slides, labs, fixes]) => { state.slides = slides; state.labs = labs; state.masterFixes = fixes.fixes || []; applyLabColors(); })
         .catch((e) => { state.indexes = null; throw e; });
     }
     return state.indexes;
@@ -1494,8 +1506,10 @@
     const core = await deckCore();
     if (bytes.length < 60 * 1024 * 1024 && !(await core.hasEmbeddedMedia(bytes))) return { bytes, report: null };
     log(`母簡報 ${mb(bytes.length)}，瘦身中（抽影片、縮圖），大檔約需一兩分鐘…`);
-    let out = await core.slimDeck(bytes, { resizeImage, log });
-    if (out.pptx.length > 60 * 1024 * 1024) out = await core.slimDeck(out.pptx, { resizeImage, log, imageThreshold: 1_000_000, maxEdge: 1600 });
+    // 影片抽掉之後只剩海報影格；「設定」填了網址的那幾頁，海報旁邊那一行就做成點得開的連結
+    const videoLinks = state.settings?.video_links || {};
+    let out = await core.slimDeck(bytes, { resizeImage, videoLinks, log });
+    if (out.pptx.length > 60 * 1024 * 1024) out = await core.slimDeck(out.pptx, { resizeImage, videoLinks, log, imageThreshold: 1_000_000, maxEdge: 1600 });
     return { bytes: out.pptx, report: out.report };
   }
   const slimSummary = (r) => `母簡報已瘦身：抽掉 ${r.videos_removed} 個影片／音訊、縮小 ${r.images_resized} 張圖，${mb(r.before)} → ${mb(r.after)}${r.warnings.length ? `；${r.warnings.join("；")}` : ""}`;
@@ -1593,12 +1607,19 @@
     if (!state.masterBytes && !state.master && !state.masterOnSite) { state.buildAfterPick = true; $("masterFile").value = ""; $("masterFile").click(); return; }
     buildDeck();
   };
+  /**
+   * 當場選的母簡報**原封不動拿去產檔**——以前選完先瘦身（抽掉影片），產出來的簡報就播不了影片。
+   * 瘦身是「放上站台」才需要的事（站台要小、要寄得出去），不是「現在要上台講」需要的事：
+   * 這一場只留十幾頁，原始母簡報裡那五支影片最多跟著一兩支進來，現場播得動。
+   */
   $("masterFile").onchange = async () => {
     const f = $("masterFile").files[0]; if (!f) return;
     const info = $("deckInfo"); info.hidden = false;
     try {
-      const { bytes, report } = await slimIfNeeded(new Uint8Array(await f.arrayBuffer()), (m) => { info.textContent = m; });
-      state.masterBytes = bytes; state.masterName = f.name.replace(/\.pptx$/i, "") + (report ? "-slim.pptx" : ".pptx"); state.slimReport = report;
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      state.masterBytes = bytes; state.masterName = f.name.replace(/\.pptx$/i, "") + ".pptx"; state.slimReport = null;
+      state.masterHasVideo = await (await deckCore()).hasEmbeddedMedia(bytes);
+      info.textContent = `母簡報 ${mb(bytes.length)}${state.masterHasVideo ? "（含影片，會留在產出的簡報裡）" : ""}`;
     } catch (e) { info.textContent = `母簡報無法使用：${e.message || e}`; flash(String(e.message || e), "err"); state.buildAfterPick = false; return; }
     if (state.buildAfterPick) { state.buildAfterPick = false; buildDeck({ offerSave: true }); }
   };
@@ -1615,17 +1636,23 @@
         const master = await masterBytes(log);
         if (!master) throw new Error("沒有母簡報");
         log("組裝簡報…");
-        const { pptx, report } = await core.buildDeck(spec, master, { slidesIndex: state.slides, lang, site: location.origin, qrPng, translate: lang === "ko" || lang === "ja" ? (texts, target) => translateTexts(texts, target, log) : null, log });
+        const { pptx, report } = await core.buildDeck(spec, master, { slidesIndex: state.slides, masterFixes: state.masterFixes, lang, site: location.origin, qrPng, translate: lang === "ko" || lang === "ja" ? (texts, target) => translateTexts(texts, target, log) : null, log });
         const name = `GHRC_${spec.visit_id}.pptx`;
         const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([pptx], { type: PPTX_MIME })); a.download = name; a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 60000);
         info.textContent = `已下載 ${name}（${report.output_slides} 頁，${mb(pptx.length)}${report.translated ? `，翻譯 ${report.translated} 段` : ""}）`;
         if (offerSave) {
           info.insertAdjacentHTML("beforeend", ` <button type="button" class="underline" id="saveMasterBtn">把這份母簡報存到站台，以後直接按</button>`);
-          $("saveMasterBtn").onclick = () => busy($("saveMasterBtn"), async () => { try { await uploadMasterBytes(state.masterBytes, state.masterName || "slim-master.pptx"); $("saveMasterBtn").remove(); flash("母簡報已放上站台"); } catch (e) { flash(String(e.message || e), "err"); } });
+          // 放上站台的那一份才瘦身（抽影片、縮圖）：站台要小、要寄得出去；剛才產的那一份影片還在
+          // 瘦身的進度寫在同一行（`info.textContent`），會把這顆按鈕一起洗掉——所以用 `?.`，不要假設它還在
+          $("saveMasterBtn").onclick = () => busy($("saveMasterBtn"), async () => { try { const { bytes, report } = await slimIfNeeded(state.masterBytes, log); await uploadMasterBytes(bytes, (state.masterName || "master.pptx").replace(/\.pptx$/i, report ? "-slim.pptx" : ".pptx")); $("saveMasterBtn")?.remove(); info.textContent = report ? slimSummary(report) : "母簡報已放上站台"; flash("母簡報已放上站台"); } catch (e) { flash(String(e.message || e), "err"); } });
         }
         const lines = [...(offerSave && state.slimReport ? [slimSummary(state.slimReport)] : []), ...report.warnings, ...report.edits.missed.map((m) => `第 ${m.slide} 頁找不到「${(m.find || "").slice(0, 40)}」`)];
         if (report.programme_table && report.programme_table !== "filled") lines.push(`第 2 頁流程表：${report.programme_table}`);
+        for (const f of report.fixes || []) lines.push(`更正母簡報內文：「${f.find}」→「${f.replace}」${f.count} 處`);
+        // 影片：留在檔案裡才播得動。母簡報是站台上那份瘦過的就不會有，說一句怎麼辦，不要讓人以為壞了
+        if (report.videos) lines.push(`保留了 ${report.videos} 支影片，現場直接播。檔案大，寄給對方請改寄 PDF 或雲端連結`);
+        else if ((state.slides?.slides || []).some((x) => x.video && (spec.slides || []).includes(x.n))) lines.push("這一場選到了影片頁，但母簡報裡沒有影片（站台上那份是瘦過的）：海報那一頁會放「設定」填的影片連結；現場要真的播，產簡報時當場選原始的母簡報");
         $("deckReport").innerHTML = lines.map((l) => `<li>${esc(l)}</li>`).join("");
         const deck = { ...(spec.deck || {}), generated_at: new Date().toISOString(), slides: report.output_slides };
         const saved = await api("/api/visits", { method: "POST", body: { ...spec, deck } });
@@ -1978,6 +2005,7 @@
     state.settings = r.settings;
     $("senderDefault").value = r.settings.sender_default || "director";
     $("reminderTo").value = r.settings.reminder_to || "";
+    renderVideoLinks(r.settings.video_links || {});
     $("reminderInfo").textContent = r.settings.reminder_to ? "" : r.effective?.reminder_to ? `留空：現在寄到 ${r.effective.reminder_to}` : "還沒有收件信箱，現在不會寄提醒";
     $("statusList").innerHTML = STATUS_ROWS.map(([k, label, where]) => {
       const on = !!r.status[k];
@@ -1987,6 +2015,21 @@
   }
   $("senderDefault").onchange = () => saveSettings({ sender_default: $("senderDefault").value }, "settingsInfo");
   $("reminderTo").onchange = () => saveSettings({ reminder_to: $("reminderTo").value.trim() }, "reminderInfo");
+  /**
+   * 母簡報那幾支影片的雲端網址（哪幾頁有影片直接讀 slides.json 的 `video: true`）。
+   * 站台上的母簡報抽掉了影片，海報那一頁只剩靜態圖——填了網址才點得開。
+   */
+  function renderVideoLinks(links) {
+    const vids = (state.slides?.slides || []).filter((s) => s.video);
+    $("videoLinks").innerHTML = vids.length
+      ? vids.map((s) => `<div class="flex flex-wrap items-center gap-2"><label class="f mb-0 !w-40" for="vl${s.n}">第 ${s.n} 頁 <span class="muted">${esc(slideTitle(s))}</span></label><input type="url" id="vl${s.n}" data-video-slide="${s.n}" class="!w-96" placeholder="https://drive.google.com/… 或 https://youtu.be/…" value="${esc(links[String(s.n)] || "")}"></div>`).join("")
+      : `<p class="muted">母簡報索引裡沒有標任何影片頁。</p>`;
+  }
+  $("videoLinks").addEventListener("change", () => {
+    const out = {};
+    for (const el of document.querySelectorAll("[data-video-slide]")) out[el.dataset.videoSlide] = el.value.trim();
+    saveSettings({ video_links: out }, "videoLinksInfo");
+  });
   async function saveSettings(settings, infoId) {
     const r = await api("/api/settings", { method: "POST", body: { settings } });
     if (!r.ok) { $(infoId).textContent = ""; return flash(r.error, "err"); }

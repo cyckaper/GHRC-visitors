@@ -37,6 +37,8 @@ const spec = {
 const slidesIndex = { slides: [{ n: 1, role: "cover" }, { n: 2, role: "programme" }, { n: 5, role: "organisation" }, { n: 10, role: "closing" }] };
 const translate = async (texts, lang) => texts.map((t) => `[${lang}] ${t}`);
 
+const masterFixes = JSON.parse(await readFile("public/data/master-fixes.json", "utf8")).fixes;
+
 test("inspect lists every slide with its media", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
   const info = await inspectDeck(await readFile(FIXTURE));
   assert.equal(info.slide_count, 10);
@@ -173,4 +175,44 @@ test("slim-master: strips the video (with link), downscales the big image, keeps
   const built = await buildDeck({ ...spec, language: "zh", slides: [1, 2, 7, 10], text_edits: [] }, buf, { slidesIndex, lang: "zh" });
   assert.deepEqual(built.report.validation.errors, []);
   await writeFile(path.join(outDir, "from-slim.pptx"), built.pptx);
+});
+
+
+test("母簡報寫「四間研究室／301-304」——每一份產出的簡報都要更正成五間、301-305", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
+  const withFixes = { ...spec, language: "zh", slides: [1, 2, 3, 5, 10], text_edits: [] };
+  const { pptx, report } = await buildDeck(withFixes, await readFile(FIXTURE), { slidesIndex, masterFixes, lang: "zh" });
+  const deck = await Deck.load(pptx);
+  const text = (await Promise.all(deck.files().filter((f) => /ppt\/slides\/slide\d+\.xml$/.test(f)).map((f) => deck.text(f)))).join("\n");
+  assert.ok(text.includes("五間研究室"), "中文：四間 → 五間");
+  assert.ok(!text.includes("四間研究室"));
+  assert.ok(text.includes("Five Laboratories"), "英文：Four → Five");
+  assert.ok(!text.includes("Four Laboratories"));
+  // 報告要說動了哪幾處，人才知道系統改過母簡報的字
+  assert.deepEqual(
+    (report.fixes || []).map((f) => [f.find, f.count]).sort(),
+    [["Four Laboratories", 1], ["四間研究室", 1]].sort(),
+  );
+  assert.deepEqual(report.validation.errors, []);
+  // 沒給更正清單就什麼都不動（CLI／瀏覽器沒載到那個檔也不能害產檔停下來）
+  const plain = await buildDeck(withFixes, await readFile(FIXTURE), { slidesIndex, lang: "zh" });
+  assert.equal(plain.report.fixes, undefined);
+});
+
+test("同一段裡有兩處也都要換（editText 的 all）", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
+  const deck = await Deck.load(await readFile(FIXTURE));
+  const page = deck.files().find((f) => /ppt\/slides\/slide3\.xml$/.test(f));
+  assert.equal(await deck.editText(page, [{ find: "研究室", replace: "研究室", all: true }]) > 0, true);
+});
+
+test("選到影片頁時，影片要留在產出的簡報裡——現場才播得動", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
+  // 以前產檔前會先把母簡報瘦身（抽掉影片），產出來的簡報按下去沒反應。
+  // 瘦身是「放上站台」才需要的事；當場選的母簡報原封不動拿來產檔，影片就跟著選到的那一頁進來。
+  const withVideo = { ...spec, language: "zh", slides: [1, 2, 7, 10], text_edits: [] };
+  const { pptx, report } = await buildDeck(withVideo, await readFile(FIXTURE), { slidesIndex, lang: "zh" });
+  const files = (await Deck.load(pptx)).files();
+  assert.ok(files.some((f) => /\.mp4$/i.test(f)), "影片留下來了");
+  assert.equal(report.videos, 1, "報告說留了幾支，人才知道這一份為什麼這麼大");
+  // 沒選到影片頁的那一場不會平白多一支
+  const without = await buildDeck({ ...withVideo, slides: [1, 2, 10] }, await readFile(FIXTURE), { slidesIndex, lang: "zh" });
+  assert.equal(without.report.videos, 0);
 });

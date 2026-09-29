@@ -502,6 +502,18 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - **排行程慢慢排，簡報那邊的狀態不歸它管**：AI 排完回來時只把行程與選頁寫回去，`deck` 沿用畫面上現有的
   （`pollPlan`）——等 AI 的那一分鐘裡人可能已經切到「簡報」分頁勾了「這場不用簡報」，排完才回來的那一份不該蓋掉。
 - **當天資料** `visit.materials = { deck_pdf, photos[], links[] }`：值是媒體庫 key（`materials/<visit_id>/<file>`）或 https 連結，`sanitizeMaterials` 只留這兩種。上傳走 `/api/materials`（單檔 4.5 MB 以內；更大的 PDF 貼雲端連結）。合照先在瀏覽器縮到長邊 1600px，**縮不動就原檔上傳**（HEIC、壞檔、記憶體不夠都算），進度與錯誤顯示在「動作三」那張卡片上（`#materialsStatus`），不是只在頁面最上方 —— 上傳失敗時人在頁面中段，看不到頂端的提示。**訪後信只能承諾頁面上真的有的東西**：`lib/visit.mjs pageContents()` 算出清單交給提示詞（mock 信也照同一份清單）。PDF 由 PowerPoint 另存，再到「後續」放上去。
+- **影片：產檔不瘦身，瘦身只在「放上站台」時做**（實際踩過：產出來的簡報按影片沒反應）。
+  當場選的母簡報**原封不動**拿去產檔，這一場只留十幾頁，原始母簡報那五支影片最多跟著一兩支進來，
+  現場播得動；產檔報告會說「保留了 N 支影片」。站台上那一份仍然是瘦過的（五支就三百多 MB，
+  Blobs 與信箱都塞不下），所以**用站台那份產的簡報沒有影片**——那幾頁只剩海報影格，
+  靠後台「設定」分頁填的**影片連結**（`settings.video_links`，頁次 → 雲端網址；哪幾頁有影片讀
+  `slides.json` 的 `video: true`）在上傳時交給 `slimDeck` 的 `videoLinks`，海報旁邊那一行就變成點得開的連結。
+  改了連結要重新上傳一次母簡報才會生效；畫面上都寫著。
+- **母簡報內文的標準更正** `public/data/master-fixes.json`：母簡報自己寫成「四間研究室／301-304」，
+  但中心是**五間、301-305**。`buildDeck` 的第 4.5 步把這一份套到輸出的每一頁（瀏覽器與 CLI 同一份），
+  報告會說「更正母簡報內文：『四間研究室』→『五間研究室』N 處」。對不到不算錯——母簡報改好之後本來就對不到。
+  **只放事實錯誤**，不放語氣或排版偏好；`find` 要夠長不會誤傷別句，長的排前面（`Four Research Laboratories`
+  要比 `Four Laboratories` 早）。這是治標，真正的修正是把母簡報改好。
 - 產檔在瀏覽器：`admin.html` 先問 `/api/master`（後台上傳的母簡報，4 MB 分塊存在媒體庫 `master/<upload_id>/part-i` ＋ `master/manifest.json`），再 HEAD `/assets/master/slim-master.pptx`（站台對不存在的路徑會回 index.html，所以看 content-type 不看狀態碼）；兩者都沒有時，「產生簡報」在同一個點擊裡同步開檔案選擇視窗，選完立刻產，並提供「把這份母簡報存到站台」。選檔或上傳時若檔案含影片或超過 60 MB，先在瀏覽器裡瘦身（`public/lib/pptx.mjs slimDeck`：抽影片留海報＋「▶ Video」、超過 3 MB 的圖用 canvas 縮到 2000px、清孤兒；規則同 `scripts/slim-master.py`），所以可以直接選 396 MB 的原始母簡報。JSZip 由 cdnjs 載入、QR 用頁面已有的 qrcodejs 畫 canvas（沒有就只放網址文字）。存檔後區塊不放操作說明，只有一行進度與必要時的警告。
 - **來賓端雙語**：英文永遠是主語，第二語言預設中文（中英對照）；`visit.language` 是 ko／ja 時改英韓、英日。流程區塊的 `title_2nd` 空白時用 `i18n.json` 的 `kind_*` 補第二語言。
 - **來賓端依階段換措辭**：訪前（日期在未來，或沒有參訪代碼的首頁）用「將參訪」、不放留信箱與感謝表單；當天才有留信箱與備援按鍵；訪後（日期已過或從感謝信的 `#respond` 進來）用過去式、標題改「感謝蒞臨」。`?phase=before|today|after` 可強制預覽。兩個互動層各有自己的連結，帶連結進來一定看得到（也支援中途換 hash）：`/<visit_id>#email`（留信箱）、`/<visit_id>#respond`（三個回應項目）。**這兩個連結在行程走完後才產出**，列在後台「後續」分頁，不在訪前——

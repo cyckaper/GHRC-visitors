@@ -237,13 +237,14 @@ export class Deck {
 
   /**
    * 逐字取代：find 先比對單一 run，再比對整段（跨 run 時合併到第一個 run）。
-   * 回傳取代次數。
+   * `all: true` 時同一段裡每一處都換（預設只換第一處）。回傳取代次數。
    */
   async editText(path, edits) {
     let xml = await this.text(path);
     let count = 0;
-    for (const { find, replace } of edits) {
+    for (const { find, replace, all } of edits) {
       if (!find) continue;
+      const swap = (text) => (all ? text.split(find).join(replace) : text.replace(find, replace));
       xml = xml.replace(/<a:p\b[^>]*>[\s\S]*?<\/a:p>/g, (para) => {
         const runs = [...para.matchAll(/<a:r\b[^>]*>[\s\S]*?<\/a:r>/g)];
         if (!runs.length) return para;
@@ -252,14 +253,14 @@ export class Deck {
         if (single >= 0) {
           count++;
           const r = runs[single][0];
-          return para.replace(r, setRunText(r, texts[single].replace(find, replace)));
+          return para.replace(r, setRunText(r, swap(texts[single])));
         }
         const joined = texts.join("");
         if (!joined.includes(find)) return para;
         count++;
         let out = para;
         for (let i = runs.length - 1; i > 0; i--) out = out.replace(runs[i][0], "");
-        return out.replace(runs[0][0], setRunText(runs[0][0], joined.replace(find, replace)));
+        return out.replace(runs[0][0], setRunText(runs[0][0], swap(joined)));
       });
     }
     this.set(path, xml);
@@ -631,6 +632,20 @@ export async function buildDeck(spec, masterBuf, opts = {}) {
     }
   }
 
+  // 4.5 母簡報內文的標準更正（public/data/master-fixes.json）：**與哪一場無關，每一份都套**。
+  // 母簡報自己寫成「四間研究室／301-304」，但中心是五間、301-305——產出去給來賓的檔案不能是錯的。
+  // 對不到不算錯（母簡報改好之後本來就對不到），報告只說套用了幾處、哪幾條有中。
+  const fixes = (Array.isArray(opts.masterFixes) ? opts.masterFixes : []).filter((f) => f && f.find);
+  if (fixes.length) {
+    const hits = [];
+    for (const f of fixes) {
+      let n = 0;
+      for (const p of order) n += await deck.editText(p, [f]);
+      if (n) hits.push({ find: f.find, replace: f.replace, count: n });
+    }
+    if (hits.length) report.fixes = hits;
+  }
+
   // 5. 今日流程表（第 2 頁若是表格）：時間、英文、第二語言、頁碼
   const progN = roleN(slidesIndex, "programme") ?? 2;
   const progPath = byN.get(progN);
@@ -685,6 +700,9 @@ export async function buildDeck(spec, masterBuf, opts = {}) {
 
   // 9. 清孤兒、驗證
   report.removed_parts = (await deck.clean()).length;
+  // 留在輸出裡的影片／音訊：現場播得動的那幾支。母簡報是瘦過的（影片抽掉了）就會是 0，
+  // 這時海報那一頁靠「設定」填的影片連結。
+  report.videos = deck.files().filter((f) => f.startsWith("ppt/media/") && MEDIA_EXT.has((f.split(".").pop() || "").toLowerCase())).length;
   const v = await deck.validate();
   report.validation = v;
   if (v.errors.length) throw new Error(`產出的檔案沒過驗證：\n- ${v.errors.join("\n- ")}`);

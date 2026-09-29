@@ -1,0 +1,27 @@
+{
+ "_comment": "母簡報內文的**標準更正**：每一份產出的簡報都會套用（public/lib/pptx.mjs buildDeck 的第 4.5 步），與哪一場無關。母簡報自己寫成「四間研究室／301-304」——中心是**五間，301-305**（305 IVR 研究室，鄭佳昆）。這一份是治標：真正的修正是把母簡報改好，改好之後這裡對不到的條目自然歸零（產檔報告會說套用了幾處）。只放事實錯誤，不放語氣或排版偏好；每一條的 find 要夠長、不會誤傷別的句子。all=true 表示同一段裡每一處都換（預設只換第一處）。",
+ "fixes": [
+  { "find": "four research laboratories", "replace": "five research laboratories", "all": true },
+  { "find": "Four research laboratories", "replace": "Five research laboratories", "all": true },
+  { "find": "Four Research Laboratories", "replace": "Five Research Laboratories", "all": true },
+  { "find": "four laboratories", "replace": "five laboratories", "all": true },
+  { "find": "Four laboratories", "replace": "Five laboratories", "all": true },
+  { "find": "Four Laboratories", "replace": "Five Laboratories", "all": true },
+  { "find": "Rooms 301-304", "replace": "Rooms 301-305", "all": true },
+  { "find": "301 to 304", "replace": "301 to 305", "all": true },
+  { "find": "301 至 304", "replace": "301 至 305", "all": true },
+  { "find": "four labs", "replace": "five labs", "all": true },
+  { "find": "Four labs", "replace": "Five labs", "all": true },
+  { "find": "Four Labs", "replace": "Five Labs", "all": true },
+  { "find": "四間專業研究室", "replace": "五間專業研究室", "all": true },
+  { "find": "301-304", "replace": "301-305", "all": true },
+  { "find": "301–304", "replace": "301–305", "all": true },
+  { "find": "301—304", "replace": "301—305", "all": true },
+  { "find": "301~304", "replace": "301~305", "all": true },
+  { "find": "301～304", "replace": "301～305", "all": true },
+  { "find": "301至304", "replace": "301至305", "all": true },
+  { "find": "四間研究室", "replace": "五間研究室", "all": true },
+  { "find": "四間實驗室", "replace": "五間實驗室", "all": true },
+  { "find": "四個研究室", "replace": "五個研究室", "all": true }
+ ]
+}

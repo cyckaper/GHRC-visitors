@@ -215,7 +215,10 @@ try {
     await page.waitForFunction(() => /移除/.test(document.getElementById("masterRow").textContent), null, { timeout: 60000 });
     const storedMb = parseFloat((/([\d.]+) MB/.exec(await page.textContent("#masterRow")) || [])[1] || "99");
     check(storedMb < 3, `master was slimmed in the browser before storing (${storedMb} MB, fixture is 11.3 MB with a video)`);
-    check(/瘦身：抽掉 1 個影片/.test(await page.textContent("#deckReport")), "slim report shown: 1 video stripped");
+    // 瘦身改成「存到站台時才做」：產出來的那一份影片還在（現場播得動），站台上那一份才抽掉
+    await page.waitForFunction(() => /瘦身：抽掉 1 個影片/.test(document.getElementById("deckInfo").textContent), null, { timeout: 30000 });
+    check(true, "the copy saved to the site is slimmed: 1 video stripped");
+    check((await built.files()).some((f) => /\.mp4$/i.test(f)) === false, "…while this visit's deck has no video because no video slide was picked");
     check((await page.locator("#subLinks").count()) === 0, "the pre-visit block does not carry the two interaction links");
     await page.reload();
     await page.waitForFunction(() => /場參訪/.test(document.getElementById("backendInfo").textContent));

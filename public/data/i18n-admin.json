@@ -385,7 +385,7 @@
   "這不是 .pptx 檔": "That is not a .pptx file",
   "沒有母簡報": "No master deck",
   "抓不到站台上的母簡報": "Could not fetch the master deck from the site",
-  "母簡報已放上站台": "The master deck is on the site",
+  "母簡報已放上站台": "Master deck saved to the site",
   "母簡報已放上站台，以後直接按「產生簡報」": "The master deck is on the site; from now on just press Generate",
   "母簡報：用站台靜態檔那一份": "Master deck: the static copy on the site",
   "母簡報：站台上的 slim-master.pptx": "Master deck: slim-master.pptx on the site",
@@ -530,7 +530,20 @@
   "名片 本次沒有": "Cards — not this time",
   "口述 本次沒有": "Dictation — not this time",
   "當天資料 本次沒有": "Materials — not this time",
-  "這一場的行程：幾點做什麼、每一間幾分鐘。會印在簡報第 2 頁與來賓專頁": "This visit's schedule: what happens when, and how long in each lab. It prints on slide 2 and appears on the guest page"
+  "這一場的行程：幾點做什麼、每一間幾分鐘。會印在簡報第 2 頁與來賓專頁": "This visit's schedule: what happens when, and how long in each lab. It prints on slide 2 and appears on the guest page",
+  "影片連結": "Video links",
+  "放上站台的母簡報": "The master deck stored on the site",
+  "不含影片": "has no videos",
+  "（五支就三百多 MB，寄不出去也存不下），那幾頁只留海報影格。把影片放到 Drive 或 YouTube 不公開連結，網址填在這裡，海報那一頁就會有一個點得開的連結。": " (all five come to over 300 MB — too big to store or to email), so those slides keep only the poster frame. Put the videos on Drive or an unlisted YouTube link, paste the addresses here, and the poster slide gets a link people can click.",
+  "改完要重新上傳一次母簡報": "Change these and you have to upload the master deck again",
+  "才會生效。": "for them to take effect.",
+  "現場要真的播影片：產簡報時當場選": "To actually play a video on the day: pick the",
+  "原始的母簡報": "original master deck",
+  "，影片會留在產出的檔案裡。": " when you generate the deck, and the videos stay in the file.",
+  "母簡報索引裡沒有標任何影片頁。": "No slide in the master index is marked as a video.",
+  "保留了 # 支影片，現場直接播。檔案大，寄給對方請改寄 PDF 或雲端連結": "# videos kept, so they play on the day. The file is large — send a PDF or a cloud link instead of emailing it",
+  "這一場選到了影片頁，但母簡報裡沒有影片（站台上那份是瘦過的）：海報那一頁會放「設定」填的影片連結；現場要真的播，產簡報時當場選原始的母簡報": "This visit includes a video slide, but the master deck has no videos (the copy on the site is the slimmed one): the poster slide carries the link from Settings. To play it on the day, pick the original master deck when you generate.",
+  "母簡報 # MB（含影片，會留在產出的簡報裡）": "Master deck # MB (with videos — they stay in the deck you generate)"
  },
  "patterns": [
   [
@@ -816,6 +829,14 @@
   [
    "^已於 (.+) 寄給 (\\d+) 人$",
    "Sent $1 to $2 people"
+  ],
+  [
+   "^第 (\\d+) 頁 (.+)$",
+   "Slide $1 $2"
+  ],
+  [
+   "^更正母簡報內文：「(.+)」→「(.+)」(\\d+) 處$",
+   "Corrected the master deck text: “$1” → “$2”, $3 place(s)"
   ]
  ]
 }
