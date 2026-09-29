@@ -591,7 +591,16 @@
   "尚未寄出：Netlify 沒有設定 Gmail。請用右邊的 mailto，或直接複製貼到 LINE 群組。": "Not sent: Gmail is not set up in Netlify. Use the mailto link, or just copy it into the LINE group.",
   "手改過、還沒發出的通告帶回來了。按「AI 擬通告」會換成新的一份。": "Your edited, unsent notice is back. Pressing “AI: draft the notice” replaces it.",
   "手改過、還沒發出的回報帶回來了。按「AI 擬回報」會換成新的一份。": "Your edited, unsent report back is back. Pressing “AI: draft the report back” replaces it.",
-  "寄送中……# 位。": "Sending… # people."
+  "寄送中……# 位。": "Sending… # people.",
+  "用自己的信箱寄": "Send it from your own mail app",
+  "把內文複製起來，再開你自己的信件程式（收件人與主旨會帶過去，內文貼上就好）": "Copies the text, then opens your own mail app with the recipients and subject filled in — just paste the body",
+  "內文已複製：信件視窗開起來之後按貼上。沒反應的話用「複製信件」，自己開信箱貼上。": "The text is copied: paste it once your mail window opens. If nothing happens, use “Copy letter” and paste it into your mailbox yourself.",
+  "複製不成功，請手動選取內文。": "Could not copy — please select the text by hand.",
+  "尚未寄出：Netlify 沒有設定 Gmail（GMAIL_CLIENT_ID／SECRET／REFRESH_TOKEN）。用右邊那顆自己寄，或按「複製信件」貼到你的信箱。": "Not sent: Gmail is not set up in Netlify (GMAIL_CLIENT_ID / SECRET / REFRESH_TOKEN). Use the button on the right to send it yourself, or press “Copy letter” and paste it into your mailbox.",
+  "尚未寄出：Netlify 沒有設定 Gmail。用右邊那顆自己寄，或直接複製貼到 LINE 群組。": "Not sent: Gmail is not set up in Netlify. Use the button on the right to send it yourself, or just copy it into the LINE group.",
+  "這一場專屬的頁面：當天的流程、五間老師卡片，": "This visit's own page: the programme for the day, the five lab cards, and ",
+  "來賓從現在就可以在上面留 email": "guests can leave their email on it from now on",
+  "（參訪之後寄簡報與論文給他）。": " (so you can send them the slides and papers after the visit)."
  },
  "patterns": [
   [

@@ -192,7 +192,7 @@
           <div><div id="qr"></div><p class="muted mt-1 max-w-[128px] leading-snug">同一個網址的 QR</p></div>
           <div class="space-y-2 min-w-0">
             <div><div class="f mb-0">來賓專頁</div><a id="pageLink" class="underline break-all" target="_blank" rel="noopener"></a></div>
-            <p class="muted">這一場專屬的頁面：當天的流程、五間老師卡片，來賓可以在上面留 email。<b>QR 是拿來印或投影的</b>——放在門口或簡報最後一頁，來賓自己掃就打得開，不必個別傳網址。產生簡報時也會自動加一頁一樣的 QR。</p>
+            <p class="muted">這一場專屬的頁面：當天的流程、五間老師卡片，<b>來賓從現在就可以在上面留 email</b>（參訪之後寄簡報與論文給他）。<b>QR 是拿來印或投影的</b>——放在門口或簡報最後一頁，來賓自己掃就打得開，不必個別傳網址。產生簡報時也會自動加一頁一樣的 QR。</p>
             <div class="flex flex-wrap gap-2">
               <button class="btn" id="copyLink" title="複製來賓專頁網址，貼到信裡或 LINE 給對方">複製網址</button>
               <button class="btn btn-soft" id="downloadIcs" title="把這一場加進行事曆，結束時間跳出來提醒你拍簽名簿、講三十秒口述。系統本來就會在那個時間寄一封提醒信，這顆是給想在行事曆上也看到的人">下載後續提醒 .ics</button>
@@ -221,7 +221,7 @@
         <div class="flex flex-wrap gap-2 items-center">
           <button class="btn" id="copyNotice" title="複製整則通告，貼到 LINE 群組">複製（貼到 LINE）</button>
           <button class="btn btn-soft" id="noticeSendBtn" title="用中心的 Gmail 寄給下面勾選的老師。沒設定 Gmail 時會給你 mailto 自己寄">寄出通告</button>
-          <a class="btn btn-soft" id="noticeMailto" hidden target="_blank" rel="noopener">用自己的信箱寄（mailto）</a>
+          <button type="button" class="btn btn-soft" id="noticeMailto" hidden title="把內文複製起來，再開你自己的信件程式（收件人與主旨會帶過去，內文貼上就好）">用自己的信箱寄</button>
           <span id="noticeSendInfo"></span>
         </div>
         <div id="noticeRecipients" class="space-y-1"></div>
@@ -246,7 +246,7 @@
         <div class="flex flex-wrap gap-2 items-center">
           <button class="btn" id="copyRundown" title="複製整則回報，貼到 LINE 群組">複製（貼到 LINE）</button>
           <button class="btn btn-soft" id="rundownSendBtn" title="用中心的 Gmail 寄給上面勾選的老師">寄出回報</button>
-          <a class="btn btn-soft" id="rundownMailto" hidden target="_blank" rel="noopener">用自己的信箱寄（mailto）</a>
+          <button type="button" class="btn btn-soft" id="rundownMailto" hidden title="把內文複製起來，再開你自己的信件程式（收件人與主旨會帶過去，內文貼上就好）">用自己的信箱寄</button>
           <span id="rundownSendInfo"></span>
         </div>
       </div>
@@ -275,7 +275,7 @@
       <div class="flex flex-wrap gap-2 items-center">
         <button class="btn" id="confirmSendBtn" title="把確認信寄給上面勾選的人（用中心的 Gmail）。沒設定 Gmail 時會給你 mailto 自己寄">寄出確認信</button>
         <button class="btn btn-soft" id="copyConfirm" title="複製主旨與內文，貼到你自己的信箱寄出">複製信件</button>
-        <a class="btn btn-soft" id="confirmMailto" hidden target="_blank" rel="noopener">用自己的信箱寄（mailto）</a>
+        <button type="button" class="btn btn-soft" id="confirmMailto" hidden title="把內文複製起來，再開你自己的信件程式（收件人與主旨會帶過去，內文貼上就好）">用自己的信箱寄</button>
         <span id="confirmSendInfo"></span>
       </div>
     </div>
@@ -438,7 +438,7 @@
       <div class="flex flex-wrap gap-2 items-center">
         <button class="btn" id="sendBtn" title="一封一封寄出去（用中心的 Gmail 帳號）。沒設定 Gmail 時會給你 mailto 自己寄">寄出感謝信</button>
         <button class="btn btn-soft" id="copyThanks" title="複製主旨與內文，貼到你自己的信箱寄出">複製信件</button>
-        <a class="btn btn-soft" id="mailtoLink" hidden target="_blank" rel="noopener">用自己的信箱寄（mailto）</a>
+        <button type="button" class="btn btn-soft" id="mailtoLink" hidden title="把內文複製起來，再開你自己的信件程式（收件人與主旨會帶過去，內文貼上就好）">用自己的信箱寄</button>
         <span id="sendInfo"></span>
       </div>
     </div>
@@ -723,7 +723,22 @@
     return waitForJob(path, r.job_id, note);
   }
   const download = (name, text, type = "application/json") => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); };
-  const copy = async (text) => { try { await navigator.clipboard.writeText(text); flash("已複製"); } catch (e) { flash("無法複製，請手動選取", "err"); } };
+  const copy = async (text) => { try { await navigator.clipboard.writeText(text); flash("已複製"); return true; } catch (e) { flash("無法複製，請手動選取", "err"); return false; } };
+  /**
+   * 「用自己的信箱寄」：**內文先複製到剪貼簿，mailto 只帶收件人與主旨**。
+   *
+   * 以前是一個 `<a target="_blank" href="mailto:…&body=整封信">`，按了常常完全沒反應
+   * （實際踩過）：整封信 percent-encode 之後破兩千字元，作業系統的信件程式直接不理；
+   * 而 mailto 開在新分頁本來就常被瀏覽器吃掉。現在同一個分頁跳轉，內文靠貼上。
+   * 沒有設定預設信件程式的電腦還是不會有反應——所以旁邊那一行要說「沒反應就用『複製信件』」。
+   */
+  async function openMailto(btn, body, info) {
+    const url = btn.dataset.mailto || "";
+    if (!url) return;
+    const ok = await copy(body);
+    if (info) info.innerHTML = `<span class="${ok ? "ok" : "err"}">${ok ? "內文已複製：信件視窗開起來之後按貼上。沒反應的話用「複製信件」，自己開信箱貼上。" : "複製不成功，請手動選取內文。"}</span>`;
+    location.href = url; // 同一個分頁；新分頁開 mailto 常被擋掉
+  }
 
   // ── tabs ──
   document.querySelectorAll(".tab").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
@@ -2104,7 +2119,7 @@
       const r = await runJob("/api/letter", { visit_id: $("visitSelect").value, action: "send", kind, sender: $(ids.sender).value, subject: $(ids.subject).value, body: $(ids.body).value, recipients }, note, `寄送中……一封一封寄，${recipients.length} 人大約要一分鐘。`);
       if (!r) return;
       if (r.sent) { $(ids.info).innerHTML = `<span class="ok">已寄給 ${r.sent_to.length} 人${r.failed?.length ? `，${r.failed.length} 人失敗：${esc(r.failed.map((f) => f.email).join("、"))}` : ""}</span>`; $(ids.mailto).hidden = true; flash(`${label}已寄出`); rebase([ids.subject, ids.body]); queueDraft(); applyDraft(); loadVisits(); loadRecipients(); }
-      else if (r.reason === "gmail_not_configured") { $(ids.info).innerHTML = `<span class="err">尚未寄出：Netlify 沒有設定 Gmail（GMAIL_CLIENT_ID／SECRET／REFRESH_TOKEN）。請用右邊的 mailto 或複製信件自行寄送。</span>`; $(ids.mailto).href = r.mailto; $(ids.mailto).hidden = false; }
+      else if (r.reason === "gmail_not_configured") { $(ids.info).innerHTML = `<span class="err">尚未寄出：Netlify 沒有設定 Gmail（GMAIL_CLIENT_ID／SECRET／REFRESH_TOKEN）。用右邊那顆自己寄，或按「複製信件」貼到你的信箱。</span>`; const m = $(ids.mailto); m.dataset.mailto = r.mailto; m.hidden = false; m.onclick = () => openMailto(m, $(ids.body).value, $(ids.info)); }
       else { $(ids.info).innerHTML = `<span class="err">一封都沒寄成功：${esc((r.failed || []).map((f) => `${f.email}（${f.error}）`).join("；")) || "未知原因"}</span>`; flash("寄送失敗", "err"); }
     });
   }
@@ -2137,7 +2152,7 @@
     const r = await runJob("/api/letter", { visit_id: $("visitSelect").value, action: "send", kind, sender: $("noticeSender").value, subject: $(`${kind}Subject`).value, body: $(`${kind}Body`).value, recipients }, note, `寄送中……${recipients.length} 位。`);
     if (!r) return;
     if (r.sent) { $(`${kind}SendInfo`).innerHTML = `<span class="ok">已寄給 ${r.sent_to.length} 人</span>`; $(`${kind}Mailto`).hidden = true; flash(`${label}已寄出`); rebase(LETTER_FIELDS); queueDraft(); applyDraft(); loadVisits(); }
-    else if (r.reason === "gmail_not_configured") { $(`${kind}SendInfo`).innerHTML = `<span class="err">尚未寄出：Netlify 沒有設定 Gmail。請用右邊的 mailto，或直接複製貼到 LINE 群組。</span>`; $(`${kind}Mailto`).href = r.mailto; $(`${kind}Mailto`).hidden = false; }
+    else if (r.reason === "gmail_not_configured") { $(`${kind}SendInfo`).innerHTML = `<span class="err">尚未寄出：Netlify 沒有設定 Gmail。用右邊那顆自己寄，或直接複製貼到 LINE 群組。</span>`; const m = $(`${kind}Mailto`); m.dataset.mailto = r.mailto; m.hidden = false; m.onclick = () => openMailto(m, $(`${kind}Body`).value, $(`${kind}SendInfo`)); }
     else { $(`${kind}SendInfo`).innerHTML = `<span class="err">一封都沒寄成功：${esc((r.failed || []).map((f) => `${f.email}（${f.error}）`).join("；")) || "未知原因"}</span>`; flash("寄送失敗", "err"); }
   });
   $("noticeSendBtn").onclick = () => sendInternal("notice");

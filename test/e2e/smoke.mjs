@@ -430,7 +430,9 @@ try {
   // ── 來賓端（日期在未來 → 訪前措辭） ──
   await page.goto(`${base}/2026-10-07-uwa`);
   await page.waitForSelector("#lab-303");
-  check((await page.textContent("#labsTitle")).includes("will visit") && (await page.isHidden("#respond")) && (await page.isHidden("#emailSec")), "before the visit: future tense, no thank-you form, no on-site email box");
+  // 留信箱訪前就要在：專頁網址是寫在訪前的確認信裡寄出去的，對方點進來時參訪還沒發生
+  check((await page.textContent("#labsTitle")).includes("will visit") && (await page.isHidden("#respond")) && (await page.isVisible("#emailSec")), "before the visit: future tense, no thank-you form, but the email box is already there");
+  check((await page.textContent("#emailTitle")).includes("afterwards"), "…and it says the slides come after the visit, not “today's”");
   await page.goto(`${base}/2026-10-07-uwa#email`);
   await page.waitForSelector("#emailSec:not([hidden])");
   check(await page.isHidden("#respond"), "#email link opens the on-site email box on its own, even before the visit");
