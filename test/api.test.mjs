@@ -905,3 +905,54 @@ test("static: guest page served for /<visit_id> fallback and admin page exists",
 });
 
 test.after(() => server.close());
+
+test("支援人力表：連結才打得開，各室自己填誰接待與方便時段，過去的擋在伺服器", async () => {
+  // 還沒產生連結之前，key 是空的——空 key 不能當通行證，不然誰都打得開
+  assert.equal((await api("/api/rota?key=")).status, 403, "沒有連結就打不開");
+  assert.equal((await api("/api/rota?key=whatever")).status, 403, "亂猜的連結打不開");
+  assert.equal((await api("/api/rota")).status, 403, "連 key 都沒帶也一樣");
+
+  const made = await api("/api/settings", { method: "POST", headers: admin, body: JSON.stringify({ settings: { rota_key: "new" } }) });
+  const key = made.body.settings.rota_key;
+  assert.match(key, /^[a-z0-9]{24}$/, "產生一個猜不到的連結");
+
+  const list = await api(`/api/rota?key=${key}`);
+  assert.equal(list.status, 200);
+  const row = list.body.visits.find((v) => v.visit_id === visitId);
+  assert.ok(row, "這一場在表上");
+  assert.ok(row.stops.length && row.stops.every((s) => s.start && s.end), "每一間帶自己的時段，老師才知道要空出什麼時候");
+  // 連結轉出去就擋不住，所以表上不放名單與 email
+  assert.ok(!("guests" in row) && !JSON.stringify(row).includes("@"), "表上沒有來賓名單與 email");
+
+  // 各室自己填：誰接待 ＋ 那一天方便的時段
+  const room = row.stops[0].room;
+  const put1 = await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: visitId, room, name: "王小明" }) });
+  assert.equal(put1.status, 200);
+  const put2 = await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: visitId, room, hours: "16:00 之後" }) });
+  assert.deepEqual(put2.body.presenters[room], "王小明", "只送時段不會把人名洗掉——兩個人同時填不同格子不該互相蓋");
+  assert.equal(put2.body.lab_hours[room], "16:00 之後");
+  assert.equal((await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: visitId, room: "999", name: "x" }) })).status, 400, "房號只有 301–305");
+
+  // **後台整筆存檔不會蓋掉老師剛填的**（後台那幾格也走這一支）
+  const saved = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit;
+  await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ ...saved, presenters: undefined, lab_hours: undefined, purpose: "改一個字觸發存檔" }) });
+  const after = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit;
+  assert.equal(after.presenters[room], "王小明", "後台存檔沒帶就沿用，不會清掉");
+  assert.equal(after.lab_hours[room], "16:00 之後");
+  await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(saved) });
+
+  // 已經結束的那一場不給改——畫面灰掉只是提示，擋要擋在伺服器
+  const past = { ...saved, visit_id: "", code: "pastrota", date: "2020-01-01", org: { ...saved.org, name: "Past Rota Institute" } };
+  const pastId = (await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(past) })).body.visit.visit_id;
+  const blocked = await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: pastId, room: "301", name: "太晚了" }) });
+  assert.equal(blocked.status, 409, "過去的場次改不動");
+  const both = await api(`/api/rota?key=${key}`);
+  assert.equal(both.body.visits.find((v) => v.visit_id === pastId).past, true, "…而且表上標成已結束");
+  await api(`/api/visits?id=${pastId}`, { method: "DELETE", headers: admin });
+
+  // 通告裡要說去哪裡填、怎麼填
+  const notice = await runJob("letter", { visit_id: visitId, kind: "notice", sender: "director" });
+  assert.ok(notice.body.draft.body.includes(`/rota?key=${key}`), "通告帶著支援人力表的網址");
+  assert.ok(/點開那一場/.test(notice.body.draft.body), "…並說明怎麼填");
+  await api("/api/settings", { method: "POST", headers: admin, body: JSON.stringify({ settings: { rota_key: "" } }) });
+});

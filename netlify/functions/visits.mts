@@ -105,7 +105,13 @@ export default async (req: Request) => {
 };
 
 /** 這幾個欄位由別的端點或背景工作維護，一般存檔不該動到。 */
-const KEPT = ["summary", "summary_at", "reminders", "drive", "cards", "signbook", "dictation", "letters", "materials", "background", "wrapup"] as const;
+/**
+ * 後台表單管不到、或**別人也在寫**的欄位：body 沒帶就沿用現有的。
+ * `presenters`／`lab_hours` 在這裡，是因為**各研究室自己會從 `/rota` 填**——
+ * 後台開著舊資料改一個字觸發自動存檔，就會把老師剛填的蓋掉（研判掛錯場是同一類）。
+ * 後台那幾格改走 `/api/rota`（admin 也打得動），這個欄位只有那一支在寫。
+ */
+const KEPT = ["summary", "summary_at", "reminders", "drive", "cards", "signbook", "dictation", "letters", "materials", "background", "wrapup", "presenters", "lab_hours"] as const;
 
 /** 這一場的網址還沒「用出去」：沒人回覆、兩封信都還沒寄出、沒放任何檔案、還沒備份到 Drive。 */
 async function isUnused(store: ReturnType<typeof getStore>, v: Visit): Promise<boolean> {
@@ -155,14 +161,18 @@ export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   v.summary = typeof input.summary === "string" ? input.summary : "";
   // 後續那四件事裡標了「本次沒有」的（只留認得的那四個 key，其他一律丟掉）
   (v as any).wrapup = { na: wrapupNA({ wrapup: (input as any).wrapup }) };
-  // 各研究室回覆的簡報人員（房號 → 姓名）：只留 301–305
-  const presenters: Record<string, string> = {};
-  for (const [room, who] of Object.entries((input as any).presenters || {})) {
-    if (!/^30[1-5]$/.test(room)) continue;
-    const name = String(who || "").trim().slice(0, 200);
-    if (name) presenters[room] = name;
-  }
-  (v as any).presenters = presenters;
+  // 各研究室自己填的：誰來接待（房號 → 姓名）與那一天開放的時段（房號 → 一句話）。只留 301–305。
+  const byRoom = (src: unknown, max: number) => {
+    const out: Record<string, string> = {};
+    for (const [room, x] of Object.entries((src as any) || {})) {
+      if (!/^30[1-5]$/.test(room)) continue;
+      const val = String(x || "").trim().slice(0, max);
+      if (val) out[room] = val;
+    }
+    return out;
+  };
+  (v as any).presenters = byRoom((input as any).presenters, 200);
+  (v as any).lab_hours = byRoom((input as any).lab_hours, 120);
   const code = String((input as any).code || "").trim();
   if (!isValidVisitId(v.visit_id) || code) v.visit_id = makeVisitId(v.date, v.org.name, code);
   v.page_url = `${site}/${v.visit_id}`;

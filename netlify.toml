@@ -22,6 +22,12 @@
   to = "/lab.html"
   status = 200
 
+# 各研究室填「這一場誰能支援」的表 /rota → rota.html
+[[redirects]]
+  from = "/rota"
+  to = "/rota.html"
+  status = 200
+
 # 專屬網址 visit.healsdesign.org/<visit_id> → 來賓端專頁（既有靜態檔優先）
 [[redirects]]
   from = "/*"

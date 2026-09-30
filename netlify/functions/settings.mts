@@ -1,4 +1,4 @@
-import { env, fail, json, readJSON, requireAdmin } from "../lib/http.mts";
+import { env, fail, json, randomId, readJSON, requireAdmin } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import { driveConfigured } from "../lib/drive.mts";
 import { gmailConfigured } from "../lib/mail.mts";
@@ -24,7 +24,12 @@ const KEY = "settings.json";
  * 放在這裡而不是 `labs.json`，是因為 `labs.json` 會送到來賓專頁上（那裡的 email 本來就是要公開的）；
  * 內部通告用的信箱只有主辦端看得到。這裡沒填就退回 `labs.json` 的公開信箱。
  */
-const DEFAULTS = { sender_default: "director" as "director" | "contact", reminder_to: "", video_links: {} as Record<string, string>, lab_emails: {} as Record<string, string> };
+/**
+ * `rota_key`：**支援人力表**（`/rota`）那個連結裡的密語。老師從 LINE 點進來就要能填，
+ * 卡在帳號密碼回覆率就沒了，所以用「猜不到的網址」而不是登入。按「重新產生」換一個，
+ * 舊連結立刻失效（人走了、連結轉出去了就換）。空的表示還沒產生過——那時候只有 admin 打得開。
+ */
+const DEFAULTS = { sender_default: "director" as "director" | "contact", reminder_to: "", video_links: {} as Record<string, string>, lab_emails: {} as Record<string, string>, rota_key: "" };
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 export type Settings = typeof DEFAULTS;
@@ -89,6 +94,10 @@ export default async (req: Request) => {
       }
       next.lab_emails = out;
     }
+    // 支援人力表的連結：`rota_key: "new"` 產生一個新的，`""` 收回（沒有連結就只有 admin 打得開）
+    const rota = body?.settings?.rota_key;
+    if (rota === "new") next.rota_key = randomId(24);
+    else if (rota === "") next.rota_key = "";
     await getStore().putMedia(KEY, new TextEncoder().encode(JSON.stringify(next)), "application/json");
     return json({ ok: true, settings: next, effective: { reminder_to: await reminderTo() } });
   }

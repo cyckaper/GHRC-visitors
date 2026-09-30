@@ -288,7 +288,11 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
      - **請接龍**——「請各研究室回覆，該時段由哪位老師或人員接待：」＋「請接龍：」＋
        **一行一個房號、後面留白**。中心本來就在 LINE 群組上接龍，老師複製整段、在自己那一行後面加名字就好，
        所以這幾行的字不能動。列的是這一場動線上的那幾間（跟收件人同一份），不是五間全列。
-     最後一句「請於（參訪前一天）前回覆」。**這一則只問一件事：誰來接待**——不要再問 demo、設備、研究生。
+     - **請接龍**那一段同時**說明去哪裡填、怎麼填**（明確要求）：先給支援人力表的網址與一句
+       「點開那一場，在自己那一間的格子填『誰接待』與『可以的時段』」，再列房號讓不想開網頁的人直接在群組接龍。
+       **後台還沒產生連結（`rota_key` 空的）就整段不提**——不要在信裡指一個打不開的地方。
+     最後一句「請於（參訪前一天）前回覆」。**這一則只問兩件事：誰來接待、貴室方便的時段**——
+     不要再問 demo、設備、研究生。
   2. **回報**——各室回覆的簡報人員填回網站（`visit.presenters`，房號 → 姓名）之後，把定案的時間、
      人員與內容再送回各室一次。
   **收件人是這一場動線上的那幾間**（`lib/visit.mjs labRecipients`），不是五間全寄。
@@ -298,6 +302,21 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
   `labs.json` 的 `lead.email`（那一個會出現在來賓專頁，本來就是公開的——目前只有 305，
   因為鄭佳昆老師自己的 CV 上就印著這個信箱；`pageContents()` 因此在動線走到 305 時才會讓訪後信
   提到「老師的聯絡方式」）；兩個都沒有就只能貼 LINE，畫面會說。
+- **支援人力表 `/rota`**（明確要求）：**一張表列出所有參訪，各研究室自己填「那一場誰能支援」與
+  「那一天貴室方便的時段」**。同一段時間好幾個單位來，一場一場在 LINE 上問每一間就亂掉了。
+  - **過去的不能改**，判斷用 `visitEndAt()`（跟後續提醒同一個算法），**擋在伺服器**——畫面灰掉只是提示。
+    灰底之外還寫著「已結束」、欄位也 disabled：只看得到灰階一樣知道那一列不用填。
+  - **每一列可以點開看訪客背景研判**（明確要求）。那份研判本來就是主辦端的東西，各研究室老師就是主辦端；
+    但它仍然**不進來賓專頁、不進信件**，那條規矩沒變。相對的，這一頁**不放名單與 email**——
+    老師要準備的是「誰來、為什麼來」，不需要聯絡方式，而連結轉出去就擋不住。
+  - **`?key=` 是連結裡的密語，不是登入**（`settings.rota_key`，後台「設定」分頁產生／重新產生／收回）。
+    老師從 LINE 點進來就要能填，卡在帳號密碼回覆率就沒了。沒產生過就只有 admin 打得開；
+    **空的 key 不算通過**，不然還沒產生之前誰都打得開。admin 一直打得開（測試要用乾淨的 context 才測得到擋人）。
+  - **`presenters`／`lab_hours` 只有 `/api/rota` 在寫**，並且列進 `visits.mts` 的 `KEPT`。
+    以前 `readForm()` 會把 `presenters` 一起送回去——後台開著舊資料改一個字觸發自動存檔，
+    就會蓋掉老師剛在表上填的（跟「研判掛錯場」同一類）。後台「通告」那幾格也改走這一支。
+  - 時段是**一句話**不是時間欄位：實際回答常常是「整段都可以」「16:00 之後」「要避開 15:40 的課」。
+  - 填進去的人名就是**回報**那一則帶出去的簡報人員（後面還會附上該室可配合的時段），不必再抄一次。
 - **兩封信各在它該在的時間點**（明確指示，沒有獨立的「信件」分頁）：**確認信在「訪前」**（排完行程、
   拿到專頁網址的下一步），**感謝信在「後續」的動作五**（當天資料放上去之後就寄）。
   收件人（名單上每一個人 ＋當天在專頁留信箱的人）**兩張卡片各有一份**——分開之後共用勾選只會讓人
@@ -443,6 +462,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → 排行程 → 自動存 → QR／.ics → **確認信（草擬、寄出或 mailto）**，**最底下列出「以前做過的參訪」**）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、後續（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁、**動作五 感謝信**）、資料（歷次參訪、回覆、摘要、跨場次彙整、CSV、Drive）、**設定（母簡報、預設值、外部服務狀態）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
 - `public/index.html`：專屬網址 `/<visit_id>`；整頁一種語言（預設英文，`?ui=zh` 換中文；ko／ja 來賓才另外附他們的語言）；流程（參訪當天標出「現在」）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
 - `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`）`drive` `drive-sync-background`（自動備份）；**三支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
+  `rota`（支援人力表，各研究室自己填）；
   `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，後續提醒）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
 - `public/lib/pptx.mjs`：母簡報子集化核心（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證），零 Node 相依，瀏覽器與 CLI 共用；`cli/lib/pptx.mjs` 只是注入 jszip／xmldom 的 Node 入口；`cli/deck.mjs` 加上 QR（qrcode 套件）與 PDF（LibreOffice）。`--inspect`、`--dump`、`--validate`。

@@ -66,7 +66,10 @@ export default backgroundHandler<Input>("信件", async (input, req) => {
   const sender = input.sender === "contact" ? "contact" : "director";
   const [labs, i18n] = await Promise.all([loadPublicData("labs"), loadPublicData("i18n")]);
   const mostWanted = [...new Set([...(visit.dictation?.extracted?.most_wanted_rooms || []), ...responses.flatMap((r) => r.most_wanted_rooms || [])])];
-  const draft = await draftLetter({ kind, visit, labs, i18n, sender, siteUrl: siteUrl(req), mostWantedRooms: mostWanted });
+  // 通告裡要告訴各室去哪裡填、怎麼填；後台還沒產生連結就不提（不要指一個打不開的地方）
+  const rotaKey = (await loadSettings()).rota_key;
+  const rotaUrl = rotaKey ? `${siteUrl(req)}/rota?key=${rotaKey}` : "";
+  const draft = await draftLetter({ kind, visit, labs, i18n, sender, siteUrl: siteUrl(req), rotaUrl, mostWantedRooms: mostWanted });
   if (kind === "notice" || kind === "rundown") {
     const prev = visit.letters[kind];
     visit.letters[kind] = { ...draft, sender, drafted_at: nowISO(), sent_to: prev?.sent_to, sent_at: prev?.sent_at };
