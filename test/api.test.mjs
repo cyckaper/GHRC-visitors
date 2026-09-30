@@ -906,15 +906,25 @@ test("static: guest page served for /<visit_id> fallback and admin page exists",
 
 test.after(() => server.close());
 
-test("支援人力表：連結才打得開，各室自己填誰接待與方便時段，過去的擋在伺服器", async () => {
-  // 還沒產生連結之前，key 是空的——空 key 不能當通行證，不然誰都打得開
-  assert.equal((await api("/api/rota?key=")).status, 403, "沒有連結就打不開");
+test("支援人力表：連結自動產生、才打得開，各室自己填誰接待與方便時段，過去的擋在伺服器", async () => {
+  // 空 key 不能當通行證（不然產生之前誰都打得開）；亂猜、不帶也一樣
+  assert.equal((await api("/api/rota?key=")).status, 403, "空的連結打不開");
   assert.equal((await api("/api/rota?key=whatever")).status, 403, "亂猜的連結打不開");
   assert.equal((await api("/api/rota")).status, 403, "連 key 都沒帶也一樣");
 
+  // **連結自動產生**（明確要求）：打開設定就有，不必先按什麼；再打開一次還是同一個
+  const auto = (await api("/api/settings", { headers: admin })).body.settings.rota_key;
+  assert.match(auto, /^[a-z0-9]{24}$/, "打開設定就有一個猜不到的連結");
+  assert.equal((await api("/api/settings", { headers: admin })).body.settings.rota_key, auto, "…而且一直是同一個（不會每打開一次就換掉、讓貼出去的連結失效）");
+  // 沒有「收回」：送空的過去不會把連結拿掉
+  await api("/api/settings", { method: "POST", headers: admin, body: JSON.stringify({ settings: { rota_key: "" } }) });
+  assert.equal((await api("/api/settings", { headers: admin })).body.settings.rota_key, auto, "送空的不會收回連結");
+  // 外流時「重新產生」換一個，舊的立刻失效
   const made = await api("/api/settings", { method: "POST", headers: admin, body: JSON.stringify({ settings: { rota_key: "new" } }) });
   const key = made.body.settings.rota_key;
-  assert.match(key, /^[a-z0-9]{24}$/, "產生一個猜不到的連結");
+  assert.match(key, /^[a-z0-9]{24}$/);
+  assert.notEqual(key, auto, "重新產生會換一個");
+  assert.equal((await api(`/api/rota?key=${auto}`)).status, 403, "舊的連結立刻失效");
 
   const list = await api(`/api/rota?key=${key}`);
   assert.equal(list.status, 200);
@@ -950,9 +960,10 @@ test("支援人力表：連結才打得開，各室自己填誰接待與方便�
   assert.equal(both.body.visits.find((v) => v.visit_id === pastId).past, true, "…而且表上標成已結束");
   await api(`/api/visits?id=${pastId}`, { method: "DELETE", headers: admin });
 
-  // 通告裡要說去哪裡填、怎麼填
+  // 通告**自動帶上連結**，後面接 #<visit_id>：點進去直接跳到這一場
   const notice = await runJob("letter", { visit_id: visitId, kind: "notice", sender: "director" });
-  assert.ok(notice.body.draft.body.includes(`/rota?key=${key}`), "通告帶著支援人力表的網址");
-  assert.ok(/點開那一場/.test(notice.body.draft.body), "…並說明怎麼填");
-  await api("/api/settings", { method: "POST", headers: admin, body: JSON.stringify({ settings: { rota_key: "" } }) });
+  const nb = notice.body.draft.body;
+  assert.ok(nb.includes(`/rota?key=${key}#${visitId}`), "通告帶著支援人力表的連結，並直接指到這一場");
+  assert.ok(/請點這個連結填寫/.test(nb) && /「誰接待」與「可以的時段」/.test(nb), "…並說明點進去要填什麼");
+  assert.ok(nb.indexOf("請點這個連結填寫") < nb.indexOf("請接龍："), "連結在前，接龍是不方便開網頁時的退路");
 });

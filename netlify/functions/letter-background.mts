@@ -4,7 +4,7 @@ import { getStore } from "../lib/store.mts";
 import { draftLetter } from "../lib/ai.mts";
 import { backgroundHandler } from "../lib/jobs.mts";
 import { labRecipients, recipientList, scheduleFingerprint } from "../../lib/visit.mjs";
-import { loadSettings } from "./settings.mts";
+import { ensureRotaKey, loadSettings } from "./settings.mts";
 import { triggerDriveSync } from "../lib/drive.mts";
 import { gmailSend } from "../lib/mail.mts";
 
@@ -66,9 +66,9 @@ export default backgroundHandler<Input>("信件", async (input, req) => {
   const sender = input.sender === "contact" ? "contact" : "director";
   const [labs, i18n] = await Promise.all([loadPublicData("labs"), loadPublicData("i18n")]);
   const mostWanted = [...new Set([...(visit.dictation?.extracted?.most_wanted_rooms || []), ...responses.flatMap((r) => r.most_wanted_rooms || [])])];
-  // 通告裡要告訴各室去哪裡填、怎麼填；後台還沒產生連結就不提（不要指一個打不開的地方）
-  const rotaKey = (await loadSettings()).rota_key;
-  const rotaUrl = rotaKey ? `${siteUrl(req)}/rota?key=${rotaKey}` : "";
+  // 通告裡一定帶著支援人力表的連結（**自動產生**，主辦端不必先去設定按什麼）；
+  // 只有通告要，回報與來賓信用不到——不為了它們去產一個連結
+  const rotaUrl = kind === "notice" ? `${siteUrl(req)}/rota?key=${await ensureRotaKey()}` : "";
   const draft = await draftLetter({ kind, visit, labs, i18n, sender, siteUrl: siteUrl(req), rotaUrl, mostWantedRooms: mostWanted });
   if (kind === "notice" || kind === "rundown") {
     const prev = visit.letters[kind];

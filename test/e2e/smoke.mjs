@@ -440,24 +440,32 @@ try {
 
   // ── 支援人力表：各研究室自己填「那一場誰能支援、方便什麼時段」──
   {
-    const put = async (body) => (await fetch(`${base}/api/settings`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer e2e-token" }, body: JSON.stringify(body) })).json();
-    const key = (await put({ settings: { rota_key: "new" } })).settings.rota_key;
+    const auth = { authorization: "Bearer e2e-token" };
+    // 連結**自動產生**：打開設定就有，不必先按什麼
+    const key = (await (await fetch(`${base}/api/settings`, { headers: auth })).json()).settings.rota_key;
+    check(/^[a-z0-9]{24}$/.test(key), "the rota link exists without anyone having to make it");
     await page.goto(`${base}/rota?key=${key}`);
     await page.waitForFunction(() => document.querySelectorAll("#rows section").length > 0, null, { timeout: 30000 });
     check((await page.locator("#rows section").count()) > 0, "the rota lists the visits for the laboratories to fill in");
     // 未來的可以填、過去的鎖住——擋在伺服器，畫面只是照著顯示
-    const row = page.locator("#rows section:not(.past)").first();
+    const row = page.locator("#rows section:not(.rota-past)").first();
     await row.locator('input[data-field="name"]').first().fill("王小明");
     await row.locator('input[data-field="hours"]').first().fill("16:00 之後");
     await page.waitForFunction(() => /已存/.test(document.getElementById("status").textContent), null, { timeout: 30000 });
     const id = await row.locator("input").first().getAttribute("data-visit");
     const room = await row.locator("input").first().getAttribute("data-room");
-    const saved = await (await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { headers: { authorization: "Bearer e2e-token" } })).json();
+    const saved = await (await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { headers: auth })).json();
     check(saved.visit.presenters[room] === "王小明" && saved.visit.lab_hours[room] === "16:00 之後", "…and what a lab types is kept on that visit, both the name and when they are free");
     // 後台整筆存檔不會蓋掉老師剛填的（presenters／lab_hours 只有 /api/rota 在寫）
-    await fetch(`${base}/api/visits`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer e2e-token" }, body: JSON.stringify({ ...saved.visit, presenters: undefined, lab_hours: undefined }) });
-    const again = await (await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { headers: { authorization: "Bearer e2e-token" } })).json();
+    await fetch(`${base}/api/visits`, { method: "POST", headers: { "content-type": "application/json", ...auth }, body: JSON.stringify({ ...saved.visit, presenters: undefined, lab_hours: undefined }) });
+    const again = await (await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { headers: auth })).json();
     check(again.visit.presenters[room] === "王小明", "…and an ordinary save from the admin page does not wipe it");
+
+    // 通告裡的連結帶著 #<visit_id>：點進來直接跳到那一場、那一張亮起來
+    await page.goto(`${base}/rota?key=${key}#${encodeURIComponent(id)}`);
+    await page.waitForFunction((v) => document.querySelector(`[data-rota-visit="${v}"]`)?.classList.contains("rota-focus"), id, { timeout: 30000 });
+    check(true, "the link in the notice lands on that visit and lights it up");
+
     // 連結不對就打不開。要用乾淨的 context 測——這個分頁有後台的 session cookie，
     // admin 本來就一直開得了（那是刻意的），用它測等於沒測。
     const guest = await browser.newContext();
@@ -466,7 +474,22 @@ try {
     await gp.waitForFunction(() => document.getElementById("status").textContent.length > 0, null, { timeout: 30000 });
     check(/連結/.test(await gp.textContent("#status")) && (await gp.locator("#rows section").count()) === 0, "a wrong link says so instead of showing the visits");
     await guest.close();
-    await put({ settings: { rota_key: "" } });
+
+    // 後台「設定」分頁：**直接看得到老師那一張表，也改得了**（同一份渲染、同一支 API）
+    await page.goto(`${base}/admin.html`);
+    await page.waitForSelector("#authOk:not([hidden])");
+    await page.click('[data-tab="settings"]');
+    await page.waitForFunction(() => document.querySelectorAll("#rotaTable section").length > 0, null, { timeout: 30000 });
+    check((await page.inputValue("#rotaLink")).endsWith(`/rota?key=${key}`), "the settings tab shows the link, already made");
+    check((await page.locator("#rotaOff").count()) === 0, "…with no make-a-link or withdraw buttons left to press");
+    const mine = page.locator(`#rotaTable [data-rota-visit="${id}"] input[data-room="${room}"][data-field="name"]`);
+    check((await mine.inputValue()) === "王小明", "the same table the leads fill in is right there in settings");
+    await mine.fill("李大華（群組接龍回的）");
+    await page.waitForFunction(() => /已存/.test(document.getElementById("rotaTableInfo").textContent), null, { timeout: 30000 });
+    const fixed = await (await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { headers: auth })).json();
+    check(fixed.visit.presenters[room] === "李大華（群組接龍回的）" && fixed.visit.lab_hours[room] === "16:00 之後", "…and the host can correct it there, one cell at a time");
+    const pastLocked = await page.locator("#rotaTable section.rota-past input:not([disabled])").count();
+    check(pastLocked === 0, "…while visits that are over stay locked there too");
   }
 
   // ── 來賓端：首頁（沒有參訪代碼）一律從訪前開始 ──

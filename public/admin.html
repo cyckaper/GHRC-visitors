@@ -524,15 +524,17 @@
 
     <div class="card space-y-3">
       <h2 class="font-semibold">支援人力表</h2>
-      <p class="muted">一張表列出所有參訪，<b>各研究室自己填那一場誰能支援</b>（同一段時間好幾個單位來，一場一場在 LINE 上問就亂了）。每一列可以點開看訪客背景研判。已經結束的場次是灰的、不能改。填進去的人名就是「回報研究室」那一則會帶出去的簡報人員，不必再抄一次。</p>
+      <p class="muted">一張表列出所有參訪，<b>各研究室自己填那一場誰能支援、貴室方便的時段</b>（同一段時間好幾個單位來，一場一場在 LINE 上問就亂了）。<b>連結是自動產生的，發通告時會自動放進去</b>，老師點進去會直接跳到那一場。填進去的人名就是「回報研究室」那一則帶出去的簡報人員，不必再抄一次。</p>
       <div class="flex flex-wrap items-center gap-2">
-        <input type="text" id="rotaLink" class="!w-96" readonly placeholder="還沒產生連結">
+        <input type="text" id="rotaLink" class="!w-96" readonly>
         <button class="btn btn-soft" id="rotaCopy" type="button">複製連結</button>
         <button class="btn btn-soft" id="rotaNew" type="button" title="換一個網址；舊的連結立刻失效">重新產生</button>
-        <button class="btn btn-soft" id="rotaOff" type="button" title="收回連結；之後只有登入後台的人打得開">收回</button>
         <span class="muted" id="rotaInfo"></span>
       </div>
-      <p class="muted">這是<b>一個猜不到的網址，不是登入</b>——老師從 LINE 點進去就能填，不必帳號密碼。連結轉出去就擋不住，所以表上只有單位名稱、日期與房號，<b>沒有來賓名單與 email</b>。人員異動或連結外流就按「重新產生」。</p>
+      <p class="muted"><b>下面這張就是老師看到的那一張，您也可以直接在這裡改</b>——群組裡接龍回的，就填進對應的格子，填完自己會存。已經結束的場次是灰的、不能改。</p>
+      <p class="muted" id="rotaTableInfo"></p>
+      <div id="rotaTable"></div>
+      <p class="muted">連結是<b>一個猜不到的網址，不是登入</b>——老師從 LINE 點進去就能填，不必帳號密碼。連結轉出去就擋不住，所以表上只有單位名稱、日期與房號，<b>沒有來賓名單與 email</b>。人員異動或連結外流就按「重新產生」。</p>
     </div>
 
     <div class="card space-y-3">
@@ -2232,6 +2234,7 @@
     loadLabsTab();
     $("reminderInfo").textContent = r.settings.reminder_to ? "" : r.effective?.reminder_to ? `留空：現在寄到 ${r.effective.reminder_to}` : "還沒有收件信箱，現在不會寄提醒";
     renderRotaLink(r.settings.rota_key || "");
+    loadRotaTable(); // 不等它：表慢一點出來，設定分頁其他東西先能用
     $("statusList").innerHTML = STATUS_ROWS.map(([k, label, where]) => {
       const on = !!r.status[k];
       const note = k === "ai" && r.status.ai_mock ? "（AI_MOCK：回固定範例，不會真的問 Claude）" : "";
@@ -2439,23 +2442,30 @@
   }
   $("senderDefault").onchange = () => saveSettings({ sender_default: $("senderDefault").value }, "settingsInfo");
   $("reminderTo").onchange = () => saveSettings({ reminder_to: $("reminderTo").value.trim() }, "reminderInfo");
-  /** 支援人力表的連結（`/rota?key=…`）。空的表示還沒產生，那時候只有登入後台的人打得開。 */
+  /**
+   * 支援人力表的連結（`/rota?key=…`）：**自動產生**（打開設定分頁時伺服器就給一個，草擬通告時也會），
+   * 所以這裡沒有「產生連結」「收回」——只有外流時用的「重新產生」。
+   */
   function renderRotaLink(k) {
     $("rotaLink").value = k ? `${location.origin}/rota?key=${k}` : "";
-    $("rotaInfo").textContent = k ? "" : t("還沒產生連結，現在只有登入後台的人打得開");
-    $("rotaCopy").disabled = !k;
-    $("rotaOff").disabled = !k;
-    $("rotaNew").textContent = t(k ? "重新產生" : "產生連結");
+  }
+  /**
+   * 老師看到的那一張表，直接擺在這裡（明確要求：設定這邊要直接看到、也改得了）。
+   * **同一份渲染**（`/lib/rota.mjs`），寫的也是同一支 `/api/rota`——後台走登入的 session，不必帶 key。
+   * 群組裡接龍回的，主辦端就在這裡填進對應的格子，資料只有一份。
+   */
+  async function loadRotaTable() {
+    const { mountRota } = await import("/lib/rota.mjs");
+    await mountRota($("rotaTable"), {
+      load: () => api("/api/rota"),
+      save: (body) => api("/api/rota", { method: "POST", body }),
+      onStatus: (msg, isError) => { $("rotaTableInfo").textContent = msg; $("rotaTableInfo").className = isError ? "err" : "muted"; },
+    });
   }
   $("rotaCopy").onclick = () => copy($("rotaLink").value);
   $("rotaNew").onclick = () => busy($("rotaNew"), async () => {
-    if ($("rotaLink").value && !confirm(t("換一個網址？貼出去的舊連結會立刻失效。"))) return;
+    if (!confirm(t("換一個網址？貼出去的舊連結會立刻失效。"))) return;
     const r = await saveSettings({ rota_key: "new" }, "rotaInfo");
-    if (r?.settings) renderRotaLink(r.settings.rota_key || "");
-  });
-  $("rotaOff").onclick = () => busy($("rotaOff"), async () => {
-    if (!confirm(t("收回連結？之後只有登入後台的人打得開。"))) return;
-    const r = await saveSettings({ rota_key: "" }, "rotaInfo");
     if (r?.settings) renderRotaLink(r.settings.rota_key || "");
   });
   /**

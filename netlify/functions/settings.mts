@@ -26,8 +26,10 @@ const KEY = "settings.json";
  */
 /**
  * `rota_key`：**支援人力表**（`/rota`）那個連結裡的密語。老師從 LINE 點進來就要能填，
- * 卡在帳號密碼回覆率就沒了，所以用「猜不到的網址」而不是登入。按「重新產生」換一個，
- * 舊連結立刻失效（人走了、連結轉出去了就換）。空的表示還沒產生過——那時候只有 admin 打得開。
+ * 卡在帳號密碼回覆率就沒了，所以用「猜不到的網址」而不是登入。
+ * **自動產生**（`ensureRotaKey()`，明確要求）：第一次有人要用就產一個存起來，之後一直沿用——
+ * 沒有「產生連結」「收回」這兩個動作，通告永遠帶得出連結。只在外流時按「重新產生」換一個，
+ * 舊連結立刻失效。
  */
 const DEFAULTS = { sender_default: "director" as "director" | "contact", reminder_to: "", video_links: {} as Record<string, string>, lab_emails: {} as Record<string, string>, rota_key: "" };
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -43,6 +45,21 @@ export async function loadSettings(): Promise<Settings> {
   } catch {
     return { ...DEFAULTS };
   }
+}
+
+/**
+ * 支援人力表的連結：沒有就產一個存起來，有就沿用。打開「設定」分頁、草擬通告都會走這裡，
+ * 所以連結永遠在——主辦端不必記得先去按什麼。
+ *
+ * 寫完**再讀一次**才回傳：兩個地方剛好同時第一次要用（打開設定與草擬通告撞在一起），各自產了一個
+ * 的話，兩邊回傳的都是最後存進去的那一個，不會有一則通告帶著一個已經被蓋掉的連結出去。
+ */
+export async function ensureRotaKey(): Promise<string> {
+  const s = await loadSettings();
+  if (s.rota_key) return s.rota_key;
+  const made = randomId(24);
+  await getStore().putMedia(KEY, new TextEncoder().encode(JSON.stringify({ ...s, rota_key: made })), "application/json");
+  return (await loadSettings()).rota_key || made;
 }
 
 /**
@@ -94,10 +111,9 @@ export default async (req: Request) => {
       }
       next.lab_emails = out;
     }
-    // 支援人力表的連結：`rota_key: "new"` 產生一個新的，`""` 收回（沒有連結就只有 admin 打得開）
-    const rota = body?.settings?.rota_key;
-    if (rota === "new") next.rota_key = randomId(24);
-    else if (rota === "") next.rota_key = "";
+    // 支援人力表的連結：只有「換一個」（外流時用）。沒有「收回」——連結是自動產生的，
+    // 收回了下一次打開設定又會產一個，等於換一個，還多一個讓人搞不清楚的按鈕
+    if (body?.settings?.rota_key === "new") next.rota_key = randomId(24);
     await getStore().putMedia(KEY, new TextEncoder().encode(JSON.stringify(next)), "application/json");
     return json({ ok: true, settings: next, effective: { reminder_to: await reminderTo() } });
   }
@@ -105,6 +121,7 @@ export default async (req: Request) => {
 
   const master = await getStore().getMedia("master/manifest.json");
   const to = await reminderTo();
+  await ensureRotaKey(); // 打開設定就看得到連結，不必先按「產生」
   return json({
     ok: true,
     settings: await loadSettings(),
