@@ -103,6 +103,11 @@ export interface Visit {
   };
   /** 各研究室回覆的**簡報人員**（房號 → 姓名，可能不只一位）：通告收到回覆後由主辦端回填。 */
   presenters?: Record<string, string>;
+  /**
+   * 訪客地圖上這個單位在哪裡（geo-background 用 AI 查的）。key＝查的是哪一個單位（名稱＋國家），
+   * 對不上就重查；precision 是 country 時 lat／lon 是空的，地圖放在國家的位置。
+   */
+  geo?: { key: string; lat: number | null; lon: number | null; place: string; precision: "site" | "city" | "region" | "country"; at: string };
   summary: string;
   /** 產摘要的時間：summary-cron 用它跟最新那筆回覆比，比較舊就自己重寫一份。 */
   summary_at?: string;

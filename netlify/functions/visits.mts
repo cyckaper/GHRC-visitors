@@ -1,7 +1,7 @@
 import { fail, json, nowISO, readJSON, requireAdmin, siteUrl } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
-import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes } from "../../lib/visit.mjs";
+import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes, needsGeo, sanitizeGeo } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
 import { dropDraft, moveDraft } from "./draft.mts";
 
@@ -42,7 +42,8 @@ export default async (req: Request) => {
       // 算在伺服器這一邊，指紋的算法就只有一份。
       return json({ ok: true, visit: v, responses, stale: staleOutputs(v) });
     }
-    const list = (await store.listVisits()).map((v) => ({ visit_id: v.visit_id, date: v.date, org: v.org?.name, type: v.org?.type, country: v.org?.country, headcount: v.headcount, status: v.status, language: v.language, guests: (v.guests || []).length, slides: (v.slides || []).length, summary: !!v.summary, updated_at: v.updated_at }));
+    // geo：訪客地圖上這個單位在哪裡（/api/geo 查的）；geo_stale：還沒查、或單位改過名字，資料分頁會自己去查
+    const list = (await store.listVisits()).map((v) => ({ visit_id: v.visit_id, date: v.date, org: v.org?.name, org_local: v.org?.name_local || "", type: v.org?.type, country: v.org?.country, headcount: v.headcount, status: v.status, language: v.language, guests: (v.guests || []).length, slides: (v.slides || []).length, summary: !!v.summary, updated_at: v.updated_at, geo: (v as any).geo ? { lat: (v as any).geo.lat, lon: (v as any).geo.lon, place: (v as any).geo.place, precision: (v as any).geo.precision } : null, geo_stale: needsGeo(v) }));
     return json({ ok: true, visits: list, backend: store.backend });
   }
 
@@ -74,6 +75,8 @@ export default async (req: Request) => {
     if (existing) for (const k of KEPT) if ((body as any)[k] === undefined) (merged as any)[k] = (existing as any)[k];
     // 各研究室自己填的那幾格：帶了也不算，一律沿用伺服器上的（見 ROTA_FIELDS）
     if (existing) for (const k of ROTA_FIELDS) if ((existing as any)[k] !== undefined) (merged as any)[k] = (existing as any)[k];
+    // 訪客地圖上的位置只有 geo-background 在寫：後台送回來的那一份一律不算（單位改了名字，key 對不上就會重查）
+    if (existing) (merged as any).geo = (existing as any).geo;
     // 研究室填的分鐘已經自動排進行程（/api/rota）。**後台手上那一份還沒看過**（它的 updated_at 比那一間
     // 填的時間早）就不能把它蓋回去：那幾間照伺服器上的分鐘、今日流程重推一次。看過之後主辦端要改就照他的。
     const base = String((body as any).updated_at || "");
@@ -171,6 +174,8 @@ export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   v.slides = Array.isArray(input.slides) ? [...new Set(input.slides.map((n) => Number(n)).filter((n) => Number.isInteger(n) && n > 0))] : [];
   v.text_edits = Array.isArray(input.text_edits) ? input.text_edits : [];
   v.materials = sanitizeMaterials((input as any).materials);
+  // 訪客地圖上的位置（geo-background 寫的）：只留認得的欄位；存檔時一律沿用伺服器上那一份
+  (v as any).geo = sanitizeGeo((input as any).geo);
   v.language = (["en", "zh", "ko", "ja"] as const).includes(v.language) ? v.language : "en";
   v.status = (["draft", "confirmed", "done"] as const).includes(v.status) ? v.status : "draft";
   v.deck = input.deck || {};

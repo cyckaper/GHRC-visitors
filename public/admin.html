@@ -71,12 +71,24 @@
   .type-ngo { background: #ffe4e6; color: #9f1239; }
   pre.wrap { white-space: pre-wrap; word-break: break-word; font-family: inherit; }
   [hidden] { display: none !important; }
-  /* 訪客地圖：選到的國家亮起來；滑鼠點的時候不要跳出對焦外框，但鍵盤按到還是要看得見 */
+  /* 訪客地圖：一個單位一個點，選到的亮起來；滑鼠點的時候不要跳出對焦外框，但鍵盤按到還是要看得見 */
+  #worldMap svg { display: block; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+  #worldMap svg.zoomed { touch-action: none; cursor: grab; }
+  #worldMap svg.dragging { cursor: grabbing; }
   #worldMap g:focus { outline: none; }
-  #worldMap g circle.dot { fill: var(--brand); fill-opacity: .8; stroke: #fff; stroke-width: 1.5; }
+  #worldMap g circle.dot { fill: var(--brand); fill-opacity: .85; stroke: #fff; stroke-width: 1.5; }
+  #worldMap g circle.dot.approx { fill: #fff; stroke: var(--brand); stroke-width: 2; }
   #worldMap g:hover circle.dot, #worldMap g[data-on] circle.dot { fill: #b45309; fill-opacity: 1; }
+  #worldMap g:hover circle.dot.approx, #worldMap g[data-on] circle.dot.approx { fill: #fff; stroke: #b45309; }
   #worldMap g:focus-visible circle.dot { stroke: #b45309; stroke-width: 3; }
   #worldMap g circle.hit { fill: transparent; stroke: none; }
+  #worldMap text { pointer-events: none; font-family: inherit; }
+  #worldMap text.count { fill: #fff; font-weight: 700; }
+  #worldMap text.lbl { fill: #292524; paint-order: stroke; stroke: rgba(255,255,255,.92); stroke-linejoin: round; }
+  .map-ctl { display: inline-flex; gap: .3rem; }
+  .map-ctl button { min-width: 2.4rem; height: 2.2rem; padding: 0 .6rem; border-radius: .55rem; background: #fff; border: 1px solid #d6d3d1; font-size: .95rem; line-height: 1; color: #292524; }
+  .map-ctl button:hover { background: #fff; border-color: #a8a29e; }
+  .map-ctl button:disabled { opacity: .4; }
   #flash { position: fixed; left: 50%; transform: translateX(-50%); bottom: 1rem; z-index: 50; max-width: min(42rem, calc(100% - 2rem)); padding: .55rem .9rem; border-radius: .7rem; font-size: .9rem; color: #fff; background: #1c1917; box-shadow: 0 10px 30px rgba(0,0,0,.22); }
   #flash.ok { background: #047857; color: #fff; } #flash.err { background: #b91c1c; color: #fff; }
   .slide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: .25rem .75rem; font-size: .85rem; }
@@ -446,8 +458,16 @@
 
     <div class="card space-y-3">
       <div class="flex flex-wrap items-baseline gap-2">
-        <h2 class="font-semibold mr-auto">訪客來自哪裡 <span class="muted font-normal">點一個國家，看那幾場</span></h2>
+        <h2 class="font-semibold mr-auto">訪客來自哪裡 <span class="muted font-normal">一個單位一個點；點一下看那幾場，有數字的點下去會放大</span></h2>
         <span class="muted" id="mapSummary"></span>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="map-ctl" id="mapCtl">
+          <button type="button" id="mapIn" title="放大（也可以雙擊地圖、觸控板或手指兩指撐開）" aria-label="放大">＋</button>
+          <button type="button" id="mapOut" title="縮小" aria-label="縮小">－</button>
+          <button type="button" id="mapReset" title="回到整張世界地圖">全圖</button>
+        </span>
+        <span class="muted text-sm" id="mapLocating"></span>
       </div>
       <div id="worldMap"></div>
       <p class="text-sm" id="mapNote"></p>
@@ -2428,12 +2448,19 @@
   }
 
   /**
-   * 訪客來自哪裡：一張等距長方投影的世界地圖，一個國家一個點，點的大小是場次多寡。
-   * 點一下列出那個國家的每一場，再點一列就跳到那一場的紀錄（摘要、回覆、動線）。
+   * 訪客來自哪裡：一張等距長方投影的世界地圖，**一個單位一個點**，落在那個學校或公司所在的地方
+   * （明確指示：「點要能縮小到學校或公司，不要佔了整個國家」）。以前是一個國家一個點，臺灣、韓國整個被蓋住。
+   * - 位置由 AI 查（`/api/geo`，背景工作）。打開這一頁時有還沒查過的（或單位改過名字的）就自己去查，
+   *   查好了地圖自己更新——不必有人記得按。查不到城市的先放在國家的位置，畫成空心的圈。
+   * - 可以放大：右上角的＋／－／全圖、觸控板雙指（瀏覽器送的是 ctrl＋滾輪）、雙擊、手機平板雙指；放大之後可以拖曳。
+   *   還在整張世界地圖時，手指滑過地圖是捲頁面、滾輪也是（不會被地圖吃掉）。
+   * - 螢幕上靠得太近的點合成一顆帶數字的群集，點下去放大到看得開；同一個城市裡、放到最大還是疊在一起的，
+   *   點下去就直接列出那幾個單位。點旁邊放得下就寫單位名稱。
+   * - 放大之後換成比較細的海岸線（`world-detail.json`，Natural Earth 1:50m，第一次放大才載）。
    *
    * 地圖資料是 `public/data/world.json`（Natural Earth 1:110m，座標已經投影好，見 scripts/make-world.mjs），
    * 所以不必為了一張圖去載一套地圖函式庫——後台是單檔 HTML、沒有建置步驟，而且現場網路不一定好。
-   * 國名對不到的**不會消失**，會列在圖下面（來信裡的國名寫法千百種，寧可講出來也不要靜靜地漏掉）。
+   * 國名對不到、位置也還沒查到的**不會消失**，會列在圖下面（來信裡的國名寫法千百種，寧可講出來也不要靜靜地漏掉）。
    */
   const normCountry = (x) => String(x || "").trim().toLowerCase().replace(/^the\s+/, "").replace(/[.,\s]+/g, " ").trim();
   function ensureWorld() {
@@ -2446,84 +2473,305 @@
   }
   const countryPoint = (w, raw) => { const n = normCountry(raw); return (n && (w.byName.get(n) || w.byName.get(w.alias.get(n) || ""))) || null; };
 
-  async function renderWorldMap() {
-    let world;
-    try { world = await ensureWorld(); } catch (e) { $("worldMap").innerHTML = ""; $("mapNote").textContent = "地圖資料載不到，其他東西照常用。"; return; }
-    const groups = new Map();
+  const MAP_FULL = { x: 0, y: 12, w: 720, h: 288 }; // 上下切掉南北極的空白（北緯 84 以北、南緯 60 以南沒有訪客）
+  const MAP_MAX_ZOOM = 20; // 放到看得出臺北、桃園、新竹是不同的點；再大 1:50m 的海岸線就撐不住了
+  const MAP_DETAIL_AT = 3; // 放大超過這個倍數換細海岸線
+  const project = (lat, lon) => ({ x: ((Number(lon) + 180) * 720) / 360, y: ((90 - Number(lat)) * 360) / 180 });
+  const mapZoom = () => MAP_FULL.w / (state.map?.view?.w || MAP_FULL.w);
+
+  /** 一個單位一個點：同一個單位來過好幾次合成一個（名稱＋國家相同就算同一個）。 */
+  function mapPoints(world) {
+    const byOrg = new Map();
     const unmatched = new Map();
     for (const v of state.visits || []) {
       const c = countryPoint(world, v.country);
-      if (!c) { const k = v.country?.trim() || "（沒填國家）"; unmatched.set(k, (unmatched.get(k) || 0) + 1); continue; }
-      const g = groups.get(c.name) || { c, visits: [] };
-      g.visits.push(v);
-      groups.set(c.name, g);
+      const g = v.geo;
+      const exact = !!g && g.precision !== "country" && g.lat != null && g.lon != null;
+      const at = exact ? project(g.lat, g.lon) : c ? { x: c.x, y: c.y } : null;
+      if (!at) { const k = v.country?.trim() || "（沒填國家）"; unmatched.set(k, (unmatched.get(k) || 0) + 1); continue; }
+      const key = `${normCountry(v.org || v.visit_id)}|${c ? c.name : normCountry(v.country)}`;
+      const p = byOrg.get(key) || { key, name: v.org || v.visit_id, local: v.org_local || "", country: c?.name || v.country || "", place: exact ? g.place || "" : "", approx: !exact, x: at.x, y: at.y, visits: [] };
+      p.visits.push(v);
+      byOrg.set(key, p);
     }
-    state.mapGroups = groups;
-    const dots = [...groups.values()].map((g) => {
-      const people = g.visits.reduce((n, v) => n + (Number(v.headcount) || 0), 0);
-      // data-r 是「螢幕上的半徑（像素）」，不是地圖座標；真正的 r 由 sizeDots() 換算
-      return `<g data-country="${esc(g.c.name)}" data-r="${dotPx(g.visits.length)}" tabindex="0" role="button" class="cursor-pointer"><circle class="hit" cx="${g.c.x}" cy="${g.c.y}" r="0"></circle><circle class="dot" cx="${g.c.x}" cy="${g.c.y}" r="0" vector-effect="non-scaling-stroke"><title>${esc(g.c.name)}：${g.visits.length} 場、${people} 人次</title></circle></g>`;
-    }).join("");
-    // 上下切掉南極與北極的空白（北緯 84 以北、南緯 60 以南沒有訪客，留著只會把其他地方壓扁）
-    const [, , w, h] = world.viewBox.split(" ").map(Number);
-    const top = (h * (90 - 84)) / 180;
-    const view = `0 ${top} ${w} ${(h * (84 + 60)) / 180}`;
-    $("worldMap").innerHTML = `<svg viewBox="${view}" class="w-full h-auto rounded-xl border" style="background:#f0fdfa" role="img" aria-label="訪客來自哪些國家的世界地圖"><path d="${world.land}" fill="#e7e5e4" stroke="#a8a29e" stroke-width="0.6" vector-effect="non-scaling-stroke"></path>${dots}</svg>`;
-    sizeDots();
-    // 地圖是跟著版面寬度縮放的：寬度一變就要重算圓點半徑
-    if (window.ResizeObserver && !state.mapResize) { state.mapResize = new ResizeObserver(() => sizeDots()); state.mapResize.observe($("worldMap")); }
-    const visits = [...groups.values()].reduce((n, g) => n + g.visits.length, 0);
-    const people = [...groups.values()].reduce((n, g) => n + g.visits.reduce((m, v) => m + (Number(v.headcount) || 0), 0), 0);
-    $("mapSummary").textContent = groups.size ? `${groups.size} 個國家 · ${visits} 場 · 共 ${people} 人次` : "";
-    $("mapNote").innerHTML = unmatched.size
-      ? `<span class="muted"><span>地圖上沒有：</span>${[...unmatched].map(([k, n]) => `<span>${esc(k)}</span>（<span>${n} 場</span>）`).join("、")}<span>——國名寫法對不到就先列在這裡，改「訪前」那一場的國家欄位就會歸位。</span></span>`
-      : groups.size ? "" : `<span class="muted">還沒有填了國家的參訪。</span>`;
-    if (state.mapCountry && groups.has(state.mapCountry)) showCountry(state.mapCountry);
-    else { state.mapCountry = ""; $("mapVisits").innerHTML = ""; }
-  }
-  /**
-   * 圓點多大：**用螢幕上的像素算，不是地圖座標**。地圖是跟著版面寬度縮放的，
-   * 半徑若寫死在地圖座標裡，地圖畫得越大圓點就跟著越大，整個韓國永遠被一個點蓋住。
-   * 這裡反過來：地圖越大，圓點在地圖座標上就越小，螢幕上看起來一樣大、蓋住的地方越來越少。
-   * 場次多的大一點（絕對尺度，不是跟當下最多的那一國比，這樣不同時間看到的大小才可比），最大 12 px。
-   * 另外疊一顆透明的圓當點擊範圍，至少 11 px，手指才點得到。
-   */
-  const dotPx = (n) => Math.min(12, 3 + 2 * Math.sqrt(n)).toFixed(1);
-  function sizeDots() {
-    const svg = $("worldMap").querySelector("svg");
-    const wide = svg?.getBoundingClientRect().width;
-    if (!wide) return;
-    const [, , w] = svg.getAttribute("viewBox").split(" ").map(Number);
-    const k = w / wide; // 一個螢幕像素等於幾個地圖座標
-    for (const g of svg.querySelectorAll("[data-country]")) {
-      const px = Number(g.dataset.r) || 5;
-      g.querySelector("circle.dot").setAttribute("r", (px * k).toFixed(2));
-      g.querySelector("circle.hit").setAttribute("r", (Math.max(px, 11) * k).toFixed(2));
-    }
+    return { points: [...byOrg.values()], unmatched };
   }
 
-  /** 點一個國家：列出那個國家的每一場，再點一列就跳到那一場的紀錄。 */
-  function showCountry(name) {
-    const g = state.mapGroups?.get(name);
-    if (!g) return;
-    state.mapCountry = name;
-    for (const el of $("worldMap").querySelectorAll("[data-country]")) el.toggleAttribute("data-on", el.dataset.country === name);
-    const rows = [...g.visits].sort((a, b) => String(b.date).localeCompare(String(a.date))).map((v) => `<button type="button" data-visit="${esc(v.visit_id)}" title="看這一場的紀錄：一頁摘要與來賓回覆" class="w-full text-left border-b last:border-0 py-1.5 hover:bg-stone-50 flex flex-wrap items-baseline gap-x-2">
+  async function renderWorldMap() {
+    let world;
+    try { world = await ensureWorld(); } catch (e) { $("worldMap").innerHTML = ""; $("mapNote").textContent = "地圖資料載不到，其他東西照常用。"; return; }
+    const { points, unmatched } = mapPoints(world);
+    state.map = { view: { ...MAP_FULL }, ...(state.map || {}), points };
+    if (!$("worldMap").querySelector("svg")) {
+      $("worldMap").innerHTML = `<svg viewBox="${MAP_FULL.x} ${MAP_FULL.y} ${MAP_FULL.w} ${MAP_FULL.h}" class="w-full h-auto rounded-xl border" style="background:#f0fdfa" role="group" aria-label="訪客來自哪裡的世界地圖"><path id="mapLand" d="${world.land}" fill="#e7e5e4" stroke="#a8a29e" stroke-width="0.6" vector-effect="non-scaling-stroke"></path><path id="mapLandDetail" fill="#e7e5e4" stroke="#a8a29e" stroke-width="0.6" vector-effect="non-scaling-stroke" display="none"></path><g id="mapDots"></g><g id="mapLabels"></g></svg>`;
+      wireMap($("worldMap").querySelector("svg"));
+    }
+    drawMap();
+    // 地圖是跟著版面寬度縮放的：寬度一變就重畫（點的大小是螢幕上的像素，群集也跟著變）
+    if (window.ResizeObserver && !state.mapResize) { state.mapResize = new ResizeObserver(() => requestDraw()); state.mapResize.observe($("worldMap")); }
+    const visits = points.reduce((n, p) => n + p.visits.length, 0);
+    const people = points.reduce((n, p) => n + p.visits.reduce((m, v) => m + (Number(v.headcount) || 0), 0), 0);
+    const countries = new Set(points.map((p) => p.country).filter(Boolean)).size;
+    $("mapSummary").textContent = points.length ? `${countries} 個國家 · ${points.length} 個單位 · ${visits} 場 · 共 ${people} 人次` : "";
+    $("mapNote").innerHTML = unmatched.size
+      ? `<span class="muted"><span>地圖上沒有：</span>${[...unmatched].map(([k, n]) => `<span>${esc(k)}</span>（<span>${n} 場</span>）`).join("、")}<span>——國名寫法對不到就先列在這裡，改「訪前」那一場的國家欄位就會歸位。</span></span>`
+      : points.length ? "" : `<span class="muted">還沒有填了國家的參訪。</span>`;
+    if (!(state.mapPick && showPick(state.mapPick))) { state.mapPick = null; $("mapVisits").innerHTML = ""; }
+    locateOrgs();
+  }
+
+  /**
+   * 照現在的放大倍數畫點。**圓點的大小是螢幕上的像素，不是地圖座標**：地圖放得越大，點在地圖上就越小，
+   * 螢幕上看起來一樣大、蓋住的地方越來越少。場次多的大一點（絕對尺度，最大 8 px）；另外疊一顆透明的圓當點擊範圍，
+   * 至少 11 px，手指才點得到。靠得比 14 px 近的合成一顆群集。每次放大、拖曳、寬度改變都整個重畫（點不多）。
+   */
+  function drawMap() {
+    const m = state.map;
+    const svg = $("worldMap").querySelector("svg");
+    if (!m || !svg) return;
+    const box = svg.getBoundingClientRect();
+    if (!box.width) return;
+    const v = m.view;
+    svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${v.h}`);
+    svg.classList.toggle("zoomed", mapZoom() > 1.01);
+    $("mapOut").disabled = $("mapReset").disabled = mapZoom() <= 1.01;
+    $("mapIn").disabled = mapZoom() >= MAP_MAX_ZOOM * 0.99;
+    showDetailLand(svg);
+    const k = v.w / box.width; // 一個螢幕像素等於幾個地圖座標
+    const clusters = [];
+    for (const p of [...m.points].sort((a, b) => b.visits.length - a.visits.length || a.name.localeCompare(b.name))) {
+      const c = clusters.find((c) => Math.hypot(c.x - p.x, c.y - p.y) / k < 14);
+      if (c) c.members.push(p);
+      else clusters.push({ x: p.x, y: p.y, members: [p] });
+    }
+    m.clusters = clusters;
+    const pick = state.mapPick || [];
+    const radius = (c) => (c.members.length === 1 ? Math.min(8, 4 + 1.5 * Math.sqrt(c.members[0].visits.length)) : Math.min(14, 8 + 1.5 * Math.sqrt(c.members.length)));
+    svg.querySelector("#mapDots").innerHTML = clusters.map((c, i) => {
+      const one = c.members.length === 1 ? c.members[0] : null;
+      const r = radius(c);
+      const n = c.members.reduce((s, p) => s + p.visits.length, 0);
+      const title = one ? `${one.name}${one.place ? `（${one.place}）` : one.approx ? "（位置只查到國家）" : ""}：${n} 場` : `${c.members.length} 個單位：${c.members.map((p) => p.name).join("、")}`;
+      const on = c.members.some((p) => pick.includes(p.key)) ? " data-on" : "";
+      return `<g data-cluster="${i}"${on} tabindex="0" role="button" aria-label="${esc(title)}" class="cursor-pointer"><circle class="hit" cx="${c.x}" cy="${c.y}" r="${(Math.max(r, 11) * k).toFixed(4)}"></circle><circle class="dot${one ? (one.approx ? " approx" : "") : " cluster"}" cx="${c.x}" cy="${c.y}" r="${(r * k).toFixed(4)}" vector-effect="non-scaling-stroke"><title>${esc(title)}</title></circle>${one ? "" : `<text class="count" x="${c.x}" y="${c.y}" font-size="${(11 * k).toFixed(4)}" text-anchor="middle" dominant-baseline="central">${c.members.length}</text>`}</g>`;
+    }).join("");
+    // 名稱：點旁邊放得下才寫（場次多的先放；右邊放不下試左邊），跟別的名稱或點重疊就不寫
+    const FS = 12;
+    const taken = clusters.map((c) => { const r = radius(c); const sx = (c.x - v.x) / k; const sy = (c.y - v.y) / k; return { x0: sx - r, y0: sy - r, x1: sx + r, y1: sy + r }; });
+    const overlaps = (b) => taken.some((a) => b.x0 < a.x1 && b.x1 > a.x0 && b.y0 < a.y1 && b.y1 > a.y0);
+    const labels = [];
+    for (const c of clusters) {
+      if (c.members.length !== 1) continue; // 群集的數字已經寫在圈裡
+      const text = mapLabel(c.members[0]);
+      const w = textWidth(text) * FS;
+      const r = radius(c);
+      const sx = (c.x - v.x) / k;
+      const sy = (c.y - v.y) / k;
+      for (const side of [1, -1]) {
+        const x0 = side > 0 ? sx + r + 3 : sx - r - 3 - w;
+        const b = { x0, y0: sy - FS * 0.65, x1: x0 + w, y1: sy + FS * 0.65 };
+        if (b.x0 < 2 || b.x1 > box.width - 2 || b.y0 < 0 || b.y1 > box.height || overlaps(b)) continue;
+        taken.push(b);
+        labels.push(`<text class="lbl" x="${(v.x + b.x0 * k).toFixed(4)}" y="${c.y}" font-size="${(FS * k).toFixed(4)}" stroke-width="${(3 * k).toFixed(4)}" dominant-baseline="central">${esc(text)}</text>`);
+        break;
+      }
+    }
+    svg.querySelector("#mapLabels").innerHTML = labels.join("");
+  }
+  const WIDE_CHAR = /[⺀-鿿가-힯぀-ヿ＀-￯]/;
+  const textWidth = (s) => [...s].reduce((w, ch) => w + (WIDE_CHAR.test(ch) ? 1 : 0.58), 0);
+  /**
+   * 點旁邊的名字：中文介面用中文名（有的話），太長就截短——完整的名稱在點一下之後的清單裡。
+   * 英文名截在字與字之間（「University of Western…」，不是「University of Wester…」）。
+   */
+  function mapLabel(p) {
+    const s = (uiLang() !== "en" && /[一-鿿]/.test(p.local) ? p.local : "") || p.name || "";
+    let w = 0;
+    let out = "";
+    for (const ch of s) {
+      w += WIDE_CHAR.test(ch) ? 1 : 0.58;
+      if (w > 15) return `${(/\s/.test(out) && !WIDE_CHAR.test(out) ? out.replace(/\s+\S*$/, "") : out).trimEnd()}…`;
+      out += ch;
+    }
+    return out;
+  }
+  function requestDraw() {
+    if (requestDraw.t) return;
+    requestDraw.t = requestAnimationFrame(() => { requestDraw.t = 0; drawMap(); });
+  }
+  /** 放大超過幾倍就換細海岸線（第一次才載，壓縮後約 120 KB）；載不到就繼續用粗的，不影響其他東西。 */
+  function showDetailLand(svg) {
+    const want = mapZoom() >= MAP_DETAIL_AT;
+    const detail = svg.querySelector("#mapLandDetail");
+    if (want && !detail.getAttribute("d") && !detail.dataset.loading && !state.worldDetailFailed) {
+      detail.dataset.loading = "1";
+      state.worldDetail ||= fetch("/data/world-detail.json").then((r) => r.json());
+      // 載不到就這一次不再試（不然放大、拖曳的每一格畫面都會再要一次）
+      state.worldDetail.then((w) => { detail.setAttribute("d", w.land); requestDraw(); }).catch(() => { state.worldDetail = null; state.worldDetailFailed = true; }).finally(() => { delete detail.dataset.loading; });
+    }
+    const on = want && !!detail.getAttribute("d");
+    detail.setAttribute("display", on ? "inline" : "none");
+    svg.querySelector("#mapLand").setAttribute("display", on ? "none" : "inline");
+  }
+
+  /** 換一個看的範圍：不能比整張世界大、不能放大超過 MAP_MAX_ZOOM 倍，也不能拖出地圖外。 */
+  function setView({ x, y, w }) {
+    const F = MAP_FULL;
+    const vw = Math.min(F.w, Math.max(F.w / MAP_MAX_ZOOM, w));
+    const vh = (vw * F.h) / F.w;
+    state.map.view = { x: Math.min(F.x + F.w - vw, Math.max(F.x, x)), y: Math.min(F.y + F.h - vh, Math.max(F.y, y)), w: vw, h: vh };
+    requestDraw();
+  }
+  /** 以地圖上 (cx, cy) 為中心放大 f 倍（f 小於 1 是縮小）：那一點留在螢幕上原來的位置。 */
+  function zoomAt(f, cx, cy) {
+    const v = state.map.view;
+    const w = Math.min(MAP_FULL.w, Math.max(MAP_FULL.w / MAP_MAX_ZOOM, v.w / f));
+    const s = w / v.w;
+    setView({ x: cx - (cx - v.x) * s, y: cy - (cy - v.y) * s, w });
+  }
+  /** 放大到看得開這幾個點（四周留一些邊）。 */
+  function fitPoints(points) {
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
+    const F = MAP_FULL;
+    const w = Math.max((Math.max(...xs) - Math.min(...xs)) * 2.2, ((Math.max(...ys) - Math.min(...ys)) * 2.2 * F.w) / F.h, F.w / MAP_MAX_ZOOM);
+    const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
+    const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
+    setView({ x: cx - w / 2, y: cy - (w * F.h) / F.w / 2, w });
+  }
+  const toMap = (svg, clientX, clientY) => {
+    const r = svg.getBoundingClientRect();
+    const v = state.map.view;
+    return { x: v.x + ((clientX - r.left) / r.width) * v.w, y: v.y + ((clientY - r.top) / r.height) * v.h };
+  };
+  /** 拖曳、雙指、滾輪、雙擊。 */
+  function wireMap(svg) {
+    const ptrs = new Map(); // 按著的手指（或滑鼠）→ 上一次的位置
+    let moved = false;
+    let downAt = null;
+    svg.addEventListener("pointerdown", (e) => {
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (ptrs.size === 1) { moved = false; downAt = { x: e.clientX, y: e.clientY }; }
+    });
+    svg.addEventListener("pointermove", (e) => {
+      const prev = ptrs.get(e.pointerId);
+      if (!prev || !state.map) return;
+      const now = { x: e.clientX, y: e.clientY };
+      const r = svg.getBoundingClientRect();
+      const v = state.map.view;
+      if (ptrs.size >= 2) {
+        // 雙指：兩指距離變幾倍就放大幾倍，兩指中間底下那一點跟著手指走
+        const other = [...ptrs].find(([id]) => id !== e.pointerId)[1];
+        const d0 = Math.hypot(prev.x - other.x, prev.y - other.y);
+        const d1 = Math.hypot(now.x - other.x, now.y - other.y);
+        if (d0 > 0 && d1 > 0) {
+          const anchor = toMap(svg, (prev.x + other.x) / 2, (prev.y + other.y) / 2);
+          const w = Math.min(MAP_FULL.w, Math.max(MAP_FULL.w / MAP_MAX_ZOOM, (v.w * d0) / d1));
+          const h = (w * MAP_FULL.h) / MAP_FULL.w;
+          setView({ x: anchor.x - (((now.x + other.x) / 2 - r.left) / r.width) * w, y: anchor.y - (((now.y + other.y) / 2 - r.top) / r.height) * h, w });
+        }
+        moved = true;
+      } else if (mapZoom() > 1.01) {
+        // 放大之後一指（或滑鼠）拖曳。移動不到 5 px 算點一下，不算拖
+        if (!moved && Math.hypot(now.x - downAt.x, now.y - downAt.y) < 5) return;
+        if (!moved) { moved = true; svg.classList.add("dragging"); try { svg.setPointerCapture(e.pointerId); } catch (err) { /* 某些瀏覽器不給，不影響拖曳 */ } }
+        setView({ x: v.x - ((now.x - prev.x) / r.width) * v.w, y: v.y - ((now.y - prev.y) / r.height) * v.h, w: v.w });
+      }
+      ptrs.set(e.pointerId, now);
+    });
+    const up = (e) => { ptrs.delete(e.pointerId); if (!ptrs.size) svg.classList.remove("dragging"); };
+    svg.addEventListener("pointerup", up);
+    svg.addEventListener("pointercancel", up);
+    // 拖完或雙指放大完放開，不算點了一個點
+    svg.addEventListener("click", (e) => { if (moved) { e.stopPropagation(); moved = false; } }, true);
+    // 觸控板雙指（瀏覽器送 ctrl＋滾輪）隨時可以縮放；一般滾輪只在已經放大的時候縮放，還在整張世界地圖時是捲頁面
+    svg.addEventListener("wheel", (e) => {
+      if (!e.ctrlKey && mapZoom() <= 1.01) return;
+      e.preventDefault();
+      const p = toMap(svg, e.clientX, e.clientY);
+      zoomAt(Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.002)), p.x, p.y);
+    }, { passive: false });
+    svg.addEventListener("dblclick", (e) => {
+      if (e.target.closest("[data-cluster]")) return;
+      const p = toMap(svg, e.clientX, e.clientY);
+      zoomAt(2, p.x, p.y);
+    });
+  }
+  const mapCenter = () => ({ x: state.map.view.x + state.map.view.w / 2, y: state.map.view.y + state.map.view.h / 2 });
+  $("mapIn").onclick = () => { if (state.map) { const c = mapCenter(); zoomAt(2, c.x, c.y); } };
+  $("mapOut").onclick = () => { if (state.map) { const c = mapCenter(); zoomAt(0.5, c.x, c.y); } };
+  $("mapReset").onclick = () => { if (state.map) setView({ ...MAP_FULL }); };
+
+  /**
+   * 點一個點：一個單位就列出那個單位的每一場；一群就放大到看得開。放到最大還是疊在一起
+   * （同一個城市裡的幾個單位——查到的座標本來就只到城市），就直接列出那幾個單位。
+   */
+  function pickCluster(i) {
+    const c = state.map?.clusters?.[i];
+    if (!c) return;
+    const spread = Math.max(...c.members.map((p) => p.x)) - Math.min(...c.members.map((p) => p.x)) + Math.max(...c.members.map((p) => p.y)) - Math.min(...c.members.map((p) => p.y));
+    if (c.members.length > 1 && mapZoom() < MAP_MAX_ZOOM * 0.99 && spread > 0.05) return fitPoints(c.members);
+    showPick(c.members.map((p) => p.key));
+  }
+  /** 列出這幾個單位的每一場，再點一列就跳到那一場的紀錄（摘要、回覆、動線）。 */
+  function showPick(keys) {
+    const pts = (state.map?.points || []).filter((p) => keys.includes(p.key));
+    if (!pts.length) return false;
+    state.mapPick = keys;
+    for (const el of $("worldMap").querySelectorAll("[data-cluster]")) el.toggleAttribute("data-on", !!state.map.clusters?.[Number(el.dataset.cluster)]?.members.some((p) => keys.includes(p.key)));
+    const row = (v) => `<button type="button" data-visit="${esc(v.visit_id)}" title="看這一場的紀錄：一頁摘要與來賓回覆" class="w-full text-left border-b last:border-0 py-1.5 hover:bg-stone-50 flex flex-wrap items-baseline gap-x-2">
         <span class="tabular-nums muted">${esc(v.date)}</span>
-        <span class="font-medium">${esc(v.org || v.visit_id)}</span>
         ${typeTag(v.type)}
         <span class="muted">${[v.headcount ? `${v.headcount} 人` : "", v.summary ? "有摘要" : ""].filter(Boolean).map((b) => `<span>${esc(b)}</span>`).join(" · ")}</span>
-      </button>`).join("");
-    $("mapVisits").innerHTML = `<div class="border rounded-xl p-2 space-y-1"><div class="font-medium">${esc(name)} <span class="muted font-normal">${g.visits.length} 場</span></div>${rows}</div>`;
+      </button>`;
+    $("mapVisits").innerHTML = pts.map((p) => `<div class="border rounded-xl p-2 space-y-1" data-place="${esc(p.key)}">
+        <div class="font-medium">${esc(p.name)}${p.local && p.local !== p.name ? ` <span class="muted font-normal">${esc(p.local)}</span>` : ""}</div>
+        <div class="muted text-xs">${[p.place ? `<span>${esc(p.place)}</span>` : p.approx ? "<span>位置只查到國家</span>" : "", p.country ? `<span>${esc(p.country)}</span>` : "", `<span>${p.visits.length} 場</span>`].filter(Boolean).join(" · ")}</div>
+        ${[...p.visits].sort((a, b) => String(b.date).localeCompare(String(a.date))).map(row).join("")}
+      </div>`).join("");
+    return true;
   }
-  $("worldMap").addEventListener("click", (e) => { const g = e.target.closest("[data-country]"); if (g) showCountry(g.dataset.country); });
-  $("worldMap").addEventListener("keydown", (e) => { if (e.key !== "Enter" && e.key !== " ") return; const g = e.target.closest("[data-country]"); if (g) { e.preventDefault(); showCountry(g.dataset.country); } });
+  $("worldMap").addEventListener("click", (e) => { const g = e.target.closest("[data-cluster]"); if (g) pickCluster(Number(g.dataset.cluster)); });
+  $("worldMap").addEventListener("keydown", (e) => { if (e.key !== "Enter" && e.key !== " ") return; const g = e.target.closest("[data-cluster]"); if (g) { e.preventDefault(); pickCluster(Number(g.dataset.cluster)); } });
   $("mapVisits").addEventListener("click", (e) => {
     const b = e.target.closest("[data-visit]");
     if (!b) return;
     showDetail(b.dataset.visit);
     $("visitDetail").scrollIntoView({ behavior: "smooth", block: "start" });
   });
+
+  /**
+   * 還沒查過位置的單位（或改過名字的）：自己去查，查好了地圖自己更新。不必有人按，也不跳紅色的錯誤訊息——
+   * 查不到就先放在國家的位置，下一次打開這一頁再試。一次最多查 30 個單位，還有剩就接著再查一輪。
+   */
+  async function locateOrgs() {
+    const stale = (state.visits || []).filter((v) => v.geo_stale).length;
+    if (!stale || locateOrgs.running) return;
+    locateOrgs.running = true;
+    const note = (t) => { $("mapLocating").textContent = t; };
+    let again = false;
+    try {
+      const r = await api("/api/geo", { method: "POST", body: {} });
+      if (!r.ok || !r.job_id) return note("");
+      note(`正在查 ${stale} 場的單位在哪裡……大約一分鐘，查好地圖會自己更新。`);
+      let misses = 0;
+      const until = Date.now() + 15 * 60000; // 背景函式的上限
+      for (let i = 0; Date.now() < until; i++) {
+        await new Promise((res) => setTimeout(res, i < 20 ? 3000 : 10000));
+        const j = await api(`/api/geo?job=${encodeURIComponent(r.job_id)}`);
+        if (!j.ok) { if (++misses < 3) continue; return note(""); }
+        if (j.status === "running") continue;
+        if (j.status !== "done") return note(`單位的位置這次沒查到（${j.error || "原因不明"}），先放在國家的位置；下次打開這一頁會再查。`);
+        note("");
+        again = true;
+        return;
+      }
+      note("");
+    } finally {
+      locateOrgs.running = false;
+      if (again) { await loadVisits(); renderWorldMap(); } // 還有沒查完的，renderWorldMap 會再叫一次
+    }
+  }
 
   async function loadDataTab() {
     const t = encodeURIComponent(token());

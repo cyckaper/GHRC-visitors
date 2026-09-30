@@ -348,16 +348,80 @@ try {
   check((await page.locator("#cardList img").count()) === 1, "the card photo is kept with the visit and the person is on the guest list");
 
   // ── 資料分頁：訪客來自哪裡（世界地圖）──
+  // 一個單位一個點，落在那個學校或公司所在的地方（明確指示：「點要能縮小到學校或公司，不要佔了整個國家」）。
+  // 位置是打開這一頁時自己去查的（AI_MOCK 把西澳大學放在伯斯），查好地圖自己更新
   await page.click('[data-tab="data"]');
-  await page.waitForFunction(() => document.querySelectorAll("#worldMap [data-country]").length > 0, null, { timeout: 30000 });
-  check(/1 個國家/.test(await page.textContent("#mapSummary")), "the data tab maps which countries visitors came from");
+  await page.waitForFunction(() => document.querySelectorAll("#worldMap [data-cluster]").length > 0, null, { timeout: 30000 });
+  check(/1 個國家 · 1 個單位/.test(await page.textContent("#mapSummary")), `the data tab maps where visitors came from, one dot per institution (${await page.textContent("#mapSummary")})`);
   check((await page.textContent("#mapNote")) === "", "…with nothing quietly dropped for want of a country name");
-  await page.click('#worldMap [data-country="Australia"]');
+  await page.waitForFunction(() => /伯斯/.test(document.querySelector("#worldMap [data-cluster]")?.getAttribute("aria-label") || ""), null, { timeout: 30000 });
+  const perth = await page.evaluate(() => { const c = document.querySelector("#worldMap circle.dot"); return { x: Number(c.getAttribute("cx")), y: Number(c.getAttribute("cy")) }; });
+  check(Math.abs(perth.x - (115.82 + 180) * 2) < 0.5 && Math.abs(perth.y - (90 + 31.98) * 2) < 0.5, `…and the institution's dot sits on its city (Perth), not on the middle of the country (${perth.x.toFixed(1)}, ${perth.y.toFixed(1)})`);
+  check(/^University of Western…?$/.test((await page.textContent("#worldMap text.lbl")).trim()), `…labelled with the institution's name, cut between words when too long (${await page.textContent("#worldMap text.lbl")})`);
+  await page.click("#worldMap [data-cluster] circle.hit");
   await page.waitForFunction(() => document.querySelectorAll("#mapVisits [data-visit]").length === 1);
-  check(true, "clicking a country lists that country's visits");
+  check(/伯斯/.test(await page.textContent("#mapVisits")), "clicking the dot lists that institution's visits and where it is");
   await page.click('#mapVisits [data-visit="2026-10-07-uwa"]');
   await page.waitForFunction(() => !document.getElementById("visitDetail").hidden && /Western Australia/.test(document.getElementById("detailTitle").textContent));
   check(true, "…and each one opens that visit's record");
+
+  // 放大縮小：＋ 放大一倍、全圖回到整張世界地圖；放大之後換細的海岸線
+  const viewW = () => page.evaluate(() => Number(document.querySelector("#worldMap svg").getAttribute("viewBox").split(" ")[2]));
+  check((await page.isDisabled("#mapReset")) && (await viewW()) === 720, "the map starts on the whole world");
+  await page.click("#mapIn");
+  await page.click("#mapIn");
+  await page.waitForFunction(() => Number(document.querySelector("#worldMap svg").getAttribute("viewBox").split(" ")[2]) === 180);
+  check(true, "＋ zooms in");
+  await page.waitForFunction(() => (document.getElementById("mapLandDetail").getAttribute("d") || "").length > 100000 && document.getElementById("mapLandDetail").getAttribute("display") === "inline", null, { timeout: 30000 });
+  check((await page.getAttribute("#mapLand", "display")) === "none", "…and once zoomed in, the finer coastline takes over");
+  const viewBox = () => page.evaluate(() => document.querySelector("#worldMap svg").getAttribute("viewBox").split(" ").map(Number));
+  const mapBox = await page.locator("#worldMap svg").boundingBox();
+  const beforeDrag = await viewBox();
+  await page.mouse.move(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(mapBox.x + mapBox.width / 2 + 120, mapBox.y + mapBox.height / 2 + 30, { steps: 6 });
+  await page.mouse.up();
+  const afterDrag = await viewBox();
+  check(afterDrag[0] < beforeDrag[0] && afterDrag[2] === beforeDrag[2], `once zoomed in, dragging moves the map (x ${beforeDrag[0].toFixed(1)} → ${afterDrag[0].toFixed(1)})`);
+  await page.keyboard.down("Control"); // 觸控板雙指撐開，瀏覽器送的就是 ctrl＋滾輪
+  await page.mouse.wheel(0, -120);
+  await page.keyboard.up("Control");
+  await page.waitForFunction((w) => Number(document.querySelector("#worldMap svg").getAttribute("viewBox").split(" ")[2]) < w, afterDrag[2]);
+  check(true, "…and a trackpad pinch zooms further in");
+  await page.click("#mapReset");
+  await page.waitForFunction(() => Number(document.querySelector("#worldMap svg").getAttribute("viewBox").split(" ")[2]) === 720);
+  check((await page.getAttribute("#mapLand", "display")) === "inline", "全圖 goes back to the whole world");
+  // 還在整張世界地圖時，一般滾輪是捲頁面，不會被地圖吃掉
+  const scrolled = await page.evaluate(() => window.scrollY);
+  await page.mouse.move(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2);
+  await page.mouse.wheel(0, 200);
+  await page.waitForFunction((y) => window.scrollY > y, scrolled, { timeout: 5000 }).catch(() => {});
+  check((await viewW()) === 720 && (await page.evaluate(() => window.scrollY)) > scrolled, "on the whole-world map, the scroll wheel scrolls the page instead of zooming");
+
+  // 靠得太近的點合成一顆帶數字的：點下去放大；同一個城市、放到最大還是疊在一起的，點下去就列出那幾個單位
+  {
+    const auth = { authorization: "Bearer e2e-token", "content-type": "application/json" };
+    const mk = async (name, date, code) => (await (await fetch(`${base}/api/visits`, { method: "POST", headers: auth, body: JSON.stringify({ org: { name, country: "Taiwan", type: "university" }, date, code, start_time: "10:00", end_time: "11:30" }) })).json()).visit.visit_id;
+    const ids = [await mk("National Taiwan University", "2025-03-01", "ntu"), await mk("惇陽工程顧問有限公司", "2025-04-01", "dunyang")];
+    await page.click('[data-tab="pre"]');
+    await page.click('[data-tab="data"]');
+    const twGroup = () => page.evaluate(() => [...document.querySelectorAll("#worldMap [data-cluster]")].findIndex((g) => /National Taiwan University/.test(g.getAttribute("aria-label")) && /惇陽/.test(g.getAttribute("aria-label"))));
+    // 等位置查好（AI_MOCK 兩個都在臺北）：查好之前兩個都放在臺灣的國家位置，那時候點下去是直接列出來，不是放大
+    const taipeiX = (121.54 + 180) * 2;
+    await page.waitForFunction((x) => [...document.querySelectorAll("#worldMap [data-cluster]")].some((g) => /National Taiwan University/.test(g.getAttribute("aria-label")) && /惇陽/.test(g.getAttribute("aria-label")) && g.querySelector("text.count")?.textContent === "2" && Math.abs(Number(g.querySelector("circle.dot").getAttribute("cx")) - x) < 0.1), taipeiX, { timeout: 60000 });
+    check(true, "two institutions in the same city show as one dot with a 2 on the whole-world map, sitting on that city");
+    await page.click(`#worldMap [data-cluster="${await twGroup()}"] circle.hit`);
+    await page.waitForFunction(() => Number(document.querySelector("#worldMap svg").getAttribute("viewBox").split(" ")[2]) < 100);
+    check(!/National Taiwan University/.test(await page.textContent("#mapVisits")), "clicking the numbered dot zooms in to it (instead of listing them right away)");
+    await page.click(`#worldMap [data-cluster="${await twGroup()}"] circle.hit`);
+    await page.waitForFunction(() => document.querySelectorAll("#mapVisits [data-place]").length === 2);
+    check(/National Taiwan University/.test(await page.textContent("#mapVisits")) && /惇陽工程顧問有限公司/.test(await page.textContent("#mapVisits")), "…and when they are still on top of each other, clicking again lists both institutions");
+    await page.click("#mapReset");
+    for (const id of ids) await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: auth });
+    await page.click('[data-tab="pre"]');
+    await page.click('[data-tab="data"]');
+    await page.waitForFunction(() => /1 個單位/.test(document.getElementById("mapSummary").textContent), null, { timeout: 30000 });
+  }
 
   // 圓點是「螢幕上幾個像素」，不是地圖座標：地圖畫得越大，點在地圖上越小，
   // 不然把地圖拉大之後整個韓國還是被一個點蓋住

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
-import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
+import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -455,4 +455,23 @@ test("支援人力表列哪幾間：主辦端排了就列動線（加上已經�
   assert.deepEqual(rotaRooms({ itinerary: route("301"), lab_minutes: { 301: 20 }, lab_added: ["301"] }, labs), { rooms: ["301", "302", "303", "304", "305"], planned: false });
   // 主辦端排了 301、303，兩間也都填了：仍然是排好了，其他三間免填（不是又變回五間都「未填」）
   assert.deepEqual(rotaRooms({ itinerary: route("301", "303"), lab_minutes: { 301: 30, 303: 15 } }, labs), { rooms: ["301", "303"], planned: true });
+});
+
+test("訪客地圖的位置：單位名稱或國家改了就要重查；座標不合理就當作只知道國家", () => {
+  const v = { org: { name: "University of Western Australia", name_local: "西澳大學", country: "Australia" } };
+  assert.equal(needsGeo(v), true, "還沒查過");
+  const geo = sanitizeGeo({ key: geoKey(v), lat: -31.98, lon: 115.82, place: "澳洲伯斯", precision: "site", at: "2026-09-30T00:00:00Z" });
+  assert.equal(needsGeo({ ...v, geo }), false, "查過了");
+  assert.equal(geoKey({ org: { name: "  University of  Western Australia ", name_local: "西澳大學", country: "australia" } }), geoKey(v), "大小寫與多餘的空白不算改名");
+  assert.equal(needsGeo({ org: { ...v.org, name: "Curtin University" }, geo }), true, "改了名字：查的是別的單位，要重查");
+  assert.equal(needsGeo({ org: { ...v.org, country: "New Zealand" }, geo }), true, "改了國家也一樣");
+  assert.equal(needsGeo({ org: { name: "", country: "Japan" } }), false, "沒有單位名稱的不查");
+  // 0,0 是 AI「查不到」的慣用值、超出範圍的座標不可能對：一律退回「只知道國家」，不要畫在海上
+  for (const bad of [{ lat: 0, lon: 0, precision: "city" }, { lat: 95, lon: 10, precision: "site" }, { lat: null, lon: 121, precision: "city" }, { lat: "x", lon: 121, precision: "city" }]) {
+    const g = sanitizeGeo({ key: "k", place: "某處", ...bad });
+    assert.deepEqual([g.lat, g.lon, g.precision], [null, null, "country"], JSON.stringify(bad));
+  }
+  assert.equal(sanitizeGeo({ key: "k", lat: 25.0171234, lon: 121.5398765, precision: "moon" }).precision, "country", "不認得的精度一律當國家");
+  assert.deepEqual([sanitizeGeo({ key: "k", lat: 25.0171234, lon: 121.5398765, precision: "site" }).lat, sanitizeGeo({ key: "k", lat: 25.0171234, lon: 121.5398765, precision: "site" }).lon], [25.0171, 121.5399], "座標留到小數四位（約十公尺，夠了）");
+  assert.equal(sanitizeGeo(null), undefined);
 });

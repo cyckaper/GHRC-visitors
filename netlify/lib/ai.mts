@@ -548,7 +548,43 @@ export async function translateTexts(texts: string[], target: "ko" | "ja" | "en"
   return out.translations;
 }
 
+// ───────────────────── 7. 訪客地圖：單位在哪裡 ─────────────────────
+
+const GeoSchema = z.object({
+  places: z.array(z.object({ id: z.string(), place: z.string(), lat: z.number(), lon: z.number(), precision: z.enum(["site", "city", "region", "country"]) })),
+});
+export type GeoPlace = z.infer<typeof GeoSchema>["places"][number];
+export interface GeoQuery { id: string; name: string; name_local: string; country: string; profile: string }
+
+const GEO_SYSTEM = `你替臺大綠色健康研究中心（GHRC）的訪客地圖標出每一個來訪單位（學校、公司、政府機關、團體）在哪裡。每一個單位回一筆，id 照抄：
+- lat／lon：那個單位本部的位置——大學給主校區、公司給總公司、機關給所在地。精度到校區或城市就夠了。
+- place：所在城市，用繁體中文寫（例如「臺北市」「新竹縣竹北市」「澳洲伯斯」「韓國首爾」「日本兵庫縣淡路市」）。
+- precision：知道是哪一個校區或地址＝site；只知道城市＝city；只知道州／省／縣＝region；連城市都不確定＝country（lat／lon 給那個國家的大概中心）。
+只根據你確定知道的，以及附上的公開資料（profile，訪前功課查到的單位側寫）判斷。不確定就降一級精度，不要編一個看起來很準的座標——地圖上點錯地方比放在國家中心更糟。`;
+
+/** 一次查好幾個單位的位置（`geo-background` 呼叫）。 */
+export async function locateOrgs(items: GeoQuery[]): Promise<GeoPlace[]> {
+  if (!items.length) return [];
+  if (isMock()) return items.map(mockPlace);
+  const out = await structured(GeoSchema, GEO_SYSTEM, JSON.stringify(items), 4000);
+  return out.places;
+}
+
 // ───────────────────────── mock ─────────────────────────
+
+/** AI_MOCK：測試與示範會用到的幾個單位給真的位置，其他的一律「只知道國家」（0,0 就是查不到）。 */
+const MOCK_PLACES: [RegExp, string, number, number, GeoPlace["precision"]][] = [
+  [/western australia|西澳/i, "澳洲伯斯", -31.98, 115.82, "site"],
+  [/konkuk|建國大學/i, "韓國首爾", 37.54, 127.08, "site"],
+  [/awaji|淡路/i, "日本兵庫縣淡路市", 34.46, 134.9, "site"],
+  [/national taiwan university|臺灣大學|台灣大學/i, "臺北市", 25.017, 121.54, "site"],
+  [/illinois|uiuc/i, "美國伊利諾州厄巴納－香檳", 40.11, -88.23, "site"],
+  [/惇陽|dun ?yang/i, "臺北市", 25.05, 121.53, "city"],
+];
+function mockPlace(item: GeoQuery): GeoPlace {
+  const hit = MOCK_PLACES.find(([re]) => re.test(`${item.name} ${item.name_local}`));
+  return hit ? { id: item.id, place: `（AI_MOCK）${hit[1]}`, lat: hit[2], lon: hit[3], precision: hit[4] } : { id: item.id, place: "", lat: 0, lon: 0, precision: "country" };
+}
 
 function mockExtract(text: string): ExtractedVisit {
   const emails = [...new Set((text.match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) || []).map((e) => e.toLowerCase()))];
