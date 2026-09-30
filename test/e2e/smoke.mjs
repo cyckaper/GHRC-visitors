@@ -438,28 +438,61 @@ try {
   await page.waitForFunction((n) => document.querySelectorAll("#visitSelect option").length === n, beforeDelete, { timeout: 30000 });
   check(await page.isHidden("#afterSave"), "and deleting it clears the form");
 
-  // ── 支援人力表：各研究室自己填「那一場誰能支援、方便什麼時段」──
+  // ── 支援人力表：各研究室自己填「那一場誰接待、共需幾分鐘」──
   {
     const auth = { authorization: "Bearer e2e-token" };
+    const visitOf = async (id) => (await (await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { headers: auth })).json()).visit;
+    const until = async (fn, what) => {
+      for (let i = 0; i < 100; i++) { if (await fn()) return; await new Promise((r) => setTimeout(r, 300)); }
+      throw new Error(`FAIL: timed out waiting for ${what}`);
+    };
     // 連結**自動產生**：打開設定就有，不必先按什麼
     const key = (await (await fetch(`${base}/api/settings`, { headers: auth })).json()).settings.rota_key;
     check(/^[a-z0-9]{24}$/.test(key), "the rota link exists without anyone having to make it");
+    const rota = await (await fetch(`${base}/api/rota?key=${key}`)).json();
+    const target = rota.visits.find((v) => !v.past && v.stops.length);
+    const id = target.visit_id;
+    const room = target.stops[0].room;
+
+    // 後台另一個分頁先開著這一場——手上的資料是老師填之前的樣子（等一下在這裡改一個字觸發自動存檔）
+    const hostCtx = await browser.newContext({ viewport: { width: 1100, height: 900 } });
+    await hostCtx.addCookies(await page.context().cookies()); // 同一個登入（另一台機器上開著的後台也一樣）
+    const host = await hostCtx.newPage();
+    await host.goto(`${base}/admin.html`);
+    await host.waitForSelector("#authOk:not([hidden])");
+    await host.selectOption("#visitSelect", id);
+    await host.waitForFunction((v) => document.getElementById("preStatus").textContent === v, id, { timeout: 30000 });
+
     await page.goto(`${base}/rota?key=${key}`);
     await page.waitForFunction(() => document.querySelectorAll("#rows section").length > 0, null, { timeout: 30000 });
-    check((await page.locator("#rows section").count()) > 0, "the rota lists the visits for the laboratories to fill in");
-    // 未來的可以填、過去的鎖住——擋在伺服器，畫面只是照著顯示
-    const row = page.locator("#rows section:not(.rota-past)").first();
-    await row.locator('input[data-field="name"]').first().fill("王小明");
-    await row.locator('input[data-field="hours"]').first().fill("16:00 之後");
-    await page.waitForFunction(() => /已存/.test(document.getElementById("status").textContent), null, { timeout: 30000 });
-    const id = await row.locator("input").first().getAttribute("data-visit");
-    const room = await row.locator("input").first().getAttribute("data-room");
-    const saved = await (await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { headers: auth })).json();
-    check(saved.visit.presenters[room] === "王小明" && saved.visit.lab_hours[room] === "16:00 之後", "…and what a lab types is kept on that visit, both the name and when they are free");
-    // 後台整筆存檔不會蓋掉老師剛填的（presenters／lab_hours 只有 /api/rota 在寫）
-    await fetch(`${base}/api/visits`, { method: "POST", headers: { "content-type": "application/json", ...auth }, body: JSON.stringify({ ...saved.visit, presenters: undefined, lab_hours: undefined }) });
-    const again = await (await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { headers: auth })).json();
-    check(again.visit.presenters[room] === "王小明", "…and an ordinary save from the admin page does not wipe it");
+    // 簡單明瞭（明確指示）：每一間只有兩格——接待人員、共需幾分鐘；不再問「方便的時段」
+    const row = page.locator(`#rows section[data-rota-visit="${id}"]`);
+    check((await row.locator(".rota-cell").first().locator("input").count()) === 2 && (await page.locator('[data-field="hours"]').count()) === 0, "each lab fills in just two things: who will host, and how many minutes");
+    check(/接待人員/.test(await page.textContent("header")) && /共需幾分鐘/.test(await page.textContent("header")), "…and the one line on top says exactly that");
+    await row.locator(`input[data-room="${room}"][data-field="name"]`).fill("王小明");
+    await row.locator(`input[data-room="${room}"][data-field="minutes"]`).fill("２５分");
+    check((await row.locator(`input[data-room="${room}"][data-field="minutes"]`).inputValue()) === "25", "typing 「２５分」 leaves just the number");
+    await until(async () => { const v = await visitOf(id); return v.presenters?.[room] === "王小明" && v.lab_minutes?.[room] === 25; }, "the rota to save the name and the minutes");
+    check(true, "…and what a lab types is kept on that visit, the name and the minutes");
+
+    // **後台開著舊資料改一個字自動存檔，不會蓋掉老師剛填的**（後台是把手上那一份整個送回去的）
+    const before = (await visitOf(id)).updated_at;
+    await host.focus("#purpose");
+    await host.keyboard.press("End");
+    await host.keyboard.type(" ");
+    await until(async () => (await visitOf(id)).updated_at !== before, "the admin tab to autosave");
+    const again = await visitOf(id);
+    check(again.presenters[room] === "王小明" && again.lab_minutes[room] === 25, "…and an autosave from an admin tab holding older data does not wipe it");
+    // 通告卡片那幾格：打字時不會被自動存檔重畫掉，離開格子才存
+    const cell = `#presenters input[data-presenter="${room}"][data-field="minutes"]`;
+    await host.waitForFunction((sel) => document.querySelector(sel)?.value === "25", cell, { timeout: 30000 });
+    await host.fill(cell, "30");
+    await host.waitForTimeout(2000); // 比自動存檔的 1.2 秒久
+    check((await host.inputValue(cell)) === "30", "typing in the notice card is not wiped by an autosave redrawing it");
+    await host.press(cell, "Tab");
+    await until(async () => (await visitOf(id)).lab_minutes?.[room] === 30, "the notice card to save the minutes");
+    check(true, "…and leaving the cell saves it to the same table");
+    await hostCtx.close();
 
     // 通告裡的連結帶著 #<visit_id>：點進來直接跳到那一場、那一張亮起來
     await page.goto(`${base}/rota?key=${key}#${encodeURIComponent(id)}`);
@@ -475,19 +508,19 @@ try {
     check(/連結/.test(await gp.textContent("#status")) && (await gp.locator("#rows section").count()) === 0, "a wrong link says so instead of showing the visits");
     await guest.close();
 
-    // 後台「設定」分頁：**直接看得到老師那一張表，也改得了**（同一份渲染、同一支 API）
+    // 後台「設定」分頁：**直接顯示那一張表**（明確指示：不用再複製連結），也改得了
     await page.goto(`${base}/admin.html`);
     await page.waitForSelector("#authOk:not([hidden])");
     await page.click('[data-tab="settings"]');
     await page.waitForFunction(() => document.querySelectorAll("#rotaTable section").length > 0, null, { timeout: 30000 });
-    check((await page.inputValue("#rotaLink")).endsWith(`/rota?key=${key}`), "the settings tab shows the link, already made");
-    check((await page.locator("#rotaOff").count()) === 0, "…with no make-a-link or withdraw buttons left to press");
+    check((await page.locator("#rotaLink, #rotaCopy").count()) === 0, "the settings tab shows the table itself, with no link to copy");
+    check((await page.locator("#rotaCard details:not([open]) #rotaNew").count()) === 1, "…and making a new link (if one gets out) is folded away under the table");
+    check((await page.locator("#labEmails, #videoLinks").count()) === 0, "the lab email and video link cards are gone from settings");
     const mine = page.locator(`#rotaTable [data-rota-visit="${id}"] input[data-room="${room}"][data-field="name"]`);
     check((await mine.inputValue()) === "王小明", "the same table the leads fill in is right there in settings");
-    await mine.fill("李大華（群組接龍回的）");
-    await page.waitForFunction(() => /已存/.test(document.getElementById("rotaTableInfo").textContent), null, { timeout: 30000 });
-    const fixed = await (await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { headers: auth })).json();
-    check(fixed.visit.presenters[room] === "李大華（群組接龍回的）" && fixed.visit.lab_hours[room] === "16:00 之後", "…and the host can correct it there, one cell at a time");
+    await mine.fill("李大華（群組裡回的）");
+    await until(async () => (await visitOf(id)).presenters?.[room] === "李大華（群組裡回的）", "the settings table to save");
+    check((await visitOf(id)).lab_minutes[room] === 30, "…and the host can correct it there, one cell at a time");
     const pastLocked = await page.locator("#rotaTable section.rota-past input:not([disabled])").count();
     check(pastLocked === 0, "…while visits that are over stay locked there too");
   }

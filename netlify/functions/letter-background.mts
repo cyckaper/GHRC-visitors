@@ -4,7 +4,7 @@ import { getStore } from "../lib/store.mts";
 import { draftLetter } from "../lib/ai.mts";
 import { backgroundHandler } from "../lib/jobs.mts";
 import { labRecipients, recipientList, scheduleFingerprint } from "../../lib/visit.mjs";
-import { ensureRotaKey, loadSettings } from "./settings.mts";
+import { ensureRotaKey } from "./settings.mts";
 import { triggerDriveSync } from "../lib/drive.mts";
 import { gmailSend } from "../lib/mail.mts";
 
@@ -77,6 +77,6 @@ export default backgroundHandler<Input>("信件", async (input, req) => {
   else visit.letters.confirmation = { ...draft, drafted_at: nowISO() };
   visit.updated_at = nowISO();
   await store.putVisit(visit);
-  const recipients = kind === "notice" || kind === "rundown" ? labRecipients(visit, labs, (await loadSettings()).lab_emails) : recipientList(visit, responses);
+  const recipients = kind === "notice" || kind === "rundown" ? labRecipients(visit, labs) : recipientList(visit, responses);
   return { kind, sender, draft, recipients };
 });

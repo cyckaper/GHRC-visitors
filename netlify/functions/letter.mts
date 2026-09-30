@@ -4,7 +4,6 @@ import { gmailConfigured } from "../lib/mail.mts";
 import { pollJob, startBackground } from "../lib/jobs.mts";
 import { labRecipients, recipientList } from "../../lib/visit.mjs";
 import { loadPublicData } from "../lib/data.mts";
-import { loadSettings } from "./settings.mts";
 
 /**
  * 訪後信／確認信。草擬要 Claude 寫一整封雙語信、寄出要一個一個打 Gmail API，
@@ -37,8 +36,7 @@ export default async (req: Request) => {
 
   if (body.action === "recipients") {
     if (internal) {
-      const [labs, settings] = await Promise.all([loadPublicData("labs"), loadSettings()]);
-      return json({ ok: true, recipients: labRecipients(visit, labs, settings.lab_emails) });
+      return json({ ok: true, recipients: labRecipients(visit, await loadPublicData("labs")) });
     }
     const responses = await store.listResponses(visit.visit_id);
     return json({ ok: true, recipients: recipientList(visit, responses) });

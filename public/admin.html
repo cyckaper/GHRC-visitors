@@ -206,13 +206,12 @@
 
     <div class="card space-y-3" id="noticeCard">
       <h2 class="font-semibold"><span class="num">5</span>通告研究室 <span class="muted font-normal">多半是貼到 LINE 群組</span></h2>
-      <p class="muted">排好行程之後先告訴各研究室：哪個單位什麼時候來、幾點走到你那一間，<b>請各室安排簡報人員</b>。收到回覆就把人填回下面那張表，定案之後再回報一次。<br>這幾則是寫給中心同事看的，所以一律中文、條列、貼得進 LINE；也可以用中心的 Gmail 寄出。</p>
+      <p class="muted">排好行程之後先告訴各研究室哪個單位什麼時候來，<b>請各室填接待人員與共需幾分鐘</b>——通告最後附支援人力表的連結，老師點進去填。定案之後再回報一次。<br>這幾則是寫給中心同事看的，所以一律中文、條列、不署名，貼得進 LINE。</p>
 
       <div class="space-y-2">
         <div class="f mb-0">一、通告與徵詢簡報人員</div>
         <div class="flex flex-wrap gap-2 items-center">
-          <select id="noticeSender" title="通告的署名"><option value="director">中心主任 張俊彥</option><option value="contact">對口老師</option></select>
-          <button class="btn" id="noticeBtn" title="依這一場的動線擬一則通告：哪個單位什麼時候來、幾點到哪一間，請各室安排簡報人員">AI 擬通告</button>
+          <button class="btn" id="noticeBtn" title="依這一場的流程擬一則通告：哪個單位什麼時候來、當天動線，最後附支援人力表的連結">AI 擬通告</button>
           <span class="muted" id="noticeInfo"></span>
         </div>
         <input type="text" id="noticeSubject" placeholder="主旨（寄 email 才用得到）">
@@ -229,8 +228,8 @@
       </div>
 
       <div class="space-y-2">
-        <div class="f mb-0">二、各室回覆的簡報人員</div>
-        <p class="muted">收到回覆（LINE 或 email）就填在這裡。下一步的回報會照這張表寫，一頁摘要也看得到。</p>
+        <div class="f mb-0">二、各室的接待人員與共需幾分鐘</div>
+        <p class="muted">老師在支援人力表上填的會出現在這裡；在群組裡直接回的，填在這裡也一樣。回報那一則照這裡寫。</p>
         <div class="space-y-1" id="presenters"></div>
       </div>
 
@@ -484,28 +483,13 @@
 
   <!-- ───────── 設定 ───────── -->
   <section id="tab-settings" class="space-y-5" hidden>
-    <p class="lede text-sm"><b>這一頁：一次做完就不用再碰的東西</b>——母簡報、預設值，以及「哪些外部服務接好了」。這些不屬於任何一場參訪，所以不放在前面幾個分頁裡。</p>
+    <p class="lede text-sm"><b>這一頁：不屬於任何一場參訪的東西。</b></p>
 
     <div class="card space-y-3">
       <h2 class="font-semibold">母簡報</h2>
       <p class="muted">站台存一份，之後每場產簡報就不必再選檔。可以直接選原始的母簡報（含影片、幾百 MB 都行）——會先在瀏覽器裡瘦身再上傳。</p>
       <p class="text-sm flex flex-wrap items-center gap-2" id="masterRow"></p>
     </div>
-
-    <div class="card space-y-3">
-      <h2 class="font-semibold">研究室老師的信箱</h2>
-      <p class="muted">行前通告要寄 email 時用（多半是貼 LINE 群組，這裡留空也沒關係）。<b>這一份只有主辦端看得到</b>，不會出現在來賓專頁上——來賓專頁那邊的聯絡方式是 <code>labs.json</code> 裡另外一個欄位，那個本來就是要公開的。</p>
-      <div class="space-y-2" id="labEmails"></div>
-      <span class="muted" id="labEmailsInfo"></span>
-    </div>
-
-    <div class="card space-y-3">
-      <h2 class="font-semibold">影片連結</h2>
-      <p class="muted">放上站台的母簡報<b>不含影片</b>（五支就三百多 MB，寄不出去也存不下），那幾頁只留海報影格。把影片放到 Drive 或 YouTube 不公開連結，網址填在這裡，海報那一頁就會有一個點得開的連結。<b>改完要重新上傳一次母簡報</b>才會生效。<br>現場要真的播影片：產簡報時當場選<b>原始的母簡報</b>，影片會留在產出的檔案裡。</p>
-      <div class="space-y-2" id="videoLinks"></div>
-      <span class="muted" id="videoLinksInfo"></span>
-    </div>
-
 
     <div class="card space-y-3">
       <h2 class="font-semibold">預設值</h2>
@@ -522,19 +506,18 @@
       <p class="muted">參訪的<b>結束時間一到</b>（依今日流程），系統會寄一封後續提醒到上面那個信箱——手機收信就會跳出來。一場只寄一次，四件事都做完了就不寄。需要 Gmail 接好。</p>
     </div>
 
-    <div class="card space-y-3">
-      <h2 class="font-semibold">支援人力表</h2>
-      <p class="muted">一張表列出所有參訪，<b>各研究室自己填那一場誰能支援、貴室方便的時段</b>（同一段時間好幾個單位來，一場一場在 LINE 上問就亂了）。<b>連結是自動產生的，發通告時會自動放進去</b>，老師點進去會直接跳到那一場。填進去的人名就是「回報研究室」那一則帶出去的簡報人員，不必再抄一次。</p>
-      <div class="flex flex-wrap items-center gap-2">
-        <input type="text" id="rotaLink" class="!w-96" readonly>
-        <button class="btn btn-soft" id="rotaCopy" type="button">複製連結</button>
-        <button class="btn btn-soft" id="rotaNew" type="button" title="換一個網址；舊的連結立刻失效">重新產生</button>
-        <span class="muted" id="rotaInfo"></span>
-      </div>
-      <p class="muted"><b>下面這張就是老師看到的那一張，您也可以直接在這裡改</b>——群組裡接龍回的，就填進對應的格子，填完自己會存。已經結束的場次是灰的、不能改。</p>
+    <div class="card space-y-3" id="rotaCard">
+      <h2 class="font-semibold">支援人力表 <span class="muted font-normal">各研究室填的就是這一張，這裡也可以直接改</span></h2>
       <p class="muted" id="rotaTableInfo"></p>
       <div id="rotaTable"></div>
-      <p class="muted">連結是<b>一個猜不到的網址，不是登入</b>——老師從 LINE 點進去就能填，不必帳號密碼。連結轉出去就擋不住，所以表上只有單位名稱、日期與房號，<b>沒有來賓名單與 email</b>。人員異動或連結外流就按「重新產生」。</p>
+      <details class="text-sm">
+        <summary class="muted cursor-pointer">連結外流了？</summary>
+        <div class="flex flex-wrap items-center gap-2 mt-2">
+          <button class="btn btn-soft" id="rotaNew" type="button">換一個新連結</button>
+          <span class="muted">舊的連結立刻失效，之後擬的通告會帶新的。</span>
+          <span class="muted" id="rotaInfo"></span>
+        </div>
+      </details>
     </div>
 
     <div class="card space-y-3">
@@ -1328,8 +1311,11 @@
   // 訪前分頁裡任何一個欄位改動都會自己存（含名單、行程那張表）
   $("startTime").addEventListener("input", showDuration);
   $("endTime").addEventListener("input", showDuration);
-  $("tab-pre").addEventListener("input", scheduleSave);
-  $("tab-pre").addEventListener("change", scheduleSave);
+  // 例外：通告卡片裡各室的接待人員與分鐘數。那幾格自己走 `/api/rota`，整筆存檔也不收它們（ROTA_FIELDS）；
+  // 讓它們觸發自動存檔，存完 `fillForm()` 重畫那一區，正在打的字就被清掉了
+  const autosaves = (e) => !e.target.closest?.("#presenters");
+  $("tab-pre").addEventListener("input", (e) => autosaves(e) && scheduleSave());
+  $("tab-pre").addEventListener("change", (e) => autosaves(e) && scheduleSave());
   // 行程那張表：研究室的分鐘改了就把後面各段的時間推算一次；類型改了要換這一列有沒有研究室分鐘
   $("programmeTable").addEventListener("input", (e) => {
     if (e.target.matches("input[data-room]")) retimeProgramme();
@@ -1617,10 +1603,9 @@
     const core = await deckCore();
     if (bytes.length < 60 * 1024 * 1024 && !(await core.hasEmbeddedMedia(bytes))) return { bytes, report: null };
     log(`母簡報 ${mb(bytes.length)}，瘦身中（抽影片、縮圖），大檔約需一兩分鐘…`);
-    // 影片抽掉之後只剩海報影格；「設定」填了網址的那幾頁，海報旁邊那一行就做成點得開的連結
-    const videoLinks = state.settings?.video_links || {};
-    let out = await core.slimDeck(bytes, { resizeImage, videoLinks, log });
-    if (out.pptx.length > 60 * 1024 * 1024) out = await core.slimDeck(out.pptx, { resizeImage, videoLinks, log, imageThreshold: 1_000_000, maxEdge: 1600 });
+    // 影片抽掉之後只剩海報影格（要播就產簡報時當場選原始的母簡報，影片會留在產出的檔案裡）
+    let out = await core.slimDeck(bytes, { resizeImage, log });
+    if (out.pptx.length > 60 * 1024 * 1024) out = await core.slimDeck(out.pptx, { resizeImage, log, imageThreshold: 1_000_000, maxEdge: 1600 });
     return { bytes: out.pptx, report: out.report };
   }
   const slimSummary = (r) => `母簡報已瘦身：抽掉 ${r.videos_removed} 個影片／音訊、縮小 ${r.images_resized} 張圖，${mb(r.before)} → ${mb(r.after)}${r.warnings.length ? `；${r.warnings.join("；")}` : ""}`;
@@ -1763,7 +1748,7 @@
         for (const f of report.fixes || []) lines.push(`更正母簡報內文：「${f.find}」→「${f.replace}」${f.count} 處`);
         // 影片：留在檔案裡才播得動。母簡報是站台上那份瘦過的就不會有，說一句怎麼辦，不要讓人以為壞了
         if (report.videos) lines.push(`保留了 ${report.videos} 支影片，現場直接播。檔案大，寄給對方請改寄 PDF 或雲端連結`);
-        else if ((state.slides?.slides || []).some((x) => x.video && (spec.slides || []).includes(x.n))) lines.push("這一場選到了影片頁，但母簡報裡沒有影片（站台上那份是瘦過的）：海報那一頁會放「設定」填的影片連結；現場要真的播，產簡報時當場選原始的母簡報");
+        else if ((state.slides?.slides || []).some((x) => x.video && (spec.slides || []).includes(x.n))) lines.push("這一場選到了影片頁，但母簡報裡沒有影片（站台上那份是瘦過的），那幾頁只有海報；現場要真的播，產簡報時當場選原始的母簡報");
         $("deckReport").innerHTML = lines.map((l) => `<li>${esc(l)}</li>`).join("");
         const deck = { ...(spec.deck || {}), generated_at: new Date().toISOString(), slides: report.output_slides };
         const saved = await api("/api/visits", { method: "POST", body: { ...spec, deck } });
@@ -2036,15 +2021,14 @@
       $(`${kind}Body`).value = l?.body || "";
       $(`${kind}SendInfo`).innerHTML = l?.sent_at ? `<span class="ok">已於 ${esc(l.sent_at.slice(0, 16).replace("T", " "))} 寄給 ${l.sent_to?.length || 0} 人</span>` : "";
     }
-    if (v.visit.letters?.notice?.sender) $("noticeSender").value = v.visit.letters.notice.sender;
     renderPresenters(v.visit);
     await loadLabRecipients();
     rebase(LETTER_FIELDS); // 伺服器上這一版才是基準；手改過還沒寄的那一版由 applyDraft 擺回來
   }
   /**
-   * 通告的收件人＝**這一場動線上的那幾間**的老師（不是五間全寄）。信箱在「設定」分頁填，
-   * 沒填就退回 labs.json 上那個公開的；兩個都沒有的照樣列出來、標明「還沒有信箱」——
-   * 少寄一個人比看不出來少寄好。
+   * 通告的收件人＝**這一場動線上的那幾間**的老師（不是五間全寄）。信箱只有 labs.json 上那個公開的
+   * （設定分頁的「研究室老師的信箱」明確指示拿掉了——通告本來就是貼 LINE 群組）；沒有信箱的照樣列出來、
+   * 標明「沒有信箱」——少寄一個人比看不出來少寄好。
    */
   async function loadLabRecipients() {
     const id = $("visitSelect").value;
@@ -2066,7 +2050,7 @@
       : [
           ...list.map((r, i) => (r.email ? `<label class="flex gap-2 items-center"><input type="checkbox" checked data-i="${i}"><span>${esc(r.name)} <span class="muted">${esc(r.room)} · ${esc(r.email)} · ${esc(r.start)}–${esc(r.end)}</span></span></label>` : "")).filter(Boolean),
           // 沒信箱的合成一句：同一句講五遍只是雜訊，重點是「這幾間要自己貼 LINE」
-          without.length ? `<p class="muted">${!withEmail.length ? "五間都" : `${esc(without.map((r) => r.room).join("、"))} `}還沒有信箱——到「設定」分頁補，或直接把上面那一則貼到 LINE 群組。</p>` : "",
+          without.length ? `<p class="muted">${!withEmail.length ? "這幾間都" : `${esc(without.map((r) => r.room).join("、"))} `}沒有信箱——把上面那一則貼到 LINE 群組就好。</p>` : "",
         ].filter(Boolean).join("");
     updateLabSendCounts();
   }
@@ -2082,9 +2066,10 @@
   }
   const checkedLabRecipients = () => [...document.querySelectorAll('#noticeRecipients input[type="checkbox"]:checked')].map((i) => state.labRecipients[Number(i.dataset.i)]).filter(Boolean);
   /**
-   * 各研究室回覆的簡報人員與方便的時段：一間一列，填了就會出現在回報那一則訊息裡。
+   * 各研究室的接待人員與共需幾分鐘（跟支援人力表同一份）：一間一列，人名會出現在回報那一則訊息裡，
+   * 分鐘數給主辦端排各室的時段用（上面那張行程表）。
    * **這幾格走 `/api/rota`，不走整筆存檔**——各研究室自己也會從支援人力表填同一個欄位，
-   * 後台開著舊資料改一個字觸發自動存檔就會把他們剛填的蓋掉（`visits.mts` 的 `KEPT` 也保留這兩個欄位）。
+   * 整筆存檔一律沿用伺服器上那一份（`visits.mts` 的 `ROTA_FIELDS`），後台手上的舊資料蓋不掉老師剛填的。
    */
   function renderPresenters(v) {
     const box = $("presenters");
@@ -2096,18 +2081,29 @@
           .filter((x) => String(x.room) !== "briefing" && Number(x.minutes) > 0)
           .map((x) => ({ room: String(x.room), name: (state.labs?.labs || []).find((l) => String(l.room) === String(x.room))?.lead?.name_zh || "", start: "", end: "" }));
     const who = v?.presenters || {};
-    const hours = v?.lab_hours || {};
+    const mins = v?.lab_minutes || {};
+    // 同一場重畫時（別的欄位自動存檔完 fillForm 會重畫這一區），正在打的那一格原樣擺回去、游標留著
+    const active = box.contains(document.activeElement) && box.dataset.visit === (v?.visit_id || "") ? document.activeElement : null;
+    const keep = active ? { room: active.dataset.presenter, field: active.dataset.field, value: active.value, at: active.selectionStart } : null;
+    box.dataset.visit = v?.visit_id || "";
     box.innerHTML = rows.length
-      ? rows.map((r) => `<div class="flex flex-wrap items-center gap-2"><span class="room" style="--tone:${roomTone(r.room)}">${esc(r.room)}</span><span class="muted !w-44">${esc(r.name || "")}${r.start ? ` ${esc(r.start)}–${esc(r.end)}` : ""}</span><input type="text" data-presenter="${esc(r.room)}" data-field="name" class="!w-52" placeholder="簡報人員（可多位）" value="${esc(who[r.room] || "")}"><input type="text" data-presenter="${esc(r.room)}" data-field="hours" class="!w-52" placeholder="該室方便的時段" value="${esc(hours[r.room] || "")}"></div>`).join("")
+      ? rows.map((r) => `<div class="flex flex-wrap items-center gap-2"><span class="room" style="--tone:${roomTone(r.room)}">${esc(r.room)}</span><span class="muted !w-44">${esc(r.name || "")}${r.start ? ` ${esc(r.start)}–${esc(r.end)}` : ""}</span><input type="text" data-presenter="${esc(r.room)}" data-field="name" class="!w-52" placeholder="接待人員" value="${esc(who[r.room] || "")}"><span class="muted">共需</span><input type="text" inputmode="numeric" maxlength="3" data-presenter="${esc(r.room)}" data-field="minutes" class="!w-16 text-right" value="${esc(mins[r.room] == null ? "" : String(mins[r.room]))}"><span class="muted">分鐘</span></div>`).join("")
       : `<p class="muted">這一場的行程還沒排到任何研究室。</p>`;
     for (const el of box.querySelectorAll("[data-presenter]")) {
       el.onchange = async () => {
         const body = { visit_id: state.visit?.visit_id, room: el.dataset.presenter, [el.dataset.field]: el.value.trim() };
         const r = await api("/api/rota", { method: "POST", body });
         if (!r.ok) return flash(r.error, "err");
-        if (state.visit) { state.visit.presenters = r.presenters; state.visit.lab_hours = r.lab_hours; }
+        if (state.visit) { state.visit.presenters = r.presenters; state.visit.lab_minutes = r.lab_minutes; }
+        if (el.dataset.field === "minutes") el.value = r.lab_minutes?.[el.dataset.presenter] ?? ""; // 「20分」存成 20，畫面跟著伺服器
         flash("已存");
       };
+    }
+    const again = keep && box.querySelector(`[data-presenter="${CSS.escape(keep.room || "")}"][data-field="${CSS.escape(keep.field || "")}"]`);
+    if (again) {
+      again.value = keep.value;
+      again.focus();
+      try { again.setSelectionRange(keep.at, keep.at); } catch { /* 有的瀏覽器對某些 input 不給設游標，不影響 */ }
     }
   }
   /** 兩封信各自一份收件人清單（確認信在「訪前」、感謝信在「後續」）。 */
@@ -2181,7 +2177,7 @@
   const draftInternal = (kind) => busy($(`${kind}Btn`), async () => {
     const id = $("visitSelect").value;
     if (!id) return flash("請先選一場參訪", "err");
-    const r = await runJob("/api/letter", { visit_id: id, kind, sender: $("noticeSender").value }, noteInto(`${kind}Info`), "AI 擬稿中……大約一分鐘。");
+    const r = await runJob("/api/letter", { visit_id: id, kind }, noteInto(`${kind}Info`), "AI 擬稿中……大約一分鐘。");
     if (!r) return;
     $(`${kind}Subject`).value = r.draft.subject; $(`${kind}Body`).value = r.draft.body;
     state.labRecipients = r.recipients || state.labRecipients; renderLabRecipients();
@@ -2200,7 +2196,7 @@
     const label = kind === "notice" ? "通告" : "回報";
     if (!confirm(t(`把${label}寄給 ${recipients.length} 位老師？`))) return;
     const note = (m) => { $(`${kind}SendInfo`).textContent = m; };
-    const r = await runJob("/api/letter", { visit_id: $("visitSelect").value, action: "send", kind, sender: $("noticeSender").value, subject: $(`${kind}Subject`).value, body: $(`${kind}Body`).value, recipients }, note, `寄送中……${recipients.length} 位。`);
+    const r = await runJob("/api/letter", { visit_id: $("visitSelect").value, action: "send", kind, subject: $(`${kind}Subject`).value, body: $(`${kind}Body`).value, recipients }, note, `寄送中……${recipients.length} 位。`);
     if (!r) return;
     if (r.sent) { $(`${kind}SendInfo`).innerHTML = `<span class="ok">已寄給 ${r.sent_to.length} 人</span>`; $(`${kind}Mailto`).hidden = true; flash(`${label}已寄出`); rebase(LETTER_FIELDS); queueDraft(); applyDraft(); loadVisits(); }
     else if (r.reason === "gmail_not_configured") { $(`${kind}SendInfo`).innerHTML = `<span class="err">尚未寄出：Netlify 沒有設定 Gmail。用右邊那顆自己寄，或直接複製貼到 LINE 群組。</span>`; const m = $(`${kind}Mailto`); m.dataset.mailto = r.mailto; m.hidden = false; m.onclick = () => openMailto(m, $(`${kind}Body`).value, $(`${kind}SendInfo`)); }
@@ -2229,11 +2225,8 @@
     renderServiceNotes();
     $("senderDefault").value = r.settings.sender_default || "director";
     $("reminderTo").value = r.settings.reminder_to || "";
-    renderVideoLinks(r.settings.video_links || {});
-    renderLabEmails(r.settings.lab_emails || {});
     loadLabsTab();
     $("reminderInfo").textContent = r.settings.reminder_to ? "" : r.effective?.reminder_to ? `留空：現在寄到 ${r.effective.reminder_to}` : "還沒有收件信箱，現在不會寄提醒";
-    renderRotaLink(r.settings.rota_key || "");
     loadRotaTable(); // 不等它：表慢一點出來，設定分頁其他東西先能用
     $("statusList").innerHTML = STATUS_ROWS.map(([k, label, where]) => {
       const on = !!r.status[k];
@@ -2443,16 +2436,9 @@
   $("senderDefault").onchange = () => saveSettings({ sender_default: $("senderDefault").value }, "settingsInfo");
   $("reminderTo").onchange = () => saveSettings({ reminder_to: $("reminderTo").value.trim() }, "reminderInfo");
   /**
-   * 支援人力表的連結（`/rota?key=…`）：**自動產生**（打開設定分頁時伺服器就給一個，草擬通告時也會），
-   * 所以這裡沒有「產生連結」「收回」——只有外流時用的「重新產生」。
-   */
-  function renderRotaLink(k) {
-    $("rotaLink").value = k ? `${location.origin}/rota?key=${k}` : "";
-  }
-  /**
-   * 老師看到的那一張表，直接擺在這裡（明確要求：設定這邊要直接看到、也改得了）。
-   * **同一份渲染**（`/lib/rota.mjs`），寫的也是同一支 `/api/rota`——後台走登入的 session，不必帶 key。
-   * 群組裡接龍回的，主辦端就在這裡填進對應的格子，資料只有一份。
+   * 老師看到的那一張表，直接擺在這裡（明確要求：設定這邊直接顯示表格、也改得了；不必再複製連結——
+   * 連結是自動產生的，通告裡本來就帶著）。**同一份渲染**（`/lib/rota.mjs`），寫的也是同一支 `/api/rota`——
+   * 後台走登入的 session，不必帶 key。群組裡直接回的，主辦端就在這裡填進對應的格子，資料只有一份。
    */
   async function loadRotaTable() {
     const { mountRota } = await import("/lib/rota.mjs");
@@ -2462,38 +2448,10 @@
       onStatus: (msg, isError) => { $("rotaTableInfo").textContent = msg; $("rotaTableInfo").className = isError ? "err" : "muted"; },
     });
   }
-  $("rotaCopy").onclick = () => copy($("rotaLink").value);
+  // 連結外流時換一個（摺在表格底下那一行）：舊的立刻失效，之後擬的通告會帶新的
   $("rotaNew").onclick = () => busy($("rotaNew"), async () => {
     if (!confirm(t("換一個網址？貼出去的舊連結會立刻失效。"))) return;
-    const r = await saveSettings({ rota_key: "new" }, "rotaInfo");
-    if (r?.settings) renderRotaLink(r.settings.rota_key || "");
-  });
-  /**
-   * 母簡報那幾支影片的雲端網址（哪幾頁有影片直接讀 slides.json 的 `video: true`）。
-   * 站台上的母簡報抽掉了影片，海報那一頁只剩靜態圖——填了網址才點得開。
-   */
-  function renderVideoLinks(links) {
-    const vids = (state.slides?.slides || []).filter((s) => s.video);
-    $("videoLinks").innerHTML = vids.length
-      ? vids.map((s) => `<div class="flex flex-wrap items-center gap-2"><label class="f mb-0 !w-40" for="vl${s.n}">第 ${s.n} 頁 <span class="muted">${esc(slideTitle(s))}</span></label><input type="url" id="vl${s.n}" data-video-slide="${s.n}" class="!w-96" placeholder="https://drive.google.com/… 或 https://youtu.be/…" value="${esc(links[String(s.n)] || "")}"></div>`).join("")
-      : `<p class="muted">母簡報索引裡沒有標任何影片頁。</p>`;
-  }
-  /** 五間研究室老師的信箱（行前通告寄 email 用；只有主辦端看得到）。 */
-  function renderLabEmails(emails) {
-    const labs = state.labs?.labs || [];
-    $("labEmails").innerHTML = labs.length
-      ? labs.map((l) => `<div class="flex flex-wrap items-center gap-2"><span class="room" style="--tone:${roomTone(l.room)}">${esc(l.room)}</span><label class="f mb-0 !w-28" for="le${l.room}">${esc(l.lead?.name_zh || "")}</label><input type="email" id="le${l.room}" data-lab-email="${esc(l.room)}" class="!w-72" placeholder="${esc(l.lead?.email || "留空就用公開的那個")}" value="${esc(emails[l.room] || "")}"></div>`).join("")
-      : `<p class="muted">老師名單還沒載入。</p>`;
-  }
-  $("labEmails").addEventListener("change", () => {
-    const out = {};
-    for (const el of document.querySelectorAll("[data-lab-email]")) out[el.dataset.labEmail] = el.value.trim();
-    saveSettings({ lab_emails: out }, "labEmailsInfo");
-  });
-  $("videoLinks").addEventListener("change", () => {
-    const out = {};
-    for (const el of document.querySelectorAll("[data-video-slide]")) out[el.dataset.videoSlide] = el.value.trim();
-    saveSettings({ video_links: out }, "videoLinksInfo");
+    if ((await saveSettings({ rota_key: "new" }, "rotaInfo"))?.ok) $("rotaInfo").textContent = "換好了";
   });
   async function saveSettings(settings, infoId) {
     const r = await api("/api/settings", { method: "POST", body: { settings } });
