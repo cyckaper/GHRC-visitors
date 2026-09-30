@@ -122,7 +122,7 @@
 
   <!-- ───────── 訪前 ───────── -->
   <section id="tab-pre" class="space-y-5">
-    <p class="lede text-sm"><b>這一頁：參訪前把五件事做完</b>——讀來信抽出資料、確認欄位、查對方背景、排今日流程，最後把確認信寄出去。寄出的那封信裡就有來賓專頁的網址。填完自己會存，不必找存檔鍵。</p>
+    <p class="lede text-sm"><b>這一頁：參訪前把六件事做完</b>——讀來信抽出資料、確認欄位、查對方背景、通告研究室、排今日流程，最後把確認信寄出去。寄出的那封信裡就有來賓專頁的網址。填完自己會存，不必找存檔鍵。</p>
     <div class="card space-y-3">
       <h2 class="font-semibold"><span class="num">1</span>貼上 email 往來或上傳名單檔，AI 抽取背景</h2>
       <p class="muted">單位、人名、職稱、人數、隨行名單與聯絡方式、對口老師、來訪目的、興趣、日期時間。抽出來的東西會填進下面的欄位，你逐項看過再改。</p>
@@ -171,9 +171,50 @@
       <div id="background" class="space-y-3"></div>
     </div>
 
+    <div class="card space-y-3" id="noticeCard">
+      <h2 class="font-semibold"><span class="num">4</span>通告研究室 <span class="muted font-normal">多半是貼到 LINE 群組</span></h2>
+      <p class="muted">查完背景就先告訴各研究室哪個單位什麼時候來，<b>請各室填接待人員與共需幾分鐘</b>——通告最後附支援人力表的連結，老師點進去填。<b>各室填的分鐘會自動排進下面的行程</b>，也會出現在來賓專頁；定案之後再回報一次。<br>這幾則是寫給中心同事看的，所以一律中文、條列、不署名，貼得進 LINE。</p>
+
+      <div class="space-y-2">
+        <div class="f mb-0">一、通告與徵詢簡報人員</div>
+        <div class="flex flex-wrap gap-2 items-center">
+          <button class="btn" id="noticeBtn" title="依這一場的流程擬一則通告：哪個單位什麼時候來、當天動線，最後附支援人力表的連結">AI 擬通告</button>
+          <span class="muted" id="noticeInfo"></span>
+        </div>
+        <input type="text" id="noticeSubject" placeholder="主旨（寄 email 才用得到）">
+        <textarea id="noticeBody" rows="12" placeholder="通告內容會出現在這裡，可以直接改"></textarea>
+        <p class="muted" id="noticeDraftNote" hidden></p>
+        <div class="flex flex-wrap gap-2 items-center">
+          <button class="btn" id="copyNotice" title="複製整則通告，貼到 LINE 群組">複製（貼到 LINE）</button>
+          <button class="btn btn-soft" id="noticeSendBtn" title="用中心的 Gmail 寄給下面勾選的老師。沒設定 Gmail 時會給你 mailto 自己寄">寄出通告</button>
+          <button type="button" class="btn btn-soft" id="noticeMailto" hidden title="把內文複製起來，再開你自己的信件程式（收件人與主旨會帶過去，內文貼上就好）">用自己的信箱寄</button>
+          <span id="noticeSendInfo"></span>
+        </div>
+        <div id="noticeRecipients" class="space-y-1"></div>
+        <p class="muted" id="noticeWho"></p>
+      </div>
+
+      <div class="space-y-2">
+        <div class="f mb-0">二、把定案的時間與內容回報給各室</div>
+        <div class="flex flex-wrap gap-2 items-center">
+          <button class="btn" id="rundownBtn" title="把定案的動線與簡報人員整理成一則訊息，回報給各研究室">AI 擬回報</button>
+          <span class="muted" id="rundownInfo"></span>
+        </div>
+        <input type="text" id="rundownSubject" placeholder="主旨（寄 email 才用得到）">
+        <textarea id="rundownBody" rows="10" placeholder="回報內容會出現在這裡"></textarea>
+        <p class="muted" id="rundownDraftNote" hidden></p>
+        <div class="flex flex-wrap gap-2 items-center">
+          <button class="btn" id="copyRundown" title="複製整則回報，貼到 LINE 群組">複製（貼到 LINE）</button>
+          <button class="btn btn-soft" id="rundownSendBtn" title="用中心的 Gmail 寄給上面勾選的老師">寄出回報</button>
+          <button type="button" class="btn btn-soft" id="rundownMailto" hidden title="把內文複製起來，再開你自己的信件程式（收件人與主旨會帶過去，內文貼上就好）">用自己的信箱寄</button>
+          <span id="rundownSendInfo"></span>
+        </div>
+      </div>
+    </div>
+
     <div class="card space-y-4">
-      <h2 class="font-semibold"><span class="num">4</span>行程</h2>
-      <p class="muted">這一張表就是這一場的行程：會印在簡報第 2 頁，也會出現在來賓專頁。「研究室參訪」那一列底下填每一間幾分鐘（留 0 表示不去），<b>時間會照著往後推算</b>，不必再對一次。預設總體介紹 20 分、每間 20 分，剩下的時間給綜合討論。</p>
+      <h2 class="font-semibold"><span class="num">5</span>行程</h2>
+      <p class="muted">這一張表就是這一場的行程：會印在簡報第 2 頁，也會出現在來賓專頁。「研究室參訪」那一列底下是每一間幾分鐘（留 0 表示不去）——<b>各研究室在支援人力表上填的分鐘會自動排進來</b>（標「研究室填」），<b>時間會照著往後推算</b>，不必再對一次。預設總體介紹 20 分、每間 20 分，剩下的時間給綜合討論。</p>
       <div class="flex flex-wrap gap-2 items-center">
         <button class="btn" id="planBtn" title="依人數、時間、興趣排出這一場的行程">AI 排行程</button>
         <span class="muted" id="planInfo"></span>
@@ -197,59 +238,12 @@
               <button class="btn" id="copyLink" title="複製來賓專頁網址，貼到信裡或 LINE 給對方">複製網址</button>
               <button class="btn btn-soft" id="downloadIcs" title="把這一場加進行事曆，結束時間跳出來提醒你拍簽名簿、講三十秒口述。系統本來就會在那個時間寄一封提醒信，這顆是給想在行事曆上也看到的人">下載後續提醒 .ics</button>
             </div>
-            <p class="muted">通告研究室與確認信在下面兩張卡片。其他要做的事（選頁、後續）看上面那一排進度：綠勾是做過了，點一格就跳到該做那件事的分頁。</p>
+            <p class="muted">確認信在下面那一張卡片。其他要做的事（選頁、後續）看上面那一排進度：綠勾是做過了，點一格就跳到該做那件事的分頁。</p>
           </div>
         </div>
       </div>
     </div>
 
-
-    <div class="card space-y-3" id="noticeCard">
-      <h2 class="font-semibold"><span class="num">5</span>通告研究室 <span class="muted font-normal">多半是貼到 LINE 群組</span></h2>
-      <p class="muted">排好行程之後先告訴各研究室哪個單位什麼時候來，<b>請各室填接待人員與共需幾分鐘</b>——通告最後附支援人力表的連結，老師點進去填。定案之後再回報一次。<br>這幾則是寫給中心同事看的，所以一律中文、條列、不署名，貼得進 LINE。</p>
-
-      <div class="space-y-2">
-        <div class="f mb-0">一、通告與徵詢簡報人員</div>
-        <div class="flex flex-wrap gap-2 items-center">
-          <button class="btn" id="noticeBtn" title="依這一場的流程擬一則通告：哪個單位什麼時候來、當天動線，最後附支援人力表的連結">AI 擬通告</button>
-          <span class="muted" id="noticeInfo"></span>
-        </div>
-        <input type="text" id="noticeSubject" placeholder="主旨（寄 email 才用得到）">
-        <textarea id="noticeBody" rows="12" placeholder="通告內容會出現在這裡，可以直接改"></textarea>
-        <p class="muted" id="noticeDraftNote" hidden></p>
-        <div class="flex flex-wrap gap-2 items-center">
-          <button class="btn" id="copyNotice" title="複製整則通告，貼到 LINE 群組">複製（貼到 LINE）</button>
-          <button class="btn btn-soft" id="noticeSendBtn" title="用中心的 Gmail 寄給下面勾選的老師。沒設定 Gmail 時會給你 mailto 自己寄">寄出通告</button>
-          <button type="button" class="btn btn-soft" id="noticeMailto" hidden title="把內文複製起來，再開你自己的信件程式（收件人與主旨會帶過去，內文貼上就好）">用自己的信箱寄</button>
-          <span id="noticeSendInfo"></span>
-        </div>
-        <div id="noticeRecipients" class="space-y-1"></div>
-        <p class="muted" id="noticeWho"></p>
-      </div>
-
-      <div class="space-y-2">
-        <div class="f mb-0">二、各室的接待人員與共需幾分鐘</div>
-        <p class="muted">老師在支援人力表上填的會出現在這裡；在群組裡直接回的，填在這裡也一樣。回報那一則照這裡寫。</p>
-        <div class="space-y-1" id="presenters"></div>
-      </div>
-
-      <div class="space-y-2">
-        <div class="f mb-0">三、把定案的時間與內容回報給各室</div>
-        <div class="flex flex-wrap gap-2 items-center">
-          <button class="btn" id="rundownBtn" title="把定案的動線與簡報人員整理成一則訊息，回報給各研究室">AI 擬回報</button>
-          <span class="muted" id="rundownInfo"></span>
-        </div>
-        <input type="text" id="rundownSubject" placeholder="主旨（寄 email 才用得到）">
-        <textarea id="rundownBody" rows="10" placeholder="回報內容會出現在這裡"></textarea>
-        <p class="muted" id="rundownDraftNote" hidden></p>
-        <div class="flex flex-wrap gap-2 items-center">
-          <button class="btn" id="copyRundown" title="複製整則回報，貼到 LINE 群組">複製（貼到 LINE）</button>
-          <button class="btn btn-soft" id="rundownSendBtn" title="用中心的 Gmail 寄給上面勾選的老師">寄出回報</button>
-          <button type="button" class="btn btn-soft" id="rundownMailto" hidden title="把內文複製起來，再開你自己的信件程式（收件人與主旨會帶過去，內文貼上就好）">用自己的信箱寄</button>
-          <span id="rundownSendInfo"></span>
-        </div>
-      </div>
-    </div>
 
     <div class="card space-y-3" id="confirmCard">
       <div class="flex flex-wrap items-center gap-2">
@@ -596,6 +590,10 @@
       const m = key.match(new RegExp(re));
       if (m) return en.replace(/\$(\d)/g, (_, i) => m[Number(i)] ?? "");
     }
+    // 進度線那一排是「✓／·／– ＋ 一件事」：記號照舊，後面那件事照它自己那一條翻
+    // （「簡報 需重產」「簽名簿 本次沒有」這幾條本來就有，只是前面多了一個記號就查不到）
+    const mark = /^([✓·–]) (.+)$/.exec(key);
+    if (mark) { const rest = T(mark[2]); if (rest) return `${mark[1]} ${rest}`; }
     return "";
   }
   /** confirm() 這種不在畫面上的字用這個（查不到就照原文）。 */
@@ -883,7 +881,7 @@
     $("deleteBtn").hidden = !state.saved;
     $("draftDiscard").hidden = state.saved || !state.draft?.fields?.form;
     if (!state.saved) $("saveInfo").textContent = "";
-    renderGuests(v.guests || []); renderProgramme(v.programme || [], v.itinerary); renderBackground(v.background); renderPresenters(v);
+    renderGuests(v.guests || []); renderProgramme(v.programme || [], v.itinerary); renderBackground(v.background);
     $("rationale").textContent = v.plan_rationale || ""; $("uncertainties").innerHTML = (v.uncertainties || []).map((u) => `<li>${esc(u)}</li>`).join("");
     $("afterSave").hidden = !state.saved;
     renderProgress(v);
@@ -945,7 +943,9 @@
     const chips = rooms.map((room) => {
       const s = by.get(room);
       const lab = (state.labs?.labs || []).find((l) => l.room === room);
-      return `<label class="card !p-2 !rounded-lg flex items-center gap-2" style="--tone:${roomTone(room)}"><span class="room">${room}</span><span class="muted">${esc(lab?.lead?.name_zh || "")}</span><input type="number" min="0" class="!w-16" value="${s ? s.minutes : 0}" data-room="${room}"> 分</label>`;
+      // 這一格是研究室自己在支援人力表上填的（主辦端之後改過就不再標）
+      const fromLab = s && state.visit?.lab_minutes?.[room] != null && Number(state.visit.lab_minutes[room]) === Number(s.minutes);
+      return `<label class="card !p-2 !rounded-lg flex items-center gap-2" style="--tone:${roomTone(room)}"><span class="room">${room}</span><span class="muted">${esc(lab?.lead?.name_zh || "")}</span><input type="number" min="0" class="!w-16" value="${s ? s.minutes : 0}" data-room="${room}"> 分${fromLab ? `<span class="muted text-xs" data-from-lab title="研究室在支援人力表上填的">研究室填</span>` : ""}</label>`;
     }).join("");
     return `<tr data-rooms-row><td colspan="7" class="!pt-0"><div class="flex flex-wrap gap-2 items-center" id="itinerary">${chips}<span class="muted" id="roomsTotal"></span></div></td></tr>`;
   };
@@ -1304,6 +1304,8 @@
       if (first || r.renamed_from) await migrateDraft(first ? "new" : r.renamed_from, r.visit.visit_id);
       if (first) flash(`建好這一場了：${r.visit.visit_id}`);
       else if (r.renamed_from) flash(`網址改成 ${r.visit.visit_id}`);
+      // 研究室剛在支援人力表上填了分鐘（伺服器已經排進行程），畫面上這一份還沒看過：說一聲為什麼行程變了
+      else if ((r.rota_applied || []).length) flash(`${r.rota_applied.join("、")} 剛在支援人力表上填了分鐘，行程已經照著排好`);
     } finally {
       saveVisit.running = false;
     }
@@ -1311,11 +1313,8 @@
   // 訪前分頁裡任何一個欄位改動都會自己存（含名單、行程那張表）
   $("startTime").addEventListener("input", showDuration);
   $("endTime").addEventListener("input", showDuration);
-  // 例外：通告卡片裡各室的接待人員與分鐘數。那幾格自己走 `/api/rota`，整筆存檔也不收它們（ROTA_FIELDS）；
-  // 讓它們觸發自動存檔，存完 `fillForm()` 重畫那一區，正在打的字就被清掉了
-  const autosaves = (e) => !e.target.closest?.("#presenters");
-  $("tab-pre").addEventListener("input", (e) => autosaves(e) && scheduleSave());
-  $("tab-pre").addEventListener("change", (e) => autosaves(e) && scheduleSave());
+  $("tab-pre").addEventListener("input", scheduleSave);
+  $("tab-pre").addEventListener("change", scheduleSave);
   // 行程那張表：研究室的分鐘改了就把後面各段的時間推算一次；類型改了要換這一列有沒有研究室分鐘
   $("programmeTable").addEventListener("input", (e) => {
     if (e.target.matches("input[data-room]")) retimeProgramme();
@@ -1515,14 +1514,16 @@
     // 已經交出去、但行程之後又改過的（伺服器算的）：綠勾要收回來，改說「需重新產生」
     const stale = (key) => (state.stale || []).some((x) => x.key === key);
     const na = new Set((v.wrapup?.na || []));
+    // 各研究室回了幾間（支援人力表上人名或分鐘填了一樣就算）
+    const replied = new Set([...Object.keys(v.presenters || {}), ...Object.keys(v.lab_minutes || {})]).size;
     // 本次沒有的那幾件不算未完成：顯示「本次沒有」，不是灰點
     const wrap = (key, label, done, why) => ["wrapup", done ? label : na.has(key) ? `${label} 本次沒有` : label, done, why, !done && na.has(key)];
     const groups = [
       ["訪前", [
         ["pre", (v.guests || []).length ? `名單 ${v.guests.length} 人` : "名單", (v.guests || []).length > 0, "訪後信會寄給名單上每一個人，所以名單就是回饋的上限"],
         ["pre", "背景研判", v.background?.status === "done", "查過對方的公開資料，判斷可能的參訪目的"],
+        ["pre", replied ? `通告 ${replied} 間已回` : "通告研究室", !!(v.letters?.notice?.body && replied), "告訴各研究室哪個單位什麼時候來，請各室在支援人力表上填接待人員與共需幾分鐘——填的分鐘會自動排進今日流程"],
         ["pre", "今日流程", (v.programme || []).length > 0, "這一場的行程：幾點做什麼、每一間幾分鐘。會印在簡報第 2 頁與來賓專頁"],
-        ["pre", Object.keys(v.presenters || {}).length ? `通告 簡報人員 ${Object.keys(v.presenters).length} 間` : "通告研究室", !!(v.letters?.notice?.body && Object.keys(v.presenters || {}).length), "告訴各研究室哪個單位什麼時候來，請他們安排簡報人員；回覆填回來之後再回報定案的時間"],
         ["deck", v.deck?.skip ? "不用簡報" : stale("deck") ? "簡報 需重產" : v.deck?.generated_at ? "簡報已產" : `選了 ${(v.slides || []).length} 頁`, !!(v.deck?.skip || (v.deck?.generated_at && !stale("deck"))), stale("deck") ? "行程或選頁在產檔之後改過，手上那份 .pptx 是舊的" : "挑頁並產出這一場的 .pptx；只口頭介紹的場次可以整頁關掉"],
         ["pre", stale("confirmation") ? "確認信 行程已改" : v.letters?.confirmation?.sent_at ? "確認信 已寄" : "確認信", !!(v.letters?.confirmation?.sent_at && !stale("confirmation")), stale("confirmation") ? "寄出之後行程又改過，對方手上的時間是舊的" : "跟對方確認日期時間，順便把來賓專頁網址交出去"],
       ]],
@@ -2021,9 +2022,7 @@
       $(`${kind}Body`).value = l?.body || "";
       $(`${kind}SendInfo`).innerHTML = l?.sent_at ? `<span class="ok">已於 ${esc(l.sent_at.slice(0, 16).replace("T", " "))} 寄給 ${l.sent_to?.length || 0} 人</span>` : "";
     }
-    renderPresenters(v.visit); // 先畫這一場的房號（各室時段跟著收件人一起回來）
     await loadLabRecipients();
-    if ($("visitSelect").value === v.visit.visit_id) renderPresenters(v.visit); // 收件人回來了，帶上各室時段再畫一次
     rebase(LETTER_FIELDS); // 伺服器上這一版才是基準；手改過還沒寄的那一版由 applyDraft 擺回來
   }
   /**
@@ -2035,13 +2034,12 @@
     const id = $("visitSelect").value;
     const box = $("noticeRecipients");
     if (!box) return;
-    if (!id) { box.innerHTML = `<p class="muted">請先在上面選一場參訪。</p>`; state.labRecipients = []; state.labRecipientsFor = ""; return; }
+    if (!id) { box.innerHTML = `<p class="muted">請先在上面選一場參訪。</p>`; state.labRecipients = []; return; }
     const r = await api("/api/letter", { method: "POST", body: { visit_id: id, action: "recipients", kind: "notice" } });
-    if ($("visitSelect").value !== id) return; // 等的時候換了一場：這一份是上一場的，不要畫上去
-    // 記下這一份是哪一場的：換一場之後、新的還沒回來之前，通告卡片不能拿上一場的房號與時段來畫
-    // （實際發生過：西澳大學那一場的卡片上列著惇陽工程那一場的 301／304／303 與時段）
+    // 等的時候換了一場：這一份是上一場的，不要畫上去（實際發生過：西澳大學那一場的通告卡片上
+    // 列著惇陽工程那一場的 301／304／303 與時段）
+    if ($("visitSelect").value !== id) return;
     state.labRecipients = r.ok ? r.recipients : [];
-    state.labRecipientsFor = id;
     renderLabRecipients();
   }
   function renderLabRecipients() {
@@ -2051,7 +2049,7 @@
     const withEmail = list.filter((r) => r.email);
     const without = list.filter((r) => !r.email);
     box.innerHTML = !list.length
-      ? `<p class="muted">這一場的行程還沒排到任何研究室，先回上面排行程。</p>`
+      ? `<p class="muted">行程上還沒排研究室——通告複製到 LINE 群組就好，五間都會看到。</p>`
       : [
           ...list.map((r, i) => (r.email ? `<label class="flex gap-2 items-center"><input type="checkbox" checked data-i="${i}"><span>${esc(r.name)} <span class="muted">${esc(r.room)} · ${esc(r.email)} · ${esc(r.start)}–${esc(r.end)}</span></span></label>` : "")).filter(Boolean),
           // 沒信箱的合成一句：同一句講五遍只是雜訊，重點是「這幾間要自己貼 LINE」
@@ -2070,52 +2068,6 @@
     $("noticeWho").textContent = picked.length ? `${t("會寄給：")}${picked.map((r) => r.name).join("、")}` : anyEmail ? t("沒有勾到任何有信箱的老師——複製到 LINE 群組就好") : "";
   }
   const checkedLabRecipients = () => [...document.querySelectorAll('#noticeRecipients input[type="checkbox"]:checked')].map((i) => state.labRecipients[Number(i.dataset.i)]).filter(Boolean);
-  /**
-   * 各研究室的接待人員與共需幾分鐘（跟支援人力表同一份）：一間一列，人名會出現在回報那一則訊息裡，
-   * 分鐘數給主辦端排各室的時段用（上面那張行程表）。
-   * **這幾格走 `/api/rota`，不走整筆存檔**——各研究室自己也會從支援人力表填同一個欄位，
-   * 整筆存檔一律沿用伺服器上那一份（`visits.mts` 的 `ROTA_FIELDS`），後台手上的舊資料蓋不掉老師剛填的。
-   */
-  function renderPresenters(v) {
-    const box = $("presenters");
-    if (!box) return;
-    // 只用這一場的收件人（`labRecipientsFor` 對得上才算）：換一場之後、新的還沒回來之前，
-    // state 裡還是上一場的，拿來畫就會把別場的房號與時段掛在這一場底下
-    const stops = state.labRecipientsFor === (v?.visit_id || "") ? state.labRecipients || [] : [];
-    const leadOf = (room) => (state.labs?.labs || []).find((l) => String(l.room) === String(room))?.lead?.name_zh || "";
-    const onRoute = (v?.itinerary || [])
-      .filter((x) => String(x.room) !== "briefing" && Number(x.minutes) > 0)
-      .map((x) => ({ room: String(x.room), name: leadOf(x.room), start: "", end: "" }));
-    // 行程還沒排：五間都先列出來（跟支援人力表同一條規則——通告那時候寫的也是「研究室參訪（301–305）」）
-    const unplanned = !stops.length && !onRoute.length;
-    const rows = stops.length ? stops : onRoute.length ? onRoute : (state.labs?.labs || []).map((l) => ({ room: String(l.room), name: leadOf(l.room), start: "", end: "" }));
-    const who = v?.presenters || {};
-    const mins = v?.lab_minutes || {};
-    // 同一場重畫時（別的欄位自動存檔完 fillForm 會重畫這一區），正在打的那一格原樣擺回去、游標留著
-    const active = box.contains(document.activeElement) && box.dataset.visit === (v?.visit_id || "") ? document.activeElement : null;
-    const keep = active ? { room: active.dataset.presenter, field: active.dataset.field, value: active.value, at: active.selectionStart } : null;
-    box.dataset.visit = v?.visit_id || "";
-    box.innerHTML = rows.length
-      ? rows.map((r) => `<div class="flex flex-wrap items-center gap-2"><span class="room" style="--tone:${roomTone(r.room)}">${esc(r.room)}</span><span class="muted !w-44">${esc(r.name || "")}${r.start ? ` ${esc(r.start)}–${esc(r.end)}` : ""}</span><input type="text" data-presenter="${esc(r.room)}" data-field="name" class="!w-52" placeholder="接待人員" value="${esc(who[r.room] || "")}"><span class="muted">共需</span><input type="text" inputmode="numeric" maxlength="3" data-presenter="${esc(r.room)}" data-field="minutes" class="!w-16 text-right" value="${esc(mins[r.room] == null ? "" : String(mins[r.room]))}"><span class="muted">分鐘</span></div>`).join("")
-      : `<p class="muted">這一場的行程還沒排到任何研究室。</p>`;
-    if (unplanned && rows.length) box.insertAdjacentHTML("afterbegin", `<p class="muted">行程還沒排，五間都先列出來。</p>`);
-    for (const el of box.querySelectorAll("[data-presenter]")) {
-      el.onchange = async () => {
-        const body = { visit_id: state.visit?.visit_id, room: el.dataset.presenter, [el.dataset.field]: el.value.trim() };
-        const r = await api("/api/rota", { method: "POST", body });
-        if (!r.ok) return flash(r.error, "err");
-        if (state.visit) { state.visit.presenters = r.presenters; state.visit.lab_minutes = r.lab_minutes; }
-        if (el.dataset.field === "minutes") el.value = r.lab_minutes?.[el.dataset.presenter] ?? ""; // 「20分」存成 20，畫面跟著伺服器
-        flash("已存");
-      };
-    }
-    const again = keep && box.querySelector(`[data-presenter="${CSS.escape(keep.room || "")}"][data-field="${CSS.escape(keep.field || "")}"]`);
-    if (again) {
-      again.value = keep.value;
-      again.focus();
-      try { again.setSelectionRange(keep.at, keep.at); } catch { /* 有的瀏覽器對某些 input 不給設游標，不影響 */ }
-    }
-  }
   /** 兩封信各自一份收件人清單（確認信在「訪前」、感謝信在「後續」）。 */
   const recipientBoxes = () => [$("confirmRecipients"), $("thanksRecipients")].filter(Boolean);
   /**
@@ -2190,7 +2142,7 @@
     const r = await runJob("/api/letter", { visit_id: id, kind }, noteInto(`${kind}Info`), "AI 擬稿中……大約一分鐘。");
     if (!r) return;
     $(`${kind}Subject`).value = r.draft.subject; $(`${kind}Body`).value = r.draft.body;
-    if (r.recipients) { state.labRecipients = r.recipients; state.labRecipientsFor = id; }
+    if (r.recipients) state.labRecipients = r.recipients;
     renderLabRecipients();
     rebase(LETTER_FIELDS); queueDraft(); applyDraft();
   });

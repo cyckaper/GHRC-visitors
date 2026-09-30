@@ -2,7 +2,7 @@ import { fail, json, nowISO, readJSON, requireAdmin } from "../lib/http.mts";
 import { loadSettings } from "./settings.mts";
 import { loadLabs } from "./labs.mts";
 import { getStore } from "../lib/store.mts";
-import { labStops, visitEndAt } from "../../lib/visit.mjs";
+import { retimeProgramme, rotaRooms, visitEndAt, withLabMinutes } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
 import type { Visit } from "../lib/types.mts";
 
@@ -18,6 +18,8 @@ import type { Visit } from "../lib/types.mts";
  * **只問兩件事：接待人員、共需幾分鐘**（明確指示：「只要填該研究室人力及共需幾分鐘，說明越簡單越好」）。
  * 通告說「研究室參訪時段目前尚未分配到各室」，各室回報要多少時間，主辦端才排得出各室的時段；
  * 以前問的是「那一天方便的時段」（一句話），改掉了。
+ * **填的分鐘自動排進行程**（明確指示）：`visit.itinerary` 那一間改成填的分鐘、今日流程從開始時間重推一次，
+ * 所以訪前的行程表、來賓專頁的參訪流程、回報那一則都跟著變，不必主辦端再抄一次。
  * 這兩個欄位**只有這一支在寫**：`visits.mts` 的 `ROTA_FIELDS` 一律沿用伺服器上那一份，後台存檔蓋不掉。
  *
  * **過去的不給改，這件事在伺服器上擋**——畫面灰掉只是提示，擋在前端等於沒擋。
@@ -35,11 +37,10 @@ import type { Visit } from "../lib/types.mts";
 
 /** 表上每一場只給這些欄位——名單、信件、回覆、摘要都不給。 */
 function rotaVisit(v: Visit, labs: any, now: Date) {
-  const onRoute = (labStops(v, labs) as any[]).map((s) => String(s.room));
   // **行程還沒排的那一場，五間都列出來**（明確指示：還沒填的也要看得到，才知道有填沒填）。
-  // 以前這種場次整張卡片只有一句「行程還沒排」，沒有格子——老師從通告點進來也沒地方填
-  // （通告那時候寫的就是「研究室參訪（301–305）」）。排好之後只列動線上那幾間，其他的是「免填」。
-  const rooms = onRoute.length ? onRoute : ((labs?.labs || []) as any[]).map((l) => String(l.room));
+  // 主辦端排好之後只列動線上那幾間（加上已經填過的），其他的是「免填」。研究室自己填的分鐘會排進動線，
+  // 那幾間不算主辦端排的——規則在 `lib/visit.mjs rotaRooms()`
+  const { rooms, planned } = rotaRooms(v, labs) as { rooms: string[]; planned: boolean };
   return {
     visit_id: v.visit_id,
     date: v.date,
@@ -51,7 +52,7 @@ function rotaVisit(v: Visit, labs: any, now: Date) {
     contact_teacher: v.contact_teacher || "",
     // 各室排定的時段不給：通告說「尚未分配到各室」，表上再印一份排定的時間只會讓人以為已經定了
     stops: rooms.map((room) => ({ room })),
-    planned: onRoute.length > 0,
+    planned,
     presenters: (v as any).presenters || {},
     lab_minutes: (v as any).lab_minutes || {},
     background: (v as any).background?.org_profile ? (v as any).background : null,
@@ -112,7 +113,31 @@ export default async (req: Request) => {
   };
   put("presenters", body?.name === undefined ? undefined : String(body.name ?? "").trim().slice(0, 60));
   put("lab_minutes", minutes);
-  (v as any).updated_at = nowISO();
+  const now = nowISO();
+  if (minutes !== undefined) {
+    const at: Record<string, string> = { ...((v as any).lab_minutes_at || {}) };
+    // 哪幾間是研究室自己填進動線的（主辦端沒排）：支援人力表判斷「這一場排了沒」要把它們排除（rotaRooms）
+    const added = new Set<string>((((v as any).lab_added || []) as unknown[]).map(String));
+    if (minutes) {
+      // **填的分鐘自動排進行程**（明確指示）：動線上那一間改成這個分鐘數（沒有就插進去），
+      // 今日流程從開始時間往後重推——訪前的行程表、來賓專頁的參訪流程、回報那一則都照這一份。
+      // 記下是什麼時候填的：後台手上那一份如果比這個舊，存檔時不會把它蓋回去（visits.mts）
+      if (!(v.itinerary || []).some((s) => String(s.room) === room && Number(s.minutes) > 0)) added.add(room);
+      v.itinerary = withLabMinutes(v.itinerary, room, minutes) as Visit["itinerary"];
+      v.programme = retimeProgramme(v) as Visit["programme"];
+      at[room] = now;
+    } else {
+      // 清空＝「還沒回」。主辦端排的那一間不動（說不定本來就要去）；只因為研究室填了才排進去的，跟著拿掉
+      delete at[room];
+      if (added.delete(room)) {
+        v.itinerary = (v.itinerary || []).filter((s) => String(s.room) !== room);
+        v.programme = retimeProgramme(v) as Visit["programme"];
+      }
+    }
+    (v as any).lab_minutes_at = at;
+    (v as any).lab_added = [...added];
+  }
+  (v as any).updated_at = now;
   await store.putVisit(v);
   await triggerDriveSync(v.visit_id);
   return json({ ok: true, presenters: (v as any).presenters || {}, lab_minutes: (v as any).lab_minutes || {} });

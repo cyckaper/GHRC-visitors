@@ -1,7 +1,7 @@
 import { fail, json, nowISO, readJSON, requireAdmin, siteUrl } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
-import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, toCSV, minutesBetween, endTimeOf, wrapupNA } from "../../lib/visit.mjs";
+import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
 import { dropDraft, moveDraft } from "./draft.mts";
 
@@ -74,6 +74,16 @@ export default async (req: Request) => {
     if (existing) for (const k of KEPT) if ((body as any)[k] === undefined) (merged as any)[k] = (existing as any)[k];
     // 各研究室自己填的那幾格：帶了也不算，一律沿用伺服器上的（見 ROTA_FIELDS）
     if (existing) for (const k of ROTA_FIELDS) if ((existing as any)[k] !== undefined) (merged as any)[k] = (existing as any)[k];
+    // 研究室填的分鐘已經自動排進行程（/api/rota）。**後台手上那一份還沒看過**（它的 updated_at 比那一間
+    // 填的時間早）就不能把它蓋回去：那幾間照伺服器上的分鐘、今日流程重推一次。看過之後主辦端要改就照他的。
+    const base = String((body as any).updated_at || "");
+    const filledAt: Record<string, string> = (existing as any)?.lab_minutes_at || {};
+    const unseen = existing ? Object.keys(filledAt).filter((room) => !base || filledAt[room] > base) : [];
+    for (const room of unseen) {
+      const step = (existing!.itinerary || []).find((s) => String(s.room) === room);
+      if (step && Number(step.minutes) > 0) merged.itinerary = withLabMinutes(merged.itinerary, room, Number(step.minutes)) as Visit["itinerary"];
+    }
+    if (unseen.length) merged.programme = retimeProgramme(merged) as Visit["programme"];
     merged.created_at = existing?.created_at || nowISO();
     merged.updated_at = nowISO();
     // 剛產出來的那一份簡報：把**這一刻的行程指紋**記下來，之後行程改了才知道手上那個 .pptx 是舊的。
@@ -85,7 +95,8 @@ export default async (req: Request) => {
       await moveDraft(renamedFrom, merged.visit_id); // 手上還沒交出去的東西不該跟著舊網址消失
     }
     await triggerDriveSync(merged.visit_id);
-    return json({ ok: true, visit: merged, renamed_from: renamedFrom, url_fixed: renameBlocked, stale: staleOutputs(merged) });
+    // rota_applied：這一次存檔時，哪幾間研究室剛填的分鐘被保留下來（後台照這個說一聲「行程已照研究室填的更新」）
+    return json({ ok: true, visit: merged, renamed_from: renamedFrom, url_fixed: renameBlocked, stale: staleOutputs(merged), rota_applied: unseen });
   }
 
   if (req.method === "DELETE") {
@@ -114,10 +125,12 @@ const KEPT = ["summary", "summary_at", "reminders", "drive", "cards", "signbook"
  * 共需幾分鐘（`lab_minutes`）。這幾個**帶了也不算**，一律沿用伺服器上那一份：
  * 後台的 `readForm()` 是把手上那一份整個送回來的，老師在表上填完之後，後台開著的那一份還是舊的，
  * 改一個字觸發自動存檔就會把老師剛填的蓋掉——`KEPT` 只擋得住「沒帶」，擋不住「帶了舊的」。
- * 後台自己要改這幾格也走 `/api/rota`（admin 打得動，設定分頁那張表與通告卡片都是）。
+ * 後台自己要改這幾格也走 `/api/rota`（admin 打得動，設定分頁那張表就是）。
+ * `lab_minutes_at`：各間是什麼時候填的（存檔時比對，後台還沒看過的分鐘不蓋回去）；
+ * `lab_added`：哪幾間是研究室自己填進動線的（支援人力表判斷「這一場排了沒」用）。
  * `lab_hours` 是改成「共需幾分鐘」之前問的「方便的時段」：不再收，存過的也不刪。
  */
-const ROTA_FIELDS = ["presenters", "lab_minutes", "lab_hours"] as const;
+const ROTA_FIELDS = ["presenters", "lab_minutes", "lab_minutes_at", "lab_added", "lab_hours"] as const;
 
 /** 這一場的網址還沒「用出去」：沒人回覆、兩封信都還沒寄出、沒放任何檔案、還沒備份到 Drive。 */
 async function isUnused(store: ReturnType<typeof getStore>, v: Visit): Promise<boolean> {
@@ -171,6 +184,8 @@ export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   // 存檔時由上面的 ROTA_FIELDS 沿用伺服器上那一份
   (v as any).presenters = {};
   (v as any).lab_minutes = {};
+  (v as any).lab_minutes_at = {};
+  (v as any).lab_added = [];
   delete (v as any).lab_hours;
   const code = String((input as any).code || "").trim();
   if (!isValidVisitId(v.visit_id) || code) v.visit_id = makeVisitId(v.date, v.org.name, code);

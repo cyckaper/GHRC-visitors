@@ -1005,3 +1005,93 @@ test("支援人力表：連結自動產生、才打得開，各室只填接待�
 
   await api(`/api/visits?id=${fid}`, { method: "DELETE", headers: admin });
 });
+
+test("研究室填的分鐘自動排進行程與來賓專頁；後台手上的舊資料蓋不掉，看過之後主辦端改的照他的", async () => {
+  const key = (await api("/api/settings", { headers: admin })).body.settings.rota_key;
+  const programme = [
+    { kind: "briefing", start: "14:00", end: "14:20", title_en: "Welcome and centre overview", title_2nd: "歡迎與中心總體介紹", rooms: [] },
+    { kind: "tour", start: "14:20", end: "15:00", title_en: "Laboratory visits", title_2nd: "研究室參訪", rooms: ["301", "303"] },
+    { kind: "discussion", start: "15:00", end: "15:30", title_en: "General discussion", title_2nd: "綜合討論", rooms: [] },
+  ];
+  const itinerary = [{ room: "briefing", minutes: 20, location: "302" }, { room: "301", minutes: 20 }, { room: "303", minutes: 20 }];
+  const made = await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ org: { name: "Autofill Rota University" }, date: "2099-11-03", code: "autofill", start_time: "14:00", end_time: "15:30", programme, itinerary }) });
+  assert.equal(made.status, 200, JSON.stringify(made.body));
+  const id = made.body.visit.visit_id;
+  const stale = made.body.visit; // 後台手上那一份：研究室還沒填之前的
+  const span = (b) => `${b.start}–${b.end}`;
+  const minutesOf = (v, room) => (v.itinerary.find((s) => String(s.room) === room) || {}).minutes;
+
+  // 301 在支援人力表上填「共需 35 分」：動線改成 35、研究室參訪那一段拉長、後面往後推
+  assert.equal((await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: id, room: "301", minutes: "35" }) })).status, 200);
+  let v = (await api(`/api/visits?id=${id}`, { headers: admin })).body.visit;
+  assert.equal(minutesOf(v, "301"), 35, "動線上 301 改成研究室填的分鐘");
+  assert.deepEqual(v.programme.map(span), ["14:00–14:20", "14:20–15:15", "15:15–15:45"], "今日流程從開始時間往後重推");
+  assert.deepEqual(v.programme[1].rooms, ["301", "303"]);
+  // 來賓專頁的參訪流程是同一份（各間的時段由動線推出來），研究室填的欄位本身不公開
+  const pub = (await api(`/api/visits?id=${id}&public=1`)).body.visit;
+  assert.deepEqual(pub.programme.map(span), ["14:00–14:20", "14:20–15:15", "15:15–15:45"], "來賓專頁看到的是更新過的流程");
+  assert.equal(minutesOf(pub, "301"), 35);
+  assert.ok(!("lab_minutes" in pub) && !("presenters" in pub) && !("lab_minutes_at" in pub), "研究室填的那幾格不進來賓專頁");
+
+  // 305 不在動線上（行程沒排它），但研究室填了：照房號插進動線
+  await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: id, room: "305", minutes: "15" }) });
+  v = (await api(`/api/visits?id=${id}`, { headers: admin })).body.visit;
+  assert.deepEqual(v.itinerary.map((s) => s.room), ["briefing", "301", "303", "305"], "照房號插進去");
+  assert.deepEqual(v.programme[1].rooms, ["301", "303", "305"]);
+  assert.equal(span(v.programme[1]), "14:20–15:30");
+
+  // 後台開著舊的那一份（兩間都還沒填時載入的）改一個字自動存檔：研究室填的分鐘不會被蓋回去
+  const resaved = await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ ...stale, purpose: "改一個字" }) });
+  assert.equal(resaved.status, 200, JSON.stringify(resaved.body));
+  assert.deepEqual([...resaved.body.rota_applied].sort(), ["301", "305"], "回報哪幾間是研究室剛填的（後台據此說一聲為什麼行程變了）");
+  v = (await api(`/api/visits?id=${id}`, { headers: admin })).body.visit;
+  assert.equal(v.purpose, "改一個字", "存檔本身照常");
+  assert.equal(minutesOf(v, "301"), 35, "301 還是研究室填的 35");
+  assert.equal(minutesOf(v, "305"), 15, "305 也還在");
+  assert.equal(span(v.programme[1]), "14:20–15:30", "今日流程照研究室填的重推");
+
+  // 看過之後（手上是最新的那一份）主辦端要改就照他的
+  const host = { ...v, itinerary: v.itinerary.map((s) => (s.room === "301" ? { ...s, minutes: 25 } : s)) };
+  const edited = await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(host) });
+  assert.deepEqual(edited.body.rota_applied, [], "已經看過了，不算研究室剛填的");
+  assert.equal(minutesOf(edited.body.visit, "301"), 25, "主辦端改的照他的");
+
+  // AI 排行程也蓋不掉研究室填的分鐘（預設每間 20 分那一套只管研究室沒填的）
+  const planned = await plan(edited.body.visit);
+  assert.equal(planned.status, 200, JSON.stringify(planned.body));
+  const pv = planned.body.visit;
+  assert.equal(minutesOf(pv, "301"), 35, "301 照研究室填的");
+  assert.equal(minutesOf(pv, "305"), 15, "305 照研究室填的");
+  const tour = pv.programme.find((b) => b.kind === "tour");
+  assert.equal(tour.rooms.length, pv.itinerary.filter((s) => s.room !== "briefing" && s.minutes > 0).length, "研究室參訪那一段列的就是動線");
+  assert.ok((planned.body.warnings || []).some((w) => w.includes("301、305") && w.includes("研究室")), `排完說一聲哪幾間照研究室填的：${planned.body.warnings}`);
+  assert.equal(pv.lab_minutes["301"], 35, "排完回來的那一份帶著研究室填的，畫面上的「研究室填」標記才對得上");
+
+  // 支援人力表：主辦端排了 301、303，301 也填了——這一場仍然是「排好了」，其他間不會又冒出「未填」
+  const rowOf = async (vid) => (await api(`/api/rota?key=${key}`)).body.visits.find((x) => x.visit_id === vid);
+  let row = await rowOf(id);
+  assert.equal(row.planned, true);
+  assert.deepEqual(row.stops.map((x) => x.room), ["301", "303", "305"], "動線上的三間（305 是研究室自己填進來的）");
+
+  // 清空分鐘＝還沒回：主辦端排的那一間不動（說不定本來就要去）；只因為研究室填了才排進去的，跟著拿掉
+  await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: id, room: "301", minutes: "" }) });
+  await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: id, room: "305", minutes: "" }) });
+  v = (await api(`/api/visits?id=${id}`, { headers: admin })).body.visit;
+  assert.ok(!("301" in v.lab_minutes) && !("305" in v.lab_minutes) && !("305" in v.lab_minutes_at), "兩格都拿掉了");
+  assert.equal(minutesOf(v, "301"), 25, "主辦端排的 301 不動");
+  assert.deepEqual(v.itinerary.map((s) => s.room), ["briefing", "301", "303"], "研究室自己填進來的 305 跟著拿掉");
+  assert.deepEqual(v.programme[1].rooms, ["301", "303"]);
+  assert.equal(span(v.programme[1]), "14:20–15:05", "流程跟著縮回來（301 主辦端改的 25 ＋ 303 的 20）");
+
+  // 行程還沒排研究室的那一場：第一間一填就排進動線，但其他四間的格子不能因此不見
+  const bareId = (await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ org: { name: "Bare Autofill University" }, date: "2099-11-04", code: "bareauto", start_time: "10:00", end_time: "12:00" }) })).body.visit.visit_id;
+  await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: bareId, room: "302", minutes: "20" }) });
+  const bare = (await api(`/api/visits?id=${bareId}`, { headers: admin })).body.visit;
+  assert.deepEqual(bare.itinerary.map((s) => s.room), ["briefing", "302"], "302 排進動線");
+  assert.ok(bare.programme.some((b) => b.kind === "tour" && b.rooms.join() === "302"), "還沒有流程的先照預設排一份，研究室參訪那一段就是 302");
+  row = await rowOf(bareId);
+  assert.equal(row.planned, false, "只有研究室自己填進來的，不算主辦端排好了");
+  assert.deepEqual(row.stops.map((x) => x.room), ["301", "302", "303", "304", "305"], "五間都還看得到格子");
+
+  for (const x of [id, bareId]) await api(`/api/visits?id=${x}`, { method: "DELETE", headers: admin });
+});
