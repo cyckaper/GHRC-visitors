@@ -454,16 +454,47 @@ try {
     check(await page.isHidden("#draftNote"), "…and ticking “confirmed” drops the draft note");
     await fetch(`${base}/api/labs`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer e2e-token" }, body: JSON.stringify({ room: "303", reset: true }) });
   }
-  await page.goBack();
+  {
+    // 老師簡報上的照片：302 有一整面照片牆，圖說是簡報上原本的標法
+    await page.goto(`${base}/lab/302`);
+    await page.waitForFunction(() => document.getElementById("labName")?.textContent?.length > 0, null, { timeout: 15000 });
+    check((await page.getAttribute(".avatar", "src")) === "/assets/labs/302/lead.jpg", "the lead photo from the lab's own slides shows up instead of the initials");
+    check((await page.locator("#photos figure").count()) === 6, "…and so do the six pictures from those slides");
+    check((await page.textContent("#photos")).includes("Environment prediction"), "…with the captions the slides gave them");
+    // 站台上真的有那幾個檔（路徑打錯的話這裡就會抓到；圖片是 lazy 的，不能只看 naturalWidth）
+    await page.waitForFunction(() => document.querySelector(".avatar")?.naturalWidth > 0, null, { timeout: 15000 });
+    const srcs = await page.$$eval("#photos img", (els) => els.map((e) => e.getAttribute("src")));
+    const codes = await Promise.all(srcs.map(async (u) => (await fetch(base + u)).status));
+    check(codes.every((c) => c === 200), `every one of them is actually served (${codes.join(",")})`);
+    // 照片牆也走後台：加一張、給圖說、再拿掉
+    const put = async (body) => (await fetch(`${base}/api/labs`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer e2e-token" }, body: JSON.stringify(body) })).json();
+    const dot = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const added = await put({ room: "302", photo: { data: dot, gallery: true } });
+    const shots = added.labs.find((l) => l.room === "302").photos;
+    check(shots.length === 7 && /^labs\/302\//.test(shots[6].src), "the admin can add a picture to that wall");
+    const captioned = await put({ room: "302", fields: { photos: shots.map((x, i) => (i === 6 ? { ...x, caption_en: "Added from the admin page" } : x)) } });
+    check(captioned.labs.find((l) => l.room === "302").photos[6].caption_en === "Added from the admin page", "…and caption it");
+    await page.reload();
+    await page.waitForFunction(() => document.querySelectorAll("#photos figure").length === 7, null, { timeout: 15000 });
+    check((await page.textContent("#photos")).includes("Added from the admin page"), "…and the introduction page shows it");
+    const dropped = await put({ room: "302", fields: { photos: shots.slice(0, 6) } });
+    check(dropped.labs.find((l) => l.room === "302").photos.length === 6, "…and take it off again");
+    await fetch(`${base}/api/labs`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer e2e-token" }, body: JSON.stringify({ room: "302", reset: true }) });
+  }
+  // 回到來賓專頁（上面跑過幾個 /lab/… 的分頁，所以直接指定網址，不靠上一頁）
+  await page.goto(`${base}/2026-10-07-uwa#email`);
+  await page.waitForSelector("#emailSec:not([hidden])");
   await page.waitForFunction(() => document.getElementById("labsTitle")?.textContent?.length > 0, null, { timeout: 15000 });
   check((await page.locator("#labs article").count()) === 6, "guest page shows the briefing step plus five lab cards");
+  check((await page.locator("#labs img.avatar").count()) === 5, "all five leads have a photo now, so no card falls back to initials");
   check((await page.textContent("#labs article:first-child")).includes("Center overview"), "briefing card comes first");
   check((await page.textContent("#lab-303")).includes("陳惠美") && !(await page.textContent("#lab-303")).includes("鄭佳昆"), "303 lists only 陳惠美");
   check((await page.textContent("#lab-305")).includes("IVR Research Lab") && !(await page.textContent("#lab-305")).includes("outside"), "305 is the IVR Research Lab");
   check((await leftEdge("#lab-303")) === labColor["303"] && (await leftEdge("#lab-305")) === labColor["305"] && labColor["303"] !== labColor["305"], "every lab card wears its own colour: 303 and 305 are both 驗證 but two different rooms");
   check((await page.textContent("#briefing-card")).includes("302"), "guest page shows the briefing in 302");
-  check((await page.textContent("#lab-303")).includes("Landscape Simulation Lab") && (await page.textContent("#lab-303")).includes("景觀環境模擬室"), "English visit is still bilingual: English first, Chinese second");
-  check((await page.textContent("#programme li:first-child")).includes("總體介紹"), "programme block gets the Chinese label when the plan left title_2nd empty");
+  check((await page.textContent("#lab-303")).includes("Landscape Simulation Lab") && (await page.textContent("#lab-303")).includes("景觀環境模擬室"), "the lab NAME keeps both scripts (a name is an identifier, not a translation)");
+  check(!/[一-鿿]/.test(await page.textContent("#lab-303 p")), "…but the prose on the English page is English only: 中英文不在同一頁印兩份");
+  check((await page.textContent("#programme li:first-child")).includes("Center overview") && !(await page.textContent("#programme li:first-child")).includes("總體介紹"), "programme block falls back to the English label when the plan left title_en empty, and does not print the Chinese one");
   check((await page.locator("#programme li").count()) > 0, "programme rendered");
   await page.waitForSelector("#materialsSec:not([hidden])");
   check((await page.locator("#photoGrid img").count()) === 1 && (await page.textContent("#linkList")).includes("Lab 303 papers"), "visit page shows the uploaded photo and the link");
@@ -500,15 +531,15 @@ try {
   // ── 來賓端：中文為主（右上角那顆鍵，或網址帶 ?ui=zh）──
   await page.goto(`${base}/2026-10-07-uwa?phase=today&ui=zh`);
   await page.waitForSelector("#lab-303");
-  check((await page.textContent("#welcome")).includes("歡迎"), "?ui=zh puts Chinese first on the guest page");
-  check((await page.textContent("#welcome")).includes("Welcome"), "…and English is still there, as the second line");
-  check((await page.textContent("#langToggle")) === "English", "the toggle offers the other language");
-  check((await page.textContent("#lab-301")).includes("健康景觀智能室"), "the lab cards lead in Chinese too");
-  check((await page.textContent("#lab-301")).includes("Health Landscape Intelligence Lab"), "…with the English name kept alongside");
+  check((await page.textContent("#welcome")).includes("歡迎"), "?ui=zh makes the guest page a Chinese page");
+  check(!(await page.textContent("#welcome")).includes("Welcome"), "…and the English is gone: the two languages are one switch, not two lines");
+  check((await page.textContent("#programme li:first-child")).includes("總體介紹"), "the Chinese page gets the Chinese programme labels");
+  check((await page.$eval("#langToggle .on", (e) => e.textContent)) === "中文", "the toggle shows which language is on, not just the other one");
+  check((await page.textContent("#lab-301")).includes("健康景觀智能室") && (await page.textContent("#lab-301")).includes("Health Landscape Intelligence Lab"), "the lab name still carries both scripts on the Chinese page");
   await page.fill("#suggestion", "半路換語言");
   await page.click("#langToggle");
-  await page.waitForFunction(() => document.getElementById("langToggle")?.textContent === "中文");
-  check((await page.textContent("#welcome")).includes("Welcome to"), "the toggle switches back to English first");
+  await page.waitForFunction(() => document.querySelector("#langToggle .on")?.textContent === "EN");
+  check((await page.textContent("#welcome")).includes("Welcome to"), "the toggle switches back to an English page");
   check((await page.inputValue("#suggestion")) === "半路換語言", "…and what the guest had already typed survives the switch");
 
   // ── 主辦端：整個介面切成英文 ──

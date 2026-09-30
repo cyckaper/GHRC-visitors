@@ -638,7 +638,15 @@
   "把這一間改回原稿？在後台改的內容會不見。": "Put this lab back to the original? What you changed here will be lost.",
   "已改回原稿": "Back to the original",
   "照片處理中…": "Working on the photo…",
-  "照片換好了": "Photo changed"
+  "照片換好了": "Photo changed",
+  "這一句是老師自己的簡報上的原文，請照用，不要改寫。": "This sentence is the lead’s own wording, taken from their slides. Use it as it stands — do not rewrite it.",
+  "介紹頁的照片": "Photos on the introduction page",
+  "圖說一張一行；移除按 ✕，按「儲存這一間」才生效": "One caption per photo. ✕ removes one — it takes effect when you save this laboratory.",
+  "圖說（中文）": "Caption (Chinese)",
+  "✕ 移除這一張": "✕ Remove this one",
+  "加照片": "Add photos",
+  "還沒有老師照片": "No photo of the lead yet",
+  "照片加好了": "Photos added"
  },
  "patterns": [
   [

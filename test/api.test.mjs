@@ -451,7 +451,10 @@ test("thanks letter: recipients = list + onsite, wording is the 請益 question,
   assert.ok(d.body.draft.body.includes("#respond"));
   assert.ok(!/satisf|rate us|rating/i.test(d.body.draft.body));
   assert.ok(/slides \(PDF\)/.test(d.body.draft.body) && /photos/.test(d.body.draft.body) && /links/.test(d.body.draft.body), "after uploading, the letter may mention the PDF, photos and links");
-  assert.ok(!/contact details/.test(d.body.draft.body), "no teacher emails in labs.json yet → no promise of contact details");
+  // 頁面上真的有的才承諾：305 在 labs.json 有公開信箱（老師自己的 CV 上就印著），
+  // 其餘四間沒有，所以這一句在不在，要看這一場走到哪幾間
+  const has305 = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit.itinerary.some((s) => String(s.room) === "305");
+  assert.equal(/contact details/.test(d.body.draft.body), has305, "只有走到有公開信箱的那一間，信裡才提得到聯絡方式");
   const send = await runJob("letter", { visit_id: visitId, action: "send", subject: d.body.draft.subject, body: d.body.draft.body, recipients: rec.body.recipients });
   assert.equal(send.status, 200);
   assert.equal(send.body.sent, false);

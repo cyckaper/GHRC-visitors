@@ -19,8 +19,10 @@
   .hero::after { width: 280px; height: 280px; background: #fcd34d; bottom: -150px; left: -70px; animation-delay: -8s; }
   .hero > * { position: relative; }
   @keyframes drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(-36px, 26px) scale(1.18); } }
-  .lang-btn { position: absolute; top: 1rem; right: 1rem; z-index: 1; font-size: .8rem; font-weight: 600; padding: .3rem .75rem; border-radius: 9999px; background: rgba(255, 255, 255, .8); color: #065f46; border: 1px solid #6ee7b7; transition: background .2s; }
+  .lang-btn { position: absolute; top: 1rem; right: 1rem; z-index: 1; font-size: .8rem; font-weight: 600; padding: .25rem .3rem; border-radius: 9999px; background: rgba(255, 255, 255, .8); color: #6b7280; border: 1px solid #6ee7b7; transition: background .2s; display: inline-flex; gap: .15rem; }
   .lang-btn:hover { background: #fff; }
+  .lang-btn span { padding: .05rem .6rem; border-radius: 9999px; }
+  .lang-btn .on { background: #065f46; color: #fff; }
   .eyebrow { display: inline-flex; align-items: center; gap: .5rem; max-width: calc(100% - 6rem); font-size: .8rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #065f46; }
   .eyebrow::before { content: ""; width: 1.6rem; height: 2px; background: currentColor; border-radius: 2px; }
   .grad-text { background: linear-gradient(90deg, #065f46, #0f766e 60%, #4d7c0f); -webkit-background-clip: text; background-clip: text; color: transparent; }
@@ -46,7 +48,8 @@
     li.now .dot::after { background: color-mix(in srgb, var(--tone) 45%, transparent); }
   }
   section > h2, .card > h2 { border-left: 4px solid var(--tone); padding-left: .6rem; }
-  .second { color: #78716c; font-size: .9em; }
+  .second { color: #a8a29e; font-size: .84em; }
+  .name-2nd { color: #78716c; font-size: .9em; font-weight: 400; }
   .btn { display: inline-flex; align-items: center; gap: .45rem; padding: .6rem 1.05rem; border-radius: .8rem; background: var(--ink); color: #fff; font-weight: 500; transition: transform .15s ease, background .2s, box-shadow .2s; }
   .btn:hover { transform: translateY(-1px); background: #292524; box-shadow: 0 8px 20px -12px rgba(0,0,0,.5); }
   .btn:disabled { opacity: .5; transform: none; }
@@ -85,7 +88,7 @@
 <body class="text-stone-900">
 <main class="max-w-3xl mx-auto px-4 py-8 space-y-8" id="app">
   <header class="hero reveal">
-    <button type="button" id="langToggle" class="lang-btn" title="中文 / English">中文</button>
+    <button type="button" id="langToggle" class="lang-btn" title="中文 / English"></button>
     <p class="eyebrow" id="centerLine">Green Health Research Center · NTU College of Bioresources and Agriculture</p>
     <h1 class="mt-3 text-3xl sm:text-4xl font-semibold leading-tight grad-text" id="welcome">Welcome to the Green Health Research Center</h1>
     <p class="mt-3 text-xl font-medium" id="orgLine"></p>
@@ -195,22 +198,27 @@
       showNotice("Could not load the visit. 無法載入參訪資料。");
     }
   }
-  // 雙語：**兩種語言一起出現**，差別只在哪一個是主語。預設英文為主、中文為輔（既有標準，
-  // 國際來賓佔多數）；右上角那顆鍵可以切成中文為主、英文為輔，選擇記在這台裝置上，
-  // 也可以用網址帶（?ui=zh／?ui=en，寄中文版連結給人時用）。
-  // 韓／日來的（visit.language=ko／ja）輔助語言仍然是他們的語言，不受這顆鍵影響。
+  // 雙語：預設英文，右上角那顆鍵切成中文（記在這台裝置，也可以用網址帶 ?ui=zh／?ui=en，
+  // 寄中文版連結給人時用）。
+  //
+  // **中英文是同一顆鍵的兩面，所以不在同一頁印兩份**：以前每一句都並排中英，
+  // 切了語言兩頁看起來差不多（明確回報過），那顆鍵等於沒有用。現在英文頁就是英文頁。
+  // **韓／日來的（visit.language=ko／ja）照舊雙語**：那不是那顆鍵的另一面，
+  // 來賓讀不懂英文時沒有別的地方可以看——輔助語言只在這個情況下出現（`aid`）。
+  // 例外是**名稱**：研究室名與老師姓名兩種寫法都印（那是門牌與人名，是識別不是翻譯）。
   const LANG_KEY = "ghrc-lang";
   const stored = () => { try { return localStorage.getItem(LANG_KEY) || ""; } catch (e) { return ""; } };
   const primary = (qs.get("ui") || stored()) === "zh" ? "zh" : "en";
   const lang2 = (visit && visit.language) || qs.get("lang") || "en";
   const secondary = lang2 === "ko" || lang2 === "ja" ? lang2 : primary === "zh" ? "en" : "zh";
   const T = (k) => (i18n[primary] || i18n.en)[k] || i18n.en[k] || "";
-  const T2 = (k) => (secondary ? (i18n[secondary] || {})[k] || "" : "");
+  const aid = secondary === "zh" || secondary === "en" ? "" : secondary;
+  const T2 = (k) => (aid ? (i18n[aid] || {})[k] || "" : "");
   const bi = (k, sep = " · ") => T(k) + (T2(k) ? sep + T2(k) : "");
   const labName = (lab) => lab["name_" + (primary === "zh" ? "zh" : "en")] || lab.name_en;
   const labName2 = (lab) => lab["name_" + secondary] || "";
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const mediaUrl = (x) => (/^https?:\/\//i.test(x) ? x : `/api/media?key=${encodeURIComponent(x)}`);
+  const mediaUrl = (x) => (/^https?:\/\//i.test(x) ? x : String(x).startsWith("assets/") ? `/${x}` : `/api/media?key=${encodeURIComponent(x)}`);
   // 頁面階段：訪前（將參訪，不放留信箱與感謝表單）、當天（留信箱、備援按鍵）、訪後（過去式、三個回應項目）。
   // 沒有參訪代碼的首頁一律從訪前開始；感謝信的 #respond 連結一律當訪後；?phase=before|today|after 可強制（預覽用）。
   const today = taipeiToday();
@@ -244,7 +252,8 @@
   }
 
   document.documentElement.lang = primary;
-  $("langToggle").textContent = primary === "zh" ? "English" : "中文";
+  // 亮著的那一個是現在的語言（只寫「中文」看不出按下去會變成什麼）
+  $("langToggle").innerHTML = `<span class="${primary === "en" ? "on" : ""}">EN</span><span class="${primary === "zh" ? "on" : ""}">中文</span>`;
   $("langToggle").onclick = switchLang;
   document.body.dataset.phase = phase;
   $("centerLine").textContent = bi("center");
@@ -283,7 +292,7 @@
       <li class="flex gap-4 py-3 reveal" style="--d:${i * 70}ms; --tone:${blockTone(b)}" data-start="${esc(b.start)}" data-end="${esc(b.end)}">
         <span class="dot" aria-hidden="true"></span>
         <span class="w-28 flex-none tabular-nums text-stone-500">${esc(b.start)} – ${esc(b.end)}</span>
-        <span><span class="font-medium">${esc(primary === "zh" ? b.title_2nd || T("kind_" + (b.kind || "other")) || b.title_en : b.title_en)}</span><span class="now-tag" hidden>${esc(T("now"))}</span>${esc(primary === "zh" ? b.title_en : b.title_2nd || T2("kind_" + (b.kind || "other"))) ? `<span class="second block">${esc(primary === "zh" ? b.title_en : b.title_2nd || T2("kind_" + (b.kind || "other")))}</span>` : ""}${b.rooms && b.rooms.length ? `<span class="block text-xs text-stone-400 mt-0.5">${b.rooms.map((r) => `<span style="color:${roomTone(r)}">Lab ${esc(r)}</span>`).join(" → ")}</span>` : ""}</span>
+        <span><span class="font-medium">${esc(primary === "zh" ? b.title_2nd || T("kind_" + (b.kind || "other")) || b.title_en : b.title_en || T("kind_" + (b.kind || "other")))}</span><span class="now-tag" hidden>${esc(T("now"))}</span>${aid && esc(b.title_2nd || T2("kind_" + (b.kind || "other"))) ? `<span class="second block">${esc(b.title_2nd || T2("kind_" + (b.kind || "other")))}</span>` : ""}${b.rooms && b.rooms.length ? `<span class="block text-xs text-stone-400 mt-0.5">${b.rooms.map((r) => `<span style="color:${roomTone(r)}">Lab ${esc(r)}</span>`).join(" → ")}</span>` : ""}</span>
       </li>`).join("");
     markNow();
     setInterval(markNow, 30000);
@@ -345,7 +354,6 @@
     const initials = (lead.name_en || lead.name_zh || "?").split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
     const pick = (base) => lab[base + "_" + primary] || lab[base + "_en"] || "";
     const oneLine = pick("one_line");
-    const oneLine2 = (primary === "zh" ? lab.one_line_en : secondary === "zh" ? lab.one_line_zh : "") || "";
     const expertise = lab["expertise_" + primary] || lab.expertise_en;
     const papers = (lab.papers || []).map((p) => `<li><a class="underline decoration-stone-300 hover:decoration-stone-900" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a>${p.venue ? ` <span class="text-stone-400">· ${esc(p.venue)}</span>` : ""}</li>`).join("");
     const stepNo = briefingStep && onRoute ? (route.indexOf(lab.room) >= 0 ? route.indexOf(lab.room) + 2 : idx + 2) : null;
@@ -353,18 +361,16 @@
     return `
       <article class="card lab-card reveal ${onRoute ? "" : "opacity-60"}" id="lab-${lab.room}" style="--d:${(idx + 1) * 60}ms; --tone:${roomTone(lab.room)}">
         <div class="flex gap-4">
-          ${lead.photo || lab.photo ? `<img class="avatar" src="${esc(lead.photo || lab.photo)}" alt="">` : `<div class="avatar">${esc(initials)}</div>`}
+          ${lead.photo || lab.photo ? `<img class="avatar" src="${esc(mediaUrl(lead.photo || lab.photo))}" alt="">` : `<div class="avatar">${esc(initials)}</div>`}
           <div class="min-w-0 flex-1">
-            <p class="text-xs flex items-center gap-2">${stepNo ? `<span class="step">${stepNo}</span>` : ""}<span class="pill">Lab ${esc(lab.room)} · ${esc(primary === "zh" ? [lab.stage_zh, lab.stage].filter(Boolean).join(" ") : [lab.stage, secondary === "zh" ? lab.stage_zh : ""].filter(Boolean).join(" "))}</span></p>
-            <h3 class="font-semibold text-lg leading-snug mt-1">${esc(labName(lab))}${labName2(lab) ? ` <span class="second font-normal">${esc(labName2(lab))}</span>` : ""}</h3>
-            <p class="mt-1"><span class="text-stone-500 text-sm">${esc(T("lead"))}${T2("lead") ? " · " + esc(T2("lead")) : ""}</span> <span class="font-medium">${esc(lead.name_zh || "")} ${esc(lead.name_en || "")}</span>${lead["title_" + primary] || lead.title_en ? `<span class="block text-sm text-stone-500">${esc(lead["title_" + primary] || lead.title_en)}${(primary === "zh" ? lead.title_en : secondary === "zh" ? lead.title_zh : "") ? ` <span class="second">${esc(primary === "zh" ? lead.title_en : lead.title_zh)}</span>` : ""}</span>` : ""}</p>
+            <p class="text-xs flex items-center gap-2">${stepNo ? `<span class="step">${stepNo}</span>` : ""}<span class="pill">Lab ${esc(lab.room)} · ${esc((primary === "zh" ? lab.stage_zh : lab.stage) || lab.stage || "")}</span></p>
+            <h3 class="font-semibold text-lg leading-snug mt-1">${esc(labName(lab))}${labName2(lab) ? ` <span class="name-2nd">${esc(labName2(lab))}</span>` : ""}</h3>
+            <p class="mt-1"><span class="text-stone-500 text-sm">${esc(T("lead"))}${T2("lead") ? " · " + esc(T2("lead")) : ""}</span> <span class="font-medium">${esc(lead.name_zh || "")} ${esc(lead.name_en || "")}</span>${lead["title_" + primary] || lead.title_en ? `<span class="block text-sm text-stone-500">${esc(lead["title_" + primary] || lead.title_en)}</span>` : ""}</p>
           </div>
         </div>
         <p class="mt-3">${esc(oneLine)}</p>
-        ${oneLine2 ? `<p class="second mt-1">${esc(oneLine2)}</p>` : ""}
         ${expertise && expertise.length ? `<p class="mt-2">${expertise.map((e) => `<span class="tag">${esc(e)}</span>`).join("")}</p>` : ""}
         ${pick("background") ? `<p class="mt-2 text-sm text-stone-600">${esc(pick("background"))}</p>` : ""}
-        ${(primary === "zh" ? lab.background_en : secondary === "zh" ? lab.background_zh : "") ? `<p class="mt-1 text-sm second">${esc(primary === "zh" ? lab.background_en : lab.background_zh)}</p>` : ""}
         ${papers ? `<p class="mt-3 text-sm text-stone-500">${esc(T("papers"))}</p><ul class="text-sm list-disc pl-5 space-y-0.5">${papers}</ul>` : ""}
         ${contact}
         <p class="mt-3 text-sm"><a class="underline decoration-stone-300 hover:decoration-stone-900" href="/lab/${esc(lab.room)}${primary === "zh" ? "?ui=zh" : ""}">${esc(T("more_about_lab"))}${T2("more_about_lab") ? ` <span class="second">${esc(T2("more_about_lab"))}</span>` : ""}</a></p>
@@ -460,10 +466,8 @@
     const dt = new Date(`${d}T${t || "00:00"}:00+08:00`);
     const en = dt.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Taipei" });
     const zh = `${d.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$1年$2月$3日")}`;
-    const first = primary === "zh" ? zh : en;
-    const other = primary === "zh" ? en : secondary === "zh" ? zh : "";
     const clock = t ? (end && end !== t ? `${t} – ${end}` : t) : "";
-    return `${first}${clock ? " · " + clock : ""}${other ? " · " + other : ""}`;
+    return `${primary === "zh" ? zh : en}${clock ? " · " + clock : ""}`;
   }
   function hm(s) { const [h, mm] = String(s || "0:0").split(":").map(Number); return h * 60 + (mm || 0); }
   function taipeiToday() { return new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); }

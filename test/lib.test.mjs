@@ -382,3 +382,32 @@ test("新的一場就有一份可以改的流程：總體簡報 → 研究室參
   const two = defaultProgramme({ start_time: "14:00", duration_minutes: 90, itinerary: [{ room: "briefing", minutes: 20 }, { room: "301", minutes: 20 }, { room: "303", minutes: 20 }] });
   assert.deepEqual([two[1].start, two[1].end], ["14:20", "15:00"]);
 });
+
+test("老師自己給的一句話要一模一樣：`one_line_source: lead` 的那幾句不准被改寫", () => {
+  // 明確指示：「ppt 中老師給的一句話介紹就一定要用」。以前這兩句被順手潤飾過
+  // （302 的 "Our research focuses on…" 變成 "Research focused on…"、303 的 "the lab" 變成 "the laboratory"），
+  // 所以這裡把原文釘死：改動 labs.json 時如果動到這兩句，測試就會擋下來。
+  // 原文來自老師自己的簡報第 1 頁（302：GHRC 林寶秀 2026；303：GHRC 303 模擬室 0929；305：Chiakuen Cheng CV 1page）。
+  const VERBATIM = {
+    302: {
+      zh: "本研究室聚焦都市微氣候、綠色基盤與人體熱舒適，整合現地量測、數值模擬與空間分析，發展氣候調適之規劃與設計策略。",
+      en: "Our research focuses on urban microclimate, green infrastructure, and human thermal comfort, integrating field measurements, numerical simulation, and spatial analysis to develop climate-responsive planning and design strategies.",
+    },
+    303: {
+      zh: "以實證設計為基礎，融合科學理論與景觀美學，開發回應不同健康需求的虛擬自然療癒環境與體驗產品。",
+      en: "Grounded in evidence-based design, the lab integrates scientific theory and landscape aesthetics to develop virtual nature-based healing environments and experiential products that address diverse health needs.",
+    },
+    305: {
+      zh: "聚焦於地方與環境的感知、依附及其變化，並探討這些經驗如何形塑景觀偏好、空間行為與旅遊決策。",
+      en: "Focuses on the perception of and attachment to places and environments, and how these experiences shape landscape preferences, spatial behavior, and travel decisions.",
+    },
+  };
+  const labs = JSON.parse(readFileSync("public/data/labs.json", "utf8")).labs;
+  const marked = labs.filter((l) => l.one_line_source === "lead").map((l) => String(l.room));
+  assert.deepEqual(marked, Object.keys(VERBATIM), "標了 lead 的就要在這張表裡，反之亦然");
+  for (const [room, want] of Object.entries(VERBATIM)) {
+    const lab = labs.find((l) => String(l.room) === room);
+    assert.equal(lab.one_line_zh, want.zh, `${room} 的中文一句話要跟老師的簡報一字不差`);
+    assert.equal(lab.one_line_en, want.en, `${room} 的英文一句話要跟老師的簡報一字不差`);
+  }
+});

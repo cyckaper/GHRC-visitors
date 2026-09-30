@@ -33,8 +33,22 @@ const FIELDS = [
   "equipment_en",
   "papers",
   "photo",
+  "photos",
   "confirmed",
 ] as const;
+
+/**
+ * 照片的來源只有三種：
+ * - `assets/labs/<房號>/<檔名>` —— repo 裡的站台檔（老師簡報上那幾張就在這裡，跟 labs.json 一起進版控）
+ * - `labs/<房號>/<檔名>` —— 後台上傳的，存在媒體庫，`/api/media` 對 `labs/` 公開
+ * - `https://…` —— 外部網址
+ * 其他一律丟掉（空字串＝拿掉照片）。
+ */
+const PHOTO = /^(assets\/labs|labs)\/30[1-5]\/[\w.-]+$/;
+const photoSrc = (v: unknown) => {
+  const x = str(v, 500);
+  return !x || PHOTO.test(x) || /^https:\/\/\S+$/i.test(x) ? x : "";
+};
 
 type Overrides = Record<string, Record<string, unknown>>;
 
@@ -90,10 +104,18 @@ export default async (req: Request) => {
     const ext = mediaType.includes("png") ? "png" : mediaType.includes("webp") ? "webp" : "jpg";
     const key = `labs/${room}/${Date.now()}.${ext}`;
     const store = getStore();
-    const prev = str(over[room]?.photo, 500);
     await store.putMedia(key, new Uint8Array(bytes), mediaType);
-    if (/^labs\/30[1-5]\/[\w.-]+$/.test(prev)) await store.deleteMedia(prev).catch(() => {});
-    over[room] = { ...(over[room] || {}), photo: key, updated_at: nowISO() };
+    if (body.photo.gallery) {
+      // 介紹頁的照片牆：接在後面，圖說之後再用 fields.photos 填
+      const base = (await loadLabs()).labs.find((l: any) => String(l.room) === room);
+      const photos = (over[room]?.photos as any[]) || base?.photos || [];
+      over[room] = { ...(over[room] || {}), photos: [...photos, { src: key, caption_zh: "", caption_en: "" }].slice(0, 24), updated_at: nowISO() };
+    } else {
+      const prev = str(over[room]?.photo, 500);
+      // 只刪後台上傳過的那一張；repo 裡的 assets/ 不動（那是底稿，按「改回原稿」還要用）
+      if (/^labs\/30[1-5]\/[\w.-]+$/.test(prev)) await store.deleteMedia(prev).catch(() => {});
+      over[room] = { ...(over[room] || {}), photo: key, updated_at: nowISO() };
+    }
   } else if (body?.reset) {
     delete over[room];
   } else {
@@ -113,9 +135,13 @@ export default async (req: Request) => {
       } else if (f === "confirmed") {
         next.confirmed = v === true || v === "true";
       } else if (f === "photo") {
-        // 媒體庫的 key（labs/<房號>/<檔名>，/api/media 對它公開）或 https 網址；清空就是拿掉照片
-        const photo = str(v, 500);
-        next.photo = !photo || /^labs\/30[1-5]\/[\w.-]+$/.test(photo) || /^https:\/\/\S+$/i.test(photo) ? photo : "";
+        next.photo = photoSrc(v);
+      } else if (f === "photos") {
+        // 介紹頁的照片牆：順序、圖說、刪掉哪幾張，整個陣列一次送上來
+        next.photos = (Array.isArray(v) ? v : [])
+          .map((x: any) => ({ src: photoSrc(x?.src), caption_zh: str(x?.caption_zh, 200), caption_en: str(x?.caption_en, 200) }))
+          .filter((x) => x.src)
+          .slice(0, 24);
       } else {
         next[f] = str(v);
       }

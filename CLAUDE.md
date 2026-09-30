@@ -275,7 +275,9 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
   **主要出口是「複製（貼到 LINE）」**——中心本來就用 LINE 群組通知，寄 email 只是備援；
   所以這兩則一律**繁體中文、條列、貼得進 LINE**（提示詞明講），不跟著來賓的語言走。
   老師的信箱存在「設定」分頁（`settings.lab_emails`，**只有主辦端看得到**），沒填就退回
-  `labs.json` 的 `lead.email`（那一個會出現在來賓專頁，本來就是公開的）；兩個都沒有就只能貼 LINE，畫面會說。
+  `labs.json` 的 `lead.email`（那一個會出現在來賓專頁，本來就是公開的——目前只有 305，
+  因為鄭佳昆老師自己的 CV 上就印著這個信箱；`pageContents()` 因此在動線走到 305 時才會讓訪後信
+  提到「老師的聯絡方式」）；兩個都沒有就只能貼 LINE，畫面會說。
 - **兩封信各在它該在的時間點**（明確指示，沒有獨立的「信件」分頁）：**確認信在「訪前」**（排完行程、
   拿到專頁網址的下一步），**感謝信在「後續」的動作五**（當天資料放上去之後就寄）。
   收件人（名單上每一個人 ＋當天在專頁留信箱的人）**兩張卡片各有一份**——分開之後共用勾選只會讓人
@@ -380,7 +382,19 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 1. 各老師的「一句話研究主題」、專長、學經歷（來賓端老師卡片與 `/lab/<房號>` 介紹頁用）與照片
    → **機制已經做好**：後台「設定 → 老師卡片與介紹頁」直接改、直接生效（`/api/labs`），不必再等程式改版。
+   → **內容也先填了一份草稿**（`public/data/labs.json`）：302 與 303 取自老師自己給的簡報
+   （**那一句是原文，逐字照用，見上面「老師自己簡報上的那一句話」**），其餘出自母簡報
+   與公開資料（系網站、國科會獲獎頁、期刊）；**查不到的一律留空，沒有憑據的學歷與論文不寫**
+   （鄭佳昆老師的學歷就是查不到——系網站被本機的網路政策擋住）。
+   其餘三位（301、304、305）的一句話仍是照母簡報擬的——**老師給了自己的說法就換掉，並標 `one_line_source`**。
    剩下的是內容本身：請各位老師確認自己那一段，確認後在後台勾「老師本人確認過了」（沒勾的頁面會標「草稿」）。
+   **照片：五位都有了**（`public/assets/labs/<房號>/lead.jpg`）。302、303、305 取自老師自己的簡報／一頁 CV
+   （302 另有六張、305 五張照片牆，圖說照抄）；301、304 由主辦端提供。305 那張旁邊就印著他的名字，
+   302、303 那兩張是從簡報版面推出來的（那一頁只有一張人像，而那是他們自己的研究室簡報），
+   **請老師確認是不是本人要用的那一張**。
+   **老師照片是圓框（`object-fit: cover`），一定會裁**，所以入庫前先裁成**以臉為中心**的正方形——
+   置中裁下去常常只看到身體（301 那張是在講課，臉不在畫面中央）。這跟「簡報照片不裁切」不衝突：
+   那條講的是投影片。
 2. 開放建議欄位的中英文措辭定稿
 3. 簽名簿的形式與擺放位置
 4. ~~隨行名單聯絡方式拿不到時的備案~~ → 現場拍名片（功能 3 的「訪客名片」）
@@ -407,7 +421,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 **已完成（P1–P4 最小可用系統 ＋ P5 捷徑 ＋ P6 產檔 ＋ P7 摘要／彙整）**
 
 - `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → 排行程 → 自動存 → QR／.ics → **確認信（草擬、寄出或 mailto）**，**最底下列出「以前做過的參訪」**）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、後續（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁、**動作五 感謝信**）、資料（歷次參訪、回覆、摘要、跨場次彙整、CSV、Drive）、**設定（母簡報、預設值、外部服務狀態）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
-- `public/index.html`：專屬網址 `/<visit_id>`；全頁英文為主、第二語言為輔（預設中文，ko／ja 來賓用韓／日文）；流程（參訪當天標出「現在」）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
+- `public/index.html`：專屬網址 `/<visit_id>`；整頁一種語言（預設英文，`?ui=zh` 換中文；ko／ja 來賓才另外附他們的語言）；流程（參訪當天標出「現在」）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
 - `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`）`drive` `drive-sync-background`（自動備份）；**三支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
   `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，後續提醒）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
@@ -435,9 +449,23 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
   站台上的後台寫不進 repo，而老師要修自己那一句話不該走 GitHub——**待確認事項 1 因此不必再等程式改版**。
   按「改回原稿」就把那一間的覆寫刪掉。`confirmed=false` 時介紹頁最底下標明「這一段是草稿」；
   照片存 `labs/<房號>/<ts>.jpg`（**公開**，`/api/media` 對 `labs/` 與 `materials/` 開放，名片與簽名簿仍要 token），
-  上傳前在瀏覽器縮到長邊 800px。
+  上傳前在瀏覽器縮到長邊 800px（照片牆 1600px）。
+- **照片有兩種：老師本人一張（`photo`）＋介紹頁的照片牆（`photos[]`，一張一個圖說）**。
+  值有三種寫法，三個頁面同一套判斷：`assets/labs/<房號>/<檔名>`（repo 裡的站台檔，跟 `labs.json` 一起進版控）、
+  `labs/<房號>/<檔名>`（後台上傳的，走 `/api/media`）、`https://…`。
+  老師自己簡報上的照片就放 `public/assets/labs/`（**老師照片長邊 800px、照片牆 1400px 的 JPEG，
+  維持原比例不裁切**——既有標準）；後台加的存媒體庫，按「改回原稿」就回到 repo 這一份。
+  **圖說照抄老師簡報上的標法**（302 那五張的「工作區／討論區／中心辦公室／環境組合預測作業」就是），
+  理由同上一條。
+- **老師自己簡報上的那一句話，逐字照用**（明確指示：「ppt 中老師給的一句話介紹就一定要用」）。
+  老師給了自己的簡報，那一句就是他要的說法，不是待潤飾的草稿——**一個字都不要改**
+  （踩過：302 的 "Our research focuses on…" 被改成 "Research focused on…"、303 的 "the lab" 被改成 "the laboratory"）。
+  在 `labs.json` 標 `one_line_source: "lead"`（目前 302、303、305），後台那一格旁邊就會說「請照用，不要改寫」；
+  原文另外釘在 `test/lib.test.mjs`，改到就會被 `npm test` 擋下來。
+  `one_line_source` **不在 `/api/labs` 可改的欄位裡**，所以它只跟著 repo 走，後台改不掉。
+  只有研究室名稱那個前綴（「303 景觀環境模擬室：」）不收——頁面上方本來就有名稱，收進來會印兩次。
 - **每一間一頁介紹**（明確要求）：`/lab/301`…`/lab/305`（`public/lab.html`，`netlify.toml` 把 `/lab/*` 導過去），
-  跟來賓專頁同一套雙語（英文為主、`?ui=zh` 換主語）與同一組顏色。來賓專頁的老師卡片最底下有一行連過去；
+  跟來賓專頁同一套語言切換（預設英文、`?ui=zh` 換中文，正文只有一種語言）與同一組顏色。來賓專頁的老師卡片最底下有一行連過去；
   頁面最後列出其他四間，看完一間可以直接跳下一間。**沒有內容的區塊整塊不顯示**——空標題比沒有更糟。
 - **兩邊都可以切中英文**（明確要求）。做法不一樣，因為兩邊的性質不同：
   - **後台**：中文寫在頁面上，英文是**疊上去的一層**——`public/data/i18n-admin.json` 的**鍵就是畫面上那一句中文**，
@@ -446,10 +474,16 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
     右上角那顆鍵切完是**存好再重新整理**（表單與暫存本來就自己存），省掉「記得原文是什麼」那一整套簿記。
     **中文改了、英文沒跟著改，`npm test` 會報**（`scripts/i18n-scan.mjs` 掃 admin.html 的每一句中文對表）。
     新增的畫面文字照樣寫中文，補一條進 i18n-admin.json 就好；`node scripts/i18n-scan.mjs --stub` 會印出缺的骨架。
-  - **來賓端**：本來就是雙語同時出現，切換只是**換哪一個當主語**——英文為主（預設，國際來賓佔多數）
-    或中文為主，另一個永遠在下面那一行。韓／日來的（`visit.language`）輔助語言仍是他們的語言，不受這顆鍵影響。
-    選擇記在這台裝置，也可以用網址帶（`?ui=zh`／`?ui=en`，寄中文版連結給人時用）；換語言會重讀頁面，
-    打到一半的欄位與捲動位置先收進 `sessionStorage` 再放回去。
+  - **來賓端與老師介紹頁**：右上角那顆鍵切**整頁的語言**——英文（預設，國際來賓佔多數）或中文。
+    **中英文不在同一頁印兩份**（明確回報過「英文中文網頁看起來差不多」）：那兩個就是這顆鍵的兩面，
+    每一句都並排等於那顆鍵沒有作用。英文頁就是英文頁。
+    **例外一：韓／日**。`visit.language` 是 ko／ja 時，輔助語言是**來賓自己的語言**、照舊印在下面那一行
+    （程式裡的 `aid`：輔助語言是中／英就當沒有，是韓／日才印）——那不是這顆鍵的另一面，來賓讀不懂英文時
+    沒有別的地方可以看。
+    **例外二：名稱**。研究室名與老師姓名兩種寫法都印（`.name-2nd`）——那是門牌與人名，是識別不是翻譯。
+    那顆鍵**兩個語言都列出來、亮著的那一個是現在的語言**（只寫「中文」看不出按下去會變成什麼）；
+    `<html lang>` 跟著主語言走。選擇記在這台裝置，也可以用網址帶（`?ui=zh`／`?ui=en`，寄中文版連結給人時用）；
+    換語言會重讀頁面，打到一半的欄位與捲動位置先收進 `sessionStorage` 再放回去。
   - 母簡報索引 `slides.json` 的頁名與區塊名有 `title`／`title_en` 兩份，後台照介面語言挑；
     老師卡片 `labs.json`、來賓端字串 `i18n.json` 本來就是多語。**AI 產出的內容不翻**（那是資料，不是介面）。
 - **顏色**：**五間研究室各一色**，值在 `public/data/labs.json` 的 `color`（後台與來賓端同一套：載入時寫進
@@ -546,7 +580,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
   **只放事實錯誤**，不放語氣或排版偏好；`find` 要夠長不會誤傷別句，長的排前面（`Four Research Laboratories`
   要比 `Four Laboratories` 早）。這是治標，真正的修正是把母簡報改好。
 - 產檔在瀏覽器：`admin.html` 先問 `/api/master`（後台上傳的母簡報，4 MB 分塊存在媒體庫 `master/<upload_id>/part-i` ＋ `master/manifest.json`），再 HEAD `/assets/master/slim-master.pptx`（站台對不存在的路徑會回 index.html，所以看 content-type 不看狀態碼）；兩者都沒有時，「產生簡報」在同一個點擊裡同步開檔案選擇視窗，選完立刻產，並提供「把這份母簡報存到站台」。選檔或上傳時若檔案含影片或超過 60 MB，先在瀏覽器裡瘦身（`public/lib/pptx.mjs slimDeck`：抽影片留海報＋「▶ Video」、超過 3 MB 的圖用 canvas 縮到 2000px、清孤兒；規則同 `scripts/slim-master.py`），所以可以直接選 396 MB 的原始母簡報。JSZip 由 cdnjs 載入、QR 用頁面已有的 qrcodejs 畫 canvas（沒有就只放網址文字）。存檔後區塊不放操作說明，只有一行進度與必要時的警告。
-- **來賓端雙語**：英文永遠是主語，第二語言預設中文（中英對照）；`visit.language` 是 ko／ja 時改英韓、英日。流程區塊的 `title_2nd` 空白時用 `i18n.json` 的 `kind_*` 補第二語言。
+- **來賓端雙語**：整頁一種語言（見上面「兩邊都可以切中英文」），只有 `visit.language` 是 ko／ja 時才附第二語言。流程區塊的標題空白時用 `i18n.json` 的 `kind_*` 補（兩種語言各補各的）。
 - **來賓端依階段換措辭**：訪前（日期在未來，或沒有參訪代碼的首頁）用「將參訪」、不放感謝表單；
   **留信箱訪前就在**（原本只有當天才顯示——但專頁的網址是寫在訪前的確認信裡寄出去的，
   對方點進來根本沒有地方可以留，明確回報過）：措辭跟著換（`leave_email_title_before`／`leave_email_body_before`，
