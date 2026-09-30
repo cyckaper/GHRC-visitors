@@ -507,7 +507,7 @@
     </div>
 
     <div class="card space-y-3" id="rotaCard">
-      <h2 class="font-semibold">支援人力表 <span class="muted font-normal">各研究室填的就是這一張，這裡也可以直接改</span></h2>
+      <h2 class="font-semibold">支援人力表 <span class="muted font-normal">哪一間填了、哪一間還沒填；這裡也可以直接改</span></h2>
       <p class="muted" id="rotaTableInfo"></p>
       <div id="rotaTable"></div>
       <details class="text-sm">
@@ -2082,11 +2082,13 @@
     // 只用這一場的收件人（`labRecipientsFor` 對得上才算）：換一場之後、新的還沒回來之前，
     // state 裡還是上一場的，拿來畫就會把別場的房號與時段掛在這一場底下
     const stops = state.labRecipientsFor === (v?.visit_id || "") ? state.labRecipients || [] : [];
-    const rows = stops.length
-      ? stops
-      : (v?.itinerary || [])
-          .filter((x) => String(x.room) !== "briefing" && Number(x.minutes) > 0)
-          .map((x) => ({ room: String(x.room), name: (state.labs?.labs || []).find((l) => String(l.room) === String(x.room))?.lead?.name_zh || "", start: "", end: "" }));
+    const leadOf = (room) => (state.labs?.labs || []).find((l) => String(l.room) === String(room))?.lead?.name_zh || "";
+    const onRoute = (v?.itinerary || [])
+      .filter((x) => String(x.room) !== "briefing" && Number(x.minutes) > 0)
+      .map((x) => ({ room: String(x.room), name: leadOf(x.room), start: "", end: "" }));
+    // 行程還沒排：五間都先列出來（跟支援人力表同一條規則——通告那時候寫的也是「研究室參訪（301–305）」）
+    const unplanned = !stops.length && !onRoute.length;
+    const rows = stops.length ? stops : onRoute.length ? onRoute : (state.labs?.labs || []).map((l) => ({ room: String(l.room), name: leadOf(l.room), start: "", end: "" }));
     const who = v?.presenters || {};
     const mins = v?.lab_minutes || {};
     // 同一場重畫時（別的欄位自動存檔完 fillForm 會重畫這一區），正在打的那一格原樣擺回去、游標留著
@@ -2096,6 +2098,7 @@
     box.innerHTML = rows.length
       ? rows.map((r) => `<div class="flex flex-wrap items-center gap-2"><span class="room" style="--tone:${roomTone(r.room)}">${esc(r.room)}</span><span class="muted !w-44">${esc(r.name || "")}${r.start ? ` ${esc(r.start)}–${esc(r.end)}` : ""}</span><input type="text" data-presenter="${esc(r.room)}" data-field="name" class="!w-52" placeholder="接待人員" value="${esc(who[r.room] || "")}"><span class="muted">共需</span><input type="text" inputmode="numeric" maxlength="3" data-presenter="${esc(r.room)}" data-field="minutes" class="!w-16 text-right" value="${esc(mins[r.room] == null ? "" : String(mins[r.room]))}"><span class="muted">分鐘</span></div>`).join("")
       : `<p class="muted">這一場的行程還沒排到任何研究室。</p>`;
+    if (unplanned && rows.length) box.insertAdjacentHTML("afterbegin", `<p class="muted">行程還沒排，五間都先列出來。</p>`);
     for (const el of box.querySelectorAll("[data-presenter]")) {
       el.onchange = async () => {
         const body = { visit_id: state.visit?.visit_id, room: el.dataset.presenter, [el.dataset.field]: el.value.trim() };
@@ -2444,8 +2447,9 @@
   $("senderDefault").onchange = () => saveSettings({ sender_default: $("senderDefault").value }, "settingsInfo");
   $("reminderTo").onchange = () => saveSettings({ reminder_to: $("reminderTo").value.trim() }, "reminderInfo");
   /**
-   * 老師看到的那一張表，直接擺在這裡（明確要求：設定這邊直接顯示表格、也改得了；不必再複製連結——
-   * 連結是自動產生的，通告裡本來就帶著）。**同一份渲染**（`/lib/rota.mjs`），寫的也是同一支 `/api/rota`——
+   * 支援人力表直接擺在這裡（明確要求：設定這邊直接顯示表格、也改得了；不必再複製連結——
+   * 連結是自動產生的，通告裡本來就帶著）。**同一份資料、同一支 `/api/rota`**，畫法是總表：一場一列、一間一欄，
+   * 還沒填的寫「未填」（明確指示：要更簡單，還沒填的也要顯示出來才知道有填沒填）。
    * 後台走登入的 session，不必帶 key。群組裡直接回的，主辦端就在這裡填進對應的格子，資料只有一份。
    */
   async function loadRotaTable() {
@@ -2454,6 +2458,7 @@
       load: () => api("/api/rota"),
       save: (body) => api("/api/rota", { method: "POST", body }),
       onStatus: (msg, isError) => { $("rotaTableInfo").textContent = msg; $("rotaTableInfo").className = isError ? "err" : "muted"; },
+      layout: "table", // 一場一列的總表：沒填的寫「未填」，一眼看得出誰還沒回（老師那一頁仍是一場一張卡片）
     });
   }
   // 連結外流時換一個（摺在表格底下那一行）：舊的立刻失效，之後擬的通告會帶新的

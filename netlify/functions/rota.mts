@@ -35,7 +35,11 @@ import type { Visit } from "../lib/types.mts";
 
 /** 表上每一場只給這些欄位——名單、信件、回覆、摘要都不給。 */
 function rotaVisit(v: Visit, labs: any, now: Date) {
-  const stops = labStops(v, labs) as any[];
+  const onRoute = (labStops(v, labs) as any[]).map((s) => String(s.room));
+  // **行程還沒排的那一場，五間都列出來**（明確指示：還沒填的也要看得到，才知道有填沒填）。
+  // 以前這種場次整張卡片只有一句「行程還沒排」，沒有格子——老師從通告點進來也沒地方填
+  // （通告那時候寫的就是「研究室參訪（301–305）」）。排好之後只列動線上那幾間，其他的是「免填」。
+  const rooms = onRoute.length ? onRoute : ((labs?.labs || []) as any[]).map((l) => String(l.room));
   return {
     visit_id: v.visit_id,
     date: v.date,
@@ -46,7 +50,8 @@ function rotaVisit(v: Visit, labs: any, now: Date) {
     purpose: v.purpose || "",
     contact_teacher: v.contact_teacher || "",
     // 各室排定的時段不給：通告說「尚未分配到各室」，表上再印一份排定的時間只會讓人以為已經定了
-    stops: stops.map((s) => ({ room: s.room })),
+    stops: rooms.map((room) => ({ room })),
+    planned: onRoute.length > 0,
     presenters: (v as any).presenters || {},
     lab_minutes: (v as any).lab_minutes || {},
     background: (v as any).background?.org_profile ? (v as any).background : null,
