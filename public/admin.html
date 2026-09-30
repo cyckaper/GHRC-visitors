@@ -2021,8 +2021,9 @@
       $(`${kind}Body`).value = l?.body || "";
       $(`${kind}SendInfo`).innerHTML = l?.sent_at ? `<span class="ok">已於 ${esc(l.sent_at.slice(0, 16).replace("T", " "))} 寄給 ${l.sent_to?.length || 0} 人</span>` : "";
     }
-    renderPresenters(v.visit);
+    renderPresenters(v.visit); // 先畫這一場的房號（各室時段跟著收件人一起回來）
     await loadLabRecipients();
+    if ($("visitSelect").value === v.visit.visit_id) renderPresenters(v.visit); // 收件人回來了，帶上各室時段再畫一次
     rebase(LETTER_FIELDS); // 伺服器上這一版才是基準；手改過還沒寄的那一版由 applyDraft 擺回來
   }
   /**
@@ -2034,9 +2035,13 @@
     const id = $("visitSelect").value;
     const box = $("noticeRecipients");
     if (!box) return;
-    if (!id) { box.innerHTML = `<p class="muted">請先在上面選一場參訪。</p>`; state.labRecipients = []; return; }
+    if (!id) { box.innerHTML = `<p class="muted">請先在上面選一場參訪。</p>`; state.labRecipients = []; state.labRecipientsFor = ""; return; }
     const r = await api("/api/letter", { method: "POST", body: { visit_id: id, action: "recipients", kind: "notice" } });
+    if ($("visitSelect").value !== id) return; // 等的時候換了一場：這一份是上一場的，不要畫上去
+    // 記下這一份是哪一場的：換一場之後、新的還沒回來之前，通告卡片不能拿上一場的房號與時段來畫
+    // （實際發生過：西澳大學那一場的卡片上列著惇陽工程那一場的 301／304／303 與時段）
     state.labRecipients = r.ok ? r.recipients : [];
+    state.labRecipientsFor = id;
     renderLabRecipients();
   }
   function renderLabRecipients() {
@@ -2074,7 +2079,9 @@
   function renderPresenters(v) {
     const box = $("presenters");
     if (!box) return;
-    const stops = (state.labRecipients || []).length ? state.labRecipients : [];
+    // 只用這一場的收件人（`labRecipientsFor` 對得上才算）：換一場之後、新的還沒回來之前，
+    // state 裡還是上一場的，拿來畫就會把別場的房號與時段掛在這一場底下
+    const stops = state.labRecipientsFor === (v?.visit_id || "") ? state.labRecipients || [] : [];
     const rows = stops.length
       ? stops
       : (v?.itinerary || [])
@@ -2180,7 +2187,8 @@
     const r = await runJob("/api/letter", { visit_id: id, kind }, noteInto(`${kind}Info`), "AI 擬稿中……大約一分鐘。");
     if (!r) return;
     $(`${kind}Subject`).value = r.draft.subject; $(`${kind}Body`).value = r.draft.body;
-    state.labRecipients = r.recipients || state.labRecipients; renderLabRecipients();
+    if (r.recipients) { state.labRecipients = r.recipients; state.labRecipientsFor = id; }
+    renderLabRecipients();
     rebase(LETTER_FIELDS); queueDraft(); applyDraft();
   });
   $("noticeBtn").onclick = () => draftInternal("notice");

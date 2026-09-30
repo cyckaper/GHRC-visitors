@@ -525,6 +525,30 @@ try {
     check(pastLocked === 0, "…while visits that are over stay locked there too");
   }
 
+  // ── 通告卡片：換一場之後，不能拿上一場的房號與時段來畫 ──
+  // （實際發生過：西澳大學那一場的卡片上列著惇陽工程那一場的 301／304／303 與時段）
+  {
+    const auth = { authorization: "Bearer e2e-token", "content-type": "application/json" };
+    const mk = async (code, date, room) => (await (await fetch(`${base}/api/visits`, { method: "POST", headers: auth, body: JSON.stringify({ org: { name: `Presenters ${code}` }, date, code, start_time: "10:00", end_time: "11:30", programme: [{ kind: "briefing", start: "10:00", end: "10:20" }, { kind: "tour", start: "10:20", end: "11:00" }, { kind: "discussion", start: "11:00", end: "11:30" }], itinerary: [{ room: "briefing", minutes: 20 }, { room, minutes: 20 }] }) })).json()).visit.visit_id;
+    const a = await mk("presa", "2099-11-01", "301");
+    const b = await mk("presb", "2099-11-02", "305");
+    await page.goto(`${base}/admin.html`);
+    await page.waitForSelector("#authOk:not([hidden])");
+    await page.click('[data-tab="pre"]');
+    // 等到畫面上是「那一場自己的」房號（最多 15 秒），再看最後停在什麼
+    const roomsFor = async (id, want) => {
+      await page.selectOption("#visitSelect", id);
+      await page.waitForFunction((v) => document.getElementById("preStatus").textContent === v, id, { timeout: 30000 });
+      await page.waitForFunction((w) => [...document.querySelectorAll('#presenters [data-presenter][data-field="name"]')].map((e) => e.dataset.presenter).join() === w, want, { timeout: 15000 }).catch(() => {});
+      return (await page.$$eval('#presenters [data-presenter][data-field="name"]', (els) => els.map((e) => e.dataset.presenter))).join();
+    };
+    const gotA = await roomsFor(a, "301");
+    check(gotA === "301", `the notice card lists this visit's labs (got ${gotA || "nothing"})`);
+    const gotB = await roomsFor(b, "305");
+    check(gotB === "305", `switching visits redraws the notice card with that visit's labs, not the previous one's (got ${gotB || "nothing"})`);
+    for (const id of [a, b]) await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: auth });
+  }
+
   // ── 來賓端：首頁（沒有參訪代碼）一律從訪前開始 ──
   await page.goto(`${base}/`);
   await page.waitForSelector("#lab-303");
