@@ -523,6 +523,19 @@
     </div>
 
     <div class="card space-y-3">
+      <h2 class="font-semibold">支援人力表</h2>
+      <p class="muted">一張表列出所有參訪，<b>各研究室自己填那一場誰能支援</b>（同一段時間好幾個單位來，一場一場在 LINE 上問就亂了）。每一列可以點開看訪客背景研判。已經結束的場次是灰的、不能改。填進去的人名就是「回報研究室」那一則會帶出去的簡報人員，不必再抄一次。</p>
+      <div class="flex flex-wrap items-center gap-2">
+        <input type="text" id="rotaLink" class="!w-96" readonly placeholder="還沒產生連結">
+        <button class="btn btn-soft" id="rotaCopy" type="button">複製連結</button>
+        <button class="btn btn-soft" id="rotaNew" type="button" title="換一個網址；舊的連結立刻失效">重新產生</button>
+        <button class="btn btn-soft" id="rotaOff" type="button" title="收回連結；之後只有登入後台的人打得開">收回</button>
+        <span class="muted" id="rotaInfo"></span>
+      </div>
+      <p class="muted">這是<b>一個猜不到的網址，不是登入</b>——老師從 LINE 點進去就能填，不必帳號密碼。連結轉出去就擋不住，所以表上只有單位名稱、日期與房號，<b>沒有來賓名單與 email</b>。人員異動或連結外流就按「重新產生」。</p>
+    </div>
+
+    <div class="card space-y-3">
       <h2 class="font-semibold">外部服務</h2>
       <p class="muted">金鑰一律放 Netlify 的環境變數，這裡只看得到「接好了沒」。改完要重新部署才會生效。</p>
       <ul class="text-sm space-y-1" id="statusList"></ul>
@@ -900,7 +913,6 @@
     v.guests = [...$("guestTable").tBodies[0].rows].map((tr) => ({ name: tr.cells[0].firstChild.value.trim(), title: tr.cells[1].firstChild.value.trim(), email: tr.cells[2].firstChild.value.trim(), affiliation: tr.cells[3].firstChild.value.trim(), role: tr.cells[4].firstChild.checked ? "lead" : "member", contact: tr.cells[5].firstChild.checked })).filter((g) => g.name || g.email);
     v.programme = readProgramme();
     v.itinerary = readItinerary();
-    v.presenters = Object.fromEntries([...document.querySelectorAll("[data-presenter]")].map((el) => [el.dataset.presenter, el.value.trim()]).filter(([, who]) => who));
     v.slides = Array.isArray(state.visit?.slides) ? state.visit.slides : [];
     if (state.visit?.background) v.background = state.visit.background;
     if (!state.urlFixed && $("code").value.trim()) v.code = $("code").value.trim().toLowerCase();
@@ -2067,7 +2079,11 @@
     $("noticeWho").textContent = picked.length ? `${t("會寄給：")}${picked.map((r) => r.name).join("、")}` : anyEmail ? t("沒有勾到任何有信箱的老師——複製到 LINE 群組就好") : "";
   }
   const checkedLabRecipients = () => [...document.querySelectorAll('#noticeRecipients input[type="checkbox"]:checked')].map((i) => state.labRecipients[Number(i.dataset.i)]).filter(Boolean);
-  /** 各研究室回覆的簡報人員：一間一列，填了就會出現在回報那一則訊息裡。 */
+  /**
+   * 各研究室回覆的簡報人員與方便的時段：一間一列，填了就會出現在回報那一則訊息裡。
+   * **這幾格走 `/api/rota`，不走整筆存檔**——各研究室自己也會從支援人力表填同一個欄位，
+   * 後台開著舊資料改一個字觸發自動存檔就會把他們剛填的蓋掉（`visits.mts` 的 `KEPT` 也保留這兩個欄位）。
+   */
   function renderPresenters(v) {
     const box = $("presenters");
     if (!box) return;
@@ -2078,9 +2094,19 @@
           .filter((x) => String(x.room) !== "briefing" && Number(x.minutes) > 0)
           .map((x) => ({ room: String(x.room), name: (state.labs?.labs || []).find((l) => String(l.room) === String(x.room))?.lead?.name_zh || "", start: "", end: "" }));
     const who = v?.presenters || {};
+    const hours = v?.lab_hours || {};
     box.innerHTML = rows.length
-      ? rows.map((r) => `<div class="flex flex-wrap items-center gap-2"><span class="room" style="--tone:${roomTone(r.room)}">${esc(r.room)}</span><span class="muted !w-44">${esc(r.name || "")}${r.start ? ` ${esc(r.start)}–${esc(r.end)}` : ""}</span><input type="text" data-presenter="${esc(r.room)}" class="!w-64" placeholder="簡報人員（可多位）" value="${esc(who[r.room] || "")}"></div>`).join("")
+      ? rows.map((r) => `<div class="flex flex-wrap items-center gap-2"><span class="room" style="--tone:${roomTone(r.room)}">${esc(r.room)}</span><span class="muted !w-44">${esc(r.name || "")}${r.start ? ` ${esc(r.start)}–${esc(r.end)}` : ""}</span><input type="text" data-presenter="${esc(r.room)}" data-field="name" class="!w-52" placeholder="簡報人員（可多位）" value="${esc(who[r.room] || "")}"><input type="text" data-presenter="${esc(r.room)}" data-field="hours" class="!w-52" placeholder="該室方便的時段" value="${esc(hours[r.room] || "")}"></div>`).join("")
       : `<p class="muted">這一場的行程還沒排到任何研究室。</p>`;
+    for (const el of box.querySelectorAll("[data-presenter]")) {
+      el.onchange = async () => {
+        const body = { visit_id: state.visit?.visit_id, room: el.dataset.presenter, [el.dataset.field]: el.value.trim() };
+        const r = await api("/api/rota", { method: "POST", body });
+        if (!r.ok) return flash(r.error, "err");
+        if (state.visit) { state.visit.presenters = r.presenters; state.visit.lab_hours = r.lab_hours; }
+        flash("已存");
+      };
+    }
   }
   /** 兩封信各自一份收件人清單（確認信在「訪前」、感謝信在「後續」）。 */
   const recipientBoxes = () => [$("confirmRecipients"), $("thanksRecipients")].filter(Boolean);
@@ -2205,6 +2231,7 @@
     renderLabEmails(r.settings.lab_emails || {});
     loadLabsTab();
     $("reminderInfo").textContent = r.settings.reminder_to ? "" : r.effective?.reminder_to ? `留空：現在寄到 ${r.effective.reminder_to}` : "還沒有收件信箱，現在不會寄提醒";
+    renderRotaLink(r.settings.rota_key || "");
     $("statusList").innerHTML = STATUS_ROWS.map(([k, label, where]) => {
       const on = !!r.status[k];
       const note = k === "ai" && r.status.ai_mock ? "（AI_MOCK：回固定範例，不會真的問 Claude）" : "";
@@ -2412,6 +2439,25 @@
   }
   $("senderDefault").onchange = () => saveSettings({ sender_default: $("senderDefault").value }, "settingsInfo");
   $("reminderTo").onchange = () => saveSettings({ reminder_to: $("reminderTo").value.trim() }, "reminderInfo");
+  /** 支援人力表的連結（`/rota?key=…`）。空的表示還沒產生，那時候只有登入後台的人打得開。 */
+  function renderRotaLink(k) {
+    $("rotaLink").value = k ? `${location.origin}/rota?key=${k}` : "";
+    $("rotaInfo").textContent = k ? "" : t("還沒產生連結，現在只有登入後台的人打得開");
+    $("rotaCopy").disabled = !k;
+    $("rotaOff").disabled = !k;
+    $("rotaNew").textContent = t(k ? "重新產生" : "產生連結");
+  }
+  $("rotaCopy").onclick = () => copy($("rotaLink").value);
+  $("rotaNew").onclick = () => busy($("rotaNew"), async () => {
+    if ($("rotaLink").value && !confirm(t("換一個網址？貼出去的舊連結會立刻失效。"))) return;
+    const r = await saveSettings({ rota_key: "new" }, "rotaInfo");
+    if (r?.settings) renderRotaLink(r.settings.rota_key || "");
+  });
+  $("rotaOff").onclick = () => busy($("rotaOff"), async () => {
+    if (!confirm(t("收回連結？之後只有登入後台的人打得開。"))) return;
+    const r = await saveSettings({ rota_key: "" }, "rotaInfo");
+    if (r?.settings) renderRotaLink(r.settings.rota_key || "");
+  });
   /**
    * 母簡報那幾支影片的雲端網址（哪幾頁有影片直接讀 slides.json 的 `video: true`）。
    * 站台上的母簡報抽掉了影片，海報那一頁只剩靜態圖——填了網址才點得開。
@@ -2445,6 +2491,7 @@
     state.settings = r.settings;
     $(infoId).textContent = settings.reminder_to === "" && r.effective?.reminder_to ? `已存（留空：寄到 ${r.effective.reminder_to}）` : "已存";
     setTimeout(() => ($(infoId).textContent = ""), 4000);
+    return r;
   }
 
   /**

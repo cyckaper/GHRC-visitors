@@ -438,6 +438,37 @@ try {
   await page.waitForFunction((n) => document.querySelectorAll("#visitSelect option").length === n, beforeDelete, { timeout: 30000 });
   check(await page.isHidden("#afterSave"), "and deleting it clears the form");
 
+  // ── 支援人力表：各研究室自己填「那一場誰能支援、方便什麼時段」──
+  {
+    const put = async (body) => (await fetch(`${base}/api/settings`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer e2e-token" }, body: JSON.stringify(body) })).json();
+    const key = (await put({ settings: { rota_key: "new" } })).settings.rota_key;
+    await page.goto(`${base}/rota?key=${key}`);
+    await page.waitForFunction(() => document.querySelectorAll("#rows section").length > 0, null, { timeout: 30000 });
+    check((await page.locator("#rows section").count()) > 0, "the rota lists the visits for the laboratories to fill in");
+    // 未來的可以填、過去的鎖住——擋在伺服器，畫面只是照著顯示
+    const row = page.locator("#rows section:not(.past)").first();
+    await row.locator('input[data-field="name"]').first().fill("王小明");
+    await row.locator('input[data-field="hours"]').first().fill("16:00 之後");
+    await page.waitForFunction(() => /已存/.test(document.getElementById("status").textContent), null, { timeout: 30000 });
+    const id = await row.locator("input").first().getAttribute("data-visit");
+    const room = await row.locator("input").first().getAttribute("data-room");
+    const saved = await (await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { headers: { authorization: "Bearer e2e-token" } })).json();
+    check(saved.visit.presenters[room] === "王小明" && saved.visit.lab_hours[room] === "16:00 之後", "…and what a lab types is kept on that visit, both the name and when they are free");
+    // 後台整筆存檔不會蓋掉老師剛填的（presenters／lab_hours 只有 /api/rota 在寫）
+    await fetch(`${base}/api/visits`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer e2e-token" }, body: JSON.stringify({ ...saved.visit, presenters: undefined, lab_hours: undefined }) });
+    const again = await (await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { headers: { authorization: "Bearer e2e-token" } })).json();
+    check(again.visit.presenters[room] === "王小明", "…and an ordinary save from the admin page does not wipe it");
+    // 連結不對就打不開。要用乾淨的 context 測——這個分頁有後台的 session cookie，
+    // admin 本來就一直開得了（那是刻意的），用它測等於沒測。
+    const guest = await browser.newContext();
+    const gp = await guest.newPage();
+    await gp.goto(`${base}/rota?key=nope`);
+    await gp.waitForFunction(() => document.getElementById("status").textContent.length > 0, null, { timeout: 30000 });
+    check(/連結/.test(await gp.textContent("#status")) && (await gp.locator("#rows section").count()) === 0, "a wrong link says so instead of showing the visits");
+    await guest.close();
+    await put({ settings: { rota_key: "" } });
+  }
+
   // ── 來賓端：首頁（沒有參訪代碼）一律從訪前開始 ──
   await page.goto(`${base}/`);
   await page.waitForSelector("#lab-303");

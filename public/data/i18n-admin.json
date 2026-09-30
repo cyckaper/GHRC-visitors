@@ -646,7 +646,27 @@
   "✕ 移除這一張": "✕ Remove this one",
   "加照片": "Add photos",
   "還沒有老師照片": "No photo of the lead yet",
-  "照片加好了": "Photos added"
+  "照片加好了": "Photos added",
+  "支援人力表": "Who can cover which visit",
+  "一張表列出所有參訪，": "One table lists every visit and ",
+  "各研究室自己填那一場誰能支援": "each laboratory fills in who can cover it",
+  "（同一段時間好幾個單位來，一場一場在 LINE 上問就亂了）。每一列可以點開看訪客背景研判。已經結束的場次是灰的、不能改。填進去的人名就是「回報研究室」那一則會帶出去的簡報人員，不必再抄一次。": ". When several organisations come in the same period, asking one visit at a time over LINE falls apart. Each row opens to show the background research. Visits that are over are greyed out and cannot be changed. The names entered here are the presenters the rundown message carries, so nothing has to be copied twice.",
+  "還沒產生連結": "No link yet",
+  "複製連結": "Copy the link",
+  "重新產生": "Make a new link",
+  "產生連結": "Make a link",
+  "收回": "Withdraw",
+  "換一個網址；舊的連結立刻失效": "A new address; the old link stops working at once",
+  "收回連結；之後只有登入後台的人打得開": "Withdraw the link; after this only someone signed in here can open it",
+  "還沒產生連結，現在只有登入後台的人打得開": "No link yet — for now only someone signed in here can open it",
+  "換一個網址？貼出去的舊連結會立刻失效。": "Make a new address? The link you already shared stops working at once.",
+  "收回連結？之後只有登入後台的人打得開。": "Withdraw the link? After this only someone signed in here can open it.",
+  "這是": "This is ",
+  "一個猜不到的網址，不是登入": "an address nobody can guess, not a sign-in",
+  "——老師從 LINE 點進去就能填，不必帳號密碼。連結轉出去就擋不住，所以表上只有單位名稱、日期與房號，": ". A lead can tap it from LINE and fill it in, with no account or password. A link that gets forwarded cannot be taken back, so the table carries only the organisation, the date and the room numbers — ",
+  "沒有來賓名單與 email": "no guest list and no email addresses",
+  "。人員異動或連結外流就按「重新產生」。": ". If someone leaves or the link gets out, make a new one.",
+  "該室方便的時段": "When that lab is free"
  },
  "patterns": [
   [
