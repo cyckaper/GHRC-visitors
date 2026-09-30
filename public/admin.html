@@ -700,13 +700,22 @@
    * POST 回 202 與 job_id，這裡每 3 秒問一次 GET <path>?job=<id>。
    * Netlify 一般函式只有 10 秒，Claude 常常不只——直接等就會變成 504 Inactivity Timeout。
    *
-   * 做完回傳結果；失敗、等太久或同一支又按了一次都回 null。note 是「寫進度那一行」的函式：
-   * 錯誤也寫在那裡，不是只有頁面最上方——人按完按鈕就在那一區看著。
+   * 做完回傳結果；失敗、等太久、同一支又按了一次、**或人已經換去看別場**都回 null。
+   * note 是「寫進度那一行」的函式：錯誤也寫在那裡，不是只有頁面最上方——人按完按鈕就在那一區看著。
+   *
+   * **換了一場就把結果丟掉**（實際發生過：西澳大學那一場上面掛著日本淡路景観園芸学校的背景研判）。
+   * 這幾支 AI 都要跑一到三分鐘，等的時候人常常切去看別場；結果回來時 `state.visit` 已經是別人了，
+   * 照樣往下寫就會蓋掉那一場，`saveVisit()` 還會直接存進去。還沒存檔的那一場（visit_id 是空的）
+   * 更危險：伺服器沒得寫，整份結果只靠畫面這一條路回來。
+   * 判斷用 `selectVisit.seq`——**只有真的換一場才會加一**，自動存檔、第一次存檔、改網址代碼都不會動它
+   * （`saveVisit` 只設 `visitSelect.value`，不走 `selectVisit`），所以邊查邊打字不會被誤殺。
+   * 不綁任何一場的工作（翻譯投影片、跨場次彙整）傳 `{ anyVisit: true }` 跳過。
    */
   const jobSeq = {};
   const noteInto = (id) => (msg) => { const el = $(id); if (el) el.textContent = msg; };
-  async function waitForJob(path, jobId, note = () => {}) {
+  async function waitForJob(path, jobId, note = () => {}, opts = {}) {
     const seq = (jobSeq[path] = (jobSeq[path] || 0) + 1);
+    const visitSeq = opts.visitSeq ?? (selectVisit.seq || 0);
     const stop = (msg) => { note(msg); flash(msg, "err"); return null; };
     let misses = 0;
     const until = Date.now() + 15 * 60000; // 等滿背景函式的上限：AI 慢的時候不能叫人再按一次
@@ -718,18 +727,20 @@
       misses = 0;
       if (r.status === "running") continue;
       if (r.status !== "done") return stop(r.error || "跑不出來，請再按一次");
+      if (!opts.anyVisit && (selectVisit.seq || 0) !== visitSeq) return stop("等的時候換了一場，這一份結果沒有放進去；回到那一場再按一次");
       note("");
       return r.result || {};
     }
     return stop("等了十五分鐘還沒跑完，AI 那邊大概卡住了，請再按一次");
   }
   /** POST 觸發 → 輪詢 → 結果。回 null 表示沒跑成（訊息已經顯示過）。 */
-  async function runJob(path, body, note, working) {
+  async function runJob(path, body, note, working, opts) {
+    const visitSeq = selectVisit.seq || 0; // 按下去的那一刻就記下是哪一場（POST 還在路上也可能換）
     const r = await api(path, { method: "POST", body });
     if (!r.ok) { note(r.error || ""); flash(r.error || "沒有開始，請再按一次", "err"); return null; }
     if (!r.job_id) return r; // 不必等的情形（例如翻譯整批命中快取）
     note(working);
-    return waitForJob(path, r.job_id, note);
+    return waitForJob(path, r.job_id, note, { visitSeq, ...opts });
   }
   const download = (name, text, type = "application/json") => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); };
   const copy = async (text) => { try { await navigator.clipboard.writeText(text); flash("已複製"); return true; } catch (e) { flash("無法複製，請手動選取", "err"); return false; } };
@@ -1188,7 +1199,7 @@
     $("background").innerHTML = `<p class="muted">查資料中……AI 要讀幾個網頁，大約一到三分鐘，查完會直接出現在這裡。</p>`;
     // 查的一律是畫面上現在這一份（剛把某個人從名單刪掉，就不該再去查他）；存過檔的另外把進度與結果寫回那一場
     const b = await runJob("/api/research", { visit_id: state.saved ? state.visit.visit_id : "", visit: v }, noteInto("researchInfo"), "查資料中……");
-    if (!b) { $("background").innerHTML = ""; return; }
+    if (!b) { renderBackground(state.visit?.background); return; } // 失敗或換了一場：擺回這一場自己的，不要留一個空框
     if (state.visit) state.visit.background = b;
     renderBackground(b);
     await saveVisit();
@@ -1229,13 +1240,14 @@
     if (picked.reduce((s, f) => s + f.size, 0) > 5 * 1024 * 1024) return flash("檔案總量超過 5 MB，請分批或改貼文字", "err");
     const files = [];
     for (const f of picked) files.push({ name: f.name, type: f.type, data: await readFileB64(f) });
+    const visitSeq = selectVisit.seq || 0;
     const r = await api("/api/extract", { method: "POST", body: { email_text: $("emailText").value, files } });
     if (!r.ok || !r.job_id) return flash(r.error || "抽取沒有開始，請再按一次", "err");
     $("extractInfo").textContent = "AI 讀信中……大約一兩分鐘，讀完會自己填進下面的欄位。";
-    pollExtract(r.job_id);
+    pollExtract(r.job_id, visitSeq);
   });
-  async function pollExtract(jobId) {
-    const out = await waitForJob("/api/extract", jobId, noteInto("extractInfo"));
+  async function pollExtract(jobId, visitSeq) {
+    const out = await waitForJob("/api/extract", jobId, noteInto("extractInfo"), { visitSeq });
     if (!out) return;
     $("listFilesInfo").innerHTML = (out.files_read || []).map((f) => `<li>${esc(f.name)} <span class="ok">已讀（${f.kind === "text" ? `${f.chars} 字` : f.kind === "document" ? "PDF 交給 AI 直接讀" : "照片交給 AI 直接讀"}）</span></li>`).join("") + (out.warnings || []).map((w) => `<li class="err">${esc(w)}</li>`).join("");
     state.saved = false; $("visitSelect").value = "";
@@ -1245,13 +1257,14 @@
     flash("抽取完成，請逐項確認（尤其是名單的 email）");
   }
   $("planBtn").onclick = () => busy($("planBtn"), async () => {
+    const visitSeq = selectVisit.seq || 0;
     const r = await api("/api/plan", { method: "POST", body: { visit: readForm() } });
     if (!r.ok || !r.job_id) return flash(r.error || "排程沒有開始，請再按一次", "err");
     $("planInfo").textContent = "AI 排行程中……大約一兩分鐘。";
-    pollPlan(r.job_id);
+    pollPlan(r.job_id, visitSeq);
   });
-  async function pollPlan(jobId) {
-    const out = await waitForJob("/api/plan", jobId, noteInto("planInfo"));
+  async function pollPlan(jobId, visitSeq) {
+    const out = await waitForJob("/api/plan", jobId, noteInto("planInfo"), { visitSeq });
     if (!out) return;
     // 排行程決定的是行程與選頁。**簡報那邊的狀態不歸它管**——等 AI 的那一分鐘裡，人可能已經切到
     // 「簡報」分頁勾了「這場不用簡報」或產了檔；排完才回來的這一份不該把那些蓋掉。
@@ -1679,7 +1692,7 @@
     for (let i = 0; i < texts.length; i += 25) {
       const done = Math.min(i + 25, texts.length);
       log(`翻譯 ${done}/${texts.length} 段 → ${target}`);
-      const r = await runJob("/api/translate", { texts: texts.slice(i, i + 25), target }, log, `翻譯 ${done}/${texts.length} 段 → ${target}……`);
+      const r = await runJob("/api/translate", { texts: texts.slice(i, i + 25), target }, log, `翻譯 ${done}/${texts.length} 段 → ${target}……`, { anyVisit: true });
       if (!r) throw new Error("翻譯失敗");
       out.push(...r.translations);
     }
@@ -2668,7 +2681,7 @@ $("driveInfo").innerHTML = d?.backed_up_at
 
   $("digestBtn").onclick = () => busy($("digestBtn"), async () => {
     const note = noteInto("digest");
-    const r = await runJob("/api/summary", { digest: true }, note, "AI 彙整中……大約一分鐘。");
+    const r = await runJob("/api/summary", { digest: true }, note, "AI 彙整中……大約一分鐘。", { anyVisit: true });
     if (r) $("digest").textContent = r.digest;
   });
 

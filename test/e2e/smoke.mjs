@@ -410,6 +410,23 @@ try {
   await page.waitForFunction(() => document.getElementById("preStatus").textContent === "2026-10-07-uwa", null, { timeout: 30000 });
   check((await page.inputValue("#visitSelect")) === "2026-10-07-uwa", "clicking one pulls it up as the current visit");
 
+  // 跑得久的 AI 做完時，人可能已經切去看別場了——那一份結果不屬於畫面上這一場，要丟掉。
+  // （實際發生過：西澳大學那一場上面掛著另一個單位的背景研判，而且 saveVisit() 直接存了進去。）
+  {
+    await page.click("#researchBtn");
+    await page.waitForFunction(() => /查資料中/.test(document.getElementById("background").textContent));
+    // selectVisit.seq 是在 change 當下就加一的，所以這裡只要「按得到」就夠，不必等載入跑完
+    await page.selectOption("#visitSelect", typoId);
+    await page.waitForFunction(() => /換了一場/.test(document.getElementById("flash").textContent), null, { timeout: 60000 });
+    check(true, "a background lookup that finishes after you switch visits says so instead of landing on the wrong one");
+    await page.waitForFunction((id) => document.getElementById("preStatus").textContent === id, typoId, { timeout: 30000 });
+    check((await page.locator("#background li").count()) === 0, "…and the visit you switched to is not left showing someone else's research");
+    const moved = await (await fetch(`${base}/api/visits?id=${encodeURIComponent(typoId)}`, { headers: { authorization: "Bearer e2e-token" } })).json();
+    check(!moved.visit?.background?.org_profile, "…and nothing was written to it on the server either");
+    await page.click(`#pastVisits [data-past="2026-10-07-uwa"]`);
+    await page.waitForFunction(() => document.getElementById("preStatus").textContent === "2026-10-07-uwa", null, { timeout: 30000 });
+  }
+
   // 一打開後台不該看到上一次那一場的資料：停在今天或接下來最近的一場，過去的不自己跳出來
   await page.reload();
   await page.waitForFunction(() => document.getElementById("preStatus").textContent === "2026-10-07-uwa", null, { timeout: 30000 });
