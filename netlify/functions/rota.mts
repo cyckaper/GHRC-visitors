@@ -12,12 +12,13 @@ import type { Visit } from "../lib/types.mts";
  * 為什麼要有這一頁：同一段時間常常好幾個單位來，每一場要問每一間「這個日期誰有空」，
  * 在 LINE 上一場一場問就亂掉了（明確回報）。一張表看得到全部，各室自己填自己那一格。
  *
- * GET  /api/rota?key=<k>                               → 未來與過去的場次（過去的 `past: true`）
- * POST /api/rota?key=<k> {visit_id, room, name, hours} → 寫進 `visit.presenters[room]` 與 `visit.lab_hours[room]`
+ * GET  /api/rota?key=<k>                                 → 未來與過去的場次（過去的 `past: true`）
+ * POST /api/rota?key=<k> {visit_id, room, name, minutes} → 寫進 `visit.presenters[room]` 與 `visit.lab_minutes[room]`
  *
- * **問兩件事：誰來接待、那一天這一間開放的時段**（明確要求）。時段是一句話不是時間欄位——
- * 實際回答常常是「整段都可以」「16:00 之後」「要避開 15:40 的課」，塞進時間選單反而填不了。
- * 這兩個欄位**只有這一支在寫**：`visits.mts` 的 `KEPT` 把它們保留下來，後台存檔蓋不掉。
+ * **只問兩件事：接待人員、共需幾分鐘**（明確指示：「只要填該研究室人力及共需幾分鐘，說明越簡單越好」）。
+ * 通告說「研究室參訪時段目前尚未分配到各室」，各室回報要多少時間，主辦端才排得出各室的時段；
+ * 以前問的是「那一天方便的時段」（一句話），改掉了。
+ * 這兩個欄位**只有這一支在寫**：`visits.mts` 的 `ROTA_FIELDS` 一律沿用伺服器上那一份，後台存檔蓋不掉。
  *
  * **過去的不給改，這件事在伺服器上擋**——畫面灰掉只是提示，擋在前端等於沒擋。
  * 判斷用 `visitEndAt()`（跟後續提醒同一個算法）：行程走完那一刻起就是過去式。
@@ -44,9 +45,10 @@ function rotaVisit(v: Visit, labs: any, now: Date) {
     headcount: v.headcount || 0,
     purpose: v.purpose || "",
     contact_teacher: v.contact_teacher || "",
-    stops: stops.map((s) => ({ room: s.room, start: s.start, end: s.end, minutes: s.minutes })),
+    // 各室排定的時段不給：通告說「尚未分配到各室」，表上再印一份排定的時間只會讓人以為已經定了
+    stops: stops.map((s) => ({ room: s.room })),
     presenters: (v as any).presenters || {},
-    lab_hours: (v as any).lab_hours || {},
+    lab_minutes: (v as any).lab_minutes || {},
     background: (v as any).background?.org_profile ? (v as any).background : null,
     past: visitEndAt(v) < now,
   };
@@ -79,26 +81,34 @@ export default async (req: Request) => {
 
   if (req.method !== "POST") return fail(405, "method not allowed");
 
-  const body = await readJSON<{ visit_id?: string; room?: string; name?: string; hours?: string }>(req);
+  const body = await readJSON<{ visit_id?: string; room?: string; name?: string; minutes?: string | number }>(req);
   const room = String(body?.room || "");
   if (!/^30[1-5]$/.test(room)) return fail(400, "房號只有 301–305");
   const v = await store.getVisit(String(body?.visit_id || ""));
   if (!v) return fail(404, "找不到這一場");
   if (visitEndAt(v) < new Date()) return fail(409, "這一場已經結束了，不能再改");
 
-  // 只改送上來的那幾個欄位：兩個人同時在填不同的格子，不該互相蓋掉
-  const put = (field: "presenters" | "lab_hours", raw: unknown, max: number) => {
-    if (raw === undefined) return;
-    const map: Record<string, string> = { ...((v as any)[field] || {}) };
-    const val = String(raw ?? "").trim().slice(0, max);
-    if (val) map[room] = val;
-    else delete map[room]; // 清空＝把這一格拿掉
+  // 共需幾分鐘：填一個數字就好（「20」「20 分」「２０」都收）；清空＝把這一格拿掉
+  let minutes: number | null | undefined;
+  if (body?.minutes !== undefined) {
+    const digits = String(body.minutes ?? "").replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).match(/\d+/);
+    if (String(body.minutes ?? "").trim() && !digits) return fail(400, "共需幾分鐘：填一個數字就好");
+    minutes = digits ? Math.min(Number(digits[0]), 600) : null;
+    if (minutes === 0) minutes = null;
+  }
+
+  // 只改送上來的那一格：兩個人同時在填不同的格子，不該互相蓋掉
+  const put = (field: "presenters" | "lab_minutes", val: string | number | null | undefined) => {
+    if (val === undefined) return;
+    const map: Record<string, string | number> = { ...((v as any)[field] || {}) };
+    if (val === null || val === "") delete map[room];
+    else map[room] = val;
     (v as any)[field] = map;
   };
-  put("presenters", body?.name, 60);
-  put("lab_hours", body?.hours, 120);
+  put("presenters", body?.name === undefined ? undefined : String(body.name ?? "").trim().slice(0, 60));
+  put("lab_minutes", minutes);
   (v as any).updated_at = nowISO();
   await store.putVisit(v);
   await triggerDriveSync(v.visit_id);
-  return json({ ok: true, presenters: (v as any).presenters || {}, lab_hours: (v as any).lab_hours || {} });
+  return json({ ok: true, presenters: (v as any).presenters || {}, lab_minutes: (v as any).lab_minutes || {} });
 };

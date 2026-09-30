@@ -4,7 +4,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -240,10 +240,9 @@ test("行前通告：收件人是這一場動線上的研究室，內容照動�
   assert.equal(notice.status, 200, JSON.stringify(notice.body));
   const body = notice.body.draft.body;
   assert.ok(body.startsWith("各位老師好："), "開頭固定這一句");
-  assert.ok(/該時段由哪位老師或人員接待/.test(body), "這一則只問一件事：誰來接待");
-  // 「請接龍」是要複製到 LINE 上的：一行一個房號、後面留白，老師自己在那一行加名字
-  const roll = body.slice(body.indexOf("請接龍：")).split("\n").slice(1).filter((x) => x.trim());
-  assert.deepEqual(roll.slice(0, onRoute.length), onRoute, "接龍清單就是這一場會走到的那幾間，一行一個、後面不補字");
+  // 結尾就是「一句話＋支援人力表的連結」（明確指示，字照給的寫）——後面沒有接龍、回覆期限、署名
+  assert.match(body, new RegExp(`\\n請各研究室回覆，該時段由哪位老師或人員接待\\nhttps://visit\\.example\\.test/rota\\?key=[a-z0-9]{24}#${visitId}$`), "最後一段是那一句話與直接跳到這一場的連結，後面什麼都不接");
+  assert.ok(!/接龍|前回覆|張俊彥|Chun-Yen|Director/.test(body), "不要接龍、不要回覆期限、不要署名（貼進中心自己的 LINE 群組，誰發的大家都看得到）");
   // 動線照今日流程的區塊列，**研究室參訪是一整段**——還沒問到人就把各室時間寫死是先斬後奏
   assert.ok(/當天動線（時間已排定）：/.test(body) && /研究室參訪（/.test(body), "動線照流程區塊列，研究室參訪不拆到各室");
   assert.ok(/尚未分配到各室/.test(body), "…並說明各室時段之後才補");
@@ -251,12 +250,19 @@ test("行前通告：收件人是這一場動線上的研究室，內容照動�
   assert.ok(saved.letters.notice.body, "草稿存回這一場");
   assert.ok(!saved.letters.notice.sent_at, "草擬不算寄出");
 
-  // 回填簡報人員 → 回報那一則就帶著走
-  const withWho = await put({ ...saved, presenters: { [onRoute[0]]: "王小明", zzz: "不該存的" } });
-  assert.deepEqual(withWho.body.visit.presenters, { [onRoute[0]]: "王小明" }, "只留 301–305");
-  const rundown = await runJob("letter", { visit_id: visitId, kind: "rundown", sender: "director" });
-  assert.ok(rundown.body.draft.body.includes("王小明"), "回報那一則要寫出簡報人員");
-  assert.ok(rundown.body.draft.body.includes("（待補）"), "還沒回覆的那幾間標待補，不要留白");
+  // 回填接待人員（走支援人力表那一支；整筆存檔帶了也不算）→ 回報那一則就帶著走。
+  // 用一場遠在將來的複本：支援人力表不收已經結束的場次，測試不能哪天因為日期過了就壞掉
+  const fut = (await put({ ...saved, visit_id: "", code: "rundown", date: "2099-10-07", org: { ...saved.org, name: "Rundown Future University" } })).body.visit;
+  const sneak = await put({ ...fut, presenters: { [onRoute[0]]: "從整筆存檔偷塞的" } });
+  assert.deepEqual(sneak.body.visit.presenters, {}, "接待人員只有 /api/rota 在寫，整筆存檔帶了也不算");
+  const who = await api("/api/rota", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: fut.visit_id, room: onRoute[0], name: "王小明" }) });
+  assert.equal(who.status, 200, JSON.stringify(who.body));
+  const rundown = await runJob("letter", { visit_id: fut.visit_id, kind: "rundown" });
+  const rb = rundown.body.draft.body;
+  assert.ok(rb.includes("王小明"), "回報那一則要寫出接待人員");
+  assert.ok(rb.includes("（待補）"), "還沒回覆的那幾間標待補，不要留白");
+  assert.ok(!/張俊彥 Chun-Yen|Director/.test(rb), "回報也不署名");
+  await api(`/api/visits?id=${fut.visit_id}`, { method: "DELETE", headers: admin });
 
   await put(before); // 擺回去，後面的測試照原本那一份跑
 });
@@ -630,6 +636,15 @@ test("設定：預設值存得起來，外部服務只回「接好了沒」不�
   assert.equal(to.body.effective.reminder_to, "wrapup@ntu.edu.tw");
   assert.equal((await api("/api/settings", { headers: admin })).body.status.reminder, false, "沒接 Gmail 就還是寄不出提醒");
   await api("/api/settings", { method: "POST", headers: admin, body: JSON.stringify({ settings: { reminder_to: "" } }) });
+
+  // 「研究室老師的信箱」「影片連結」明確指示拿掉了：送了也不收，以前存過的也不再帶出去
+  const legacy = JSON.parse(await readFile(path.join(tmp, "media", "settings.json"), "utf8"));
+  await writeFile(path.join(tmp, "media", "settings.json"), JSON.stringify({ ...legacy, lab_emails: { 301: "old@ntu.edu.tw" }, video_links: { 19: "https://youtu.be/old" } }));
+  const cleaned = (await api("/api/settings", { headers: admin })).body.settings;
+  assert.ok(!("lab_emails" in cleaned) && !("video_links" in cleaned), "舊的值讀的時候就丟掉");
+  const posted = await api("/api/settings", { method: "POST", headers: admin, body: JSON.stringify({ settings: { lab_emails: { 302: "x@ntu.edu.tw" }, video_links: { 35: "https://youtu.be/x" } } }) });
+  assert.ok(!("lab_emails" in posted.body.settings) && !("video_links" in posted.body.settings), "送了也不收");
+  assert.ok(!/old@ntu|youtu\.be/.test(await readFile(path.join(tmp, "media", "settings.json"), "utf8")), "下一次存檔就清乾淨");
 });
 
 test("一頁摘要不必人記得按：每晚掃一次，過完又有回覆的自己產", async () => {
@@ -906,7 +921,7 @@ test("static: guest page served for /<visit_id> fallback and admin page exists",
 
 test.after(() => server.close());
 
-test("支援人力表：連結自動產生、才打得開，各室自己填誰接待與方便時段，過去的擋在伺服器", async () => {
+test("支援人力表：連結自動產生、才打得開，各室只填接待人員與共需幾分鐘，後台舊資料蓋不掉，過去的擋在伺服器", async () => {
   // 空 key 不能當通行證（不然產生之前誰都打得開）；亂猜、不帶也一樣
   assert.equal((await api("/api/rota?key=")).status, 403, "空的連結打不開");
   assert.equal((await api("/api/rota?key=whatever")).status, 403, "亂猜的連結打不開");
@@ -926,33 +941,47 @@ test("支援人力表：連結自動產生、才打得開，各室自己填誰�
   assert.notEqual(key, auto, "重新產生會換一個");
   assert.equal((await api(`/api/rota?key=${auto}`)).status, 403, "舊的連結立刻失效");
 
+  // 用一場遠在將來的：支援人力表不收已經結束的場次，測試不能哪天因為日期過了就壞掉
+  const src = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit;
+  const fid = (await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ ...src, visit_id: "", code: "rotafuture", date: "2099-10-07", org: { ...src.org, name: "Future Rota University" } }) })).body.visit.visit_id;
+  // 後台手上那一份：老師還沒填之前載入的（等一下拿它整份存回去）
+  const stale = (await api(`/api/visits?id=${fid}`, { headers: admin })).body.visit;
+
   const list = await api(`/api/rota?key=${key}`);
   assert.equal(list.status, 200);
-  const row = list.body.visits.find((v) => v.visit_id === visitId);
+  const row = list.body.visits.find((v) => v.visit_id === fid);
   assert.ok(row, "這一場在表上");
-  assert.ok(row.stops.length && row.stops.every((s) => s.start && s.end), "每一間帶自己的時段，老師才知道要空出什麼時候");
+  // 列出要走哪幾間，但**不印各室排定的時段**：通告說「尚未分配到各室」，各室回報要多少時間才排得出來
+  assert.ok(row.stops.length && row.stops.every((s) => /^30[1-5]$/.test(s.room) && !("start" in s) && !("minutes" in s)), "只有房號，沒有各室的時段");
   // 連結轉出去就擋不住，所以表上不放名單與 email
   assert.ok(!("guests" in row) && !JSON.stringify(row).includes("@"), "表上沒有來賓名單與 email");
 
-  // 各室自己填：誰接待 ＋ 那一天方便的時段
+  // 各室只填兩件事（明確指示）：接待人員、共需幾分鐘
   const room = row.stops[0].room;
-  const put1 = await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: visitId, room, name: "王小明" }) });
-  assert.equal(put1.status, 200);
-  const put2 = await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: visitId, room, hours: "16:00 之後" }) });
-  assert.deepEqual(put2.body.presenters[room], "王小明", "只送時段不會把人名洗掉——兩個人同時填不同格子不該互相蓋");
-  assert.equal(put2.body.lab_hours[room], "16:00 之後");
-  assert.equal((await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: visitId, room: "999", name: "x" }) })).status, 400, "房號只有 301–305");
+  const put1 = await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: fid, room, name: "王小明" }) });
+  assert.equal(put1.status, 200, JSON.stringify(put1.body));
+  const put2 = await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: fid, room, minutes: "２５ 分" }) });
+  assert.equal(put2.body.presenters[room], "王小明", "只送分鐘不會把人名洗掉——兩個人同時填不同格子不該互相蓋");
+  assert.equal(put2.body.lab_minutes[room], 25, "「２５ 分」存成 25");
+  assert.ok(!("lab_hours" in put2.body), "不再問「方便的時段」");
+  assert.equal((await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: fid, room, minutes: "二十" }) })).status, 400, "分鐘填一個數字就好");
+  assert.equal((await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: fid, room: "999", name: "x" }) })).status, 400, "房號只有 301–305");
 
-  // **後台整筆存檔不會蓋掉老師剛填的**（後台那幾格也走這一支）
-  const saved = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit;
-  await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ ...saved, presenters: undefined, lab_hours: undefined, purpose: "改一個字觸發存檔" }) });
-  const after = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit;
-  assert.equal(after.presenters[room], "王小明", "後台存檔沒帶就沿用，不會清掉");
-  assert.equal(after.lab_hours[room], "16:00 之後");
-  await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(saved) });
+  // **後台開著舊資料改一個字自動存檔，不會蓋掉老師剛填的**——後台的 readForm() 是把手上那一份整個送回來的，
+  // 裡面的 presenters／lab_minutes 是老師填之前的樣子
+  const resaved = await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ ...stale, purpose: "改一個字觸發存檔" }) });
+  assert.equal(resaved.status, 200, JSON.stringify(resaved.body));
+  const after = (await api(`/api/visits?id=${fid}`, { headers: admin })).body.visit;
+  assert.equal(after.purpose, "改一個字觸發存檔", "存檔本身照常");
+  assert.equal(after.presenters[room], "王小明", "…老師填的人名還在");
+  assert.equal(after.lab_minutes[room], 25, "…分鐘也還在");
+
+  // 清空＝拿掉那一格
+  const cleared = await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: fid, room, minutes: "" }) });
+  assert.ok(!(room in cleared.body.lab_minutes) && cleared.body.presenters[room] === "王小明", "分鐘清空就拿掉那一格，人名不動");
 
   // 已經結束的那一場不給改——畫面灰掉只是提示，擋要擋在伺服器
-  const past = { ...saved, visit_id: "", code: "pastrota", date: "2020-01-01", org: { ...saved.org, name: "Past Rota Institute" } };
+  const past = { ...stale, visit_id: "", code: "pastrota", date: "2020-01-01", org: { ...stale.org, name: "Past Rota Institute" } };
   const pastId = (await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(past) })).body.visit.visit_id;
   const blocked = await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: pastId, room: "301", name: "太晚了" }) });
   assert.equal(blocked.status, 409, "過去的場次改不動");
@@ -960,10 +989,11 @@ test("支援人力表：連結自動產生、才打得開，各室自己填誰�
   assert.equal(both.body.visits.find((v) => v.visit_id === pastId).past, true, "…而且表上標成已結束");
   await api(`/api/visits?id=${pastId}`, { method: "DELETE", headers: admin });
 
-  // 通告**自動帶上連結**，後面接 #<visit_id>：點進去直接跳到這一場
-  const notice = await runJob("letter", { visit_id: visitId, kind: "notice", sender: "director" });
+  // 通告**自動帶上連結**，後面接 #<visit_id>：點進去直接跳到這一場。連結就是通告的最後一行
+  const notice = await runJob("letter", { visit_id: fid, kind: "notice" });
   const nb = notice.body.draft.body;
-  assert.ok(nb.includes(`/rota?key=${key}#${visitId}`), "通告帶著支援人力表的連結，並直接指到這一場");
-  assert.ok(/請點這個連結填寫/.test(nb) && /「誰接待」與「可以的時段」/.test(nb), "…並說明點進去要填什麼");
-  assert.ok(nb.indexOf("請點這個連結填寫") < nb.indexOf("請接龍："), "連結在前，接龍是不方便開網頁時的退路");
+  assert.ok(nb.endsWith(`請各研究室回覆，該時段由哪位老師或人員接待\nhttps://visit.example.test/rota?key=${key}#${fid}`), `通告最後就是那一句話與直接指到這一場的連結：${nb.slice(-160)}`);
+  assert.ok(!/請點這個連結填寫|接龍/.test(nb), "不再有「點連結怎麼填」的說明與接龍");
+
+  await api(`/api/visits?id=${fid}`, { method: "DELETE", headers: admin });
 });

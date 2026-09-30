@@ -317,14 +317,6 @@ export interface LetterContext {
   mostWantedRooms: string[];
 }
 
-/** 回覆期限：參訪前一天（通告裡寫「請在這一天前回覆」）。 */
-function dayBefore(date: string): string {
-  const d = new Date(`${date}T00:00:00+08:00`);
-  if (Number.isNaN(d.getTime())) return "";
-  d.setUTCDate(d.getUTCDate() - 1);
-  return d.toISOString().slice(0, 10);
-}
-
 function senderBlock(ctx: LetterContext): string {
   if (ctx.sender === "contact" && ctx.visit.contact_teacher && ctx.visit.contact_teacher !== "張俊彥") {
     const lab = (ctx.labs.labs || []).find((l: any) => l.lead?.name_zh === ctx.visit.contact_teacher);
@@ -366,7 +358,8 @@ export async function draftLetter(ctx: LetterContext): Promise<{ subject: string
     ctx.kind === "rundown"
       ? `你替 GHRC 草擬一則**回報給中心自己五間研究室**的訊息：通告發出去、各室回覆簡報人員之後，把定案的安排再送回去一次。收信的是同事，**一律用繁體中文**。
 語氣：同事之間，簡短、條列、看一眼就知道自己幾點要做什麼。不要客套話，不要感謝詞，不要公文腔。
-結構：1) 一句話說哪個單位、什麼時候來、幾位；2) **定案動線**——照 lab_stops 逐條列「幾點–幾點　房號　研究室　簡報人員　N 分鐘」，presenter 是空的就寫「（待補）」；3) 一兩句提醒當天的重點（來賓想看什麼、簡報大概講多久）；4) 一句「有問題直接回這則訊息」；5) 署名 sender。
+結構：1) 一句話說哪個單位、什麼時候來、幾位；2) **定案動線**——照 lab_stops 逐條列「幾點–幾點　房號　研究室　簡報人員　N 分鐘」，presenter 是空的就寫「（待補）」；3) 一兩句提醒當天的重點（來賓想看什麼、簡報大概講多久）；4) 最後一句「有問題直接回這則訊息」。
+**不要署名**：這一則是貼進中心自己的 LINE 群組，誰發的大家都看得到。
 時間與人員一律照提供的資料，不要自己改也不要補上沒有的人。回傳 subject 與純文字 body。
 
 ${CENTER_FACTS}`
@@ -378,10 +371,9 @@ ${CENTER_FACTS}`
 2) 一句話說哪個單位、什麼時候來、幾位。
 3) 一兩句來賓背景與他們想看什麼（purpose／interests，沒有就省略）。
 4) **原封不動**放入提供的 route_block（當天動線），一個字都不要改、不要重排、不要補上各室的時間。
-5) **原封不動**放入提供的 roll_call_block（請各研究室回覆、請點連結填寫的網址與怎麼填、請接龍的房號清單），一個字都不要改：網址要完整（含 # 後面那一段，那是直接跳到這一場用的）、房號一行一個、後面不要補任何字——那是要讓老師複製到 LINE 上接龍用的。
-6) 一句「請於 reply_by 前回覆」。
-7) 署名 sender。
-只寫這一場真的有的資訊：沒有的欄位就不要提，不要自己補上參觀路線以外的安排，也不要另外再問 demo、設備、研究生之類的事——這一則只問一件事：誰來接待。回傳 subject 與純文字 body。
+5) **原封不動**放入提供的 roll_call_block（請各研究室回覆，下一行是支援人力表的網址），一個字都不要改，網址要完整（含 # 後面那一段，那是直接跳到這一場用的）。
+**roll_call_block 就是整則的最後一段，後面什麼都不要加**：不要回覆期限、不要署名、不要結尾的客套話——這一則是貼進中心自己的 LINE 群組，誰發的大家都看得到。
+只寫這一場真的有的資訊：沒有的欄位就不要提，不要自己補上參觀路線以外的安排，也不要另外再問 demo、設備、研究生之類的事——這一則只問一件事：誰來接待（要多少時間，老師在網址那張表上填）。回傳 subject 與純文字 body。
 
 ${CENTER_FACTS}`
       : ctx.kind === "confirmation"
@@ -404,23 +396,18 @@ ${CENTER_FACTS}`;
     // 行前通告：當天幾點走到哪一間、各幾分鐘、誰負責（通告的主體就是這一份）
     // 行前通告／回報：當天幾點走到哪一間、各幾分鐘、誰負責、各室回覆的簡報人員
     lab_stops: internal
-      ? labStops(v, ctx.labs).map((x: any) => ({ ...x, presenter: (v as any).presenters?.[x.room] || "", hours: (v as any).lab_hours?.[x.room] || "", label: `${x.start}–${x.end}　${x.room} ${x.name_zh}　${x.lead}　${x.minutes} 分` }))
+      ? labStops(v, ctx.labs).map((x: any) => ({ ...x, presenter: (v as any).presenters?.[x.room] || "", label: `${x.start}–${x.end}　${x.room} ${x.name_zh}　${x.lead}　${x.minutes} 分` }))
       : undefined,
     interests: internal ? v.interests : undefined,
     headcount: internal ? v.headcount : undefined,
-    reply_by: ctx.kind === "notice" ? dayBefore(v.date) : undefined,
     route_block: ctx.kind === "notice" ? routeBlock(v, ctx.labs) : undefined,
-    roll_call_block: ctx.kind === "notice" ? rollCallBlock(v, ctx.labs, ctx.rotaUrl) : undefined,
+    roll_call_block: ctx.kind === "notice" ? rollCallBlock(v, ctx.rotaUrl) : undefined,
     response_block: ctx.kind === "thanks" ? responseBlock(v.language, ctx.i18n, respondUrl) : undefined,
-    sender: senderBlock(ctx),
+    // 通告與回報不署名（貼進中心自己的 LINE 群組，誰發的大家都看得到）
+    sender: internal ? undefined : senderBlock(ctx),
   };
   const out = await structured(LetterSchema, system, JSON.stringify(payload));
-  if (ctx.kind === "notice") {
-    // 這兩段是要貼進 LINE 的，AI 漏掉或改寫過就換回排好的那一份
-    for (const block of [routeBlock(v, ctx.labs), rollCallBlock(v, ctx.labs, ctx.rotaUrl)]) {
-      if (!out.body.includes(block)) out.body = `${out.body.trimEnd()}\n\n${block}`;
-    }
-  }
+  if (ctx.kind === "notice") out.body = settleNotice(out.body, routeBlock(v, ctx.labs), rollCallBlock(v, ctx.rotaUrl));
   if (ctx.kind === "thanks" && !out.body.includes(respondUrl)) {
     out.body = `${out.body.trim()}\n\n${responseBlock(v.language, ctx.i18n, respondUrl)}`;
   }
@@ -680,53 +667,44 @@ function routeBlock(v: Visit, labs: any): string {
 }
 
 /**
- * 「請接龍」：中心本來就在 LINE 群組上用接龍回覆——**一行一個房號、後面留白**，
- * 老師複製整段、在自己那一行後面加名字就好。所以這一段是排好的字，不交給 AI 寫。
- * 列的是這一場動線上的那幾間（跟收件人同一份），不是五間全列。
+ * 通告的最後一段：**一句話＋支援人力表的連結，就這樣**（明確指示，字照給的寫）。
+ * 以前後面還有「點進去怎麼填」的說明、接龍的房號清單、回覆期限與署名——全部拿掉了：
+ * 表上自己看得懂要填什麼，而這一則是貼進中心自己的 LINE 群組，誰發的大家都看得到。
+ * 連結後面接 `#<visit_id>`，老師點進去**直接跳到這一場**、那一張卡片會亮一下，不必在一整張表裡找。
+ * 連結是自動產生的（`ensureRotaKey()`），所以一定帶得出去；沒有連結那條路只是保險。
  */
+function rollCallBlock(v: Visit, rotaUrl = ""): string {
+  return ["請各研究室回覆，該時段由哪位老師或人員接待", ...(rotaUrl ? [`${rotaUrl}#${v.visit_id}`] : [])].join("\n");
+}
+
 /**
- * **請大家點連結去填**（明確要求）：連結是自動產生的，所以通告一定帶得出去；
- * 後面接上 `#<visit_id>`，老師點進去**直接跳到這一場**、那一張卡片會亮一下，不必在一整張表裡找。
- * 接龍留在最後當退路（有人就是不開網頁），主辦端再把群組裡接龍回的填進表裡（後台「設定」分頁看得到也改得了）。
- * 沒有連結的那一條路只是保險——`ensureRotaKey()` 之後不應該發生。
+ * 通告的結尾一定是那一段回覆與連結，**後面什麼都不接**（AI 自己補的期限、署名、客套話一律剪掉），
+ * 前面少了當天動線就補回去。兩段都是排好的字，AI 漏掉或改寫過就換回排好的那一份——那是要貼進 LINE 的。
  */
-function rollCallBlock(v: Visit, labs: any, rotaUrl = ""): string {
-  const rooms = labStops(v, labs).map((x: any) => x.room);
-  const list = rooms.length ? rooms : ["301", "302", "303", "304", "305"];
-  return [
-    "請各研究室回覆，該時段由哪位老師或人員接待，以及那一天貴室方便的時段：",
-    ...(rotaUrl
-      ? [
-          "",
-          "請點這個連結填寫（點進去會直接跳到這一場）：",
-          `${rotaUrl}#${v.visit_id}`,
-          "在自己那一間的格子填「誰接待」與「可以的時段」，填完自己會存，沒有送出鍵。所有場次都在同一張表上，每一場都可以點開看訪客背景研判。",
-          "",
-          "不方便開網頁的，請接龍：",
-        ]
-      : ["", "請接龍："]),
-    ...list,
-  ].join("\n");
+function settleNotice(body: string, route: string, roll: string): string {
+  const at = body.indexOf(roll);
+  let head = (at >= 0 ? body.slice(0, at) : body).trimEnd();
+  if (!head.includes(route)) head = head ? `${head}\n\n${route}` : route;
+  return `${head}\n\n${roll}`;
 }
 
 function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, contents: { key: string; zh: string }[]): { subject: string; body: string } {
   const v = ctx.visit;
   const location = v.itinerary?.find((s) => s.room === "briefing")?.location || "302";
   if (ctx.kind === "notice" || ctx.kind === "rundown") {
-    // 內部通告：中文、條列、貼得進 LINE。真提示詞同一個結構
+    // 內部通告：中文、條列、貼得進 LINE、不署名。真提示詞同一個結構
     const stops = labStops(v, ctx.labs) as any[];
-    const hours = (room: string) => ((v as any).lab_hours?.[room] ? `　（該室可配合：${(v as any).lab_hours[room]}）` : "");
-    const line = (x: any) => `${x.start}–${x.end}　${x.room} ${x.name_zh}　${ctx.kind === "rundown" ? ((v as any).presenters?.[x.room] || "（待補）") + hours(x.room) : x.lead}　${x.minutes} 分`;
+    const line = (x: any) => `${x.start}–${x.end}　${x.room} ${x.name_zh}　${ctx.kind === "rundown" ? (v as any).presenters?.[x.room] || "（待補）" : x.lead}　${x.minutes} 分`;
     const n = v.headcount || v.guests?.length || 0;
     const head = `${v.org?.name || "（單位待補）"}　${v.date} ${v.start_time}–${endTimeOf(v)}${n ? `　${n} 位` : ""}`;
     return ctx.kind === "notice"
       ? {
           subject: `（AI_MOCK）行前通告：${v.org?.name || v.visit_id} ${v.date} 來訪`,
-          body: `各位老師好：\n\n${head}\n\n${routeBlock(v, ctx.labs)}\n\n${rollCallBlock(v, ctx.labs, ctx.rotaUrl)}\n\n請於 ${dayBefore(v.date)} 前回覆。\n\n${senderBlock(ctx)}`,
+          body: `各位老師好：\n\n${head}\n\n${routeBlock(v, ctx.labs)}\n\n${rollCallBlock(v, ctx.rotaUrl)}`,
         }
       : {
           subject: `（AI_MOCK）定案回報：${v.org?.name || v.visit_id} ${v.date}`,
-          body: `各位老師好：\n\n${head}\n\n定案動線與簡報人員：\n${stops.map(line).join("\n")}\n\n有問題直接回這則訊息。\n\n${senderBlock(ctx)}`,
+          body: `各位老師好：\n\n${head}\n\n定案動線與簡報人員：\n${stops.map(line).join("\n")}\n\n有問題直接回這則訊息。`,
         };
   }
   if (ctx.kind === "confirmation") {

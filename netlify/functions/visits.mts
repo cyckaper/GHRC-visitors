@@ -72,6 +72,8 @@ export default async (req: Request) => {
     // 背景工作寫的）。body 沒帶就沿用現有的：不然在別的分頁開著舊資料按一下存檔，就會把它們清掉——
     // 提醒紀錄被清掉還會害後續提醒重寄一次。
     if (existing) for (const k of KEPT) if ((body as any)[k] === undefined) (merged as any)[k] = (existing as any)[k];
+    // 各研究室自己填的那幾格：帶了也不算，一律沿用伺服器上的（見 ROTA_FIELDS）
+    if (existing) for (const k of ROTA_FIELDS) if ((existing as any)[k] !== undefined) (merged as any)[k] = (existing as any)[k];
     merged.created_at = existing?.created_at || nowISO();
     merged.updated_at = nowISO();
     // 剛產出來的那一份簡報：把**這一刻的行程指紋**記下來，之後行程改了才知道手上那個 .pptx 是舊的。
@@ -104,14 +106,18 @@ export default async (req: Request) => {
   return fail(405, "method not allowed");
 };
 
-/** 這幾個欄位由別的端點或背景工作維護，一般存檔不該動到。 */
+/** 後台表單管不到的欄位（別的端點或背景工作維護）：body 沒帶就沿用現有的，一般存檔不該動到。 */
+const KEPT = ["summary", "summary_at", "reminders", "drive", "cards", "signbook", "dictation", "letters", "materials", "background", "wrapup"] as const;
+
 /**
- * 後台表單管不到、或**別人也在寫**的欄位：body 沒帶就沿用現有的。
- * `presenters`／`lab_hours` 在這裡，是因為**各研究室自己會從 `/rota` 填**——
- * 後台開著舊資料改一個字觸發自動存檔，就會把老師剛填的蓋掉（研判掛錯場是同一類）。
- * 後台那幾格改走 `/api/rota`（admin 也打得動），這個欄位只有那一支在寫。
+ * **只有 `/api/rota` 在寫**的欄位——各研究室自己在支援人力表上填的接待人員（`presenters`）與
+ * 共需幾分鐘（`lab_minutes`）。這幾個**帶了也不算**，一律沿用伺服器上那一份：
+ * 後台的 `readForm()` 是把手上那一份整個送回來的，老師在表上填完之後，後台開著的那一份還是舊的，
+ * 改一個字觸發自動存檔就會把老師剛填的蓋掉——`KEPT` 只擋得住「沒帶」，擋不住「帶了舊的」。
+ * 後台自己要改這幾格也走 `/api/rota`（admin 打得動，設定分頁那張表與通告卡片都是）。
+ * `lab_hours` 是改成「共需幾分鐘」之前問的「方便的時段」：不再收，存過的也不刪。
  */
-const KEPT = ["summary", "summary_at", "reminders", "drive", "cards", "signbook", "dictation", "letters", "materials", "background", "wrapup", "presenters", "lab_hours"] as const;
+const ROTA_FIELDS = ["presenters", "lab_minutes", "lab_hours"] as const;
 
 /** 這一場的網址還沒「用出去」：沒人回覆、兩封信都還沒寄出、沒放任何檔案、還沒備份到 Drive。 */
 async function isUnused(store: ReturnType<typeof getStore>, v: Visit): Promise<boolean> {
@@ -161,18 +167,11 @@ export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   v.summary = typeof input.summary === "string" ? input.summary : "";
   // 後續那四件事裡標了「本次沒有」的（只留認得的那四個 key，其他一律丟掉）
   (v as any).wrapup = { na: wrapupNA({ wrapup: (input as any).wrapup }) };
-  // 各研究室自己填的：誰來接待（房號 → 姓名）與那一天開放的時段（房號 → 一句話）。只留 301–305。
-  const byRoom = (src: unknown, max: number) => {
-    const out: Record<string, string> = {};
-    for (const [room, x] of Object.entries((src as any) || {})) {
-      if (!/^30[1-5]$/.test(room)) continue;
-      const val = String(x || "").trim().slice(0, max);
-      if (val) out[room] = val;
-    }
-    return out;
-  };
-  (v as any).presenters = byRoom((input as any).presenters, 200);
-  (v as any).lab_hours = byRoom((input as any).lab_hours, 120);
+  // 各研究室自己填的（接待人員、共需幾分鐘）**只有 `/api/rota` 在寫**：這裡一律從空的開始，
+  // 存檔時由上面的 ROTA_FIELDS 沿用伺服器上那一份
+  (v as any).presenters = {};
+  (v as any).lab_minutes = {};
+  delete (v as any).lab_hours;
   const code = String((input as any).code || "").trim();
   if (!isValidVisitId(v.visit_id) || code) v.visit_id = makeVisitId(v.date, v.org.name, code);
   v.page_url = `${site}/${v.visit_id}`;
