@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
+import { weekdayOf } from "../public/lib/rota.mjs";
 import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
 
 const visit = {
@@ -474,4 +475,14 @@ test("訪客地圖的位置：單位名稱或國家改了就要重查；座標�
   assert.equal(sanitizeGeo({ key: "k", lat: 25.0171234, lon: 121.5398765, precision: "moon" }).precision, "country", "不認得的精度一律當國家");
   assert.deepEqual([sanitizeGeo({ key: "k", lat: 25.0171234, lon: 121.5398765, precision: "site" }).lat, sanitizeGeo({ key: "k", lat: 25.0171234, lon: 121.5398765, precision: "site" }).lon], [25.0171, 121.5399], "座標留到小數四位（約十公尺，夠了）");
   assert.equal(sanitizeGeo(null), undefined);
+});
+
+test("支援人力表上的星期幾照日期算，不受時區影響", () => {
+  // 明確回報：11/2 是週一，表上寫成週日（以前拿台北的午夜去問 UTC，每一天都早一天）
+  assert.equal(weekdayOf("2026-11-02"), "一");
+  assert.equal(weekdayOf("2026-10-15"), "四");
+  assert.equal(weekdayOf("2026-09-30"), "三");
+  assert.equal(weekdayOf("2027-01-01"), "五");
+  assert.equal(weekdayOf("2028-02-29"), "二", "閏年那一天也對");
+  assert.equal(weekdayOf(""), "", "沒有日期就不寫星期");
 });

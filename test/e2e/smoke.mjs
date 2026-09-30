@@ -601,6 +601,8 @@ try {
     check((await bareRow.locator("td.rota-todo").count()) === 5 && (await bareRow.locator('input[data-field="name"]').first().getAttribute("placeholder")) === "未填", "a visit whose route is not planned yet lists all five labs, each marked 未填 until someone answers");
     const oneRow = page.locator(`#rotaTable tr[data-rota-visit="${only301}"]`);
     check((await oneRow.locator("td.rota-todo").count()) === 1 && (await oneRow.locator("td.rota-na").count()) === 4 && (await oneRow.locator("td.rota-na").first().textContent()).trim() === "免填", "once the route is planned, the labs it skips say 免填");
+    // 星期幾照日期算（明確回報：11/2 是週一，表上寫成週日——以前每一天都早一天）
+    check((await oneRow.locator("th").textContent()).includes("10/10（六）"), `the table shows the right weekday (2099-10-10 is a Saturday): ${(await oneRow.locator("th").textContent()).trim()}`);
     const mine = page.locator(`#rotaTable tr[data-rota-visit="${id}"] input[data-room="${room}"][data-field="name"]`);
     check((await mine.inputValue()) === "王小明" && !(await mine.evaluate((el) => el.closest("td").classList.contains("rota-todo"))), "what a lab filled in shows in its cell, not marked 未填");
     await mine.fill("李大華（群組裡回的）");
