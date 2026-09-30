@@ -21,11 +21,11 @@
       "equipment_zh": ["七站心理生理量測陣列", "HealthCloud 資料平台（自建）"],
       "background_en": "Ph.D. in Recreation and Parks, Pennsylvania State University (1993). M.S. in Horticulture, National Taiwan University (1987). Professor at NTU's Department of Horticulture and Landscape Architecture since 2005; Director of the Green Health Research Center from August 2026. Adjunct Professor, Department of Landscape Architecture, University of Illinois Urbana-Champaign, since 2017. Recipient of the NSTC Outstanding Research Award (2025). The first landscape scholar to measure how landscapes affect brain activity using functional magnetic resonance imaging.",
       "background_zh": "美國賓州州立大學遊憩與公園學博士（1993）、國立臺灣大學園藝學碩士（1987）。2005 年起任教臺大園藝暨景觀學系，2026 年 8 月起兼綠色健康研究中心主任；2017 年起兼任美國伊利諾大學香檳分校景觀建築系兼任教授。2025 年獲國科會傑出研究獎。是全球第一位以功能性磁振造影（fMRI）量測景觀如何影響腦部活動的景觀學者。",
+      "photo": "assets/labs/301/lead.jpg",
       "papers": [
         { "title": "Using functional Magnetic Resonance Imaging (fMRI) to analyze brain region activity when viewing landscapes", "venue": "Landscape and Urban Planning, 2017", "url": "https://www.sciencedirect.com/science/article/pii/S0169204617300300" },
         { "title": "Landscapes and Human Health", "venue": "International Journal of Environmental Research and Public Health, 2017", "url": "https://doi.org/10.3390/ijerph14101212" }
       ],
-      "photo": null,
       "confirmed": false
     },
     {
@@ -114,7 +114,7 @@
         { "title": "Effects of the built and social features of urban greenways on the outdoor activity of older adults", "venue": "Landscape and Urban Planning, 2020", "url": "https://www.sciencedirect.com/science/article/abs/pii/S0169204619315257" },
         { "title": "Effects of Urban Park Quality, Environmental Perception, and Leisure Activity on Well-Being among the Older Population", "venue": "International Journal of Environmental Research and Public Health, 2021", "url": "https://doi.org/10.3390/ijerph182111402" }
       ],
-      "photo": null,
+      "photo": "assets/labs/304/lead.jpg",
       "confirmed": false
     },
     {
