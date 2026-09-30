@@ -14,6 +14,14 @@
  */
 
 const WEEK = ["日", "一", "二", "三", "四", "五", "六"];
+/**
+ * 那一天是星期幾。**日期字串本身沒有時區**，直接照年月日算。以前是拿「台北時間的午夜」去問 UTC 是星期幾，
+ * 得到的是前一天下午四點——整張表每一天都早一天（明確回報：11/2 是週一，表上寫成週日）。
+ */
+export function weekdayOf(date) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || ""));
+  return m ? WEEK[new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))).getUTCDay()] : "";
+}
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 const CSS = `
@@ -100,8 +108,8 @@ function background(v) {
 
 function card(v, labs) {
   const lab = (room) => labs.find((l) => String(l.room) === String(room)) || { room, name_zh: room, color: "#0f766e" };
-  const d = new Date(`${v.date}T00:00:00+08:00`);
-  const when = `${v.date}（${WEEK[d.getUTCDay()]}）${v.start_time || ""}${v.end_time ? `–${v.end_time}` : ""}`;
+  const wk = weekdayOf(v.date);
+  const when = `${v.date}${wk ? `（${wk}）` : ""}${v.start_time || ""}${v.end_time ? `–${v.end_time}` : ""}`;
   const stops = v.stops || [];
   // 一間一格，只有兩件事：接待人員、共需幾分鐘（明確指示）。各室排定的時段不印——
   // 通告說「尚未分配到各室」，各室回報要多少時間，主辦端才排得出來
@@ -167,8 +175,8 @@ function table(visits, labs) {
   const lab = (room) => labs.find((l) => String(l.room) === room);
   const head = `<thead><tr><th class="rota-th">場次</th>${rooms.map((room) => `<th class="rota-th" style="color:var(--c${esc(room)})">${esc(room)}<div class="rota-sub">${esc(shortName(lab(room)))}</div></th>`).join("")}</tr></thead>`;
   const row = (v) => {
-    const d = new Date(`${v.date}T00:00:00+08:00`);
-    const when = `${String(v.date || "").slice(5).replace("-", "/")}（${WEEK[d.getUTCDay()]}）${v.start_time || ""}${v.end_time ? `–${v.end_time}` : ""}`;
+    const wk = weekdayOf(v.date);
+    const when = `${String(v.date || "").slice(5).replace("-", "/")}${wk ? `（${wk}）` : ""}${v.start_time || ""}${v.end_time ? `–${v.end_time}` : ""}`;
     return `<tr class="${v.past ? "rota-past" : ""}" data-rota-visit="${esc(v.visit_id)}">
         <th scope="row" class="rota-rh"><b>${esc(v.org?.name_local || v.org?.name)}</b><div class="rota-sub">${esc(when)}</div></th>
         ${rooms.map((room) => tableCell(v, room)).join("")}
