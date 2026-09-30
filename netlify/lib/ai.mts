@@ -371,8 +371,15 @@ ${CENTER_FACTS}`
       : ctx.kind === "notice"
       ? `你替 GHRC 草擬一封**寄給中心自己五間研究室老師**的行前通告。收信的是同事，不是來賓——**一律用繁體中文**，不管來賓講什麼語言。
 語氣：同事之間，簡短、好讀、好回。不要客套話堆疊，不要感謝詞，不要「敬請惠予協助」這種公文腔。
-結構：1) 一句話說哪個單位、什麼時候來、幾位；2) 一兩句來賓背景與他們想看什麼（purpose／interests，沒有就省略）；3) **當天動線**——照 lab_stops 逐條列出「幾點–幾點　房號　研究室　老師　N 分鐘」，時間是排定的，不要自己改；4) **要請各研究室回覆的事**，條列四點：那個時段由誰接待、要不要準備 demo 或設備、需不需要研究生幫忙（幾位）、時間上有沒有困難；5) 一句「直接回這封信就可以」與截止日（參訪前一天）；6) 署名 sender。
-只寫這一場真的有的資訊：沒有的欄位就不要提，不要自己補上參觀路線以外的安排。回傳 subject 與純文字 body。
+結構，照這個順序：
+1) 開頭一行固定寫「各位老師好：」。
+2) 一句話說哪個單位、什麼時候來、幾位。
+3) 一兩句來賓背景與他們想看什麼（purpose／interests，沒有就省略）。
+4) **原封不動**放入提供的 route_block（當天動線），一個字都不要改、不要重排、不要補上各室的時間。
+5) **原封不動**放入提供的 roll_call_block（請各研究室回覆＋請接龍的房號清單），一個字都不要改，房號一行一個、後面不要補任何字——那是要讓老師複製到 LINE 上接龍用的。
+6) 一句「請於 reply_by 前回覆」。
+7) 署名 sender。
+只寫這一場真的有的資訊：沒有的欄位就不要提，不要自己補上參觀路線以外的安排，也不要另外再問 demo、設備、研究生之類的事——這一則只問一件事：誰來接待。回傳 subject 與純文字 body。
 
 ${CENTER_FACTS}`
       : ctx.kind === "confirmation"
@@ -400,10 +407,18 @@ ${CENTER_FACTS}`;
     interests: internal ? v.interests : undefined,
     headcount: internal ? v.headcount : undefined,
     reply_by: ctx.kind === "notice" ? dayBefore(v.date) : undefined,
+    route_block: ctx.kind === "notice" ? routeBlock(v, ctx.labs) : undefined,
+    roll_call_block: ctx.kind === "notice" ? rollCallBlock(v, ctx.labs) : undefined,
     response_block: ctx.kind === "thanks" ? responseBlock(v.language, ctx.i18n, respondUrl) : undefined,
     sender: senderBlock(ctx),
   };
   const out = await structured(LetterSchema, system, JSON.stringify(payload));
+  if (ctx.kind === "notice") {
+    // 這兩段是要貼進 LINE 的，AI 漏掉或改寫過就換回排好的那一份
+    for (const block of [routeBlock(v, ctx.labs), rollCallBlock(v, ctx.labs)]) {
+      if (!out.body.includes(block)) out.body = `${out.body.trimEnd()}\n\n${block}`;
+    }
+  }
   if (ctx.kind === "thanks" && !out.body.includes(respondUrl)) {
     out.body = `${out.body.trim()}\n\n${responseBlock(v.language, ctx.i18n, respondUrl)}`;
   }
@@ -636,6 +651,42 @@ function span(x: { start: string; end: string }): number {
   return hm(x.end) - hm(x.start);
 }
 
+/**
+ * 行前通告的「當天動線」：**照今日流程的區塊列，研究室參訪是一整段、不拆到各室**
+ * （明確指示）。通告是去問「誰來接待」的，還沒問到人就先把各室的時間寫死，
+ * 等於先斬後奏；各室的時段在**回報**那一則才定案（那時候才有簡報人員）。
+ */
+function routeBlock(v: Visit, labs: any): string {
+  const rooms = labStops(v, labs).map((x: any) => x.room);
+  const brief = v.itinerary?.find((s) => String(s.room) === "briefing");
+  const label = (b: any) =>
+    b.kind === "briefing"
+      ? `${brief?.location || "302"}　歡迎與中心總體介紹`
+      : b.kind === "tour"
+      ? `研究室參訪（${rooms.join("、") || "301–305"}，全程同一層樓）`
+      : b.kind === "discussion"
+      ? "綜合討論"
+      : b.kind === "photo"
+      ? "合照"
+      : b.title_2nd || b.title_en || "";
+  const lines = (v.programme || []).filter((b) => b && b.start && b.end).map((b) => `${b.start}–${b.end}　${label(b)}`);
+  return [
+    "當天動線（時間已排定）：",
+    ...lines,
+    "※ 研究室參訪時段目前尚未分配到各室，確定後再補上。",
+  ].join("\n");
+}
+
+/**
+ * 「請接龍」：中心本來就在 LINE 群組上用接龍回覆——**一行一個房號、後面留白**，
+ * 老師複製整段、在自己那一行後面加名字就好。所以這一段是排好的字，不交給 AI 寫。
+ * 列的是這一場動線上的那幾間（跟收件人同一份），不是五間全列。
+ */
+function rollCallBlock(v: Visit, labs: any): string {
+  const rooms = labStops(v, labs).map((x: any) => x.room);
+  return ["請各研究室回覆，該時段由哪位老師或人員接待：", "", "請接龍：", ...(rooms.length ? rooms : ["301", "302", "303", "304", "305"])].join("\n");
+}
+
 function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, contents: { key: string; zh: string }[]): { subject: string; body: string } {
   const v = ctx.visit;
   const location = v.itinerary?.find((s) => s.room === "briefing")?.location || "302";
@@ -648,7 +699,7 @@ function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, con
     return ctx.kind === "notice"
       ? {
           subject: `（AI_MOCK）行前通告：${v.org?.name || v.visit_id} ${v.date} 來訪`,
-          body: `各位老師好：\n\n${head}\n\n當天動線：\n${stops.map(line).join("\n")}\n\n請各室協助回覆：\n1. 這個時段由哪一位簡報\n2. 要不要準備 demo 或設備\n3. 需不需要研究生幫忙（幾位）\n4. 時間上有沒有困難\n\n請於 ${dayBefore(v.date)} 前回覆，直接回這則訊息就可以。\n\n${senderBlock(ctx)}`,
+          body: `各位老師好：\n\n${head}\n\n${routeBlock(v, ctx.labs)}\n\n${rollCallBlock(v, ctx.labs)}\n\n請於 ${dayBefore(v.date)} 前回覆。\n\n${senderBlock(ctx)}`,
         }
       : {
           subject: `（AI_MOCK）定案回報：${v.org?.name || v.visit_id} ${v.date}`,

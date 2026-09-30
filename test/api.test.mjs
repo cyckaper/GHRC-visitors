@@ -239,8 +239,14 @@ test("行前通告：收件人是這一場動線上的研究室，內容照動�
   const notice = await runJob("letter", { visit_id: visitId, kind: "notice", sender: "director" });
   assert.equal(notice.status, 200, JSON.stringify(notice.body));
   const body = notice.body.draft.body;
-  for (const room of onRoute) assert.ok(body.includes(room), `通告要列出 ${room}`);
-  assert.ok(/簡報/.test(body), "要請各室安排簡報人員");
+  assert.ok(body.startsWith("各位老師好："), "開頭固定這一句");
+  assert.ok(/該時段由哪位老師或人員接待/.test(body), "這一則只問一件事：誰來接待");
+  // 「請接龍」是要複製到 LINE 上的：一行一個房號、後面留白，老師自己在那一行加名字
+  const roll = body.slice(body.indexOf("請接龍：")).split("\n").slice(1).filter((x) => x.trim());
+  assert.deepEqual(roll.slice(0, onRoute.length), onRoute, "接龍清單就是這一場會走到的那幾間，一行一個、後面不補字");
+  // 動線照今日流程的區塊列，**研究室參訪是一整段**——還沒問到人就把各室時間寫死是先斬後奏
+  assert.ok(/當天動線（時間已排定）：/.test(body) && /研究室參訪（/.test(body), "動線照流程區塊列，研究室參訪不拆到各室");
+  assert.ok(/尚未分配到各室/.test(body), "…並說明各室時段之後才補");
   const saved = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit;
   assert.ok(saved.letters.notice.body, "草稿存回這一場");
   assert.ok(!saved.letters.notice.sent_at, "草擬不算寄出");
