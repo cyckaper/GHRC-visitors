@@ -6,30 +6,13 @@
 <title>GHRC 支援人力表</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  /* 五間各一色，值由 /api/rota 回的 labs 填進來（跟後台與來賓端同一套） */
+  /* 五間各一色，值由 /api/rota 回的 labs 填進來（跟後台與來賓端同一套）。
+     表格本身的樣式在 /lib/rota.mjs（後台「設定」分頁也用同一份），這裡只管頁面外框。 */
   :root { --ink: #1c1917; --c301: #047857; --c302: #0369a1; --c303: #6d28d9; --c304: #b45309; --c305: #a21caf; }
   body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 5px; z-index: 60; background: linear-gradient(90deg, var(--c301), var(--c302) 25%, var(--c303) 50%, var(--c304) 75%, var(--c305)); }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", sans-serif; background: #fafaf9; color: var(--ink); }
-  .card { background: #fff; border: 1px solid #e7e5e4; border-radius: .9rem; padding: 1rem 1.1rem; }
-  /* 過去的一場：灰底、字淡下來、顏色抽掉，一眼看得出「這一列不用填了」。
-     只靠顏色不夠——旁邊還寫著「已結束」，欄位也是 disabled，看不到顏色一樣知道。 */
-  .card.past { background: #ebe9e7; color: #78716c; border-color: #d6d3d1; }
-  .card.past .cell { background: #f5f5f4; border-top-color: #d6d3d1 !important; }
-  .card.past .cell div { color: #a8a29e !important; }
-  .card.past .over { font-weight: 600; color: #57534e; }
   .muted { color: #78716c; font-size: .86rem; }
-  .pill { display: inline-flex; align-items: center; font-size: .72rem; font-weight: 700; letter-spacing: .04em; padding: .1rem .5rem; border-radius: 9999px; color: #fff; background: var(--tone); }
-  .who { width: 100%; border: 1px solid #d6d3d1; border-radius: .45rem; padding: .3rem .5rem; font-size: .92rem; background: #fff; }
-  .who:focus { outline: 2px solid var(--tone); outline-offset: 1px; }
-  .who:disabled { background: #f5f5f4; color: #a8a29e; border-style: dashed; }
-  .who.saved { border-color: #15803d; }
-  .cell { border-top: 3px solid var(--tone); border-radius: .5rem; padding: .4rem .5rem; background: #fff; }
-  .card.past .cell { background: #fafaf9; }
-  details > summary { cursor: pointer; list-style: none; }
-  details > summary::-webkit-details-marker { display: none; }
-  details > summary::before { content: "▸ "; }
-  details[open] > summary::before { content: "▾ "; }
-  .f { font-size: .78rem; font-weight: 600; color: #57534e; letter-spacing: .02em; }
+  .err { color: #b91c1c; font-size: .9rem; }
 </style>
 </head>
 <body class="min-h-screen">
@@ -39,107 +22,31 @@
     <p class="muted mt-1">每一場參訪，請各研究室在自己那一格填上<b>當天可以支援的人</b>與<b>貴室方便的時段</b>。時段寫一句話就好（「整段都可以」「16:00 之後」都行）。<b>填完自己會存</b>，沒有送出鍵。已經結束的場次是灰的，不能再改。</p>
   </header>
   <p id="status" class="muted"></p>
-  <div id="rows" class="space-y-3"></div>
+  <div id="rows"></div>
   <footer class="muted pt-4 border-t border-stone-200">
     <p>國立臺灣大學生物資源暨農學院　綠色健康研究中心　·　臺大造園館三樓　·　ntughrc@gmail.com</p>
     <p class="mt-1">這個網址只給中心內部使用，請不要轉給外面。</p>
   </footer>
 </main>
 
-<script>
-(async () => {
-  const $ = (id) => document.getElementById(id);
-  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const qs = new URLSearchParams(location.search);
-  const key = qs.get("key") || "";
-  const api = (path, init) => fetch(path, { credentials: "same-origin", ...init }).then((r) => r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` })));
-  const WEEK = ["日", "一", "二", "三", "四", "五", "六"];
+<script type="module">
+import { mountRota, focusVisit } from "/lib/rota.mjs";
 
-  const r = await api(`/api/rota?key=${encodeURIComponent(key)}`);
-  if (!r.ok) { $("status").innerHTML = `<span class="text-red-700">${esc(r.error || "打不開")}</span>`; return; }
-  const labs = r.labs || [];
-  for (const l of labs) document.documentElement.style.setProperty(`--c${l.room}`, l.color);
-  const labName = (room) => labs.find((l) => String(l.room) === String(room)) || { room, name_zh: room, lead: "" };
+const $ = (id) => document.getElementById(id);
+const key = new URLSearchParams(location.search).get("key") || "";
+const q = `/api/rota?key=${encodeURIComponent(key)}`;
+const api = (path, init) => fetch(path, { credentials: "same-origin", ...init }).then((r) => r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` })));
+const status = (msg, isError) => { $("status").textContent = msg; $("status").className = isError ? "err" : "muted"; };
+// 通告裡的連結帶著 #<visit_id>：點進來直接跳到那一場
+const wanted = () => decodeURIComponent(location.hash.slice(1));
 
-  const upcoming = r.visits.filter((v) => !v.past);
-  $("status").textContent = upcoming.length
-    ? `接下來有 ${upcoming.length} 場要填；底下灰色的 ${r.visits.length - upcoming.length} 場已經結束。`
-    : "目前沒有將來的參訪。";
-
-  /** 背景研判：整份摺起來，點開才看——表上一眼要看到的是日期與空格，不是一整頁研判。 */
-  function background(b) {
-    if (!b) return "";
-    const list = (items, fn) => (items || []).map((x) => `<li>${fn(x)}</li>`).join("");
-    return `
-      <details class="mt-2">
-        <summary class="text-sm font-medium">訪客背景研判（點開來看）</summary>
-        <div class="mt-2 space-y-2 text-sm">
-          <p>${esc(b.org_profile)}</p>
-          ${(b.purposes || []).length ? `<div><div class="f">可能的參訪目的</div><ol class="list-decimal pl-5">${list(b.purposes, esc)}</ol></div>` : ""}
-          ${(b.people || []).length ? `<div><div class="f">名單上的人</div><ul class="list-disc pl-5">${list(b.people, (p) => `<span class="font-medium">${esc(p.name)}</span>　${esc(p.note)}`)}</ul></div>` : ""}
-          ${(b.rooms || []).length ? `<div><div class="f">可能最想看</div><ul class="list-disc pl-5">${list(b.rooms, (x) => `<span class="font-medium">${esc(x.room)}</span>　${esc(x.why)}`)}</ul></div>` : ""}
-          ${(b.prepare || []).length ? `<div><div class="f">可以先準備</div><ul class="list-disc pl-5">${list(b.prepare, esc)}</ul></div>` : ""}
-          ${(b.unknowns || []).length ? `<div><div class="f">還要確認</div><ul class="list-disc pl-5 text-amber-700">${list(b.unknowns, esc)}</ul></div>` : ""}
-        </div>
-      </details>`;
-  }
-
-  $("rows").innerHTML = r.visits
-    .map((v) => {
-      const d = new Date(`${v.date}T00:00:00+08:00`);
-      const when = `${v.date}（${WEEK[d.getUTCDay()]}）${v.start_time || ""}${v.end_time ? `–${v.end_time}` : ""}`;
-      const stops = v.stops || [];
-      const cells = stops.length
-        ? stops
-            .map((s) => {
-              const lab = labName(s.room);
-              return `<div class="cell" style="--tone:${esc(lab.color || "#0f766e")}">
-                  <div class="text-xs font-semibold" style="color:${esc(lab.color || "#0f766e")}">${esc(s.room)} ${esc(lab.name_zh)}</div>
-                  <div class="muted" style="font-size:.74rem">${esc(s.start)}–${esc(s.end)}　${esc(String(s.minutes))} 分</div>
-                  <input class="who mt-1" data-visit="${esc(v.visit_id)}" data-room="${esc(s.room)}" data-field="name" value="${esc(v.presenters?.[s.room] || "")}"
-                         placeholder="${v.past ? "" : "誰能支援？"}" ${v.past ? "disabled" : ""}>
-                  <input class="who mt-1" data-visit="${esc(v.visit_id)}" data-room="${esc(s.room)}" data-field="hours" value="${esc(v.lab_hours?.[s.room] || "")}"
-                         placeholder="${v.past ? "" : "可以的時段？"}" title="那一天貴室方便的時段。「整段都可以」「16:00 之後」「要避開 15:40 的課」都可以，不必寫成標準時間" ${v.past ? "disabled" : ""}>
-                </div>`;
-            })
-            .join("")
-        : `<p class="muted">行程還沒排，排好之後這裡就會列出要走哪幾間。</p>`;
-      return `<section class="card ${v.past ? "past" : ""}">
-          <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span class="font-semibold">${esc(v.org.name)}</span>
-            ${v.org.name_local && v.org.name_local !== v.org.name ? `<span class="muted">${esc(v.org.name_local)}</span>` : ""}
-            <span class="muted">${esc(when)}</span>
-            ${v.org.country ? `<span class="muted">${esc(v.org.country)}</span>` : ""}
-            ${v.headcount ? `<span class="muted">${esc(String(v.headcount))} 位</span>` : ""}
-            ${v.contact_teacher ? `<span class="muted">對口 ${esc(v.contact_teacher)}</span>` : ""}
-            ${v.past ? `<span class="over">已結束</span>` : ""}
-          </div>
-          ${v.purpose ? `<p class="muted mt-1">${esc(v.purpose)}</p>` : ""}
-          ${background(v.background)}
-          <div class="grid gap-2 mt-3" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">${cells}</div>
-        </section>`;
-    })
-    .join("");
-
-  // 填完自己存（跟後台同一個做法：打完字 0.8 秒後寫回去，沒有送出鍵）
-  const timers = new Map();
-  $("rows").addEventListener("input", (e) => {
-    const el = e.target.closest(".who");
-    if (!el || el.disabled) return;
-    el.classList.remove("saved");
-    clearTimeout(timers.get(el));
-    timers.set(el, setTimeout(async () => {
-      const res = await api(`/api/rota?key=${encodeURIComponent(key)}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        // 只送自己這一格：兩個人同時在填不同的格子，不該互相蓋掉
-        body: JSON.stringify({ visit_id: el.dataset.visit, room: el.dataset.room, [el.dataset.field === "hours" ? "hours" : "name"]: el.value }),
-      });
-      if (res.ok) { el.classList.add("saved"); $("status").textContent = `已存 ${new Date().toTimeString().slice(0, 5)}`; }
-      else $("status").innerHTML = `<span class="text-red-700">${esc(res.error || "存不起來")}</span>`;
-    }, 800));
-  });
-})();
+await mountRota($("rows"), {
+  load: () => api(q),
+  save: (body) => api(q, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+  onStatus: status,
+  focus: wanted(),
+});
+window.addEventListener("hashchange", () => focusVisit($("rows"), wanted()));
 </script>
 </body>
 </html>
