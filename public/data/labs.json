@@ -1,5 +1,5 @@
 {
-  "_comment": "來賓端老師卡片與 /lab/<房號> 介紹頁。color 是這一間在全站的顏色（來賓端卡片、後台選頁區塊與行程、動線表都用同一色，五間各一色，改這裡就全站跟著改）。303 只列陳惠美（明確指示，與母簡報不同）。**`one_line_source` 標成 lead 的那一句是老師自己簡報上的原文，逐字照用，不改寫**（明確指示；目前 302、303 有）。intro／expertise／equipment／background／papers 是草稿：302 與 303 取自老師自己的簡報，其餘由母簡報與公開資料（系網站、國科會獲獎頁、期刊）整理；查不到的一律留空，沒有憑據的學歷、職稱、論文不寫。confirmed=false 表示尚待老師本人確認（待確認事項 1），後台「設定」分頁可以直接改。photo 為 null 時頁面顯示姓名縮寫；photo／photos[].src 是 assets/… 的站台檔、labs/… 的媒體庫 key，或 https 網址。302 與 303 的照片取自老師自己的簡報（302 的圖說也是簡報上原本的標法，照抄）。",
+  "_comment": "來賓端老師卡片與 /lab/<房號> 介紹頁。color 是這一間在全站的顏色（來賓端卡片、後台選頁區塊與行程、動線表都用同一色，五間各一色，改這裡就全站跟著改）。303 只列陳惠美（明確指示，與母簡報不同）。**`one_line_source` 標成 lead 的那一句是老師自己簡報上的原文，逐字照用，不改寫**（明確指示；目前 302、303 有）。intro／expertise／equipment／background／papers 是草稿：302 與 303 取自老師自己的簡報，其餘由母簡報與公開資料（系網站、國科會獲獎頁、期刊）整理；查不到的一律留空，沒有憑據的學歷、職稱、論文不寫。confirmed=false 表示尚待老師本人確認（待確認事項 1），後台「設定」分頁可以直接改。photo 為 null 時頁面顯示姓名縮寫；photo／photos[].src 是 assets/… 的站台檔、labs/… 的媒體庫 key，或 https 網址。302、303、305 的照片取自老師自己的簡報／一頁 CV（圖說也是他們原本的標法，照抄；305 那幾張只有英文圖說，沒有中文就留空，頁面自己退回英文，不要自己翻）。",
   "labs": [
     {
       "room": "301",
@@ -126,13 +126,14 @@
       "stage": "Validate",
       "stage_zh": "驗證",
       "color": "#a21caf",
-      "lead": { "name_zh": "鄭佳昆", "name_en": "Chia-Kuen Cheng", "title_en": "Associate Professor", "title_zh": "副教授", "email": "" },
-      "one_line_en": "Landscape and place studied through immersive virtual reality: virtual tours, perceived crowding, landscape lighting and drone acceptance, 2019 to 2025.",
-      "one_line_zh": "以沉浸式虛擬實境研究景觀與場所：虛擬導覽、擁擠感、景觀照明、無人機接受度（2019–2025）。",
-      "intro_en": "Immersive virtual reality is used here as an instrument rather than a showpiece: it lets a landscape be varied one element at a time, and the change in what people perceive can then be read off. Five studies between 2019 and 2025 cover virtual touring, perceived crowding in recreation settings, landscape lighting, and public acceptance of drones. A recurring theme is place bonding — how people come to feel attached to somewhere, including somewhere they have never been.",
-      "intro_zh": "這一間把沉浸式虛擬實境當儀器用，而不是當展示品：它讓景觀可以一次只改一個元素，人的知覺變化就讀得出來。2019 到 2025 年的五個研究涵蓋虛擬導覽、遊憩環境的擁擠感、景觀照明，以及大眾對無人機的接受度。貫穿其中的主題是地方依附——人怎麼對一個地方產生感情，包括從沒去過的地方。",
-      "expertise_en": ["Landscape perception and preference", "Place emotional bonding and attachment", "Environmental behaviour analysis", "Landscape information technology", "Sustainable landscape planning"],
-      "expertise_zh": ["景觀知覺與偏好", "地方情感連結與依附", "環境行為分析", "景觀資訊技術", "永續景觀規劃"],
+      "lead": { "name_zh": "鄭佳昆", "name_en": "Chia-Kuen Cheng", "title_en": "Associate Professor", "title_zh": "副教授", "email": "chiakuen@ntu.edu.tw" },
+      "one_line_source": "lead",
+      "one_line_en": "Focuses on the perception of and attachment to places and environments, and how these experiences shape landscape preferences, spatial behavior, and travel decisions.",
+      "one_line_zh": "聚焦於地方與環境的感知、依附及其變化，並探討這些經驗如何形塑景觀偏好、空間行為與旅遊決策。",
+      "intro_en": "Four directions, all of them about place. Place attachment: how it changes, and how it transfers. Landscape and spatial perception: preference, facility colours, crowding, mystery. Nightscape and lighting: day-versus-night preference, prospect and refuge, the impression a lit place leaves. Travel and behaviour: virtual tours, visit intention, nostalgia, authenticity. Immersive virtual reality is the instrument rather than the showpiece — it lets a landscape be varied one element at a time, so the change in what people perceive can be read off.",
+      "intro_zh": "四個方向，講的都是「地方」。地方依附：它怎麼變化、怎麼轉移。景觀與空間知覺：偏好、設施顏色、擁擠感、神秘感。夜間環境與照明：日夜偏好、展望與庇護、被照亮的地方留下什麼印象。旅遊與行為：虛擬導覽、造訪意願、懷舊、真實性。沉浸式虛擬實境在這裡是儀器而不是展示品——它讓景觀一次只改一個元素，人的知覺變化就讀得出來。",
+      "expertise_en": ["Human-Place Emotional Attachment", "Landscape Perception & Preference", "Nightscape Perception and Lighting Effects", "Recreation & Tourism Behavior"],
+      "expertise_zh": ["地方依附", "景觀知覺", "夜間環境", "旅遊行為"],
       "equipment_en": ["Immersive virtual reality (IVR) experiment setup"],
       "equipment_zh": ["沉浸式虛擬實境（IVR）實驗設備"],
       "background_en": "Associate Professor, Department of Horticulture and Landscape Architecture, National Taiwan University. Vice President of the 21st board of the Chinese Institute of Landscape Architecture.",
@@ -141,7 +142,14 @@
         { "title": "Bonding to a new place never visited: Exploring the relationship between landscape elements and place bonding", "venue": "Tourism Management, 2014", "url": "https://www.sciencedirect.com/science/article/abs/pii/S0261517714001587" },
         { "title": "Exploring the validity of using immersive virtual reality technique on perceived crowding of recreational environment", "venue": "Landscape and Ecological Engineering, 2024", "url": "https://doi.org/10.1007/s11355-024-00629-2" }
       ],
-      "photo": null,
+      "photos": [
+        { "src": "assets/labs/305/mystery.jpg", "caption_en": "Spatial Perception & Mystery", "caption_zh": "" },
+        { "src": "assets/labs/305/lighting.jpg", "caption_en": "Responses to Colored Lighting in Landscape", "caption_zh": "" },
+        { "src": "assets/labs/305/greenery-1.jpg", "caption_en": "Response to Artificial Greenery", "caption_zh": "" },
+        { "src": "assets/labs/305/greenery-2.jpg", "caption_en": "Response to Artificial Greenery", "caption_zh": "" },
+        { "src": "assets/labs/305/greenery-3.jpg", "caption_en": "Response to Artificial Greenery", "caption_zh": "" }
+      ],
+      "photo": "assets/labs/305/lead.jpg",
       "confirmed": false
     }
   ]
