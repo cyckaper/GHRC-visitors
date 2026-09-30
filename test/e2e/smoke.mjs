@@ -508,21 +508,36 @@ try {
     check(/連結/.test(await gp.textContent("#status")) && (await gp.locator("#rows section").count()) === 0, "a wrong link says so instead of showing the visits");
     await guest.close();
 
-    // 後台「設定」分頁：**直接顯示那一張表**（明確指示：不用再複製連結），也改得了
+    // 後台「設定」分頁：**一張總表**——一場一列、一間一欄，還沒填的寫「未填」（明確指示：
+    // 要更簡單，還沒填的也要顯示出來才知道有填沒填）。不用再複製連結，也改得了
+    const json = { ...auth, "content-type": "application/json" };
+    const make = async (body) => (await (await fetch(`${base}/api/visits`, { method: "POST", headers: json, body: JSON.stringify(body) })).json()).visit.visit_id;
+    const bare = await make({ org: { name: "Unplanned Rota University" }, date: "2099-10-09", code: "unplanned", start_time: "10:00", end_time: "12:00" });
+    const only301 = await make({ org: { name: "Only 301 University" }, date: "2099-10-10", code: "only301", start_time: "10:00", end_time: "11:30", programme: [{ kind: "briefing", start: "10:00", end: "10:20" }, { kind: "tour", start: "10:20", end: "10:40" }, { kind: "discussion", start: "10:40", end: "11:30" }], itinerary: [{ room: "briefing", minutes: 20 }, { room: "301", minutes: 20 }] });
     await page.goto(`${base}/admin.html`);
     await page.waitForSelector("#authOk:not([hidden])");
     await page.click('[data-tab="settings"]');
-    await page.waitForFunction(() => document.querySelectorAll("#rotaTable section").length > 0, null, { timeout: 30000 });
+    await page.waitForFunction((v) => !!document.querySelector(`#rotaTable tr[data-rota-visit="${v}"]`), bare, { timeout: 30000 });
     check((await page.locator("#rotaLink, #rotaCopy").count()) === 0, "the settings tab shows the table itself, with no link to copy");
     check((await page.locator("#rotaCard details:not([open]) #rotaNew").count()) === 1, "…and making a new link (if one gets out) is folded away under the table");
     check((await page.locator("#labEmails, #videoLinks").count()) === 0, "the lab email and video link cards are gone from settings");
-    const mine = page.locator(`#rotaTable [data-rota-visit="${id}"] input[data-room="${room}"][data-field="name"]`);
-    check((await mine.inputValue()) === "王小明", "the same table the leads fill in is right there in settings");
+    check((await page.locator("#rotaTable .rota-table").first().locator("thead th").count()) === 6, "one row per visit, one column per lab");
+    const bareRow = page.locator(`#rotaTable tr[data-rota-visit="${bare}"]`);
+    check((await bareRow.locator("td.rota-todo").count()) === 5 && (await bareRow.locator('input[data-field="name"]').first().getAttribute("placeholder")) === "未填", "a visit whose route is not planned yet lists all five labs, each marked 未填 until someone answers");
+    const oneRow = page.locator(`#rotaTable tr[data-rota-visit="${only301}"]`);
+    check((await oneRow.locator("td.rota-todo").count()) === 1 && (await oneRow.locator("td.rota-na").count()) === 4 && (await oneRow.locator("td.rota-na").first().textContent()).trim() === "免填", "once the route is planned, the labs it skips say 免填");
+    const mine = page.locator(`#rotaTable tr[data-rota-visit="${id}"] input[data-room="${room}"][data-field="name"]`);
+    check((await mine.inputValue()) === "王小明" && !(await mine.evaluate((el) => el.closest("td").classList.contains("rota-todo"))), "what a lab filled in shows in its cell, not marked 未填");
     await mine.fill("李大華（群組裡回的）");
     await until(async () => (await visitOf(id)).presenters?.[room] === "李大華（群組裡回的）", "the settings table to save");
     check((await visitOf(id)).lab_minutes[room] === 30, "…and the host can correct it there, one cell at a time");
-    const pastLocked = await page.locator("#rotaTable section.rota-past input:not([disabled])").count();
-    check(pastLocked === 0, "…while visits that are over stay locked there too");
+    const firstBare = bareRow.locator('input[data-field="name"]').first();
+    await firstBare.fill("陳小華");
+    check(!(await firstBare.evaluate((el) => el.closest("td").classList.contains("rota-todo"))), "typing a name into a 未填 cell clears the mark");
+    await until(async () => Object.values((await visitOf(bare)).presenters || {}).includes("陳小華"), "the new name to save");
+    const pastLocked = await page.locator("#rotaTable .rota-past input").count();
+    check(pastLocked === 0, "…while visits that are over are folded away at the bottom, shown but not editable");
+    for (const v of [bare, only301]) await fetch(`${base}/api/visits?id=${encodeURIComponent(v)}`, { method: "DELETE", headers: auth });
   }
 
   // ── 通告卡片：換一場之後，不能拿上一場的房號與時段來畫 ──

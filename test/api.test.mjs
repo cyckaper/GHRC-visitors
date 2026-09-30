@@ -953,6 +953,14 @@ test("支援人力表：連結自動產生、才打得開，各室只填接待�
   assert.ok(row, "這一場在表上");
   // 列出要走哪幾間，但**不印各室排定的時段**：通告說「尚未分配到各室」，各室回報要多少時間才排得出來
   assert.ok(row.stops.length && row.stops.every((s) => /^30[1-5]$/.test(s.room) && !("start" in s) && !("minutes" in s)), "只有房號，沒有各室的時段");
+  assert.equal(row.planned, true, "排好行程的那一場只列動線上那幾間");
+  // **行程還沒排的那一場，五間都列出來**（明確指示：還沒填的也要看得到，才知道有填沒填）——
+  // 以前這種場次只有一句「行程還沒排」，老師從通告點進來沒地方填
+  const bareId = (await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ org: { name: "Unplanned Rota University" }, date: "2099-10-08", code: "unplanned", start_time: "10:00", end_time: "12:00" }) })).body.visit.visit_id;
+  const bare = (await api(`/api/rota?key=${key}`)).body.visits.find((v) => v.visit_id === bareId);
+  assert.deepEqual(bare.stops.map((s) => s.room), ["301", "302", "303", "304", "305"], "行程還沒排：五間都列出來");
+  assert.equal(bare.planned, false);
+  await api(`/api/visits?id=${bareId}`, { method: "DELETE", headers: admin });
   // 連結轉出去就擋不住，所以表上不放名單與 email
   assert.ok(!("guests" in row) && !JSON.stringify(row).includes("@"), "表上沒有來賓名單與 email");
 

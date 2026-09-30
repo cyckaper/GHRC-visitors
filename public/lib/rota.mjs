@@ -47,6 +47,22 @@ const CSS = `
 .rota-bg ol, .rota-bg ul { padding-left: 1.25rem; }
 .rota-bg ol { list-style: decimal; }
 .rota-bg ul { list-style: disc; }
+/* ── 後台用的總表（layout: "table"）：一場一列、一間一欄，填了沒一眼看得到 ── */
+.rota-scroll { overflow-x: auto; }
+.rota-table { width: 100%; min-width: 640px; border-collapse: separate; border-spacing: 4px; }
+.rota-th { text-align: left; vertical-align: bottom; padding: .15rem .35rem; font-size: .82rem; font-weight: 700; }
+.rota-sub { font-size: .72rem; font-weight: 400; color: #78716c; }
+.rota-rh { text-align: left; vertical-align: top; padding: .35rem .4rem; min-width: 8.5rem; font-size: .88rem; font-weight: 400; }
+.rota-td { vertical-align: top; padding: .3rem .4rem; background: #fff; border: 1px solid #e7e5e4; border-top: 3px solid var(--tone, #d6d3d1); border-radius: .5rem; font-size: .88rem; }
+.rota-td .rota-in { margin-top: 0; }
+/* 還沒填：整格淡黃、那一格寫著「未填」——顏色之外還有字，只看得到灰階也分得出來 */
+.rota-td.rota-todo { background: #fffbeb; }
+.rota-td.rota-todo .rota-in[data-field="name"]::placeholder { color: #b45309; opacity: 1; }
+/* 這一場不走這一間 */
+.rota-td.rota-na { background: #fafaf9; border-style: dashed; border-top-width: 1px; color: #a8a29e; text-align: center; vertical-align: middle; }
+.rota-past .rota-rh, .rota-past .rota-td { color: #78716c; }
+.rota-past .rota-td { background: #f5f5f4; border-top-color: #d6d3d1; }
+.rota-pastbox > summary { cursor: pointer; margin-top: .75rem; font-size: .88rem; color: #57534e; }
 `;
 
 function injectStyle() {
@@ -117,6 +133,53 @@ function card(v, labs) {
     </section>`;
 }
 
+/** 研究室名稱放進欄位標題時拿掉括號裡的補充（「IVR 研究室（沉浸式虛擬實境）」→「IVR 研究室」），欄才不會被撐高。 */
+const shortName = (l) => String(l?.name_zh || "").replace(/（[^）]*）$/, "").trim();
+
+/**
+ * 總表的一格。三種狀態，字就寫在格子裡：填了（人名、分鐘）、**未填**（淡黃，這一場要走這一間但還沒回）、
+ * **免填**（這一場不走這一間）。已經結束的只顯示字、不給格子。
+ */
+function tableCell(v, room) {
+  const on = (v.stops || []).some((s) => String(s.room) === room);
+  if (!on) return `<td class="rota-td rota-na">免填</td>`;
+  const name = v.presenters?.[room] || "";
+  const mins = v.lab_minutes?.[room];
+  if (v.past) {
+    const text = name || mins != null ? `${esc(name || "—")}${mins != null ? `<span class="rota-muted">　${esc(String(mins))} 分</span>` : ""}` : `<span class="rota-muted">—</span>`;
+    return `<td class="rota-td">${text}</td>`;
+  }
+  const attrs = `data-visit="${esc(v.visit_id)}" data-room="${esc(room)}"`;
+  return `<td class="rota-td ${name ? "" : "rota-todo"}" style="--tone:var(--c${esc(room)})">
+      <input class="rota-in" ${attrs} data-field="name" value="${esc(name)}" placeholder="未填" aria-label="${esc(room)} 接待人員">
+      <label class="rota-min"><input class="rota-in" ${attrs} data-field="minutes" inputmode="numeric" maxlength="3" value="${esc(mins == null ? "" : String(mins))}" aria-label="${esc(room)} 共需幾分鐘"> 分</label>
+    </td>`;
+}
+
+/**
+ * 後台「設定」分頁用的**總表**（明確指示：要更簡單，還沒填的也要顯示出來才知道有填沒填）：
+ * 一場一列、五間一間一欄，每一格就是那一間的接待人員與分鐘，**沒填的寫「未填」**。
+ * 老師那一頁（`/rota`）還是一場一張卡片——老師只看自己那一格；主辦端要看的是整張表誰還沒回。
+ * 已經結束的收在最底下摺起來，只給看、不給改。
+ */
+function table(visits, labs) {
+  const rooms = labs.length ? labs.map((l) => String(l.room)) : ["301", "302", "303", "304", "305"];
+  const lab = (room) => labs.find((l) => String(l.room) === room);
+  const head = `<thead><tr><th class="rota-th">場次</th>${rooms.map((room) => `<th class="rota-th" style="color:var(--c${esc(room)})">${esc(room)}<div class="rota-sub">${esc(shortName(lab(room)))}</div></th>`).join("")}</tr></thead>`;
+  const row = (v) => {
+    const d = new Date(`${v.date}T00:00:00+08:00`);
+    const when = `${String(v.date || "").slice(5).replace("-", "/")}（${WEEK[d.getUTCDay()]}）${v.start_time || ""}${v.end_time ? `–${v.end_time}` : ""}`;
+    return `<tr class="${v.past ? "rota-past" : ""}" data-rota-visit="${esc(v.visit_id)}">
+        <th scope="row" class="rota-rh"><b>${esc(v.org?.name_local || v.org?.name)}</b><div class="rota-sub">${esc(when)}</div></th>
+        ${rooms.map((room) => tableCell(v, room)).join("")}
+      </tr>`;
+  };
+  const grid = (list) => `<div class="rota-scroll"><table class="rota-table">${head}<tbody>${list.map(row).join("")}</tbody></table></div>`;
+  const upcoming = visits.filter((v) => !v.past);
+  const past = visits.filter((v) => v.past);
+  return `${upcoming.length ? grid(upcoming) : ""}${past.length ? `<details class="rota-pastbox"><summary>已結束的 ${past.length} 場（點開來看）</summary>${grid(past)}</details>` : ""}`;
+}
+
 /** 從通告的連結（`/rota?key=…#<visit_id>`）點進來：捲到那一場、亮一下。 */
 export function focusVisit(root, id) {
   if (!id) return false;
@@ -136,8 +199,9 @@ export function focusVisit(root, id) {
  *   save(body)      → { ok, error? }；body 是 { visit_id, room, name } 或 { visit_id, room, minutes }
  *   onStatus(msg, isError)
  *   focus           要亮起來的那一場的 visit_id（通告連結 # 後面那一段）
+ *   layout          "cards"（老師那一頁，一場一張卡片）或 "table"（後台設定分頁，一場一列的總表）
  */
-export async function mountRota(root, { load, save, onStatus = () => {}, focus = "" } = {}) {
+export async function mountRota(root, { load, save, onStatus = () => {}, focus = "", layout = "cards" } = {}) {
   injectStyle();
   const r = await load();
   if (!r || !r.ok) {
@@ -148,7 +212,7 @@ export async function mountRota(root, { load, save, onStatus = () => {}, focus =
   const labs = r.labs || [];
   for (const l of labs) if (l.color) document.documentElement.style.setProperty(`--c${l.room}`, l.color);
   const visits = r.visits || [];
-  root.innerHTML = visits.length ? visits.map((v) => card(v, labs)).join("") : `<p class="rota-muted">還沒有任何參訪。</p>`;
+  root.innerHTML = !visits.length ? `<p class="rota-muted">還沒有任何參訪。</p>` : layout === "table" ? table(visits, labs) : visits.map((v) => card(v, labs)).join("");
   // 說明越少越好（明確指示）：灰的、寫著「已結束」的那幾場自己看得懂，不必再講一次
   onStatus(visits.some((v) => !v.past) ? "" : "目前沒有將來的參訪。", false);
 
@@ -165,6 +229,8 @@ export async function mountRota(root, { load, save, onStatus = () => {}, focus =
       if (clean !== el.value) el.value = clean;
     }
     el.classList.remove("rota-saved");
+    // 總表：人名一填上，那一格就不再是「未填」（清空又變回來）
+    if (el.dataset.field === "name") el.closest(".rota-td")?.classList.toggle("rota-todo", !el.value.trim());
     clearTimeout(timers.get(el));
     timers.set(
       el,

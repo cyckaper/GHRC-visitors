@@ -652,14 +652,20 @@
   "# 共需幾分鐘": "# minutes needed",
   "這幾間都沒有信箱——把上面那一則貼到 LINE 群組就好。": "None of these labs has an email address — just paste the message above into the LINE group.",
   "這一頁：不屬於任何一場參訪的東西。": "This tab: the things that do not belong to any one visit.",
-  "各研究室填的就是這一張，這裡也可以直接改": "the same table the labs fill in — you can edit it right here",
   "連結外流了？": "Has the link got out?",
   "換一個新連結": "Make a new link",
   "舊的連結立刻失效，之後擬的通告會帶新的。": "The old link stops working at once; notices drafted after this carry the new one.",
   "換好了": "Done — the new link is live",
   "訪客背景（點開來看）": "About the visitors (tap to open)",
   "共需幾分鐘：填一個數字就好": "Minutes needed: just a number",
-  "這一場選到了影片頁，但母簡報裡沒有影片（站台上那份是瘦過的），那幾頁只有海報；現場要真的播，產簡報時當場選原始的母簡報": "This visit includes a video slide, but the master deck has no videos (the copy on the site is the slimmed one), so those slides show only the poster. To play it on the day, pick the original master deck when you generate."
+  "這一場選到了影片頁，但母簡報裡沒有影片（站台上那份是瘦過的），那幾頁只有海報；現場要真的播，產簡報時當場選原始的母簡報": "This visit includes a video slide, but the master deck has no videos (the copy on the site is the slimmed one), so those slides show only the poster. To play it on the day, pick the original master deck when you generate.",
+  "哪一間填了、哪一間還沒填；這裡也可以直接改": "which labs have answered and which have not — you can edit it right here",
+  "場次": "Visit",
+  "未填": "Not yet",
+  "免填": "Not needed",
+  "已結束的 # 場（點開來看）": "# visits that are over (tap to open)",
+  "IVR 研究室": "IVR Research Lab",
+  "行程還沒排，五間都先列出來。": "The route is not planned yet, so all five labs are listed."
  },
  "patterns": [
   [
