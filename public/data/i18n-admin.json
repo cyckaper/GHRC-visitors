@@ -168,7 +168,6 @@
   "寄出感謝信": "Send the thank-you letter",
   "這一頁：歷次參訪的檔案": "This tab: the archive of past visits",
   "訪客來自哪裡": "Where the visitors come from",
-  "點一個國家，看那幾場": "click a country to see those visits",
   "歷次參訪": "Past visits",
   "點一列看那一場的摘要、回覆與動線": "click a row for that visit's summary, replies and route",
   "狀態": "Status",
@@ -661,7 +660,16 @@
   "告訴各研究室哪個單位什麼時候來，請各室在支援人力表上填接待人員與共需幾分鐘——填的分鐘會自動排進今日流程": "Tells the labs who is coming and when, and asks each lab to put its host and the minutes it needs on the cover table — those minutes go straight into the programme",
   "行程上還沒排研究室——通告複製到 LINE 群組就好，五間都會看到。": "No labs on the schedule yet — just copy the notice into the LINE group so all five see it.",
   "這一頁：參訪前把六件事做完": "This tab: six things to finish before the visit",
-  "——讀來信抽出資料、確認欄位、查對方背景、通告研究室、排今日流程，最後把確認信寄出去。寄出的那封信裡就有來賓專頁的網址。填完自己會存，不必找存檔鍵。": " — read the email and pull out the details, check the fields, look up who they are, notify the labs, plan the programme, and send the confirmation letter. That letter carries the guest page address. Everything saves itself; there is no save button."
+  "——讀來信抽出資料、確認欄位、查對方背景、通告研究室、排今日流程，最後把確認信寄出去。寄出的那封信裡就有來賓專頁的網址。填完自己會存，不必找存檔鍵。": " — read the email and pull out the details, check the fields, look up who they are, notify the labs, plan the programme, and send the confirmation letter. That letter carries the guest page address. Everything saves itself; there is no save button.",
+  "一個單位一個點；點一下看那幾場，有數字的點下去會放大": "one dot per institution; tap one to see its visits, tap a numbered dot to zoom in",
+  "全圖": "Whole world",
+  "放大（也可以雙擊地圖、觸控板或手指兩指撐開）": "Zoom in (or double-click the map, or pinch)",
+  "放大": "Zoom in",
+  "縮小": "Zoom out",
+  "回到整張世界地圖": "Back to the whole world",
+  "位置只查到國家": "only the country is known",
+  "# 個國家 · # 個單位 · # 場 · 共 # 人次": "# countries · # institutions · # visits · # people in all",
+  "正在查 # 場的單位在哪裡……大約一分鐘，查好地圖會自己更新。": "Looking up where # visits' institutions are… about a minute; the map updates itself when done."
  },
  "patterns": [
   [
@@ -779,10 +787,6 @@
   [
    "^選了 (\\d+) 頁$",
    "$1 slides"
-  ],
-  [
-   "^(\\d+) 個國家 · (\\d+) 場 · 共 (\\d+) 人次$",
-   "$1 countries · $2 visits · $3 people in all"
   ],
   [
    "^（(\\d+) 區、(\\d+) 頁，約 (\\d+) 分鐘）$",
@@ -999,6 +1003,10 @@
   [
    "^(.+) 剛在支援人力表上填了分鐘，行程已經照著排好$",
    "$1 just filled in minutes on the cover table; the schedule has been updated to match"
+  ],
+  [
+   "^單位的位置這次沒查到（(.+)），先放在國家的位置；下次打開這一頁會再查。$",
+   "Could not look up the institutions this time ($1); they sit on their country for now and will be tried again next time this tab opens."
   ]
  ]
 }

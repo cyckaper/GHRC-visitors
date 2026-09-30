@@ -1095,3 +1095,42 @@ test("研究室填的分鐘自動排進行程與來賓專頁；後台手上的�
 
   for (const x of [id, bareId]) await api(`/api/visits?id=${x}`, { method: "DELETE", headers: admin });
 });
+
+test("訪客地圖：每個單位查一次位置（背景工作），單位改名就重查；整筆存檔帶什麼 geo 都不算", async () => {
+  const mk = async (name, country, date, code) => (await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ org: { name, country }, date, code, start_time: "10:00", end_time: "11:30" }) })).body.visit.visit_id;
+  const a = await mk("Konkuk University", "South Korea", "2099-12-01", "geoa");
+  const b = await mk("Konkuk University", "South Korea", "2099-12-02", "geob");
+  const c = await mk("Nowhere Horticultural Society", "Japan", "2099-12-03", "geoc");
+  const listed = async () => new Map((await api("/api/visits", { headers: admin })).body.visits.map((v) => [v.visit_id, v]));
+  let rows = await listed();
+  assert.ok(rows.get(a).geo_stale && rows.get(c).geo_stale && rows.get(a).geo === null, "新的一場還沒查位置");
+
+  const run = await runJob("geo", {});
+  assert.equal(run.status, 200, JSON.stringify(run.body));
+  assert.ok(run.body.updated >= 3 && run.body.remaining === 0, JSON.stringify(run.body));
+  rows = await listed();
+  for (const id of [a, b]) {
+    const g = rows.get(id).geo;
+    assert.ok(Math.abs(g.lat - 37.54) < 0.01 && Math.abs(g.lon - 127.08) < 0.01 && g.precision === "site" && /首爾/.test(g.place), `同一個單位兩場都落在首爾：${JSON.stringify(g)}`);
+    assert.equal(rows.get(id).geo_stale, false);
+  }
+  const unknown = rows.get(c).geo;
+  assert.deepEqual([unknown.lat, unknown.lon, unknown.precision], [null, null, "country"], "查不到城市的：只知道國家（地圖放在國家的位置），不編座標");
+  assert.equal(rows.get(c).geo_stale, false, "查不到也記下來，不必每打開一次就再問一次");
+  const again = await api("/api/geo", { method: "POST", headers: admin, body: "{}" });
+  assert.equal(again.status, 200);
+  assert.equal(again.body.pending, 0, "都查過了就不開工作");
+
+  // 後台送回來的那一份一律不算（只有 geo-background 在寫）
+  const full = (await api(`/api/visits?id=${a}`, { headers: admin })).body.visit;
+  await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ ...full, purpose: "改一個字", geo: { key: full.geo.key, lat: 1, lon: 2, place: "亂填", precision: "site" } }) });
+  const kept = (await api(`/api/visits?id=${a}`, { headers: admin })).body.visit.geo;
+  assert.equal(kept.place, full.geo.place, "存檔帶來的 geo 不算，沿用伺服器上那一份");
+  // 單位改了名字：查的是別的單位，要重查
+  await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ ...full, org: { ...full.org, name: "Seoul National University" } }) });
+  assert.equal((await listed()).get(a).geo_stale, true, "改了名字就要重查");
+  // 來賓端看不到（名單以外的東西本來就不給，這個也一樣）
+  assert.ok(!("geo" in (await api(`/api/visits?id=${b}&public=1`)).body.visit));
+
+  for (const id of [a, b, c]) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
+});

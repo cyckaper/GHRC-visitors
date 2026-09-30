@@ -229,7 +229,7 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
 >
 > 目前走這一套的：`extract`（讀信）、`plan`（排行程與選頁）、`research`（訪前功課，狀態另外記在
 > `visit.background`）、`letter`（草擬**與寄出**）、`summary`（一頁摘要與跨場次彙整）、`signbook`（讀手寫字）、
-> `transcribe`（Whisper ＋抽取）、`cards`（讀名片）、`translate`（第二語言）。（`settings` 不是 AI，當場回。）再有跑得久的 AI 就照這個模式加，
+> `transcribe`（Whisper ＋抽取）、`cards`（讀名片）、`translate`（第二語言）、`geo`（訪客地圖上各單位在哪裡）。（`settings` 不是 AI，當場回。）再有跑得久的 AI 就照這個模式加，
 > 不要直接在一般函式裡等。
 >
 > **兩條給畫面的規矩**（主辦端是老師，不是工程師）：
@@ -426,15 +426,33 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
 - 跨場次彙整開放建議欄位，找出重複出現的問題（例如某一間反覆被說聽不懂），
   定期送回各研究室老師手上
 - 年報與諮詢委員會統計：人次、身分、國家、最受關注的研究室、合作意向趨勢。
-  **「資料」分頁最上面一張世界地圖**（`renderWorldMap()`）：一個國家一個點、點的大小是場次，
-  旁邊直接給「N 個國家 · M 場 · 共 K 人次」；點一個國家列出那幾場，再點一列就跳到那一場的紀錄。
+  **「資料」分頁最上面一張世界地圖**（`renderWorldMap()`）：**一個單位一個點，落在那個學校或公司所在的地方**
+  （明確指示：「點要能縮小到學校或公司，不要佔了整個國家」；以前是一個國家一個點，臺灣、韓國整個被蓋住）。
+  旁邊直接給「N 個國家 · M 個單位 · K 場 · 共 P 人次」；點一個點列出那個單位的每一場（與所在城市），
+  再點一列就跳到那一場的紀錄。
+  - **位置由 AI 查**（`/api/geo` → `geo-background`，背景工作；一次最多 30 個單位，同一個單位來過好幾次只查一次），
+    存在 `visit.geo`（`lat`／`lon`／`place`／`precision`：site／city／region／country，`lib/visit.mjs sanitizeGeo`）。
+    **打開資料分頁時有還沒查過的就自己去查**，查好地圖自己更新——不必有人記得按，也不跳紅色錯誤（查不到就下次再查）。
+    `geo.key`＝查的是哪一個單位（名稱＋在地名稱＋國家，`geoKey()`）：**單位改了名字就對不上、重查**（`needsGeo()`），
+    不然會把新的單位畫在舊單位的地方。`geo` **只有 `geo-background` 在寫**，整筆存檔帶什麼都不算、也不動 `updated_at`。
+    提示詞帶那一場訪前功課的單位側寫（`background.org_profile`，查網路查到的）；**只根據確定知道的，不確定就降一級精度，
+    不要編一個看起來很準的座標**——查不到城市的記成「只知道國家」（lat／lon 留空），地圖放在國家的位置、畫成空心的圈。
+    AI 沒回到的也這樣記，不然每打開一次就再問一次。
+  - **可以放大**：地圖上方的＋／－／全圖、雙擊、觸控板雙指（瀏覽器送 ctrl＋滾輪）、手機平板兩指撐開；放大之後可以拖曳。
+    **還在整張世界地圖時，手指滑過地圖與一般滾輪都是捲頁面**（`touch-action: pan-y`；放大之後才換成 `none`），
+    不然往下捲頁面會被地圖卡住。最多放大 20 倍（看得出臺北、新竹是不同的點；再大 1:50m 的海岸線就撐不住了）。
+  - **螢幕上靠得比 14 px 近的點合成一顆帶數字的群集**，點下去放大到看得開；同一個城市裡、放到最大還是疊在一起的
+    （座標本來就只到城市），點下去就直接列出那幾個單位。點旁邊放得下就寫單位名稱（中文介面用中文名，太長就截短，
+    英文截在字與字之間）；放不下就不寫，名稱不會疊在一起。
+  - **圓點的大小是「螢幕上幾個像素」，不是地圖座標**（`drawMap()`，放大、拖曳、寬度一變都整個重畫）：
+    半徑寫死在地圖座標裡的話，地圖放得越大點就越大，整個韓國永遠被一個點蓋住。場次多的大一點（絕對尺度，最大 8 px），
+    另外疊一顆透明的圓當點擊範圍（至少 11 px，手指才點得到）。
   地圖資料 `public/data/world.json` 是 **Natural Earth 1:110m（public domain）** 經 world-atlas 轉檔、
   再由 `scripts/make-world.mjs` 投影成等距長方座標（720×360，一度兩像素）後產出的靜態檔——
   座標先算好，前端只要畫，**不必為了一張圖去載地圖函式庫**（後台是單檔 HTML，現場網路也不一定好）。
-  **圓點的大小是「螢幕上幾個像素」，不是地圖座標**（`sizeDots()`，寬度一變就重算）：地圖是跟著版面縮放的，
-  半徑寫死在地圖座標裡的話，地圖畫得越大點就越大，整個韓國永遠被一個點蓋住。場次多的大一點（絕對尺度，
-  最大 12 px），另外疊一顆透明的圓當點擊範圍（至少 11 px，手指才點得到）。
-  國名對不到的**不會消失**，列在圖下面（來信裡的國名寫法千百種；常見的中英寫法在產生器的 `ALIASES`，
+  **放大超過 3 倍換細海岸線** `public/data/world-detail.json`（1:50m，同一個產生器的第三個參數，簡化過、相對座標；
+  約 370 KB，壓縮後 120 KB，**第一次放大才載**）——1:110m 的臺灣只有 9 個點，放大就是一個多邊形。
+  國名對不到、位置也還沒查到的**不會消失**，列在圖下面（來信裡的國名寫法千百種；常見的中英寫法在產生器的 `ALIASES`，
   1:110m 放不下的新加坡、香港、澳門在 `EXTRA`）。要改地圖資料就改 `scripts/make-world.mjs` 重跑，不要手改 JSON。
 
 ### 5. 部署
@@ -506,12 +524,12 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 - `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → **通告研究室（各室在支援人力表上填的分鐘自動排進行程）** → 排行程 → 自動存 → QR／.ics → **確認信（草擬、寄出或 mailto）**，**最底下列出「以前做過的參訪」**）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、後續（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁、**動作五 感謝信**）、資料（歷次參訪、回覆、摘要、跨場次彙整、CSV、Drive）、**設定（母簡報、預設值、支援人力表、外部服務狀態、老師卡片）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
 - `public/index.html`：專屬網址 `/<visit_id>`；整頁一種語言（預設英文，`?ui=zh` 換中文；ko／ja 來賓才另外附他們的語言）；流程（參訪當天標出「現在」；研究室參訪底下一間一行、各自的時段）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
-- `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`）`drive` `drive-sync-background`（自動備份）；**三支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
+- `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`／`geo-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`；`geo` 查訪客地圖上各單位在哪裡）`drive` `drive-sync-background`（自動備份）；**三支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
   `rota`（支援人力表，各研究室自己填）；
   `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，後續提醒）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
 - `public/lib/pptx.mjs`：母簡報子集化核心（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證），零 Node 相依，瀏覽器與 CLI 共用；`cli/lib/pptx.mjs` 只是注入 jszip／xmldom 的 Node 入口；`cli/deck.mjs` 加上 QR（qrcode 套件）與 PDF（LibreOffice）。`--inspect`、`--dump`、`--validate`。
-- `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-world.mjs`：訪客地圖的陸地輪廓與國家落點（`public/data/world.json`）。
+- `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-world.mjs`：訪客地圖的陸地輪廓與國家落點（`public/data/world.json`），加第三個參數（1:50m）另外產放大用的細海岸線（`world-detail.json`）。
 - 介面語言：`public/data/i18n-admin.json`（後台英文；鍵＝畫面上那句中文）、`scripts/i18n-scan.mjs`（掃出沒翻的，`npm test` 會跑）、
   `public/data/i18n.json`（來賓端四語）、`slides.json` 的 `title_en`。
 - 測試：`npm test`（單元、API 走本機 dev server、產檔與瘦身走合成簡報）、`npm run test:e2e`（Chromium）。`AI_MOCK=1` 讓所有 AI 呼叫回固定範例，`MAIL_MOCK=1` 讓寄信不真的打 Gmail（信寫進媒體庫 `mail/last.json`，測試再讀出來對內容）。CI：`.github/workflows/ci.yml` 在每個 PR 與 main 的 push 跑同一套（typecheck → npm test → e2e）。
