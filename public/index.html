@@ -287,12 +287,23 @@
     const programmeKey = phase === "before" ? "programme_before" : phase === "after" ? "programme_after" : "programme";
     $("programmeTitle").textContent = T(programmeKey);
     $("programmeTitle2").textContent = T2(programmeKey);
+    // 研究室參訪那一段：一間一行、各自的時段。分鐘數是動線上的（各研究室在支援人力表上填的會自動排進來），
+    // 從這一段的開始時間往後推——跟後台行程表、回報那一則同一套算法
+    const labSlots = (b) => {
+      if (!b.rooms || !b.rooms.length) return "";
+      let cur = hm(b.start);
+      return b.rooms.map((r) => {
+        const mins = Number(((visit.itinerary || []).find((s) => String(s.room) === String(r)) || {}).minutes) || 0;
+        const slot = mins > 0 ? `<span class="tabular-nums">${fmtHM(cur)}–${fmtHM((cur += mins))}</span>` : "";
+        return `<span class="block text-xs text-stone-500 mt-0.5" data-lab-slot="${esc(r)}"><span style="color:${roomTone(r)}">Lab ${esc(r)}</span> ${slot}</span>`;
+      }).join("");
+    };
     const blockTone = (b) => (b.rooms && b.rooms.length ? roomTone(b.rooms[0]) : b.kind === "discussion" ? "#4d7c0f" : b.kind === "photo" ? "#b45309" : "var(--cbriefing)");
     $("programme").innerHTML = visit.programme.map((b, i) => `
       <li class="flex gap-4 py-3 reveal" style="--d:${i * 70}ms; --tone:${blockTone(b)}" data-start="${esc(b.start)}" data-end="${esc(b.end)}">
         <span class="dot" aria-hidden="true"></span>
         <span class="w-28 flex-none tabular-nums text-stone-500">${esc(b.start)} – ${esc(b.end)}</span>
-        <span><span class="font-medium">${esc(primary === "zh" ? b.title_2nd || T("kind_" + (b.kind || "other")) || b.title_en : b.title_en || T("kind_" + (b.kind || "other")))}</span><span class="now-tag" hidden>${esc(T("now"))}</span>${aid && esc(b.title_2nd || T2("kind_" + (b.kind || "other"))) ? `<span class="second block">${esc(b.title_2nd || T2("kind_" + (b.kind || "other")))}</span>` : ""}${b.rooms && b.rooms.length ? `<span class="block text-xs text-stone-400 mt-0.5">${b.rooms.map((r) => `<span style="color:${roomTone(r)}">Lab ${esc(r)}</span>`).join(" → ")}</span>` : ""}</span>
+        <span><span class="font-medium">${esc(primary === "zh" ? b.title_2nd || T("kind_" + (b.kind || "other")) || b.title_en : b.title_en || T("kind_" + (b.kind || "other")))}</span><span class="now-tag" hidden>${esc(T("now"))}</span>${aid && esc(b.title_2nd || T2("kind_" + (b.kind || "other"))) ? `<span class="second block">${esc(b.title_2nd || T2("kind_" + (b.kind || "other")))}</span>` : ""}${labSlots(b)}</span>
       </li>`).join("");
     markNow();
     setInterval(markNow, 30000);
@@ -470,6 +481,7 @@
     return `${primary === "zh" ? zh : en}${clock ? " · " + clock : ""}`;
   }
   function hm(s) { const [h, mm] = String(s || "0:0").split(":").map(Number); return h * 60 + (mm || 0); }
+  function fmtHM(m) { return `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; }
   function taipeiToday() { return new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10); }
   function taipeiNow() { const d = new Date(Date.now() + 8 * 3600e3); return d.getUTCHours() * 60 + d.getUTCMinutes(); }
 })();

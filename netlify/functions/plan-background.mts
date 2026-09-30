@@ -6,7 +6,7 @@ import { slideHistory } from "../lib/history.mts";
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
 import { normalizeVisit } from "./visits.mts";
-import { applyProgrammeTimes, briefingBlockMinutes, ensureBriefingFirst, snapSlidesToGroups } from "../../lib/visit.mjs";
+import { applyProgrammeTimes, briefingBlockMinutes, ensureBriefingFirst, retimeProgramme, snapSlidesToGroups, withLabMinutes } from "../../lib/visit.mjs";
 
 /**
  * 排行程與選頁（背景函式，15 分鐘上限）：提示詞裡有整份頁次索引與母簡報文字，
@@ -15,12 +15,14 @@ import { applyProgrammeTimes, briefingBlockMinutes, ensureBriefingFirst, snapSli
  */
 export default backgroundHandler<{ visit?: Partial<Visit> }>("排程", async (input, req) => {
   const visit = normalizeVisit(input.visit || {}, siteUrl(req));
-  const [slidesIndex, labs, masterText, history] = await Promise.all([
+  const [slidesIndex, labs, masterText, history, stored] = await Promise.all([
     loadPublicData("slides"),
     loadPublicData("labs"),
     loadMasterText(),
     // 歷次累積回饋這一次的挑頁：同類單位選過什麼、哪幾頁引發提問、哪幾間被點名
     slideHistory(getStore(), visit.org?.type || "other", visit.visit_id).catch(() => null),
+    // 各研究室在支援人力表上填的（接待人員、共需幾分鐘）只在伺服器上那一份：送上來的那一份不帶
+    input.visit?.visit_id ? getStore().getVisit(String(input.visit.visit_id)).catch(() => null) : null,
   ]);
   const plan = await planVisit(visit, slidesIndex, labs, masterText, history);
   // 後端再驗一次：頁次必須存在、always 頁一定在、順序依母簡報頁序。
@@ -58,6 +60,19 @@ export default backgroundHandler<{ visit?: Partial<Visit> }>("排程", async (in
   const timed = applyProgrammeTimes(merged);
   if (timed.changed) warnings.push(`每間研究室一律 ${timed.alloc.perRoom} 分、總體介紹 ${timed.alloc.briefing} 分（AI 排的分鐘數已按預設重算）；要改就直接在下面改。`);
   merged = { ...merged, programme: timed.programme, itinerary: timed.itinerary };
+  // **研究室在支援人力表上填了分鐘的，照研究室填的**（明確指示：各研究室填的時間自動排進行程）——
+  // 上面那一步的預設蓋不掉。填了分鐘就是要接待，AI 沒排到那一間也放回動線（不去的話主辦端改成 0）
+  const rota = { presenters: (stored as any)?.presenters || {}, lab_minutes: (stored as any)?.lab_minutes || {}, lab_minutes_at: (stored as any)?.lab_minutes_at || {}, lab_added: (stored as any)?.lab_added || [] };
+  const filled = Object.entries(rota.lab_minutes as Record<string, number>).filter(([, m]) => Number(m) > 0);
+  if (filled.length) {
+    let itinerary = merged.itinerary;
+    for (const [room, m] of filled) itinerary = withLabMinutes(itinerary, room, Number(m)) as Visit["itinerary"];
+    merged = { ...merged, itinerary };
+    merged.programme = retimeProgramme(merged) as Visit["programme"];
+    warnings.push(`${filled.map(([room]) => room).join("、")} 的分鐘照研究室在支援人力表上填的。`);
+  }
+  // 回傳的這一份帶著伺服器上的那幾格，行程表上「研究室填」的標記才不會在存檔回來之前閃掉
+  merged = { ...merged, ...rota } as Visit;
   const minutes = slides.reduce((sum, n) => sum + (known.get(n)?.minutes || 1), 0);
   return { plan: { ...plan, programme: merged.programme, slides }, visit: merged, estimated_briefing_minutes: Math.round(minutes), master_text_available: !!masterText, history: history ? { visits: history.visits, same_type: history.same_type } : null, warnings };
 });

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
-import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
+import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -410,4 +410,49 @@ test("老師自己給的一句話要一模一樣：`one_line_source: lead` 的�
     assert.equal(lab.one_line_zh, want.zh, `${room} 的中文一句話要跟老師的簡報一字不差`);
     assert.equal(lab.one_line_en, want.en, `${room} 的英文一句話要跟老師的簡報一字不差`);
   }
+});
+
+test("研究室填的分鐘排進動線：有那一間就改分鐘，沒有就照房號插進去（不插在總體介紹前面）", () => {
+  const it = [{ room: "briefing", minutes: 20, location: "302" }, { room: "301", minutes: 20, focus: "HealthCloud" }, { room: "304", minutes: 20 }];
+  const changed = withLabMinutes(it, "301", 35);
+  assert.deepEqual(changed.map((s) => [s.room, s.minutes]), [["briefing", 20], ["301", 35], ["304", 20]]);
+  assert.equal(changed[1].focus, "HealthCloud", "改分鐘不動那一間的重點");
+  assert.equal(it[1].minutes, 20, "回傳新的一份，不改原本的");
+  assert.deepEqual(withLabMinutes(it, "303", 15).map((s) => s.room), ["briefing", "301", "303", "304"]);
+  assert.deepEqual(withLabMinutes(it, "305", 15).map((s) => s.room), ["briefing", "301", "304", "305"]);
+  assert.deepEqual(withLabMinutes([], "302", 25), [{ room: "302", minutes: 25, focus: "", location: "" }]);
+});
+
+test("今日流程從開始時間往後重推：研究室參訪＝動線合計、其他區塊維持原本的長度", () => {
+  const v = {
+    start_time: "14:00",
+    itinerary: [{ room: "briefing", minutes: 20 }, { room: "301", minutes: 30 }, { room: "303", minutes: 15 }, { room: "305", minutes: 0 }],
+    programme: [
+      { kind: "briefing", start: "14:00", end: "14:20", title_en: "Welcome" },
+      { kind: "tour", start: "14:20", end: "15:00", rooms: ["301", "303", "305"] },
+      { kind: "discussion", start: "15:00", end: "15:30" },
+    ],
+  };
+  const p = retimeProgramme(v);
+  assert.deepEqual(p.map((b) => [b.kind, b.start, b.end]), [["briefing", "14:00", "14:20"], ["tour", "14:20", "15:05"], ["discussion", "15:05", "15:35"]]);
+  assert.deepEqual(p[1].rooms, ["301", "303"], "留 0 的那一間不算在動線上");
+  assert.equal(p[0].title_en, "Welcome", "區塊的其他欄位照舊");
+  // 還沒有流程：先照預設排一份，研究室參訪一樣是動線的合計
+  const fresh = retimeProgramme({ start_time: "10:00", duration_minutes: 150, itinerary: v.itinerary });
+  assert.deepEqual(fresh.map((b) => b.kind), ["briefing", "tour", "discussion"]);
+  const tour = fresh.find((b) => b.kind === "tour");
+  assert.equal(minutesBetween(tour.start, tour.end), 45);
+});
+
+test("支援人力表列哪幾間：主辦端排了就列動線（加上已經填過的）；沒排、或只有研究室自己填進來的，五間都列", () => {
+  const labs = { labs: ["301", "302", "303", "304", "305"].map((room) => ({ room })) };
+  const route = (...rooms) => [{ room: "briefing", minutes: 20 }, ...rooms.map((room) => ({ room, minutes: 20 }))];
+  assert.deepEqual(rotaRooms({ itinerary: route() }, labs), { rooms: ["301", "302", "303", "304", "305"], planned: false });
+  assert.deepEqual(rotaRooms({ itinerary: route("301", "303") }, labs), { rooms: ["301", "303"], planned: true });
+  // 主辦端排了 301、303；304 在排之前就填了人名：填過的不能看不見
+  assert.deepEqual(rotaRooms({ itinerary: route("301", "303"), presenters: { 304: "王小明" } }, labs), { rooms: ["301", "303", "304"], planned: true });
+  // 還沒排，301 自己填了分鐘（被排進動線）：其他四間仍要看得到格子
+  assert.deepEqual(rotaRooms({ itinerary: route("301"), lab_minutes: { 301: 20 }, lab_added: ["301"] }, labs), { rooms: ["301", "302", "303", "304", "305"], planned: false });
+  // 主辦端排了 301、303，兩間也都填了：仍然是排好了，其他三間免填（不是又變回五間都「未填」）
+  assert.deepEqual(rotaRooms({ itinerary: route("301", "303"), lab_minutes: { 301: 30, 303: 15 } }, labs), { rooms: ["301", "303"], planned: true });
 });

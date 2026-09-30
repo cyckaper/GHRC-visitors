@@ -483,16 +483,27 @@ try {
     await until(async () => (await visitOf(id)).updated_at !== before, "the admin tab to autosave");
     const again = await visitOf(id);
     check(again.presenters[room] === "王小明" && again.lab_minutes[room] === 25, "…and an autosave from an admin tab holding older data does not wipe it");
-    // 通告卡片那幾格：打字時不會被自動存檔重畫掉，離開格子才存
-    const cell = `#presenters input[data-presenter="${room}"][data-field="minutes"]`;
-    await host.waitForFunction((sel) => document.querySelector(sel)?.value === "25", cell, { timeout: 30000 });
-    await host.fill(cell, "30");
-    await host.waitForTimeout(2000); // 比自動存檔的 1.2 秒久
-    check((await host.inputValue(cell)) === "30", "typing in the notice card is not wiped by an autosave redrawing it");
-    await host.press(cell, "Tab");
-    await until(async () => (await visitOf(id)).lab_minutes?.[room] === 30, "the notice card to save the minutes");
-    check(true, "…and leaving the cell saves it to the same table");
+    // **研究室填的分鐘自動排進行程**（明確指示）：伺服器已經把 25 排進動線，後台那個舊分頁存完檔
+    // 畫面就換成伺服器那一份——行程表上那一間是 25、標著「研究室填」
+    const toMin = (t) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+    check((again.itinerary.find((s) => String(s.room) === room) || {}).minutes === 25, "the minutes a lab fills in go straight into the visit's route");
+    const chip = `#itinerary input[data-room="${room}"]`;
+    await host.waitForFunction((sel) => document.querySelector(sel)?.value === "25", chip, { timeout: 30000 });
+    check((await host.locator(`#itinerary label:has(input[data-room="${room}"]) [data-from-lab]`).count()) === 1, "…and show up in the schedule on the admin page, marked as filled in by the lab");
+    // 通告接在訪客背景研判之後、行程之前；卡片裡不再有另一份「各室的接待人員與共需幾分鐘」
+    check(await host.evaluate(() => {
+      const [bg, notice, table] = ["background", "noticeCard", "programmeTable"].map((x) => document.getElementById(x));
+      const after = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+      return after(bg, notice) && after(notice, table);
+    }), "the notice card comes right after the background check, before the schedule");
+    check((await host.textContent("#noticeCard .num")).trim() === "4" && (await host.locator("#presenters").count()) === 0, "…as step 4, without its own list of hosts and minutes");
     await hostCtx.close();
+
+    // 來賓專頁的參訪流程也是這一份：研究室參訪底下一間一行，那一間的時段就是研究室填的分鐘
+    await page.goto(`${base}/${encodeURIComponent(id)}`);
+    await page.waitForSelector(`[data-lab-slot="${room}"]`, { timeout: 30000 });
+    const slot = (await page.textContent(`[data-lab-slot="${room}"]`)).match(/(\d\d:\d\d)–(\d\d:\d\d)/);
+    check(!!slot && toMin(slot[2]) - toMin(slot[1]) === 25, `the guest page lists that lab's own time slot, as long as the lab said it needs (got ${slot && slot[0]})`);
 
     // 通告裡的連結帶著 #<visit_id>：點進來直接跳到那一場、那一張亮起來
     await page.goto(`${base}/rota?key=${key}#${encodeURIComponent(id)}`);
@@ -530,7 +541,7 @@ try {
     check((await mine.inputValue()) === "王小明" && !(await mine.evaluate((el) => el.closest("td").classList.contains("rota-todo"))), "what a lab filled in shows in its cell, not marked 未填");
     await mine.fill("李大華（群組裡回的）");
     await until(async () => (await visitOf(id)).presenters?.[room] === "李大華（群組裡回的）", "the settings table to save");
-    check((await visitOf(id)).lab_minutes[room] === 30, "…and the host can correct it there, one cell at a time");
+    check((await visitOf(id)).lab_minutes[room] === 25, "…and the host can correct it there, one cell at a time");
     const firstBare = bareRow.locator('input[data-field="name"]').first();
     await firstBare.fill("陳小華");
     check(!(await firstBare.evaluate((el) => el.closest("td").classList.contains("rota-todo"))), "typing a name into a 未填 cell clears the mark");
@@ -540,27 +551,29 @@ try {
     for (const v of [bare, only301]) await fetch(`${base}/api/visits?id=${encodeURIComponent(v)}`, { method: "DELETE", headers: auth });
   }
 
-  // ── 通告卡片：換一場之後，不能拿上一場的房號與時段來畫 ──
+  // ── 通告卡片：換一場之後，不能拿上一場的收件人來畫 ──
   // （實際發生過：西澳大學那一場的卡片上列著惇陽工程那一場的 301／304／303 與時段）
   {
     const auth = { authorization: "Bearer e2e-token", "content-type": "application/json" };
-    const mk = async (code, date, room) => (await (await fetch(`${base}/api/visits`, { method: "POST", headers: auth, body: JSON.stringify({ org: { name: `Presenters ${code}` }, date, code, start_time: "10:00", end_time: "11:30", programme: [{ kind: "briefing", start: "10:00", end: "10:20" }, { kind: "tour", start: "10:20", end: "11:00" }, { kind: "discussion", start: "11:00", end: "11:30" }], itinerary: [{ room: "briefing", minutes: 20 }, { room, minutes: 20 }] }) })).json()).visit.visit_id;
-    const a = await mk("presa", "2099-11-01", "301");
-    const b = await mk("presb", "2099-11-02", "305");
+    const mk = async (code, date, room) => (await (await fetch(`${base}/api/visits`, { method: "POST", headers: auth, body: JSON.stringify({ org: { name: `Notice ${code}` }, date, code, start_time: "10:00", end_time: "11:30", programme: [{ kind: "briefing", start: "10:00", end: "10:20" }, { kind: "tour", start: "10:20", end: "11:00" }, { kind: "discussion", start: "11:00", end: "11:30" }], itinerary: [{ room: "briefing", minutes: 20 }, { room, minutes: 20 }] }) })).json()).visit.visit_id;
+    const a = await mk("noticea", "2099-11-01", "301"); // 301 沒有信箱
+    const b = await mk("noticeb", "2099-11-02", "305"); // 305 有（老師自己 CV 上印的那一個）
     await page.goto(`${base}/admin.html`);
     await page.waitForSelector("#authOk:not([hidden])");
     await page.click('[data-tab="pre"]');
-    // 等到畫面上是「那一場自己的」房號（最多 15 秒），再看最後停在什麼
-    const roomsFor = async (id, want) => {
+    // 等到收件人是「那一場自己的」（最多 15 秒），再看最後停在什麼
+    const recipientsFor = async (id, has305) => {
       await page.selectOption("#visitSelect", id);
       await page.waitForFunction((v) => document.getElementById("preStatus").textContent === v, id, { timeout: 30000 });
-      await page.waitForFunction((w) => [...document.querySelectorAll('#presenters [data-presenter][data-field="name"]')].map((e) => e.dataset.presenter).join() === w, want, { timeout: 15000 }).catch(() => {});
-      return (await page.$$eval('#presenters [data-presenter][data-field="name"]', (els) => els.map((e) => e.dataset.presenter))).join();
+      await page.waitForFunction((want) => /305/.test(document.getElementById("noticeRecipients").textContent) === want && /沒有信箱|305/.test(document.getElementById("noticeRecipients").textContent), has305, { timeout: 15000 }).catch(() => {});
+      return (await page.textContent("#noticeRecipients")).trim();
     };
-    const gotA = await roomsFor(a, "301");
-    check(gotA === "301", `the notice card lists this visit's labs (got ${gotA || "nothing"})`);
-    const gotB = await roomsFor(b, "305");
-    check(gotB === "305", `switching visits redraws the notice card with that visit's labs, not the previous one's (got ${gotB || "nothing"})`);
+    const gotA = await recipientsFor(a, false);
+    check(!/305/.test(gotA) && /沒有信箱/.test(gotA), `the notice card lists this visit's labs (got ${gotA || "nothing"})`);
+    const gotB = await recipientsFor(b, true);
+    check(/305/.test(gotB), `switching visits redraws the notice card with that visit's labs (got ${gotB || "nothing"})`);
+    const backA = await recipientsFor(a, false);
+    check(!/305/.test(backA), `…and switching back does not keep the previous visit's labs (got ${backA || "nothing"})`);
     for (const id of [a, b]) await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: auth });
   }
 
