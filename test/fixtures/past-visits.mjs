@@ -5,7 +5,11 @@
  */
 import JSZip from "jszip";
 
-export async function pastVisitsXlsx() {
+/**
+ * `extra`：後面再加幾列（模擬有人在 Google 試算表裡加了一列）；`jorjinPurpose`：改佐臻那一列的交流重點（改舊的那一列不算新的一列）。
+ * 人名一律是虛構的（repo 是公開的）。
+ */
+export async function pastVisitsXlsx({ extra = [], jorjinPurpose = "參訪 303 與 304" } = {}) {
   const strings = [];
   const s = (t) => { if (!strings.includes(t)) strings.push(t); return strings.indexOf(t); };
   const cell = (ref, t) => (t === "" ? `<c r="${ref}" s="0"/>` : typeof t === "number" ? `<c r="${ref}"${ref[0] === "B" ? ' s="1"' : ""} t="n"><v>${t}</v></c>` : `<c r="${ref}" t="s"><v>${s(t)}</v></c>`);
@@ -13,8 +17,9 @@ export async function pastVisitsXlsx() {
   const sheet1 = [
     row(1, ["編號", "日期", "類別", "國家／地區", "來訪單位", "來訪人員", "同行單位", "交流重點／成果"]),
     row(2, [1, 45299, "國際", "美國、芬蘭", "美國伊利諾大學、芬蘭赫爾辛基大學", "John A. Smith 教授（伊利諾大學）、Aino Virtanen 教授（赫爾辛基大學）", "", "研討會講者"]),
-    row(3, [2, 45714, "企業", "臺灣", "佐臻股份有限公司（AR眼鏡公司）", "王大明副總經理", "", "參訪 303 與 304"]),
+    row(3, [2, 45714, "企業", "臺灣", "佐臻股份有限公司（AR眼鏡公司）", "王大明副總經理", "", jorjinPurpose]),
     row(4, [3, "", "國內", "臺灣", "某某大學景觀系", "系上師生", "", ""]),
+    ...extra.map((cells, i) => row(5 + i, cells)),
   ].join("");
   const sheet2 = [row(1, ["類別", "場次"]), row(2, ["國際", 14])].join("");
   const zip = new JSZip();

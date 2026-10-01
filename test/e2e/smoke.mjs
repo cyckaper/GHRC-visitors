@@ -29,6 +29,7 @@ const tmp = await mkdtemp(path.join(os.tmpdir(), "ghrc-e2e-"));
 process.env.STORE_BACKEND = "file";
 process.env.STORE_DIR = tmp;
 process.env.AI_MOCK = "1";
+process.env.DRIVE_MOCK = "1"; // 參訪名單的 Google 試算表存在媒體庫（備份照舊看真的 Google 設定，不受影響）
 process.env.ADMIN_TOKEN = "e2e-token";
 const { createServer } = await import("../../scripts/dev-server.mjs");
 const server = createServer();
@@ -468,6 +469,8 @@ try {
     check((await page.locator("#importTable tbody tr").count()) === 4 && (await page.locator("#importTable [data-import]").count()) === 3, "importing an old visitor list shows every row first; the one without a date cannot be ticked");
     check(/原表同一列拆出來的，算同一場/.test(await page.textContent("#importTable")) && /2024-01-08/.test(await page.textContent("#importTable")), "…the row with two universities is split in two (counted as one visit), with the Excel date read as a date");
     check((await page.textContent("#importGo")) === "匯入 3 筆" && !/佐臻/.test(await page.textContent("#visitsTable")), "…and nothing is written until “import” is pressed");
+    // 明確指示：「每一次有增加再自動加入」——匯入時順便存成 Google 試算表，預設勾著
+    check((await page.isVisible("#importLinkRow")) && (await page.isChecked("#importLink")), "…with “also save it as a Google Sheet” ticked, so rows added there later come in by themselves");
     await page.click("#importTable tbody tr:nth-child(3) [data-import]");
     check((await page.textContent("#importGo")) === "匯入 2 筆", "…unticking a row takes it out");
     await page.click("#importTable tbody tr:nth-child(3) [data-import]");
@@ -477,6 +480,18 @@ try {
     await page.waitForFunction(() => /佐臻/.test(document.getElementById("visitsTable").textContent));
     await page.waitForFunction(() => /4 個國家 · 4 個單位 · 3 場/.test(document.getElementById("mapSummary").textContent), null, { timeout: 30000 });
     check(true, `the imported visits are on the map; the two universities from one row count as one visit (${await page.textContent("#mapSummary")})`);
+    await page.waitForSelector("#listBox:not([hidden])", { timeout: 30000 });
+    check(/GHRC 參訪名單/.test(await page.textContent("#listInfo")) && /每十五分鐘/.test(await page.textContent("#listInfo")), `…and the list is now a Google Sheet the system keeps watching (${await page.textContent("#listInfo")})`);
+    // 有人在那份試算表裡加了一列：「現在就看一次」（平常是每十五分鐘自己看、打開這一頁也看一次）
+    {
+      const { mockSheetWrite } = await import("../../netlify/lib/drive.mts");
+      const list = await (await fetch(`${base}/api/visit-list`, { headers: { authorization: "Bearer e2e-token" } })).json();
+      await mockSheetWrite(list.file_id, new Uint8Array(await pastVisitsXlsx({ extra: [[4, 45930, "國際", "日本", "日本千葉大學園藝學院", "山田太郎教授", "", "園藝療法交流"]] })));
+      await page.click("#listSync");
+      await page.waitForFunction(() => /從名單加了 1 筆/.test(document.getElementById("listNote").textContent), null, { timeout: 60000 });
+      await page.waitForFunction(() => /日本千葉大學園藝學院/.test(document.getElementById("visitsTable").textContent), null, { timeout: 30000 });
+      check(/上一次加了 1 筆/.test(await page.textContent("#listInfo")), "a row added to the Google Sheet comes in on its own, and the list line says so");
+    }
     await page.click("#visitsTable tr:has-text('佐臻')");
     await page.waitForFunction(() => /匯入/.test(document.getElementById("summary").textContent));
     check(/王大明副總經理/.test(await page.textContent("#summary")), "an imported visit shows what the original row said");
@@ -489,6 +504,8 @@ try {
     const auth = { authorization: "Bearer e2e-token" };
     const imported = (await (await fetch(`${base}/api/visits`, { headers: auth })).json()).visits.filter((v) => v.imported);
     for (const v of imported) await fetch(`${base}/api/visits?id=${encodeURIComponent(v.visit_id)}`, { method: "DELETE", headers: auth });
+    const { getStore } = await import("../../netlify/lib/store.mts");
+    await getStore().deleteMedia("sync/visit-list.json"); // 後面的測試從還沒連上名單的樣子開始
     await page.click('[data-tab="pre"]');
     await page.click('[data-tab="data"]');
     await page.waitForFunction(() => /1 個國家 · 1 個單位/.test(document.getElementById("mapSummary").textContent), null, { timeout: 30000 });
