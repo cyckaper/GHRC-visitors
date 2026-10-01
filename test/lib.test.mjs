@@ -301,6 +301,44 @@ test("五間研究室各有自己的顏色：labs.json 是全站唯一來源", (
   }
 });
 
+test("中心首頁的內容（center.json）：中英兩份都在、只有五間、不放預算、HEALS 不是中心的", () => {
+  const center = JSON.parse(readFileSync("public/data/center.json", "utf8"));
+  const labs = JSON.parse(readFileSync("public/data/labs.json", "utf8")).labs;
+  // 整頁一種語言，切過去不能開天窗：有 _en 就要有 _zh（反過來也是），日期條目的 en／zh 也一樣
+  const walk = (o, at) => {
+    if (Array.isArray(o)) return o.forEach((x, i) => walk(x, `${at}[${i}]`));
+    if (!o || typeof o !== "object") return;
+    for (const k of Object.keys(o)) {
+      const m = /^(?:(.*)_)?(en|zh)$/.exec(k);
+      if (m) {
+        const twin = `${m[1] ? m[1] + "_" : ""}${m[2] === "en" ? "zh" : "en"}`;
+        assert.ok(String(o[twin] || "").trim(), `${at}.${k} 有了，${at}.${twin} 卻是空的`);
+      }
+      walk(o[k], `${at}.${k}`);
+    }
+  };
+  walk(center, "center");
+  const text = JSON.stringify({ ...center, _comment: "" });
+  assert.doesNotMatch(text, /301\s*[-–—~～至]\s*304|four (research )?lab|四間|四個研究室/i, "中心只有這五間：301–305");
+  assert.doesNotMatch(text, /HEALS/i, "HEALS Design 是 Lab 301 的方法論，不寫成中心的");
+  assert.doesNotMatch(text, /NT\$|新臺幣|億元|萬元|預算|budget/i, "不放中心總預算數字");
+  // 閉環的每一段都有研究室，每一間也都落在某一段（303 與 305 都是驗證）——研究室改了 stage，首頁不能漏掉它
+  for (const lab of labs) assert.ok(center.loop.stages.includes(lab.stage), `${lab.room} 的 stage（${lab.stage}）要在首頁的閉環裡`);
+  for (const st of center.loop.stages) assert.ok(labs.some((l) => l.stage === st), `閉環的「${st}」那一段沒有研究室`);
+});
+
+test("/ 是中心首頁（center.html），/<visit_id> 仍然落到來賓專頁", () => {
+  const toml = readFileSync("netlify.toml", "utf8");
+  const rules = toml.split("[[redirects]]").slice(1).map((b) => ({ from: (/from\s*=\s*"([^"]+)"/.exec(b) || [])[1], to: (/to\s*=\s*"([^"]+)"/.exec(b) || [])[1], force: /force\s*=\s*true/.test(b) }));
+  const root = rules.findIndex((r) => r.from === "/");
+  const rest = rules.findIndex((r) => r.from === "/*");
+  assert.ok(root >= 0, "要有一條 / 的規則");
+  assert.equal(rules[root].to, "/center.html");
+  assert.ok(rules[root].force, "根目錄本來就有 index.html，不 force 的話 Netlify 會直接給 index.html");
+  assert.ok(rest > root && rules[rest].to === "/index.html", "/<visit_id> 那一條（/*）要排在後面，仍然給來賓專頁");
+  assert.match(readFileSync("scripts/dev-server.mjs", "utf8"), /if \(p === "\/"\) p = "\/center\.html"/, "本機開發伺服器也要一樣");
+});
+
 test("後台的英文：畫面上每一句中文都有翻譯", () => {
   const strings = scanAdmin();
   assert.ok(strings.length > 200, "應該掃得到整頁的中文");

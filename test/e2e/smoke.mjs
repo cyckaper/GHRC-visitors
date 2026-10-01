@@ -643,11 +643,33 @@ try {
     for (const id of [a, b]) await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: auth });
   }
 
-  // ── 來賓端：首頁（沒有參訪代碼）一律從訪前開始 ──
+  // ── 中心首頁（/）：介紹中心，五間研究室各連到自己的介紹頁 ──
   await page.goto(`${base}/`);
+  await page.waitForFunction(() => document.querySelectorAll("#labs .lab-card").length === 5, null, { timeout: 15000 });
+  check((await page.textContent("h1")) === "Green Health Research Center", "/ is the centre's homepage, not an empty visit page");
+  const homeLinks = await page.$$eval("#labs .lab-card", (els) => els.map((a) => a.getAttribute("href")));
+  check(homeLinks.join(" ") === "/lab/301 /lab/302 /lab/303 /lab/304 /lab/305", `…with the five laboratories, each linking to its own page (${homeLinks.join(" ")})`);
+  check((await page.textContent("#lab-303")).includes("陳惠美") && !(await page.textContent("#lab-303")).includes("鄭佳昆") && (await page.textContent("#lab-305")).includes("IVR Research Lab"), "…303 lists only 陳惠美 and 305 is the IVR Research Lab");
+  check((await page.$$eval('#loop [data-stage="Validate"] a', (els) => els.map((a) => a.textContent))).join() === "303,305", "…the evidence loop puts both 303 and 305 under Validate");
+  check(!/301\s*[-–]\s*304|four lab/i.test(await page.textContent("main")), "…and nowhere says four laboratories or 301–304");
+  await page.click("#langToggle");
+  await page.waitForFunction(() => document.querySelector("h1")?.textContent === "綠色健康研究中心" && document.querySelectorAll("#labs .lab-card").length === 5, null, { timeout: 15000 });
+  check((await page.getAttribute("#lab-303", "href")) === "/lab/303?ui=zh", "the Chinese homepage sends you to the Chinese lab page");
+  await page.click("#lab-303");
+  await page.waitForFunction(() => document.getElementById("labName")?.textContent === "景觀環境模擬室", null, { timeout: 15000 });
+  check((await page.getAttribute("#homeLink", "href")) === "/?ui=zh" && (await page.textContent("#homeLink")).includes("綠色健康研究中心"), "…and the lab page links back to the homepage in the same language");
+  await page.click("#homeLink");
+  await page.waitForFunction(() => document.querySelector("h1")?.textContent === "綠色健康研究中心", null, { timeout: 15000 });
+  // 換回英文：這台裝置記得選了哪一個語言，後面的介紹頁測試要的是英文
+  await page.click("#langToggle");
+  await page.waitForFunction(() => document.querySelector("h1")?.textContent === "Green Health Research Center", null, { timeout: 15000 });
+
+  // ── 來賓端：沒有參訪代碼（/index.html、打錯的網址）一律從訪前開始 ──
+  await page.goto(`${base}/index.html`);
   await page.waitForSelector("#lab-303");
-  check((await page.textContent("#labsTitle")) === "The five laboratories" && (await page.isHidden("#respond")) && (await page.isHidden("#emailSec")), "landing page without a visit starts in the pre-visit state and does not claim a visit is happening today");
+  check((await page.textContent("#labsTitle")) === "The five laboratories" && (await page.isHidden("#respond")) && (await page.isHidden("#emailSec")), "guest page without a visit starts in the pre-visit state and does not claim a visit is happening today");
   check(!(await page.textContent("#labsTitle2")).includes("今天"), "…and the Chinese heading does not say 今天 either");
+  check((await page.getAttribute("#aboutCenter", "href")) === "/", "…and links to the centre's homepage");
 
   // ── 來賓端（日期在未來 → 訪前措辭） ──
   await page.goto(`${base}/2026-10-07-uwa`);
