@@ -664,7 +664,13 @@ try {
   const homeLinks = await page.$$eval("#labs .lab-card", (els) => els.map((a) => a.getAttribute("href")));
   check(homeLinks.join(" ") === "/lab/301 /lab/302 /lab/303 /lab/304 /lab/305", `…with the five laboratories, each linking to its own page (${homeLinks.join(" ")})`);
   check((await page.textContent("#lab-303")).includes("陳惠美") && !(await page.textContent("#lab-303")).includes("鄭佳昆") && (await page.textContent("#lab-305")).includes("IVR Research Lab"), "…303 lists only 陳惠美 and 305 is the IVR Research Lab");
-  check((await page.$$eval('#loop [data-stage="Validate"] a', (els) => els.map((a) => a.textContent))).join() === "303,305", "…the evidence loop puts both 303 and 305 under Validate");
+  // 明確指示：「構成一條閉環證據鏈」那一段不要；五間研究室的卡片放在「組織架構」與「參訪與聯絡」之間
+  check(await page.evaluate(() => {
+    const ids = [...document.querySelectorAll("main > section:not([hidden])")].map((s) => s.id);
+    return !document.getElementById("loop") && ids.indexOf("orgSec") + 1 === ids.indexOf("labsSec") && ids.indexOf("labsSec") + 1 === ids.indexOf("contactSec");
+  }), "…no evidence-loop block, and the five laboratory cards sit between the organisation and the contact section");
+  check((await page.textContent("#labsTitle")) === "The five laboratories", "…under a plain heading");
+  check(!/Cornell/.test(await page.textContent("#members")) && (await page.locator("#members li").count()) === 7, "…and the international platform does not list Cornell");
   check(!/301\s*[-–]\s*304|four lab/i.test(await page.textContent("main")), "…and nowhere says four laboratories or 301–304");
   await page.click("#langToggle");
   await page.waitForFunction(() => document.querySelector("h1")?.textContent === "綠色健康研究中心" && document.querySelectorAll("#labs .lab-card").length === 5, null, { timeout: 15000 });

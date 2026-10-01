@@ -12,15 +12,6 @@
  "where_en": "Rooms 301–305, 3F Landscape Building, National Taiwan University",
  "where_zh": "臺大造園館三樓 301–305 室",
  "email": "ntughrc@gmail.com",
- "loop": {
-  "title_en": "Five laboratories, one closed evidence loop",
-  "title_zh": "五間研究室構成一條閉環證據鏈",
-  "stages": ["Measure", "Design", "Validate", "Prescribe"],
-  "back_en": "Validation feeds back into the design criteria",
-  "back_zh": "驗證結果回饋修正設計準則",
-  "floor_en": "Participants complete measurement, design and validation without leaving the floor.",
-  "floor_zh": "量測、設計、驗證可在同一動線內完成，受試者無須移動至不同建築。"
- },
  "missions": [
   {
    "title_en": "Research and industry collaboration",
@@ -49,17 +40,16 @@
   { "date": "2026.04.09", "en": "Global Views USR Award, First Prize", "zh": "遠見 USR 獎首獎" }
  ],
  "platform": {
-  "title_en": "Landscape and Human Health — an eight-university platform",
-  "title_zh": "Landscape and Human Health 國際合作研究平台 · 八校成員",
-  "note_en": "Eight universities on one theme — landscape and human health — sustained by joint conferences, student exchange and co-authored research.",
-  "note_zh": "八校平台以景觀與人類健康為共同主題，透過研討會、學生互訪與聯合研究維持運作。",
+  "title_en": "Landscape and Human Health — an international research platform",
+  "title_zh": "Landscape and Human Health 國際合作研究平台 · 成員",
+  "note_en": "Member universities share one theme — landscape and human health — sustained by joint conferences, student exchange and co-authored research.",
+  "note_zh": "平台以景觀與人類健康為共同主題，透過研討會、學生互訪與聯合研究維持運作。",
   "members": [
    { "en": "National Taiwan University", "zh": "國立臺灣大學", "where_en": "Taiwan", "where_zh": "臺灣" },
    { "en": "University of Hong Kong", "zh": "香港大學", "where_en": "Hong Kong", "where_zh": "香港" },
    { "en": "Chiang Mai University", "zh": "清邁大學", "where_en": "Thailand", "where_zh": "泰國" },
    { "en": "Konkuk University", "zh": "建國大學", "where_en": "Korea", "where_zh": "韓國" },
    { "en": "University of Illinois Urbana-Champaign", "zh": "伊利諾大學", "where_en": "United States", "where_zh": "美國" },
-   { "en": "Cornell University", "zh": "康乃爾大學", "where_en": "United States", "where_zh": "美國" },
    { "en": "Texas A&M University", "zh": "德州農工大學", "where_en": "United States", "where_zh": "美國" },
    { "en": "Michigan State University", "zh": "密西根州立大學", "where_en": "United States", "where_zh": "美國" }
   ]

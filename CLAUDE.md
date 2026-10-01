@@ -535,7 +535,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 - `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → **通告研究室（各室在支援人力表上填的分鐘自動排進行程）** → 排行程 → 自動存 → QR／.ics → **確認信（草擬、寄出或 mailto）**，**最底下列出「以前做過的參訪」**）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、後續（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁、**動作五 感謝信**）、資料（歷次參訪、回覆、摘要、跨場次彙整、CSV、Drive）、**設定（母簡報、預設值、支援人力表、外部服務狀態、老師卡片）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
 - `public/index.html`：專屬網址 `/<visit_id>`；整頁一種語言（預設英文，`?ui=zh` 換中文；ko／ja 來賓才另外附他們的語言）；流程（參訪當天標出「現在」；研究室參訪底下一間一行、各自的時段）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
-- `public/center.html`：**中心首頁 `/`**——中心簡介、五間研究室（閉環＋卡片，各連到 `/lab/<房號>`）、三大任務、沿革、國際平台、外部肯定、組織架構、聯絡；字在 `public/data/center.json`（見「約定」的「中心首頁」）。
+- `public/center.html`：**中心首頁 `/`**——中心簡介、三大任務、沿革、國際平台、外部肯定、組織架構、五間研究室（卡片，各連到 `/lab/<房號>`）、聯絡；字在 `public/data/center.json`（見「約定」的「中心首頁」）。
 - `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`／`geo-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`；`geo` 查訪客地圖上各單位在哪裡）`drive` `drive-sync-background`（自動備份）；**三支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
   `rota`（支援人力表，各研究室自己填）；
   `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，後續提醒）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
@@ -586,11 +586,15 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - **中心首頁 `/`**（明確要求：「把老師們介紹的那些網頁，乾脆做成一個介紹綠色健康研究中心的首頁，在首頁裡面再去連結接到老師們的介紹」）：
   `public/center.html`。`netlify.toml` 一條 **force** 的 `/ → /center.html`（根目錄本來就有 index.html，不 force 的話 Netlify 直接給它），
   `/<visit_id>` 仍然落到來賓專頁；`/index.html` 與打錯的網址還是那個沒有參訪代碼的來賓頁。
-  - 由上而下：中心簡介 → **五間研究室**（閉環：量測 301 → 設計 302 → 驗證 303·305 → 處方 304，底下五張卡片整張就是連結，
-    點下去是那一間的介紹頁）→ 設置辦法三大任務 → 沿革 → 國際平台（八校、已簽署與已成形的合作）→ 外部肯定 → 組織架構 → 參訪與聯絡。
+  - 由上而下：中心簡介 → 設置辦法三大任務 → 沿革 → 國際平台（Landscape and Human Health 平台成員、已簽署與已成形的合作）→ 外部肯定 → 組織架構
+    → **五間研究室**（五張卡片，整張就是連結，點下去是那一間的介紹頁）→ 參訪與聯絡。
+    **研究室排在「組織架構」與「參訪與聯絡」之間**（明確指示）；以前排在最上面，前面還有一條「五間研究室構成一條閉環證據鏈」
+    （量測 → 設計 → 驗證 → 處方四格），**明確指示拿掉了**（「構成一條閉環證據鏈這些不要」），`npm test` 擋它回來。
+  - **國際平台不列康乃爾大學**（明確指示：「研究平台，康乃爾大學不要列入」）。名單因此是七所，標題與說明也就**不寫校數**
+    （以前寫「八校」，少了一所就對不上）；`npm test` 擋康乃爾與「八校」回到首頁。
   - 字在 `public/data/center.json`（中英兩份，出自母簡報與設置辦法；簡介那一段是照簡報整理的）。**研究室的名稱、負責人、照片、
-    一句話不在這裡**——一律從 `/api/labs` 來（後台「設定」改的那一份），首頁與介紹頁永遠一致；閉環怎麼分段看 `labs.json` 的 `stage`。
-    `npm test` 擋：少一種語言、「四間／301–304」、HEALS（那是 Lab 301 的方法論）、預算數字、有研究室落不進閉環。
+    一句話不在這裡**——一律從 `/api/labs` 來（後台「設定」改的那一份），首頁與介紹頁永遠一致。
+    `npm test` 擋：少一種語言、「四間／301–304」、HEALS（那是 Lab 301 的方法論）、預算數字、閉環證據鏈、研究室不在組織架構與聯絡之間。
   - 語言跟介紹頁同一套（預設英文、`?ui=zh`，記在這台裝置的 `ghrc-ui-lang`），連過去時帶著 `?ui=zh`；
     來賓專頁最底下也有一行「認識中心」連過來。
   - **刻意不放**：簡報裡對特定來賓講的東西——還沒定案的計畫（2027 聯合中心、收費標準）、得獎方案的累計數字
