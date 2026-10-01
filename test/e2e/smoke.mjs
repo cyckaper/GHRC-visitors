@@ -509,7 +509,9 @@ try {
       await page.click("#listSync");
       await page.waitForFunction(() => /從名單加了 1 筆/.test(document.getElementById("listNote").textContent), null, { timeout: 60000 });
       await page.waitForFunction(() => /日本千葉大學園藝學院/.test(document.getElementById("visitsTable").textContent), null, { timeout: 30000 });
-      check(/上一次加了 1 筆/.test(await page.textContent("#listInfo")), "a row added to the Google Sheet comes in on its own, and the list line says so");
+      // 名單那一行是清單畫完之後才去重讀的（loadDataTab 不等它），CI 上慢一點就會比清單晚一拍——等它，不要當場比
+      await page.waitForFunction(() => /上一次加了 1 筆/.test(document.getElementById("listInfo").textContent), null, { timeout: 30000 });
+      check(true, "a row added to the Google Sheet comes in on its own, and the list line says so");
     }
     await page.click("#visitsTable tr:has-text('佐臻')");
     await page.waitForFunction(() => /匯入/.test(document.getElementById("summary").textContent));
