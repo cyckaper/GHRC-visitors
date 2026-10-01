@@ -5,7 +5,7 @@ import { env } from "./http.mts";
 import { isMock } from "./data.mts";
 import type { DictationExtract, ResponseRow, SignbookEntry, Visit } from "./types.mts";
 import type { Extracted } from "./files.mts";
-import { allocateProgramme, endTimeOf, labStops, pageContents } from "../../lib/visit.mjs";
+import { allocateProgramme, briefingBlockMinutes, endTimeOf, labStops, pageContents } from "../../lib/visit.mjs";
 
 /**
  * 所有 AI 呼叫集中在這裡（工作包第 5 章）。
@@ -259,23 +259,23 @@ const PLAN_SYSTEM = `你替 GHRC 排一次參訪的行程並從母簡報挑頁�
 母簡報規則（不可違反）：
 - 章節編號與實體頁序不一致，只能依提供的頁次索引選頁，不要自己推測。
 - always=true 的頁（封面、今日流程、簡報架構、核心宣稱、謝謝）永遠保留。
-- 每頁約 40–60 秒（索引裡的 minutes），影片頁另計；總頁數要塞得進「總體簡報」區塊的分鐘數。
+- 每頁約 40–60 秒（索引裡的 minutes），影片頁另計；總頁數要塞得進 briefing_minutes（今日流程裡總體簡報那一段的分鐘數）。
 - 選頁偏好：政府單位偏政策與場域落地；大學偏研究與學生交流；企業偏應用與委託研究；學生團偏影片與體驗。以索引的 audience 與 lab 標記為線索，並參考來賓興趣。
 - **history（歷次實際表現，有才給）**：slides[].used／used_same_type 是這一頁過去選過幾次、同類單位選過幾次；asked 是那一場被提問、mentioned 是在回饋中被提到。rooms[] 每一間分兩種來源：wanted／cooperate 是**來賓自己回的**（最想看、想合作），host_noted 是**主持人口述裡聽到的**——「主持人覺得對方有興趣」不等於「對方說他有興趣」，兩者不要混著講。用法：**被提問或被提到過的頁優先留下**，同類單位常選的頁優先考慮，來賓自己點名多的研究室優先排進動線（host_noted 只當佐證）。但**沒有數字不代表那頁不好**——可能只是沒人選過，該講還是要講；history 是佐證，不是排行榜。
 - **選頁以「區塊」為單位**（groups）：挑到某一區的任何一頁，整個區塊都會進去（後台也只勾區塊、不勾單頁），所以請以區塊為單位思考，不必逐頁斟酌。
-- 實驗室頁：要參訪的房間才放它的頁；分隔頁（role=divider）只在放了該實驗室內容時保留。
+- 實驗室頁：只放 **route** 上那幾間的頁（route＝今日流程上這一場要去的研究室，是各研究室在支援人力表上填的、或主辦端排好的；route 是空的才自己依興趣判斷）；分隔頁（role=divider）只在放了該實驗室內容時保留。
 - 最後的「您最想看哪一部分」頁與 QR 頁由產檔程式另外加，不要選。
 - 不放中心總預算數字；HEALS Design 是 301 專屬方法論。
 
 行程規則：
 - 從 start_time 開始，總長 = duration_minutes，區塊順序固定是 briefing（總體簡報）→ tour（依序參訪研究室）→ discussion（**綜合討論，一定要有**；title_en 用 "General discussion"，title_2nd 用「綜合討論」或對應語言）→ photo（合照，5 分鐘，可省略）。
 - **時間分配的預設規則**：總體介紹 20 分、每間研究室 20 分、合照 5 分，前面扣掉之後**剩下的時間全部給綜合討論**。只有總時間不夠時才縮短研究室（每間至少 5 分）與總體介紹（至少 10 分），綜合討論至少 10 分。
-- itinerary 是現場動線。**第一步固定是 room="briefing"（總體介紹，在簡報室）**，minutes = briefing 區塊長度、focus 寫這場總體簡報要強調什麼；之後才是 tour 區塊內各房間的順序與分鐘數，預設 301→302→303→304→305，依興趣可調整或省略房間；房間分鐘數總和 = tour 區塊長度。
+- itinerary 是現場動線。**第一步固定是 room="briefing"（總體介紹，在簡報室）**，minutes = briefing 區塊長度、focus 寫這場總體簡報要強調什麼；之後才是 tour 區塊內各房間的順序與分鐘數：**有給 route 就照 route 的房間、順序與分鐘，不要增減**；route 是空的才預設 301→302→303→304→305，依興趣可調整或省略房間；房間分鐘數總和 = tour 區塊長度。
 - title_2nd 用來賓的第二語言（language）；language=en 時 title_2nd 留空。
 - slides_range 用「01 – 12」這種格式描述該區塊對應的**輸出後**頁碼範圍（輸出後頁碼 = 選用頁在 slides 陣列裡的序號，從 1 起算），非簡報區塊填「—」。
 - cover_text：封面要替換的三段文字：org_line（單位名稱，英文為主，可加當地語）、guest_lines（主要來賓一到三行：姓名 職稱）、date_line（例如「7 October 2026 · 2026年10月7日」）。
 - text_edits：只有在提供母簡報文字（master_text）時才填。針對第 1、2、3 頁，逐一給出 find（母簡報裡**逐字**存在的文字段落）與 replace（新文字），用來改單位名稱、流程表的時間／說明／頁碼、Contents 的章節列表。沒有 master_text 就給空陣列。
-- rationale：用中文兩三句說明為什麼這樣排。
+- rationale：用中文兩三句說明**為什麼挑這幾個區塊**（後台把它放在選頁旁邊；有給 route 時行程是研究室填的，不必解釋行程）。
 - 總體介紹的地點由主辦端決定（見 briefing_location，預設 302），不用寫進輸出。
 
 ${CENTER_FACTS}`;
@@ -289,6 +289,9 @@ export async function planVisit(visit: Visit, slidesIndex: any, labs: any, maste
       duration_minutes: visit.duration_minutes, purpose: visit.purpose, interests: visit.interests, language: visit.language, contact_teacher: visit.contact_teacher,
     },
     briefing_location: visit.itinerary?.find((s) => s.room === "briefing")?.location || "302",
+    // 今日流程是自動排的（各研究室在支援人力表上填的分鐘）：挑頁照這一份動線與總體簡報的長度，不要另排一份
+    route: (visit.itinerary || []).filter((s) => s.room !== "briefing" && (Number(s.minutes) || 0) > 0).map((s) => ({ room: s.room, minutes: Number(s.minutes) })),
+    briefing_minutes: briefingBlockMinutes(visit.programme) || Number(visit.itinerary?.find((s) => s.room === "briefing")?.minutes) || 20,
     slide_index: slidesIndex.slides,
     labs: (labs.labs || []).map((l: any) => ({ room: l.room, name_en: l.name_en, lead: l.lead?.name_zh, one_line_en: l.one_line_en })),
     master_text: masterText ? { slides: (masterText.slides || []).filter((s: any) => s.n <= 3) } : null,

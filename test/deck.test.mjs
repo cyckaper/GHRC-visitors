@@ -101,6 +101,16 @@ test("build: English-only variant strips every Chinese run", { skip: !available 
   assert.equal((await deck.paragraphs((await deck.slides())[6].path))[0], "Which part would you most like to see?");
 });
 
+test("build: page 2's slide-number column fills itself when nobody typed one (the admin no longer asks for it)", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
+  // 後台的今日流程不再請人填「頁碼」：總體簡報＝從第 1 頁到最後一張選用頁，其他區塊「—」；有填的照填的
+  const programme = spec.programme.map((b, i) => ({ ...b, slides_range: i === 3 ? "（現場）" : "" }));
+  const { pptx } = await buildDeck({ ...spec, language: "en", slides: [1, 2, 3, 4, 9, 10], programme }, await readFile(FIXTURE), { slidesIndex, lang: "en" });
+  const deck = await Deck.load(pptx);
+  const prog = await deck.paragraphs((await deck.slides())[1].path);
+  assert.ok(prog.includes("01 – 06"), `the overview covers the six chosen slides (the ask and QR pages come after): ${prog.join(" | ")}`);
+  assert.equal(prog.filter((p) => p === "—").length, 2, "the tour and the discussion have no slides");
+});
+
 test("build: Chinese variant keeps the deck as is (no translator needed)", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
   const { report } = await buildDeck({ ...spec, language: "zh", text_edits: [] }, await readFile(FIXTURE), { slidesIndex, lang: "zh" });
   assert.equal(report.translated, undefined);

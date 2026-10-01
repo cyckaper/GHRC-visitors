@@ -114,26 +114,35 @@ try {
   await page.waitForFunction(() => /名單 2 人/.test(document.getElementById("progress").textContent), null, { timeout: 30000 });
   check(true, "deleting someone from the guest list saves by itself — they do not come back");
 
-  await page.click("#planBtn");
-  // 排行程也跑在背景（提示詞帶整份頁次索引，10 秒同樣不夠）
-  await page.waitForFunction(() => /排行程中/.test(document.getElementById("planInfo").textContent));
-  check(true, "排行程 runs in the background too");
-  // 排完的判斷要看 AI 回來了沒（表上本來就有一份預設流程，不能用「有沒有列」判斷）
-  await page.waitForFunction(() => /也挑了/.test(document.getElementById("planInfo").textContent), null, { timeout: 90000 });
-  check((await page.locator("#programmeTable tbody tr select").evaluateAll((els) => els.map((e) => e.options[e.selectedIndex].text))).includes("綜合討論"), "programme table shows a 綜合討論 block");
+  // 今日流程是自動排的（各研究室在支援人力表上填的分鐘會自己排進來）：訪前不再有「AI 排行程」，
+  // 平常只看一份排好的流程；可以改的那張表收在「要改再點開」裡
+  check((await page.$("#planBtn")) === null, "the pre-visit tab has no AI scheduling button any more — the labs' own minutes fill the schedule");
   check((await page.locator("#tab-pre #slideGrid").count()) === 0, "the pre-visit tab no longer carries the slide picker");
+  check(/綜合討論/.test(await page.textContent("#programmeView")) && (await page.locator("#programmeView .room").count()) === 5, "the schedule is already laid out to look at: 綜合討論 included, a line per lab under the tour");
+  check(!(await page.$eval("#programmeEdit", (d) => d.open)) && !(await page.isVisible("#programmeTable")), "the editable table stays folded away until it is needed");
+  await page.click("#programmeEdit summary");
   // 行程只有一張表：每一間幾分鐘就長在「研究室參訪」那一列底下，總體介紹的地點在 briefing 那一列
   check((await page.locator("#programmeTable tr[data-rooms-row]").count()) === 1, "the lab minutes live inside the one schedule table");
   check((await page.inputValue("#programmeTable [data-briefing-location]")) === "302", "briefing room defaults to 302, on the briefing row itself");
   check((await page.locator("#itinerary input[data-room]").count()) === 5, "one minutes box per lab");
   check(/五間合計 \d+ 分/.test(await page.textContent("#roomsTotal")), "it adds the lab minutes up");
+  check((await page.locator("#programmeTable thead th").allTextContents()).every((t) => t !== "頁碼"), "nobody is asked to type slide numbers — the deck works them out");
   {
     // 分鐘一改，後面各段的時間就跟著往後推——**時間是算出來的，不是第二個要填的欄位**
     const before = await page.inputValue("#programmeTable tbody tr:last-child input[type=time]");
     const box = page.locator('#itinerary input[data-room="301"]');
-    await box.fill(String((Number(await box.inputValue()) || 0) + 30));
+    const minutes = (Number(await box.inputValue()) || 0) + 30;
+    await box.fill(String(minutes));
     await page.waitForFunction((was) => document.querySelector("#programmeTable tbody tr:last-child input[type=time]").value !== was, before, { timeout: 15000 });
     check(/流程排了 \d+ 分/.test(await page.textContent("#programmeTotal")), "and says how long the whole thing runs");
+    check(await page.evaluate((m) => [...document.querySelectorAll("#programmeView .room")].some((el) => el.textContent === "301" && el.parentElement.textContent.includes(`${m} 分`)), minutes), "the schedule you look at follows the table");
+    // 開始時間一改，整排跟著往後推（以前流程停在舊的時間，要一列一列自己改）
+    const start = await page.inputValue("#startTime");
+    await page.fill("#startTime", "10:30");
+    await page.waitForFunction(() => /^10:30–/.test(document.querySelector("#programmeView span").textContent), null, { timeout: 15000 });
+    check((await page.inputValue("#programmeTable tbody tr:first-child input[type=time]")) === "10:30", "moving the start time moves the whole programme with it");
+    await page.fill("#startTime", start);
+    await page.waitForFunction((s) => document.querySelector("#programmeView span").textContent.startsWith(`${s}–`), start, { timeout: 15000 });
   }
   // 進度線：這一場到哪一步了，點一格跳到該做那件事的分頁
   check(/名單 2 人/.test(await page.textContent("#progress")), "the progress line counts the guest list");
@@ -158,7 +167,15 @@ try {
   await page.click('#progress [data-go="deck"]');
   await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]").length > 0);
   check((await page.inputValue("#visitSelect")) === "2026-10-07-uwa", "the progress line's 簡報 cell opens the deck tab on this visit");
-  check((await page.locator("#slideGrid input[data-block]:checked").count()) >= 2, "the plan's blocks are waiting in the deck tab");
+  // 挑頁搬來這裡（以前是訪前「AI 排行程」順便挑）：跑在背景，挑完勾好區塊、寫一句為什麼、自己存——行程不動
+  const routeBefore = JSON.stringify((await (await fetch(`${base}/api/visits?id=2026-10-07-uwa`, { headers: { authorization: "Bearer e2e-token" } })).json()).visit.itinerary);
+  await page.click("#pickBtn");
+  await page.waitForFunction(() => /AI 挑頁中/.test(document.getElementById("pickInfo").textContent));
+  await page.waitForFunction(() => /挑了 \d+ 頁/.test(document.getElementById("pickInfo").textContent), null, { timeout: 90000 });
+  check((await page.locator("#slideGrid input[data-block]:checked").count()) > 2 && (await page.textContent("#pickRationale")).trim().length > 0, "AI 挑頁 ticks blocks beyond the mandatory two, and says why");
+  await page.waitForFunction(() => /已存 \d+ 頁/.test(document.getElementById("slidesInfo").textContent), null, { timeout: 30000 });
+  const picked = (await (await fetch(`${base}/api/visits?id=2026-10-07-uwa`, { headers: { authorization: "Bearer e2e-token" } })).json()).visit;
+  check(picked.slides.length > 5 && !!picked.plan_rationale && JSON.stringify(picked.itinerary) === routeBefore, "…saves the pick by itself, and leaves the schedule the labs filled in alone");
   // 顏色：研究室的區塊用那一間的顏色，值來自 public/data/labs.json（不是抄在頁面裡的第二份）
   const hexToRgb = (h) => `rgb(${parseInt(h.slice(1, 3), 16)}, ${parseInt(h.slice(3, 5), 16)}, ${parseInt(h.slice(5, 7), 16)})`;
   const labColor = Object.fromEntries(JSON.parse(await readFile("public/data/labs.json", "utf8")).labs.map((l) => [l.room, hexToRgb(l.color)]));
@@ -755,6 +772,13 @@ try {
     check(dropped.labs.find((l) => l.room === "302").photos.length === 6, "…and take it off again");
     await fetch(`${base}/api/labs`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer e2e-token" }, body: JSON.stringify({ room: "302", reset: true }) });
   }
+  // 流程區塊的英文標題空白時，來賓專頁用 i18n 的 kind_* 補、不印中文那一行。以前這個情形是「AI 排行程」
+  // 留下來的；那顆鍵拿掉之後今日流程照預設排（標題都有），所以這裡自己把第一段的英文標題清掉再看
+  {
+    const cur = (await (await fetch(`${base}/api/visits?id=2026-10-07-uwa`, { headers: { authorization: "Bearer e2e-token" } })).json()).visit;
+    cur.programme[0] = { ...cur.programme[0], title_en: "" };
+    await fetch(`${base}/api/visits`, { method: "POST", headers: { authorization: "Bearer e2e-token", "content-type": "application/json" }, body: JSON.stringify(cur) });
+  }
   // 回到來賓專頁（上面跑過幾個 /lab/… 的分頁，所以直接指定網址，不靠上一頁）
   await page.goto(`${base}/2026-10-07-uwa#email`);
   await page.waitForSelector("#emailSec:not([hidden])");
@@ -768,7 +792,7 @@ try {
   check((await page.textContent("#briefing-card")).includes("302"), "guest page shows the briefing in 302");
   check((await page.textContent("#lab-303")).includes("Landscape Simulation Lab") && (await page.textContent("#lab-303")).includes("景觀環境模擬室"), "the lab NAME keeps both scripts (a name is an identifier, not a translation)");
   check(!/[一-鿿]/.test(await page.textContent("#lab-303 p")), "…but the prose on the English page is English only: 中英文不在同一頁印兩份");
-  check((await page.textContent("#programme li:first-child")).includes("Center overview") && !(await page.textContent("#programme li:first-child")).includes("總體介紹"), "programme block falls back to the English label when the plan left title_en empty, and does not print the Chinese one");
+  check((await page.textContent("#programme li:first-child")).includes("Center overview") && !(await page.textContent("#programme li:first-child")).includes("總體介紹"), "programme block falls back to the English label when its English title is empty, and does not print the Chinese one");
   check((await page.locator("#programme li").count()) > 0, "programme rendered");
   await page.waitForSelector("#materialsSec:not([hidden])");
   check((await page.locator("#photoGrid img").count()) === 1 && (await page.textContent("#linkList")).includes("Lab 303 papers"), "visit page shows the uploaded photo and the link");
@@ -833,6 +857,7 @@ try {
     for (let n = w.nextNode(); n; n = w.nextNode()) {
       if (["SCRIPT", "STYLE", "TEXTAREA", "CODE", "PRE"].includes(n.parentNode?.nodeName)) continue;
       if (!n.parentElement?.offsetParent) continue;
+      if (n.parentElement.closest("[data-ai-text]")) continue; // AI 寫的內容是資料，不是介面：不翻（AI 挑頁旁邊那一句為什麼）
       const t = n.nodeValue.trim();
       if (t && /[一-鿿]/.test(t) && !["中", "中文", "日本語"].includes(t)) out.push(t);
     }
