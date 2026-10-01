@@ -1,8 +1,9 @@
 import { fail, json, nowISO, readJSON, requireAdmin, siteUrl } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
-import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes, needsGeo, sanitizeGeo, sanitizePublic } from "../../lib/visit.mjs";
+import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes, needsGeo, sanitizeGeo, sanitizePublic, institutionKeys, visitEndAt } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
+import { purgePublicVisits } from "../lib/cdn.mts";
 import { dropDraft, moveDraft } from "./draft.mts";
 
 /**
@@ -44,7 +45,10 @@ export default async (req: Request) => {
     }
     // geo：訪客地圖上這個單位在哪裡（/api/geo 查的）；geo_stale：還沒查、或單位改過名字，資料分頁會自己去查
     // group：匯入的舊紀錄裡，原表同一列拆出來的那幾筆（算同一場）；imported：這一場是從以前的名單匯入的
-    const list = (await store.listVisits()).map((v) => ({ visit_id: v.visit_id, date: v.date, org: v.org?.name, org_local: v.org?.name_local || "", type: v.org?.type, country: v.org?.country, headcount: v.headcount, status: v.status, language: v.language, guests: (v.guests || []).length, slides: (v.slides || []).length, summary: !!v.summary, updated_at: v.updated_at, geo: (v as any).geo ? { lat: (v as any).geo.lat, lon: (v as any).geo.lon, place: (v as any).geo.place, precision: (v as any).geo.precision } : null, geo_stale: needsGeo(v), group: (v as any).imported?.group || "", imported: !!(v as any).imported }));
+    const all = await store.listVisits();
+    // inst：同一個單位的每一場都一樣（中文名稱一樣、或英文名稱去掉空白與標點後一樣），資料分頁的地圖照這個合成一個點
+    const inst = institutionKeys(all);
+    const list = all.map((v) => ({ visit_id: v.visit_id, date: v.date, org: v.org?.name, org_local: v.org?.name_local || "", type: v.org?.type, country: v.org?.country, headcount: v.headcount, status: v.status, language: v.language, guests: (v.guests || []).length, slides: (v.slides || []).length, summary: !!v.summary, updated_at: v.updated_at, geo: (v as any).geo ? { lat: (v as any).geo.lat, lon: (v as any).geo.lon, place: (v as any).geo.place, precision: (v as any).geo.precision } : null, geo_stale: needsGeo(v), group: (v as any).imported?.group || "", imported: !!(v as any).imported, inst: inst.get(v.visit_id) || "" }));
     return json({ ok: true, visits: list, backend: store.backend });
   }
 
@@ -117,6 +121,9 @@ export default async (req: Request) => {
       }
     }
     await triggerDriveSync(merged.visit_id);
+    // 已經來過的那一場改了（單位名稱、國家、去了哪幾間……）：首頁的地圖與來訪紀錄頁跟著換，不必等 CDN 那一份過期。
+    // 還沒來的不在公開頁上，存再多次也不必清
+    if (hasHappened(merged) || (current && hasHappened(current))) await purgePublicVisits();
     // rota_applied：這一次存檔時，哪幾間研究室剛填的分鐘被保留下來（後台照這個說一聲「行程已照研究室填的更新」）
     return json({ ok: true, visit: merged, renamed_from: renamedFrom, url_fixed: renameBlocked, stale: staleOutputs(merged), rota_applied: unseen });
   }
@@ -133,11 +140,18 @@ export default async (req: Request) => {
     for (const key of mediaKeys(visit)) await store.deleteMedia(key).catch(() => {});
     await dropDraft(id);
     await store.deleteVisit(id);
+    if (hasHappened(visit)) await purgePublicVisits(); // 公開頁上也拿掉
     return json({ ok: true, deleted: id });
   }
 
   return fail(405, "method not allowed");
 };
+
+/** 這一場已經結束了（公開頁只列這種的；`visitEndAt` 跟後續提醒同一個算法）。 */
+function hasHappened(v: Visit): boolean {
+  const end = visitEndAt(v).getTime();
+  return Number.isFinite(end) && end <= Date.now();
+}
 
 /** 後台表單管不到的欄位（別的端點或背景工作維護）：body 沒帶就沿用現有的，一般存檔不該動到。 */
 const KEPT = ["summary", "summary_at", "reminders", "drive", "cards", "signbook", "dictation", "letters", "materials", "background", "wrapup", "imported"] as const;

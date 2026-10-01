@@ -692,7 +692,7 @@
   "匯入了 # 筆": "Imported #",
   "匯入了 # 筆。地圖上的位置正在查，查好會自己更新。": "Imported #. Their locations are being looked up; the map updates itself when done.",
   "公開頁上的說明": "On the public pages",
-  "中心首頁的地圖與「來訪紀錄」頁，參訪過後才出現；改了十分鐘內更新": "the map on the centre's homepage and the Visits page; shown once the visit is over, and changes appear within ten minutes",
+  "中心首頁的地圖與「來訪紀錄」頁，參訪過後才出現；改了重新整理就看得到": "the map on the centre's homepage and the Visits page; shown once the visit is over, and changes show on reload",
   "看公開頁": "View public page",
   "這一場不公開（地圖與來訪紀錄都不放）": "Keep this visit private (leave it off the map and the Visits page)",
   "來訪人員（中文）": "Visitors (Chinese)",

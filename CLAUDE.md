@@ -438,6 +438,12 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
   （明確指示：「點要能縮小到學校或公司，不要佔了整個國家」；以前是一個國家一個點，臺灣、韓國整個被蓋住）。
   旁邊直接給「N 個國家 · M 個單位 · K 場 · 共 P 人次」；點一個點列出那個單位的每一場（與所在城市），
   再點一列就跳到那一場的紀錄。
+  - **哪幾場是同一個單位**（`lib/visit.mjs institutionKeys()`；後台這張、首頁的地圖、`/visits` 三處同一個判斷）：
+    **中文（中日韓文）名稱一樣**，或**英文名稱去掉空白、標點、大小寫、開頭的 The 之後一樣、國家也一樣**；一路串下去
+    （A、B 中文一樣，B、C 英文一樣，三場就是同一個）。「臺／台」當同一個字；英文名稱那一格寫的是中文也照中文比。
+    **實際發生過**：惇陽工程兩場，一場英文寫「Dun Yang…」、一場寫「Dunyang…」——以前只比英文名稱，就被算成兩個單位、地圖上多一顆點。
+    名稱照最近那一場的寫法；位置有查到城市的優先。伺服器把代碼（`inst`）跟著資料給前端，前端不自己再判斷一次。
+    代碼是正規化過的名稱，**不是 visit_id**；公開的兩支**只拿要公開的那幾場來算**，還沒來的那一場的名稱不會從代碼裡透出來。
   - **位置由 AI 查**（`/api/geo` → `geo-background`，背景工作；一次最多 30 個單位，同一個單位來過好幾次只查一次），
     存在 `visit.geo`（`lat`／`lon`／`place`／`precision`：site／city／region／country，`lib/visit.mjs sanitizeGeo`）。
     **打開資料分頁時有還沒查過的就自己去查**，查好地圖自己更新——不必有人記得按，也不跳紅色錯誤（查不到就下次再查）。
@@ -562,7 +568,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - `public/center.html`：**中心首頁 `/`**——中心簡介、三大任務、沿革、國際平台、來訪單位（世界地圖）、外部肯定、組織架構、五間研究室（卡片，各連到 `/lab/<房號>`）、聯絡；字在 `public/data/center.json`（見「約定」的「中心首頁」）。
 - `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`／`geo-background`／`import-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`；`geo` 查訪客地圖上各單位在哪裡；`import` 讀以前的參訪名單）`drive` `drive-sync-background`（自動備份）；**三支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
   `rota`（支援人力表，各研究室自己填）； `visitor-map`（**公開**：中心首頁的來訪單位地圖，只有單位、位置與來過幾次）； `import`（匯入以前的參訪名單：預覽與寫入，規則在 `lib/import.mjs`）； `visit-log`（**公開**：`/visits` 來訪紀錄頁；admin 用 POST 改公開說明與「不公開」）；
-  `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，後續提醒）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
+  `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，後續提醒）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive／cdn）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
 - `public/lib/pptx.mjs`：母簡報子集化核心（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證），零 Node 相依，瀏覽器與 CLI 共用；`cli/lib/pptx.mjs` 只是注入 jszip／xmldom 的 Node 入口；`cli/deck.mjs` 加上 QR（qrcode 套件）與 PDF（LibreOffice）。`--inspect`、`--dump`、`--validate`。
 - `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-world.mjs`：訪客地圖的陸地輪廓與國家落點（`public/data/world.json`），加第三個參數（1:50m）另外產放大用的細海岸線（`world-detail.json`）。畫地圖的是 `public/lib/worldmap.mjs`（後台「資料」分頁與中心首頁共用）。
@@ -626,7 +632,11 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
     **不給日期、人數、名單、email、來訪目的、背景研判**（`npm test` 擋）。**只列已經來過的**（`visitEndAt` 已過）：
     還沒來的不先公告，部長級的行程不該先出現在首頁上；主辦端標了「這一場不公開」的也不畫。單位改名之後還沒重查位置的，先放在國家的位置。
     國名對不到、也沒有位置的不畫（後台那張會列在圖下面，改好就歸位）；一個點都沒有時整段不出現。
-    站台的 CDN 擋十分鐘（`netlify-cdn-cache-control`），剛結束的那一場晚一點才出現。城市是 AI 用中文查的，英文頁只寫國家。
+    站台的 CDN 擋十分鐘（`netlify-cdn-cache-control`），**資料一改就清掉**（`netlify/lib/cdn.mts purgePublicVisits()`，Netlify 的 purge API，
+    cache tag `public-visits`）：匯入以前的名單、改公開頁上的說明、存或刪一場**已經來過的**、查到位置之後——匯入完重新整理就要看得到
+    （不然匯入完馬上去看，頁面上還是原本那兩三個單位：CDN 十分鐘、瀏覽器又多留五分鐘）。瀏覽器那一層因此不留（`max-age=0`）。
+    還沒來的那一場不在公開頁上，自動存檔再多次也不清；剛結束的那一場沒有人改資料，照舊等十分鐘自己過期才出現。
+    城市是 AI 用中文查的，英文頁只寫國家。
   - **來訪紀錄 `/visits`**（明確要求：「參訪者多，把這些參訪另外作一頁連過去詳細說明」）：`public/visits.html`，
     首頁「來訪單位」底下一行「每一場的詳細說明 →」連過去，點地圖上的點出來的卡片也有「看這個單位的參訪 →」（`/visits?org=`）。
     一年一段、新的在前，一場一張卡片：日期、單位（原表同一列拆出來的幾個單位在同一張）、國家與類型、**來訪人員、交流重點／成果**、
@@ -635,7 +645,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
     說明**只放主辦端願意公開的字**（`visit.public`：people_zh／people_en／note_zh／note_en／hidden）——
     匯入的舊紀錄帶原表的「來訪人員」「交流重點／成果」（中心自己簡報上的內容；英文是讀表時 AI 照譯的），
     系統裡排的一場預設是空的（只有日期、單位、國家、去了哪幾間），**來訪目的不會自己跑出來**。
-    後台「資料」分頁點一場，「公開頁上的說明」那一塊可以改、補英文、勾「這一場不公開」（地圖上也不畫）；打完自己存，十分鐘內更新（CDN）。
+    後台「資料」分頁點一場，「公開頁上的說明」那一塊可以改、補英文、勾「這一場不公開」（地圖上也不畫）；打完自己存，重新整理就看得到（存的時候清 CDN）。
     同一場（原表同一列拆出來的）交流重點與「不公開」一起改，來訪人員各自的。`public` **只有 `/api/visit-log` 在寫**（跟 `geo` 一樣）：
     「訪前」開著的那一份是改之前讀的，整筆存檔帶回來也不算。錨點是「日期＋當天第幾場」，**不是 visit_id**（那是來賓專頁的網址，不公開）。
     英文頁上只有中文說明的照放中文、標「in Chinese」（比整段不見好）。名單、email、背景研判、摘要、回覆一律不在這一頁（`npm test` 擋）。
