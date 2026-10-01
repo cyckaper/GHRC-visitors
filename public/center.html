@@ -37,17 +37,6 @@
   .name-2nd { color: #78716c; font-size: .9em; font-weight: 400; }
   .pill { display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: .12rem .6rem; border-radius: 9999px; color: #fff; background: var(--tone); }
   .step { width: 1.75rem; height: 1.75rem; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 600; color: #fff; background: var(--tone); flex: none; }
-  /* 閉環：量測 → 設計 → 驗證 → 處方。手機兩欄、平板以上一排四格，格與格之間一個箭頭 */
-  .loop { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
-  .loop li { position: relative; background: #fff; border: 1px solid #e7e5e4; border-top: 4px solid var(--tone); border-radius: .8rem; padding: .55rem .75rem .65rem; }
-  .loop .no { font-size: .7rem; font-weight: 600; letter-spacing: .06em; color: #a8a29e; }
-  .loop .name { display: block; font-weight: 600; color: var(--tone); }
-  @media (min-width: 640px) {
-    .loop { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.5rem; }
-    .loop li:not(:last-child)::after { content: "→"; position: absolute; right: -1.2rem; top: 50%; transform: translateY(-50%); color: #a8a29e; font-weight: 600; }
-  }
-  .chip { display: inline-block; font-size: .75rem; font-weight: 600; color: #fff; background: var(--tone); border-radius: 9999px; padding: .05rem .55rem; margin: .35rem .25rem 0 0; }
-  .chip:hover { filter: brightness(1.12); }
   /* 研究室卡片：整張就是連結，點下去是那一間的整頁介紹 */
   .lab-card { display: block; border-left: 6px solid var(--tone); transition: opacity .6s ease var(--d, 0ms), transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
   .lab-card:hover { transform: translateY(-2px); box-shadow: 0 14px 34px -20px rgba(28, 25, 23, .35); border-color: var(--tone); }
@@ -86,15 +75,6 @@
     <p class="mt-4 text-sm text-stone-600 flex flex-wrap gap-x-3 gap-y-1"><span id="where"></span><a class="u" id="mailTop" href="mailto:ntughrc@gmail.com">ntughrc@gmail.com</a></p>
   </header>
 
-  <!-- 主角：五間研究室。先一條閉環，再五張卡片，每一張連到那一間的整頁介紹 /lab/<房號> -->
-  <section class="reveal" id="labsSec">
-    <h2 id="labsTitle"></h2>
-    <ol class="loop mt-3" id="loop"></ol>
-    <p class="mt-2 text-sm text-stone-500"><span aria-hidden="true">↺</span> <span id="loopBack"></span></p>
-    <p class="text-sm text-stone-500" id="loopFloor"></p>
-    <div class="space-y-4 mt-5" id="labs"></div>
-  </section>
-
   <section class="reveal" id="missionsSec">
     <h2 id="missionsTitle"></h2>
     <div class="grid sm:grid-cols-3 gap-3 mt-3" id="missions"></div>
@@ -126,6 +106,13 @@
       <p class="mt-4 text-sm font-medium text-stone-500" id="divisionsTitle"></p>
       <ul class="divide-y divide-stone-100" id="divisions"></ul>
     </div>
+  </section>
+
+  <!-- 五間研究室：一間一張卡片，整張就是連結，點下去是那一間的整頁介紹 /lab/<房號>。
+       位置在「組織架構」與「參訪與聯絡」之間（明確指示）；以前在最上面、先放一條「閉環證據鏈」，那一段拿掉了 -->
+  <section class="reveal" id="labsSec">
+    <h2 id="labsTitle"></h2>
+    <div class="space-y-4 mt-3" id="labs"></div>
   </section>
 
   <section class="card reveal" id="contactSec">
@@ -222,18 +209,9 @@
   const labName = (l) => (primary === "zh" ? l.name_zh : l.name_en) || l.name_en || "";
   const labName2 = (l) => (primary === "zh" ? l.name_en : l.name_zh) || "";
   const stageOf = (l) => (primary === "zh" ? l.stage_zh : l.stage) || l.stage || "";
-  $("labsTitle").textContent = pick(center.loop, "title") || T("labs");
-  $("loopBack").textContent = pick(center.loop, "back");
-  $("loopFloor").textContent = pick(center.loop, "floor");
+  $("labsTitle").textContent = T("labs");
   const drawLabs = (labs) => {
     for (const l of labs) if (l.color) document.documentElement.style.setProperty(`--c${l.room}`, l.color);
-    // 階段的順序在 center.json，哪一間屬於哪一段看 labs.json 的 stage（303、305 都是驗證）
-    $("loop").innerHTML = ((center.loop && center.loop.stages) || []).map((stage, i) => {
-      const rooms = labs.filter((l) => l.stage === stage);
-      const tone = rooms.length ? `var(--c${rooms[0].room})` : "var(--accent)";
-      const name = (rooms.length && stageOf(rooms[0])) || stage;
-      return `<li style="--tone:${tone}" data-stage="${esc(stage)}"><span class="no">${String(i + 1).padStart(2, "0")}</span><span class="name">${esc(name)}</span>${rooms.map((l) => `<a class="chip" style="--tone:var(--c${esc(l.room)})" href="${esc(inLang(`/lab/${l.room}`))}">${esc(l.room)}</a>`).join("")}</li>`;
-    }).join("");
     $("labs").innerHTML = labs.map((l, i) => {
       const lead = l.lead || {};
       const photo = photoUrl(lead.photo || l.photo);

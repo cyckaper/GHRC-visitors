@@ -322,9 +322,21 @@ test("中心首頁的內容（center.json）：中英兩份都在、只有五間
   assert.doesNotMatch(text, /301\s*[-–—~～至]\s*304|four (research )?lab|四間|四個研究室/i, "中心只有這五間：301–305");
   assert.doesNotMatch(text, /HEALS/i, "HEALS Design 是 Lab 301 的方法論，不寫成中心的");
   assert.doesNotMatch(text, /NT\$|新臺幣|億元|萬元|預算|budget/i, "不放中心總預算數字");
-  // 閉環的每一段都有研究室，每一間也都落在某一段（303 與 305 都是驗證）——研究室改了 stage，首頁不能漏掉它
-  for (const lab of labs) assert.ok(center.loop.stages.includes(lab.stage), `${lab.room} 的 stage（${lab.stage}）要在首頁的閉環裡`);
-  for (const st of center.loop.stages) assert.ok(labs.some((l) => l.stage === st), `閉環的「${st}」那一段沒有研究室`);
+  // 「五間研究室構成一條閉環證據鏈」那一段拿掉了（明確指示：「構成一條閉環證據鏈這些不要」）
+  assert.doesNotMatch(text, /閉環|evidence loop/i, "首頁不放閉環證據鏈");
+  // 國際平台不列康乃爾大學（明確指示）；名單少了一所，標題與說明也就不寫「八校」，免得對不上
+  assert.doesNotMatch(text, /Cornell|康乃爾/i, "國際平台不列康乃爾大學");
+  assert.doesNotMatch(JSON.stringify(center.platform), /八校|eight/i, "平台的標題與說明不寫校數");
+  assert.equal(labs.length, 5);
+});
+
+test("中心首頁：五間研究室的卡片排在「組織架構」與「參訪與聯絡」之間，閉環那一段拿掉了", () => {
+  // 明確指示：「5 間研究室的介紹移到『組織架構』與『參訪與聯絡』之間」
+  const html = readFileSync("public/center.html", "utf8");
+  const at = (id) => html.indexOf(`<section class="reveal" id="${id}"`) + 1 || html.indexOf(`<section class="card reveal" id="${id}"`) + 1;
+  assert.ok(at("orgSec") && at("labsSec") && at("contactSec"), "三個區塊都在");
+  assert.ok(at("orgSec") < at("labsSec") && at("labsSec") < at("contactSec"), "研究室在組織架構之後、參訪與聯絡之前");
+  assert.doesNotMatch(html.replace(/<!--[\s\S]*?-->/g, ""), /id="loop"|閉環/, "閉環那一段（四格、回饋那一行、同一動線那一行）不在頁面上");
 });
 
 test("陳惠美老師對外稱「首任主任 Inaugural Director」，不寫 Co-PI", () => {
