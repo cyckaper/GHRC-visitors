@@ -526,6 +526,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 - `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → **通告研究室（各室在支援人力表上填的分鐘自動排進行程）** → 排行程 → 自動存 → QR／.ics → **確認信（草擬、寄出或 mailto）**，**最底下列出「以前做過的參訪」**）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、後續（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁、**動作五 感謝信**）、資料（歷次參訪、回覆、摘要、跨場次彙整、CSV、Drive）、**設定（母簡報、預設值、支援人力表、外部服務狀態、老師卡片）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
 - `public/index.html`：專屬網址 `/<visit_id>`；整頁一種語言（預設英文，`?ui=zh` 換中文；ko／ja 來賓才另外附他們的語言）；流程（參訪當天標出「現在」；研究室參訪底下一間一行、各自的時段）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
+- `public/center.html`：**中心首頁 `/`**——中心簡介、五間研究室（閉環＋卡片，各連到 `/lab/<房號>`）、三大任務、沿革、國際平台、外部肯定、組織架構、聯絡；字在 `public/data/center.json`（見「約定」的「中心首頁」）。
 - `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`／`geo-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`；`geo` 查訪客地圖上各單位在哪裡）`drive` `drive-sync-background`（自動備份）；**三支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
   `rota`（支援人力表，各研究室自己填）；
   `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，後續提醒）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
@@ -572,6 +573,19 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - **每一間一頁介紹**（明確要求）：`/lab/301`…`/lab/305`（`public/lab.html`，`netlify.toml` 把 `/lab/*` 導過去），
   跟來賓專頁同一套語言切換（預設英文、`?ui=zh` 換中文，正文只有一種語言）與同一組顏色。來賓專頁的老師卡片最底下有一行連過去；
   頁面最後列出其他四間，看完一間可以直接跳下一間。**沒有內容的區塊整塊不顯示**——空標題比沒有更糟。
+  左上角「← 綠色健康研究中心」回中心首頁。
+- **中心首頁 `/`**（明確要求：「把老師們介紹的那些網頁，乾脆做成一個介紹綠色健康研究中心的首頁，在首頁裡面再去連結接到老師們的介紹」）：
+  `public/center.html`。`netlify.toml` 一條 **force** 的 `/ → /center.html`（根目錄本來就有 index.html，不 force 的話 Netlify 直接給它），
+  `/<visit_id>` 仍然落到來賓專頁；`/index.html` 與打錯的網址還是那個沒有參訪代碼的來賓頁。
+  - 由上而下：中心簡介 → **五間研究室**（閉環：量測 301 → 設計 302 → 驗證 303·305 → 處方 304，底下五張卡片整張就是連結，
+    點下去是那一間的介紹頁）→ 設置辦法三大任務 → 沿革 → 國際平台（八校、已簽署與已成形的合作）→ 外部肯定 → 組織架構 → 參訪與聯絡。
+  - 字在 `public/data/center.json`（中英兩份，出自母簡報與設置辦法；簡介那一段是照簡報整理的）。**研究室的名稱、負責人、照片、
+    一句話不在這裡**——一律從 `/api/labs` 來（後台「設定」改的那一份），首頁與介紹頁永遠一致；閉環怎麼分段看 `labs.json` 的 `stage`。
+    `npm test` 擋：少一種語言、「四間／301–304」、HEALS（那是 Lab 301 的方法論）、預算數字、有研究室落不進閉環。
+  - 語言跟介紹頁同一套（預設英文、`?ui=zh`，記在這台裝置的 `ghrc-ui-lang`），連過去時帶著 `?ui=zh`；
+    來賓專頁最底下也有一行「認識中心」連過來。
+  - **刻意不放**：簡報裡對特定來賓講的東西——還沒定案的計畫（2027 聯合中心、收費標準）、得獎方案的累計數字
+    （含中心成立前的成果）、參訪規則與名額。那些是那一場的簡報內容，不是中心的門面。
 - **兩邊都可以切中英文**（明確要求）。做法不一樣，因為兩邊的性質不同：
   - **後台**：中文寫在頁面上，英文是**疊上去的一層**——`public/data/i18n-admin.json` 的**鍵就是畫面上那一句中文**，
     所以 render 出什麼就照那一句查，各處不必改寫成 `t("some.key")`；查不到就維持中文（不會變空白或 key）。
@@ -690,10 +704,10 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
   要比 `Four Laboratories` 早）。這是治標，真正的修正是把母簡報改好。
 - 產檔在瀏覽器：`admin.html` 先問 `/api/master`（後台上傳的母簡報，4 MB 分塊存在媒體庫 `master/<upload_id>/part-i` ＋ `master/manifest.json`），再 HEAD `/assets/master/slim-master.pptx`（站台對不存在的路徑會回 index.html，所以看 content-type 不看狀態碼）；兩者都沒有時，「產生簡報」在同一個點擊裡同步開檔案選擇視窗，選完立刻產，並提供「把這份母簡報存到站台」。選檔或上傳時若檔案含影片或超過 60 MB，先在瀏覽器裡瘦身（`public/lib/pptx.mjs slimDeck`：抽影片留海報＋「▶ Video」、超過 3 MB 的圖用 canvas 縮到 2000px、清孤兒；規則同 `scripts/slim-master.py`），所以可以直接選 396 MB 的原始母簡報。JSZip 由 cdnjs 載入、QR 用頁面已有的 qrcodejs 畫 canvas（沒有就只放網址文字）。存檔後區塊不放操作說明，只有一行進度與必要時的警告。
 - **來賓端雙語**：整頁一種語言（見上面「兩邊都可以切中英文」），只有 `visit.language` 是 ko／ja 時才附第二語言。流程區塊的標題空白時用 `i18n.json` 的 `kind_*` 補（兩種語言各補各的）。
-- **來賓端依階段換措辭**：訪前（日期在未來，或沒有參訪代碼的首頁）用「將參訪」、不放感謝表單；
+- **來賓端依階段換措辭**：訪前（日期在未來，或沒有參訪代碼——`/index.html`、打錯的網址；`/` 已經是中心首頁）用「將參訪」、不放感謝表單；
   **留信箱訪前就在**（原本只有當天才顯示——但專頁的網址是寫在訪前的確認信裡寄出去的，
   對方點進來根本沒有地方可以留，明確回報過）：措辭跟著換（`leave_email_title_before`／`leave_email_body_before`，
-  「參訪之後寄給您」而不是「今天的簡報」）。**沒有參訪代碼的首頁仍然不放**（沒有一場可以掛）。
+  「參訪之後寄給您」而不是「今天的簡報」）。**沒有參訪代碼的頁面仍然不放**（沒有一場可以掛）。
   訪後也不放（那時候該填的是三個回應項目），要用還是可以帶 `#email` 進來。當天另有備援按鍵；訪後（日期已過或從感謝信的 `#respond` 進來）用過去式、標題改「感謝蒞臨」。`?phase=before|today|after` 可強制預覽。兩個互動層各有自己的連結，帶連結進來一定看得到（也支援中途換 hash）：`/<visit_id>#email`（留信箱）、`/<visit_id>#respond`（三個回應項目）。**這兩個連結在行程走完後才產出**，列在後台「後續」分頁，不在訪前——
   那裡一張卡片把**三個連結並列**（專頁網址／`#email`／`#respond`），各寫一句什麼時候用，因為它們是同一個頁面的三種用法。
 - **時間填的是「幾點開始、幾點結束」**（明確指示：人數與總分鐘都不是主辦端在意的東西）。

@@ -3,7 +3,7 @@
  * 本機開發伺服器（不需 Netlify CLI）。
  *  - 靜態檔：public/
  *  - /api/<name> 與 /.netlify/functions/<name> → netlify/functions/<name>.mts（Node 22 原生執行 TypeScript）
- *  - /lab/<房號> → lab.html、/rota → rota.html、/<visit_id> → index.html（模擬 netlify.toml 的 redirect 與 fallback）
+ *  - / → center.html（中心首頁）、/lab/<房號> → lab.html、/rota → rota.html、/<visit_id> → index.html（模擬 netlify.toml 的 redirect 與 fallback）
  *  - 提供 Netlify 全域物件的最小替身（Netlify.env）
  * 環境：STORE_BACKEND 預設 file；ADMIN_TOKEN 未設時用 "dev"；AI_MOCK 未設時提示。
  */
@@ -94,7 +94,8 @@ export function createServer() {
         return await sendResponse(res, await fn(toRequest(req, body), {}));
       }
       let p = decodeURIComponent(url.pathname);
-      if (p === "/") p = "/index.html";
+      // 中心首頁（同 netlify.toml 那一條 force 的 "/" → center.html）；/index.html 仍是來賓專頁
+      if (p === "/") p = "/center.html";
       const file = path.normalize(path.join(publicDir, p));
       if (!file.startsWith(publicDir)) {
         res.writeHead(403);

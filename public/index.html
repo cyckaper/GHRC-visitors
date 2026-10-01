@@ -17,14 +17,15 @@
   .hero::before, .hero::after { content: ""; position: absolute; border-radius: 50%; filter: blur(42px); opacity: .75; pointer-events: none; animation: drift 16s ease-in-out infinite alternate; }
   .hero::before { width: 340px; height: 340px; background: #5eead4; top: -140px; right: -90px; }
   .hero::after { width: 280px; height: 280px; background: #fcd34d; bottom: -150px; left: -70px; animation-delay: -8s; }
-  .hero > * { position: relative; }
+  /* 內容要壓在光暈上面：::after 在內容之後畫，不給 z-index 的話黃色那一團會蓋住左下角的字 */
+  .hero > * { position: relative; z-index: 1; }
   @keyframes drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(-36px, 26px) scale(1.18); } }
   .lang-btn { position: absolute; top: 1rem; right: 1rem; z-index: 1; font-size: .8rem; font-weight: 600; padding: .25rem .3rem; border-radius: 9999px; background: rgba(255, 255, 255, .8); color: #6b7280; border: 1px solid #6ee7b7; transition: background .2s; display: inline-flex; gap: .15rem; }
   .lang-btn:hover { background: #fff; }
   .lang-btn span { padding: .05rem .6rem; border-radius: 9999px; }
   .lang-btn .on { background: #065f46; color: #fff; }
   .eyebrow { display: inline-flex; align-items: center; gap: .5rem; max-width: calc(100% - 6rem); font-size: .8rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #065f46; }
-  .eyebrow::before { content: ""; width: 1.6rem; height: 2px; background: currentColor; border-radius: 2px; }
+  .eyebrow::before { content: ""; width: 1.6rem; height: 2px; background: currentColor; border-radius: 2px; flex: none; }
   .grad-text { background: linear-gradient(90deg, #065f46, #0f766e 60%, #4d7c0f); -webkit-background-clip: text; background-clip: text; color: transparent; }
   /* 進場：往上浮現，依序錯開 */
   .reveal { opacity: 0; transform: translateY(16px); transition: opacity .6s ease, transform .6s cubic-bezier(.2, .7, .2, 1); transition-delay: var(--d, 0ms); }
@@ -168,6 +169,7 @@
   <footer class="text-xs text-stone-400 pt-4 space-y-1 reveal">
     <p id="footerLine">Green Health Research Center · Landscape Building 3F, Department of Horticulture and Landscape Architecture, National Taiwan University</p>
     <p><span id="footerContact"></span> <a class="underline decoration-stone-300 hover:decoration-stone-900 hover:text-stone-700" href="mailto:ntughrc@gmail.com">ntughrc@gmail.com</a></p>
+    <p><a class="underline decoration-stone-300 hover:decoration-stone-900 hover:text-stone-700" id="aboutCenter" href="/"></a></p>
   </footer>
 </main>
 
@@ -280,6 +282,9 @@
     $("dateLine").textContent = formatDate(visit.date, visit.start_time, visit.end_time);
   }
   $("footerContact").textContent = bi("center_contact") + ":";
+  // 中心首頁（/）：介紹中心與五間研究室。語言跟著帶過去（首頁與這一頁各記各的）
+  $("aboutCenter").href = primary === "zh" ? "/?ui=zh" : "/";
+  $("aboutCenter").textContent = bi("about_center") + " →";
 
   // 今日流程（時間軸；參訪當天會標出「現在」進行到哪一段）
   if (visit && visit.programme && visit.programme.length) {

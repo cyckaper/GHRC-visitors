@@ -16,6 +16,15 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
+# 中心首頁 visit.healsdesign.org/ → center.html（介紹中心，五間研究室各連到 /lab/<房號>）。
+# 要 force：根目錄本來就有 index.html（來賓專頁），不 force 的話 Netlify 會直接給 index.html。
+# 只比對 "/" 這一個路徑，/<visit_id> 仍然落到最下面那一條。
+[[redirects]]
+  from = "/"
+  to = "/center.html"
+  status = 200
+  force = true
+
 # 五間研究室的老師介紹頁 /lab/301 … /lab/305 → lab.html（頁面自己從網址讀房號）
 [[redirects]]
   from = "/lab/*"

@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Green Health Research Center · NTU</title>
+<meta name="description" content="Green Health Research Center (GHRC), College of Bioresources and Agriculture, National Taiwan University: making the health benefits of nature measurable, designable, and prescribable. 臺大生農學院 綠色健康研究中心。">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Green Health Research Center 綠色健康研究中心">
+<meta property="og:description" content="Making the health benefits of nature measurable, designable, and prescribable · 讓自然的健康效益 可量測 · 可設計 · 可處方">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  /* 跟來賓專頁、老師介紹頁同一套：五間各一色（值由 /api/labs 的 color 填進來，下面五個只是還沒載到時的備用） */
+  :root { --ink: #1c1917; --accent: #0f766e; --tone: #0f766e;
+          --c301: #047857; --c302: #0369a1; --c303: #6d28d9; --c304: #b45309; --c305: #a21caf; }
+  body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 5px; z-index: 60; background: linear-gradient(90deg, var(--c301), var(--c302) 25%, var(--c303) 50%, var(--c304) 75%, var(--c305)); }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Apple SD Gothic Neo", "Hiragino Sans", sans-serif; background: #fafaf9; color: var(--ink); }
+  /* 標題區：跟來賓專頁同一個綠—青漸層與兩個慢慢漂移的光暈（中心的門面） */
+  .hero { position: relative; overflow: hidden; border-radius: 1.5rem; padding: 2.25rem 1.5rem 1.75rem; background: linear-gradient(135deg, #d1fae5 0%, #cffafe 48%, #fef3c7 100%); border: 1px solid #6ee7b7; }
+  .hero::before, .hero::after { content: ""; position: absolute; border-radius: 50%; filter: blur(42px); opacity: .75; pointer-events: none; animation: drift 16s ease-in-out infinite alternate; }
+  .hero::before { width: 340px; height: 340px; background: #5eead4; top: -140px; right: -90px; }
+  .hero::after { width: 280px; height: 280px; background: #fcd34d; bottom: -150px; left: -70px; animation-delay: -8s; }
+  /* 內容要壓在光暈上面：::after 在內容之後畫，不給 z-index 的話黃色那一團會蓋住左下角的字 */
+  .hero > * { position: relative; z-index: 1; }
+  @keyframes drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(-36px, 26px) scale(1.18); } }
+  .lang-btn { position: absolute; top: 1rem; right: 1rem; z-index: 1; font-size: .8rem; font-weight: 600; padding: .25rem .3rem; border-radius: 9999px; background: rgba(255, 255, 255, .8); color: #6b7280; border: 1px solid #6ee7b7; display: inline-flex; gap: .15rem; }
+  .lang-btn:hover { background: #fff; }
+  .lang-btn span { padding: .05rem .6rem; border-radius: 9999px; }
+  .lang-btn .on { background: #065f46; color: #fff; }
+  .eyebrow { display: inline-flex; align-items: center; gap: .5rem; max-width: calc(100% - 7rem); font-size: .8rem; font-weight: 600; letter-spacing: .03em; color: #065f46; }
+  .eyebrow::before { content: ""; width: 1.6rem; height: 2px; background: currentColor; border-radius: 2px; flex: none; }
+  .grad-text { background: linear-gradient(90deg, #065f46, #0f766e 60%, #4d7c0f); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .reveal { opacity: 0; transform: translateY(16px); transition: opacity .6s ease, transform .6s cubic-bezier(.2, .7, .2, 1); transition-delay: var(--d, 0ms); }
+  .reveal.in { opacity: 1; transform: none; }
+  .card { background: #fff; border: 1px solid #e7e5e4; border-radius: 1rem; padding: 1.25rem; }
+  section > h2 { border-left: 4px solid var(--tone); padding-left: .6rem; font-size: 1.125rem; font-weight: 600; }
+  .name-2nd { color: #78716c; font-size: .9em; font-weight: 400; }
+  .pill { display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: .12rem .6rem; border-radius: 9999px; color: #fff; background: var(--tone); }
+  .step { width: 1.75rem; height: 1.75rem; border-radius: 9999px; display: inline-flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 600; color: #fff; background: var(--tone); flex: none; }
+  /* 閉環：量測 → 設計 → 驗證 → 處方。手機兩欄、平板以上一排四格，格與格之間一個箭頭 */
+  .loop { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+  .loop li { position: relative; background: #fff; border: 1px solid #e7e5e4; border-top: 4px solid var(--tone); border-radius: .8rem; padding: .55rem .75rem .65rem; }
+  .loop .no { font-size: .7rem; font-weight: 600; letter-spacing: .06em; color: #a8a29e; }
+  .loop .name { display: block; font-weight: 600; color: var(--tone); }
+  @media (min-width: 640px) {
+    .loop { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.5rem; }
+    .loop li:not(:last-child)::after { content: "→"; position: absolute; right: -1.2rem; top: 50%; transform: translateY(-50%); color: #a8a29e; font-weight: 600; }
+  }
+  .chip { display: inline-block; font-size: .75rem; font-weight: 600; color: #fff; background: var(--tone); border-radius: 9999px; padding: .05rem .55rem; margin: .35rem .25rem 0 0; }
+  .chip:hover { filter: brightness(1.12); }
+  /* 研究室卡片：整張就是連結，點下去是那一間的整頁介紹 */
+  .lab-card { display: block; border-left: 6px solid var(--tone); transition: opacity .6s ease var(--d, 0ms), transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+  .lab-card:hover { transform: translateY(-2px); box-shadow: 0 14px 34px -20px rgba(28, 25, 23, .35); border-color: var(--tone); }
+  .lab-card .more { color: var(--tone); }
+  .avatar { width: 72px; height: 72px; border-radius: 9999px; object-fit: cover; background: #e7e5e4; color: #44403c; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 1.1rem; flex: none; box-shadow: inset 0 0 0 3px #fff, 0 0 0 3px var(--tone); }
+  @supports (color: color-mix(in srgb, #000 10%, #fff)) {
+    .lab-card { background: color-mix(in srgb, var(--tone) 5%, #fff); }
+    .avatar { background: color-mix(in srgb, var(--tone) 14%, #fff); color: var(--tone); }
+  }
+  .timeline li { position: relative; padding-left: 1.6rem; }
+  .timeline li::before { content: ""; position: absolute; left: .42rem; top: 1.4rem; bottom: -.45rem; width: 2px; background: #e7e5e4; }
+  .timeline li:last-child::before { display: none; }
+  .timeline .dot { position: absolute; left: .1rem; top: .95rem; width: .8rem; height: .8rem; border-radius: 50%; background: var(--tone); border: 2px solid #fff; box-shadow: 0 0 0 1px var(--tone); }
+  .member { background: #fff; border: 1px solid #e7e5e4; border-radius: .7rem; padding: .55rem .7rem; }
+  a.u { text-decoration: underline; text-decoration-color: #d6d3d1; }
+  a.u:hover { text-decoration-color: var(--ink); }
+  .btn { display: inline-flex; align-items: center; gap: .45rem; padding: .6rem 1.05rem; border-radius: .8rem; background: var(--accent); color: #fff; font-weight: 500; }
+  .btn:hover { background: #115e59; }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .hero::before, .hero::after { animation: none; }
+    .lab-card:hover { transform: none; }
+  }
+</style>
+</head>
+<body>
+<main class="max-w-3xl mx-auto px-4 py-8 space-y-10" id="app">
+  <header class="hero reveal">
+    <button type="button" id="langToggle" class="lang-btn" title="English / 中文"></button>
+    <p class="eyebrow" id="parent">College of Bioresources and Agriculture, National Taiwan University</p>
+    <h1 class="mt-3 text-3xl sm:text-4xl font-semibold leading-tight grad-text" id="name">Green Health Research Center</h1>
+    <p class="name-2nd mt-1" id="name2"></p>
+    <p class="mt-4 text-lg sm:text-xl font-medium text-stone-800" id="tagline"></p>
+    <p class="mt-3 text-stone-700" id="about"></p>
+    <p class="mt-4 text-sm text-stone-600 flex flex-wrap gap-x-3 gap-y-1"><span id="where"></span><a class="u" id="mailTop" href="mailto:ntughrc@gmail.com">ntughrc@gmail.com</a></p>
+  </header>
+
+  <!-- 主角：五間研究室。先一條閉環，再五張卡片，每一張連到那一間的整頁介紹 /lab/<房號> -->
+  <section class="reveal" id="labsSec">
+    <h2 id="labsTitle"></h2>
+    <ol class="loop mt-3" id="loop"></ol>
+    <p class="mt-2 text-sm text-stone-500"><span aria-hidden="true">↺</span> <span id="loopBack"></span></p>
+    <p class="text-sm text-stone-500" id="loopFloor"></p>
+    <div class="space-y-4 mt-5" id="labs"></div>
+  </section>
+
+  <section class="reveal" id="missionsSec">
+    <h2 id="missionsTitle"></h2>
+    <div class="grid sm:grid-cols-3 gap-3 mt-3" id="missions"></div>
+  </section>
+
+  <section class="reveal" id="milestonesSec">
+    <h2 id="milestonesTitle"></h2>
+    <ol class="card timeline mt-3 !py-2" id="milestones"></ol>
+  </section>
+
+  <section class="reveal" id="intlSec">
+    <h2 id="intlTitle"></h2>
+    <p class="mt-3 font-medium" id="platformTitle"></p>
+    <ul class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2" id="members"></ul>
+    <p class="mt-2 text-sm text-stone-500" id="platformNote"></p>
+    <p class="mt-5 font-medium" id="partnersTitle"></p>
+    <ol class="card timeline mt-2 !py-2" id="partners"></ol>
+  </section>
+
+  <section class="reveal" id="recognitionSec">
+    <h2 id="recognitionTitle"></h2>
+    <div class="space-y-3 mt-3" id="recognition"></div>
+  </section>
+
+  <section class="reveal" id="orgSec">
+    <h2 id="orgTitle"></h2>
+    <div class="card mt-3">
+      <ul class="divide-y divide-stone-100" id="people"></ul>
+      <p class="mt-4 text-sm font-medium text-stone-500" id="divisionsTitle"></p>
+      <ul class="divide-y divide-stone-100" id="divisions"></ul>
+    </div>
+  </section>
+
+  <section class="card reveal" id="contactSec">
+    <h2 id="contactTitle"></h2>
+    <p class="mt-2 text-stone-600" id="contactBody"></p>
+    <p class="mt-3"><a class="btn" id="mailBtn" href="mailto:ntughrc@gmail.com"><span aria-hidden="true">✉</span> ntughrc@gmail.com</a></p>
+    <p class="mt-3 text-sm text-stone-500" id="contactWhere"></p>
+  </section>
+
+  <footer class="text-xs text-stone-400 pt-4 border-t border-stone-200">
+    <p id="footerLine"></p>
+  </footer>
+</main>
+
+<script>
+(async () => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const qs = new URLSearchParams(location.search);
+
+  /**
+   * 中心首頁（visit.healsdesign.org/）：介紹中心，五間研究室各連到自己的介紹頁 /lab/<房號>。
+   * 內容在 /data/center.json；研究室的名稱、負責人、照片、一句話一律從 /api/labs 來（後台「設定」改的那一份），
+   * 所以首頁與介紹頁永遠一致，這裡不重抄。
+   *
+   * 語言跟老師介紹頁同一套：英文為預設，右上角那顆鍵切中文（記在這台裝置，也可以用 ?ui=zh 帶）；
+   * 整頁一種語言，只有名稱（研究室名、人名）兩種寫法都印——那是識別，不是翻譯。
+   */
+  const UI_KEY = "ghrc-ui-lang";
+  const stored = () => { try { return localStorage.getItem(UI_KEY) || ""; } catch (e) { return ""; } };
+  const asked = qs.get("ui");
+  const primary = (asked === "zh" || asked === "en" ? asked : stored()) === "zh" ? "zh" : "en";
+  const other = primary === "zh" ? "en" : "zh";
+  document.documentElement.lang = primary === "zh" ? "zh-Hant" : "en";
+  const L = {
+    en: { title: "Green Health Research Center · NTU", labs: "The five laboratories", lead: "Lead", more: "About the laboratory →", missions: "Three missions in the center's charter", milestones: "Milestones", intl: "International platform", partners: "Signed and established partnerships", recognition: "Recognition", org: "Organisation", divisions: "Divisions", contact: "Visits and enquiries", contactBody: "To arrange a visit or ask a question, please write to us.", failed: "Could not load this page. Please try again later." },
+    zh: { title: "綠色健康研究中心 · 臺大生農學院", labs: "五間研究室", lead: "負責人", more: "研究室介紹 →", missions: "中心三大任務", milestones: "中心沿革", intl: "國際平台", partners: "已簽署與已成形的合作", recognition: "外部肯定", org: "組織架構", divisions: "分組", contact: "參訪與聯絡", contactBody: "安排參訪或任何問題，請來信。", failed: "讀不到中心資料，請稍後再試。" },
+  };
+  const T = (k) => L[primary][k];
+  const pick = (o, base) => (o && (o[`${base}_${primary}`] || o[`${base}_en`])) || "";
+  // 換頁時把語言帶過去（介紹頁也讀同一個 UI_KEY，但這台裝置存不了的時候只能靠網址）
+  const inLang = (href) => (primary === "zh" ? `${href}?ui=zh` : href);
+
+  // 兩個都列出來、亮著的那一個是現在的語言（只寫「中文」看不出按下去會變成什麼）
+  $("langToggle").innerHTML = `<span class="${primary === "en" ? "on" : ""}">EN</span><span class="${primary === "zh" ? "on" : ""}">中文</span>`;
+  $("langToggle").onclick = () => {
+    try { localStorage.setItem(UI_KEY, other); } catch (e) {}
+    const u = new URL(location.href);
+    u.searchParams.set("ui", other);
+    location.href = u.toString();
+  };
+
+  // /api/labs＝repo 裡的 labs.json ＋ 後台改過的部分；抓不到就退回靜態那一份（首頁不能因此開天窗）
+  const getLabs = async () => {
+    try {
+      const j = await (await fetch("/api/labs")).json();
+      if (j && j.labs && j.labs.length) return j.labs;
+    } catch (e) {}
+    return (await (await fetch("/data/labs.json")).json()).labs || [];
+  };
+  // 兩個一起抓，但中心的部分（靜態檔）先畫：/api/labs 是函式，冷啟動要一兩秒，整頁不必跟著等
+  const labsReady = getLabs().catch(() => []);
+  let center;
+  try {
+    center = await (await fetch("/data/center.json")).json();
+  } catch (e) {
+    $("app").innerHTML = `<p class="card">${esc(T("failed"))}</p>`;
+    return;
+  }
+
+  document.title = T("title");
+  $("parent").textContent = pick(center, "parent");
+  $("name").textContent = pick(center, "name");
+  $("name2").textContent = [primary === "zh" ? center.name_en : center.name_zh, center.abbr].filter(Boolean).join(" · ");
+  // 「可量測 · 可設計 · 可處方」每一段不要在中間斷行（手機上會變成「可／處方」）；英文那一句照常換行
+  const tagline = pick(center, "tagline");
+  const parts = tagline.split(" · ");
+  $("tagline").innerHTML = parts.length > 1 ? parts.map((x) => `<span class="whitespace-nowrap">${esc(x)}</span>`).join(" · ") : esc(tagline);
+  $("about").textContent = pick(center, "about");
+  $("where").textContent = pick(center, "where");
+
+  // 進場動畫：捲到哪、哪裡浮現（不支援 IntersectionObserver 就全部直接顯示）。研究室晚一點才補上，所以要能再叫一次
+  const io = "IntersectionObserver" in window ? new IntersectionObserver((entries) => { for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }, { rootMargin: "0px 0px -8% 0px", threshold: 0.05 }) : null;
+  const revealNew = () => {
+    const els = document.querySelectorAll(".reveal:not(.in)");
+    if (!io) return els.forEach((el) => el.classList.add("in"));
+    els.forEach((el) => io.observe(el));
+    // 已經在視窗裡的在下一幀就進場，避免首屏空白
+    requestAnimationFrame(() => els.forEach((el) => { const r = el.getBoundingClientRect(); if (r.top < innerHeight && r.bottom > 0) el.classList.add("in"); }));
+  };
+
+  // ── 五間研究室 ──
+  const photoUrl = (p) => (!p ? "" : /^https?:/i.test(p) ? p : p.startsWith("assets/") ? `/${p}` : `/api/media?key=${encodeURIComponent(p)}`);
+  const labName = (l) => (primary === "zh" ? l.name_zh : l.name_en) || l.name_en || "";
+  const labName2 = (l) => (primary === "zh" ? l.name_en : l.name_zh) || "";
+  const stageOf = (l) => (primary === "zh" ? l.stage_zh : l.stage) || l.stage || "";
+  $("labsTitle").textContent = pick(center.loop, "title") || T("labs");
+  $("loopBack").textContent = pick(center.loop, "back");
+  $("loopFloor").textContent = pick(center.loop, "floor");
+  const drawLabs = (labs) => {
+    for (const l of labs) if (l.color) document.documentElement.style.setProperty(`--c${l.room}`, l.color);
+    // 階段的順序在 center.json，哪一間屬於哪一段看 labs.json 的 stage（303、305 都是驗證）
+    $("loop").innerHTML = ((center.loop && center.loop.stages) || []).map((stage, i) => {
+      const rooms = labs.filter((l) => l.stage === stage);
+      const tone = rooms.length ? `var(--c${rooms[0].room})` : "var(--accent)";
+      const name = (rooms.length && stageOf(rooms[0])) || stage;
+      return `<li style="--tone:${tone}" data-stage="${esc(stage)}"><span class="no">${String(i + 1).padStart(2, "0")}</span><span class="name">${esc(name)}</span>${rooms.map((l) => `<a class="chip" style="--tone:var(--c${esc(l.room)})" href="${esc(inLang(`/lab/${l.room}`))}">${esc(l.room)}</a>`).join("")}</li>`;
+    }).join("");
+    $("labs").innerHTML = labs.map((l, i) => {
+      const lead = l.lead || {};
+      const photo = photoUrl(lead.photo || l.photo);
+      const initials = (lead.name_en || lead.name_zh || String(l.room)).split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
+      const oneLine = l[`one_line_${primary}`] || l.one_line_en || "";
+      return `
+        <a class="card lab-card reveal" id="lab-${esc(l.room)}" href="${esc(inLang(`/lab/${l.room}`))}" style="--d:${i * 60}ms; --tone:var(--c${esc(l.room)})">
+          <div class="flex gap-4">
+            ${photo ? `<img class="avatar" src="${esc(photo)}" alt="" loading="lazy">` : `<div class="avatar">${esc(initials)}</div>`}
+            <div class="min-w-0 flex-1">
+              <p class="text-xs"><span class="pill">Lab ${esc(l.room)} · ${esc(stageOf(l))}</span></p>
+              <h3 class="font-semibold text-lg leading-snug mt-1">${esc(labName(l))}${labName2(l) ? ` <span class="name-2nd">${esc(labName2(l))}</span>` : ""}</h3>
+              <p class="mt-0.5"><span class="text-sm text-stone-500">${esc(T("lead"))}</span> <span class="font-medium">${esc([lead.name_zh, lead.name_en].filter(Boolean).join(" "))}</span></p>
+            </div>
+          </div>
+          ${oneLine ? `<p class="mt-3 text-stone-700">${esc(oneLine)}</p>` : ""}
+          <p class="mt-3 text-sm font-medium more">${esc(T("more"))}</p>
+        </a>`;
+    }).join("");
+  };
+
+  // ── 三大任務（設置辦法） ──
+  $("missionsTitle").textContent = T("missions");
+  $("missions").innerHTML = (center.missions || []).map((m, i) => `
+    <article class="card reveal" style="--d:${i * 60}ms"><span class="step">${i + 1}</span>
+      <h3 class="font-semibold leading-snug mt-2">${esc(pick(m, "title"))}</h3>
+      <p class="mt-1 text-sm text-stone-600">${esc(pick(m, "body"))}</p>
+    </article>`).join("");
+
+  // ── 沿革 ──
+  const dated = (rows) => (rows || []).map((r) => `<li class="flex gap-4 py-2.5"><span class="dot" aria-hidden="true"></span><span class="w-24 flex-none tabular-nums text-stone-500">${esc(r.date)}</span><span class="min-w-0">${esc(r[primary] || r.en)}</span></li>`).join("");
+  $("milestonesTitle").textContent = T("milestones");
+  $("milestones").innerHTML = dated(center.milestones);
+
+  // ── 國際平台 ──
+  const platform = center.platform || {};
+  $("intlTitle").textContent = T("intl");
+  $("platformTitle").textContent = pick(platform, "title");
+  $("members").innerHTML = (platform.members || []).map((u) => `<li class="member"><span class="block text-sm font-medium leading-snug">${esc(u[primary] || u.en)}</span><span class="block text-xs text-stone-500 mt-0.5">${esc(u[`where_${primary}`] || u.where_en || "")}</span></li>`).join("");
+  $("platformNote").textContent = pick(platform, "note");
+  $("partnersTitle").textContent = T("partners");
+  $("partners").innerHTML = dated(center.partnerships);
+  $("intlSec").hidden = !(platform.members || []).length && !(center.partnerships || []).length;
+
+  // ── 外部肯定 ──
+  $("recognitionTitle").textContent = T("recognition");
+  $("recognition").innerHTML = (center.recognition || []).map((r) => `
+    <article class="card">
+      <p class="text-xs text-stone-500 tabular-nums">${esc(r.date || "")}</p>
+      <h3 class="font-semibold leading-snug mt-1">${esc(pick(r, "title"))}</h3>
+      <p class="mt-1 font-medium text-stone-700">${esc(pick(r, "project"))}</p>
+      <p class="mt-2 text-sm text-stone-600">${esc(pick(r, "note"))}</p>
+    </article>`).join("");
+  $("recognitionSec").hidden = !(center.recognition || []).length;
+
+  // ── 組織架構：人名兩種寫法都印 ──
+  const org = center.organisation || {};
+  const person = (p) => `<li class="py-2.5 sm:grid sm:grid-cols-[13rem_1fr] sm:gap-3"><span class="block text-sm text-stone-500">${esc(pick(p, "role"))}</span><span class="block"><span class="font-medium">${esc([p.name_zh, p.name_en].filter(Boolean).join(" "))}</span><span class="block text-sm text-stone-500">${esc(pick(p, "dept"))}</span></span></li>`;
+  $("orgTitle").textContent = T("org");
+  $("people").innerHTML = (org.people || []).map(person).join("");
+  $("divisionsTitle").textContent = T("divisions");
+  $("divisions").innerHTML = (org.divisions || []).map(person).join("");
+  $("divisionsTitle").hidden = !(org.divisions || []).length;
+  $("orgSec").hidden = !(org.people || []).length && !(org.divisions || []).length;
+
+  // ── 參訪與聯絡 ──
+  const mail = center.email || "ntughrc@gmail.com";
+  for (const id of ["mailTop", "mailBtn"]) $(id).href = `mailto:${mail}`;
+  $("mailTop").textContent = mail;
+  $("mailBtn").innerHTML = `<span aria-hidden="true">✉</span> ${esc(mail)}`;
+  $("contactTitle").textContent = T("contact");
+  $("contactBody").textContent = T("contactBody");
+  $("contactWhere").textContent = pick(center, "where");
+  $("footerLine").textContent = `${pick(center, "name")} · ${pick(center, "parent")}`;
+
+  revealNew();
+  const labs = (await labsReady).slice().sort((a, b) => Number(a.room) - Number(b.room));
+  drawLabs(labs);
+  revealNew();
+})();
+</script>
+</body>
+</html>

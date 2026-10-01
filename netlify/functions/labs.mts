@@ -3,7 +3,7 @@ import { loadPublicData } from "../lib/data.mts";
 import { getStore } from "../lib/store.mts";
 
 /**
- * 五間研究室的老師卡片內容（來賓專頁的卡片、`/lab/<房號>` 介紹頁、後台「設定」分頁都吃這一支）。
+ * 五間研究室的老師卡片內容（來賓專頁的卡片、`/lab/<房號>` 介紹頁、中心首頁 `/`、後台「設定」分頁都吃這一支）。
  *
  * GET  /api/labs                       （公開）合併後的五間：`public/data/labs.json` ＋ 後台改過的部分
  * POST /api/labs {room, fields}        （admin）改一間；只存**改過的欄位**，沒改的仍然跟著 repo 裡那一份走

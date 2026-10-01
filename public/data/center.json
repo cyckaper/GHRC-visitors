@@ -1,0 +1,97 @@
+{
+ "_comment": "中心首頁（visit.healsdesign.org/ → public/center.html）的內容。字句出自母簡報（2026-09-30 產出的那一份，中英對照）與設置辦法；about 那一段是照簡報整理的，請中心確認。規矩：中心只有五間（301–305），不放中心總預算數字，HEALS Design 是 Lab 301 的方法論、不寫成中心的。研究室的名稱、負責人、照片、一句話**不在這裡**——一律從 /api/labs 來（後台「設定 → 老師卡片與介紹頁」改的就是那一份），首頁與 /lab/301… 永遠一致。改字就改這個檔，中英兩份一起改。",
+ "name_en": "Green Health Research Center",
+ "name_zh": "綠色健康研究中心",
+ "abbr": "GHRC",
+ "parent_en": "College of Bioresources and Agriculture, National Taiwan University",
+ "parent_zh": "國立臺灣大學生物資源暨農學院",
+ "tagline_en": "Making the health benefits of nature measurable, designable, and prescribable",
+ "tagline_zh": "讓自然的健康效益 可量測 · 可設計 · 可處方",
+ "about_en": "A college-level research center of the College of Bioresources and Agriculture at National Taiwan University, established by charter in 2023 and opened in April 2024. Five adjoining laboratories on the third floor of the Landscape Building each take one step: measuring how people respond to landscapes, designing healing environments, validating them in immersive virtual reality, and delivering interventions to whole groups at once.",
+ "about_zh": "臺大生農學院的院級研究中心，2023 年依設置辦法成立，2024 年 4 月開幕。造園館三樓相連的五間研究室各負責一段：量測人對景觀的身心反應、規劃療癒環境、以沉浸式虛擬實境驗證，再到整組受試者同步接受的團體介入。",
+ "where_en": "Rooms 301–305, 3F Landscape Building, National Taiwan University",
+ "where_zh": "臺大造園館三樓 301–305 室",
+ "email": "ntughrc@gmail.com",
+ "loop": {
+  "title_en": "Five laboratories, one closed evidence loop",
+  "title_zh": "五間研究室構成一條閉環證據鏈",
+  "stages": ["Measure", "Design", "Validate", "Prescribe"],
+  "back_en": "Validation feeds back into the design criteria",
+  "back_zh": "驗證結果回饋修正設計準則",
+  "floor_en": "Participants complete measurement, design and validation without leaving the floor.",
+  "floor_zh": "量測、設計、驗證可在同一動線內完成，受試者無須移動至不同建築。"
+ },
+ "missions": [
+  {
+   "title_en": "Research and industry collaboration",
+   "title_zh": "參與農業療癒與健康環境研究計畫",
+   "body_en": "Take part in university, inter-university and government research and industry projects on agricultural therapy and healthy environments, and turn the results into social service — the university's social responsibility in practice.",
+   "body_zh": "積極參與校內、校際、政府推動之農業療癒與健康環境之學術研究或產學合作相關計畫，並將研究成果轉為社會服務，實踐大學社會責任。"
+  },
+  {
+   "title_en": "Talent cultivation",
+   "title_zh": "培育農業療癒與健康環境專長人才",
+   "body_en": "Build curricula and creative teaching that bring students into government programmes and social needs, raising their awareness of policy and their ability to take part in it and deliver.",
+   "body_zh": "結合課程設計，運用創意教學帶領學生參與政府相關計畫並支援社會需求，提升學生對政策之關注、參與和執行能力，培養農業療癒與健康環境領域人才。"
+  },
+  {
+   "title_en": "International platform",
+   "title_zh": "建立農業療癒與健康環境國際平台",
+   "body_en": "Act as an integrating hub, widening the network of scholars, professionals and organisations at home and abroad for joint research and shared agendas.",
+   "body_zh": "整合資源合作核心，擴大連結農業療癒與健康環境相關領域之學者、專業人士及國內外組織，進行研究合作及議題探討。"
+  }
+ ],
+ "milestones": [
+  { "date": "2023.01.14", "en": "College council approves the charter", "zh": "院務會議通過設置辦法" },
+  { "date": "2023.05.09", "en": "University administrative council approval", "zh": "校行政會議審議通過" },
+  { "date": "2024.04.10", "en": "Opening ceremony and international forum", "zh": "中心開幕暨國際論壇" },
+  { "date": "2025.02.17", "en": "Panoramic Cinema Lab 304 opens", "zh": "304 全景影院啟用" },
+  { "date": "2026.04.09", "en": "Global Views USR Award, First Prize", "zh": "遠見 USR 獎首獎" }
+ ],
+ "platform": {
+  "title_en": "Landscape and Human Health — an eight-university platform",
+  "title_zh": "Landscape and Human Health 國際合作研究平台 · 八校成員",
+  "note_en": "Eight universities on one theme — landscape and human health — sustained by joint conferences, student exchange and co-authored research.",
+  "note_zh": "八校平台以景觀與人類健康為共同主題，透過研討會、學生互訪與聯合研究維持運作。",
+  "members": [
+   { "en": "National Taiwan University", "zh": "國立臺灣大學", "where_en": "Taiwan", "where_zh": "臺灣" },
+   { "en": "University of Hong Kong", "zh": "香港大學", "where_en": "Hong Kong", "where_zh": "香港" },
+   { "en": "Chiang Mai University", "zh": "清邁大學", "where_en": "Thailand", "where_zh": "泰國" },
+   { "en": "Konkuk University", "zh": "建國大學", "where_en": "Korea", "where_zh": "韓國" },
+   { "en": "University of Illinois Urbana-Champaign", "zh": "伊利諾大學", "where_en": "United States", "where_zh": "美國" },
+   { "en": "Cornell University", "zh": "康乃爾大學", "where_en": "United States", "where_zh": "美國" },
+   { "en": "Texas A&M University", "zh": "德州農工大學", "where_en": "United States", "where_zh": "美國" },
+   { "en": "Michigan State University", "zh": "密西根州立大學", "where_en": "United States", "where_zh": "美國" }
+  ]
+ },
+ "partnerships": [
+  { "date": "2024.06.21", "en": "Joint master's programme with UT Arlington", "zh": "德州大學阿靈頓分校建築學院來訪，促成景觀學聯合碩士學程。" },
+  { "date": "2025.04.21", "en": "MOU signed with Konkuk University", "zh": "韓國建國大學農業治癒融合研究中心來臺，正式簽署合作備忘錄。" },
+  { "date": "2025.05.20", "en": "UT Arlington student delegation visit", "zh": "德州大學阿靈頓分校學生團來訪，進行實驗室體驗與交流。" },
+  { "date": "2025.11.25", "en": "Reciprocal visit to Konkuk University", "zh": "中心主任與顧問回訪建國大學，商討研究合作與課程互通。" }
+ ],
+ "recognition": [
+  {
+   "date": "2026.04.09",
+   "title_en": "2026 Global Views USR Award — First Prize, Wellbeing and Symbiosis category",
+   "title_zh": "2026 遠見 USR 大學社會責任獎 · 福祉共生組 首獎",
+   "project_en": "Green Health Prescription — Integrating Natural Healing and Smart Technology",
+   "project_zh": "綠色健康處方：自然療癒與智慧科技整合的社會實踐",
+   "note_en": "Jointly led by the Departments of Horticulture and Landscape Architecture, and of Forestry. 57 universities entered, with 222 entries.",
+   "note_zh": "由園藝暨景觀學系與森林環境暨資源學系攜手推動。共 57 所學校、222 件方案參賽。"
+  }
+ ],
+ "organisation": {
+  "people": [
+   { "role_en": "Director", "role_zh": "中心主任", "name_en": "Chun-Yen Chang", "name_zh": "張俊彥", "dept_en": "Horticulture and Landscape Architecture", "dept_zh": "園藝暨景觀學系" },
+   { "role_en": "Co-principal investigator (former director)", "role_zh": "共同主持人（前任主任）", "name_en": "Hui-Mei Chen", "name_zh": "陳惠美", "dept_en": "Horticulture and Landscape Architecture", "dept_zh": "園藝暨景觀學系" }
+  ],
+  "divisions": [
+   { "role_en": "Horticultural Therapy", "role_zh": "園藝療癒組", "name_en": "Po-Ju Chang", "name_zh": "張伯茹", "dept_en": "Horticulture and Landscape Architecture", "dept_zh": "園藝暨景觀學系" },
+   { "role_en": "Forest Therapy", "role_zh": "森林療癒組", "name_en": "Chia-Pin Yu", "name_zh": "余家斌", "dept_en": "Forestry and Resource Conservation", "dept_zh": "森林環境暨資源學系" },
+   { "role_en": "Landscape Therapy", "role_zh": "景觀療癒組", "name_en": "Chia-Kuen Cheng", "name_zh": "鄭佳昆", "dept_en": "Horticulture and Landscape Architecture", "dept_zh": "園藝暨景觀學系" },
+   { "role_en": "Green Health Tourism", "role_zh": "綠色健康旅遊組", "name_en": "Bau-Show Lin", "name_zh": "林寶秀", "dept_en": "Horticulture and Landscape Architecture", "dept_zh": "園藝暨景觀學系" },
+   { "role_en": "Green Health Communication", "role_zh": "綠色健康傳播組", "name_en": "Yu-Chan Chiu", "name_zh": "邱玉蟬", "dept_en": "Bio-Industry Communication and Development", "dept_zh": "生物產業傳播暨發展學系" }
+  ]
+ }
+}
