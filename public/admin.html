@@ -464,15 +464,33 @@
     <div class="card space-y-3">
       <div class="flex flex-wrap items-center gap-2">
         <h2 class="font-semibold mr-auto">歷次參訪 <span class="muted font-normal">點一列看那一場的摘要、回覆與動線</span></h2>
+        <label class="btn btn-soft cursor-pointer" title="系統上線之前的參訪（試算表、Word 或簡報檔）：AI 讀完先列出來給你看，勾好才匯入；匯入之後兩張地圖上就有">匯入以前的參訪<input type="file" id="importFile" accept=".xlsx,.xlsm,.csv,.tsv,.txt,.docx,.pptx" hidden></label>
         <a class="btn btn-soft" id="csvVisits" download>visits.csv</a>
         <a class="btn btn-soft" id="csvResponses" download>responses.csv</a>
         <a class="btn btn-soft" id="csvPerf" download>slide_performance.csv</a>
+      </div>
+      <p class="text-sm" id="importInfo"></p>
+      <div id="importBox" class="space-y-2 border rounded-xl p-3" hidden>
+        <div class="overflow-x-auto"><table id="importTable"><thead><tr><th><input type="checkbox" id="importAll" checked title="全選／全不選"></th><th>日期</th><th>單位</th><th class="whitespace-nowrap">國家</th><th class="whitespace-nowrap">類型</th><th>來訪人員</th><th>交流重點／成果</th></tr></thead><tbody></tbody></table></div>
+        <p class="text-sm muted" id="importSkipped"></p>
+        <div class="flex flex-wrap gap-2"><button class="btn" id="importGo">匯入</button><button class="btn btn-soft" id="importCancel">不匯入</button></div>
       </div>
       <table id="visitsTable"><thead><tr><th>日期</th><th>單位</th><th>類型</th><th>國家</th><th>人數</th><th>狀態</th></tr></thead><tbody></tbody></table>
     </div>
     <div class="card space-y-3" id="visitDetail" hidden>
       <div class="flex flex-wrap gap-2 items-center"><h2 class="font-semibold mr-auto" id="detailTitle"></h2><button class="btn" id="summaryBtn" title="現在就產一份：把這一場的回覆、動線、口述整理成一頁摘要，並記下哪幾頁被提問、被提到。平常不必按——有回覆之後每天凌晨會自己產，回覆變多也會自己重寫">AI 產一頁摘要</button><button class="btn btn-soft" id="driveBtn" title="手動補救用：把這一場的資料與檔案另存到中心的 Google Drive（平常會自動備份）">立即備份到 Drive</button></div>
       <p class="text-sm" id="driveInfo"></p>
+      <div class="border rounded-xl p-3 space-y-2" id="publicBox">
+        <div class="flex flex-wrap items-baseline gap-2"><h3 class="font-medium mr-auto">公開頁上的說明 <span class="muted font-normal">中心首頁的地圖與「來訪紀錄」頁，參訪過後才出現；改了十分鐘內更新</span></h3><a class="underline text-sm" id="publicView" target="_blank" rel="noopener" href="/visits">看公開頁</a></div>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="pubHidden"> 這一場不公開（地圖與來訪紀錄都不放）</label>
+        <div class="grid sm:grid-cols-2 gap-2 text-sm">
+          <label class="space-y-1"><span class="muted block">來訪人員（中文）</span><input type="text" id="pubPeopleZh" class="w-full"></label>
+          <label class="space-y-1"><span class="muted block">來訪人員（英文）</span><input type="text" id="pubPeopleEn" class="w-full"></label>
+          <label class="space-y-1"><span class="muted block">交流重點／成果（中文）</span><textarea id="pubNoteZh" rows="3" class="w-full"></textarea></label>
+          <label class="space-y-1"><span class="muted block">交流重點／成果（英文）</span><textarea id="pubNoteEn" rows="3" class="w-full"></textarea></label>
+        </div>
+        <p class="text-sm muted" id="pubInfo"></p>
+      </div>
       <pre class="wrap text-sm" id="summary"></pre>
       <h3 class="font-medium">來賓回覆</h3>
       <table id="responsesTable"><thead><tr><th>來源</th><th>姓名</th><th>email</th><th>最想看</th><th>想合作</th><th>希望我們</th><th>簽名簿／建議／備註</th><th>時間</th></tr></thead><tbody></tbody></table>
@@ -2534,10 +2552,15 @@
     }
     // 點旁邊的名字：中文介面用中文名（有的話），英文介面用英文名；太長的由地圖自己截短
     state.map.setPoints(points.map((p) => ({ ...p, n: p.visits.length, label: (uiLang() !== "en" && /[一-鿿]/.test(p.local) ? p.local : "") || p.name, title: mapTitle(p) })));
-    const visits = points.reduce((n, p) => n + p.visits.length, 0);
-    const people = points.reduce((n, p) => n + p.visits.reduce((m, v) => m + (Number(v.headcount) || 0), 0), 0);
+    // 幾場：匯入的舊紀錄裡，原表同一列拆成好幾個單位的（研討會的幾位講者）算同一場——年報要跟原表的場次對得上。
+    // 人次：原表沒寫人數的是 0（不知道），不拿名單上有名字的人數充數，另外說有幾場不知道
+    const byGroup = new Map();
+    for (const p of points) for (const v of p.visits) { const g = v.group || v.visit_id; byGroup.set(g, (byGroup.get(g) || 0) + (Number(v.headcount) || 0)); }
+    const visits = byGroup.size;
+    const people = [...byGroup.values()].reduce((a, b) => a + b, 0);
+    const unknown = [...byGroup.values()].filter((n) => !n).length;
     const countries = new Set(points.map((p) => p.country).filter(Boolean)).size;
-    $("mapSummary").textContent = points.length ? `${countries} 個國家 · ${points.length} 個單位 · ${visits} 場 · 共 ${people} 人次` : "";
+    $("mapSummary").textContent = points.length ? `${countries} 個國家 · ${points.length} 個單位 · ${visits} 場 · 共 ${people} 人次${unknown ? `（${unknown} 場不知道人數）` : ""}` : "";
     $("mapNote").innerHTML = unmatched.size
       ? `<span class="muted"><span>地圖上沒有：</span>${[...unmatched].map(([k, n]) => `<span>${esc(k)}</span>（<span>${n} 場</span>）`).join("、")}<span>——國名寫法對不到就先列在這裡，改「訪前」那一場的國家欄位就會歸位。</span></span>`
       : points.length ? "" : `<span class="muted">還沒有填了國家的參訪。</span>`;
@@ -2608,17 +2631,123 @@
     $("csvVisits").href = `/api/visits?export=csv&table=visits&token=${t}`; $("csvResponses").href = `/api/visits?export=csv&table=responses&token=${t}`; $("csvPerf").href = `/api/visits?export=csv&table=slide_performance&token=${t}`;
     await loadVisits();
     renderWorldMap();
-    $("visitsTable").tBodies[0].innerHTML = state.visits.map((v) => `<tr class="cursor-pointer hover:bg-stone-50" data-id="${esc(v.visit_id)}"><td>${esc(v.date)}</td><td>${esc(v.org)}</td><td>${typeTag(v.type) || esc(v.type)}</td><td>${esc(v.country)}</td><td>${esc(v.headcount)}</td><td>${esc(v.status)}</td></tr>`).join("");
+    $("visitsTable").tBodies[0].innerHTML = state.visits.map((v) => `<tr class="cursor-pointer hover:bg-stone-50" data-id="${esc(v.visit_id)}"><td>${esc(v.date)}</td><td>${esc(v.org)}</td><td>${typeTag(v.type) || esc(v.type)}</td><td>${esc(v.country)}</td><td>${Number(v.headcount) > 0 ? esc(v.headcount) : ""}</td><td>${esc(v.status)}</td></tr>`).join("");
   }
   $("visitsTable").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-id]"); if (tr) showDetail(tr.dataset.id); });
+  /**
+   * 公開頁上的說明（中心首頁的地圖與 /visits 來訪紀錄頁；明確要求：「參訪者多，把這些參訪另外作一頁連過去詳細說明」）。
+   * 匯入的舊紀錄帶原表的「來訪人員」「交流重點／成果」；系統裡排的一場預設是空的（公開頁只有日期、單位、國家、去了哪幾間）。
+   * 打完字自己存（`/api/visit-log`）；勾「不公開」就整場不放。名單、email、來訪目的、背景研判不會出現在公開頁。
+   */
+  const PUB_FIELDS = { pubPeopleZh: "people_zh", pubPeopleEn: "people_en", pubNoteZh: "note_zh", pubNoteEn: "note_en" };
+  function fillPublic(v) {
+    const pub = v.public || {};
+    for (const [id, k] of Object.entries(PUB_FIELDS)) $(id).value = pub[k] || "";
+    $("pubHidden").checked = !!pub.hidden;
+    $("pubInfo").textContent = "";
+    $("publicView").href = `/visits?org=${encodeURIComponent(v.org?.name || "")}`;
+    clearTimeout(fillPublic.t);
+  }
+  async function savePublic() {
+    const id = state.detailId;
+    if (!id) return;
+    const body = { visit_id: id, public: { hidden: $("pubHidden").checked } };
+    for (const [elId, k] of Object.entries(PUB_FIELDS)) body.public[k] = $(elId).value;
+    const r = await api("/api/visit-log", { method: "POST", body });
+    if (state.detailId !== id) return; // 存的時候換去看別場了
+    $("pubInfo").textContent = r.ok ? `已存 ${new Date().toTimeString().slice(0, 5)}` : `存不起來：${r.error}`;
+  }
+  $("publicBox").addEventListener("input", () => { clearTimeout(fillPublic.t); $("pubInfo").textContent = "存檔中…"; fillPublic.t = setTimeout(savePublic, 1200); });
+  $("pubHidden").addEventListener("change", () => { clearTimeout(fillPublic.t); savePublic(); });
+
+  /** 從以前的名單匯入的那一場：原表那一列寫了什麼（沒有摘要時給人看這個）。 */
+  function importedNote(v) {
+    const m = v.imported;
+    if (!m) return "";
+    return [
+      `從「${m.from}」第 ${m.row} 列匯入（系統上線之前的紀錄）。`,
+      m.people ? `來訪人員：${m.people}` : "",
+      m.companions ? `同行單位：${m.companions}` : "",
+      v.purpose ? `交流重點／成果：${v.purpose}` : "",
+    ].filter(Boolean).join("\n");
+  }
+
+  /**
+   * 匯入以前的參訪（系統上線之前的紀錄；明確要求：「把所有參訪者加入中心首頁地圖，以及主辦端網頁資料地圖中」）。
+   * 選一個檔（試算表、Word、簡報）→ AI 讀成一筆一筆（英文正式名稱、類型；一列有好幾個單位就拆開，算同一場）
+   * → **先列出來給人看，勾好才寫進去**。系統裡已經有的（同一天、同一個單位）不勾也勾不了，重複匯入同一份不會多出東西。
+   * 匯入之後就是一般的一場：地圖、清單、中心首頁的來訪單位都照舊從參訪紀錄來，位置照舊自己去查。
+   */
+  $("importFile").onchange = async () => {
+    const f = $("importFile").files[0];
+    $("importFile").value = ""; // 同一個檔再選一次也要有反應
+    if (!f) return;
+    const note = noteInto("importInfo");
+    state.importPlan = null;
+    $("importBox").hidden = true;
+    if (f.size > 4.5 * 1024 * 1024) return note(`${f.name} 超過 4.5 MB`);
+    let data;
+    try { data = await readFileB64(f); } catch (e) { return note(`讀不到這個檔案：${e?.message || e}`); }
+    const r = await runJob("/api/import", { file: { name: f.name, type: f.type, data } }, note, "AI 讀名單中……大約一兩分鐘。", { anyVisit: true });
+    if (!r || !Array.isArray(r.rows)) return;
+    state.importPlan = { file: r.file || f.name, rows: r.rows, skipped: r.skipped || [], by: r.by || "" };
+    renderImport();
+  };
+  function renderImport() {
+    const p = state.importPlan;
+    if (!p) { $("importBox").hidden = true; return; }
+    const why = (r) => (r.problems || []).join("、") || (r.exists ? "已經有了" : r.duplicate ? "名單裡重複" : "");
+    $("importTable").tBodies[0].innerHTML = p.rows.map((r, i) => `<tr data-i="${i}" class="${why(r) ? "muted" : ""}">
+        <td class="text-center">${why(r) ? "" : `<input type="checkbox" data-import checked>`}</td>
+        <td class="tabular-nums whitespace-nowrap">${esc(r.date || "—")}</td>
+        <td><span translate="no" data-ai-text>${esc(r.org.name_local || r.org.name)}</span>${r.org.name_local && r.org.name && r.org.name !== r.org.name_local ? `<span class="block muted text-xs" translate="no" data-ai-text>${esc(r.org.name)}</span>` : ""}${r.split ? `<span class="block muted text-xs">原表同一列拆出來的，算同一場</span>` : ""}${why(r) ? `<span class="block err text-xs">${esc(why(r))}</span>` : ""}</td>
+        <td class="whitespace-nowrap" translate="no" data-ai-text>${esc(r.org.country)}</td>
+        <td class="whitespace-nowrap">${typeTag(r.org.type) || esc(r.org.type)}</td>
+        <td class="text-xs" translate="no" data-ai-text>${esc(r.people_text || (r.people || []).map((x) => `${x.name} ${x.title}`.trim()).join("、"))}</td>
+        <td class="text-xs" translate="no" data-ai-text>${esc(String(r.purpose || "").length > 90 ? `${r.purpose.slice(0, 88)}…` : r.purpose || "")}</td>
+      </tr>`).join("");
+    const rows = new Set(p.rows.map((r) => r.source_row)).size;
+    $("importInfo").textContent = p.rows.length
+      ? `讀到 ${p.rows.length} 個單位（原表 ${rows} 列）。勾好要匯入的，按下面的「匯入」；匯入之後地圖上就有，位置會自己去查。${p.by === "columns" ? "（Claude 還沒接好：照欄名讀，單位名稱照原表的寫法。）" : ""}`
+      : "這個檔裡讀不到參訪紀錄。";
+    $("importSkipped").textContent = p.skipped.length ? `沒有列進來的：${p.skipped.join("；")}` : "";
+    $("importAll").checked = true;
+    updateImportGo();
+    $("importBox").hidden = !p.rows.length;
+  }
+  const importPicked = () => [...$("importTable").querySelectorAll("tr[data-i]")].filter((tr) => tr.querySelector("[data-import]")?.checked).map((tr) => state.importPlan.rows[Number(tr.dataset.i)]);
+  function updateImportGo() {
+    const n = state.importPlan ? importPicked().length : 0;
+    $("importGo").textContent = `匯入 ${n} 筆`;
+    $("importGo").disabled = !n;
+  }
+  $("importTable").addEventListener("change", (e) => {
+    if (e.target.id === "importAll") $("importTable").querySelectorAll("[data-import]").forEach((c) => (c.checked = e.target.checked));
+    updateImportGo();
+  });
+  $("importCancel").onclick = () => { state.importPlan = null; $("importBox").hidden = true; $("importInfo").textContent = ""; };
+  $("importGo").onclick = () => busy($("importGo"), async () => {
+    const p = state.importPlan;
+    const rows = p ? importPicked() : [];
+    if (!rows.length) return;
+    const r = await api("/api/import", { method: "POST", body: { action: "commit", file: p.file, rows } });
+    if (!r.ok) { $("importInfo").textContent = r.error || ""; return flash(r.error || "沒有匯入", "err"); }
+    state.importPlan = null;
+    $("importBox").hidden = true;
+    const skipped = (r.skipped || []).map((x) => `${x.org}：${x.reason}`).join("；");
+    flash(`匯入了 ${r.created.length} 筆`);
+    await loadDataTab(); // 清單與地圖跟著更新；還沒查過位置的，地圖自己會去查
+    $("importInfo").textContent = `匯入了 ${r.created.length} 筆${skipped ? `（沒有匯入：${skipped}）` : ""}。地圖上的位置正在查，查好會自己更新。`;
+  });
   async function showDetail(id) {
     const v = await api(`/api/visits?id=${encodeURIComponent(id)}`);
     if (!v.ok) return flash(v.error, "err");
-    state.detailId = id; $("visitDetail").hidden = false; $("detailTitle").textContent = `${v.visit.date} ${v.visit.org?.name}`; $("summary").textContent = v.visit.summary || "（還沒有摘要。參訪過完、有來賓回覆之後，系統會在每天凌晨自己產一份；想現在就要就按上面那顆按鈕。）";
+    state.detailId = id; $("visitDetail").hidden = false; $("detailTitle").textContent = `${v.visit.date} ${v.visit.org?.name}`; $("summary").textContent = v.visit.summary || importedNote(v.visit) || "（還沒有摘要。參訪過完、有來賓回覆之後，系統會在每天凌晨自己產一份；想現在就要就按上面那顆按鈕。）";
     const d = v.visit.drive;
 $("driveInfo").innerHTML = d?.backed_up_at
       ? `<span class="ok">Google Drive 已自動備份 ${esc(d.backed_up_at.slice(0, 16).replace("T", " "))}${d.items ? `（${d.items} 個檔案）` : ""}</span> <a class="underline" target="_blank" rel="noopener" href="${esc(d.url || "")}">在 Drive 開啟</a>${d.failed?.length ? `<span class="err block">${esc(d.failed.join("；"))}</span>` : ""}`
       : `<span class="muted">資料一有變動就會自動備份到 Google Drive，不必手動按。</span>`;
+    fillPublic(v.visit);
     $("responsesTable").tBodies[0].innerHTML = v.responses.map((r) => `<tr><td>${esc(r.source)}${r.anonymous ? "<br><span class='muted'>不具名</span>" : ""}</td><td>${esc(r.name)}</td><td>${esc(r.email)}</td><td>${esc((r.most_wanted_rooms || []).join(" "))}</td><td>${esc((r.cooperate_rooms || []).join(" "))}</td><td>${esc((r.next_actions || []).join(" "))}${r.next_other ? "<br>" + esc(r.next_other) : ""}</td><td>${esc([r.signbook_text, r.suggestion, r.note].filter(Boolean).join("\n"))}</td><td class="muted">${esc(r.submitted_at.slice(0, 16).replace("T", " "))}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">（尚無回覆）</td></tr>`;
   }
   $("summaryBtn").onclick = () => busy($("summaryBtn"), async () => {

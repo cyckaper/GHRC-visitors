@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
 import { weekdayOf } from "../public/lib/rota.mjs";
-import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
+import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -339,6 +339,18 @@ test("中心首頁：五間研究室的卡片排在「組織架構」與「參�
   assert.doesNotMatch(html.replace(/<!--[\s\S]*?-->/g, ""), /id="loop"|閉環/, "閉環那一段（四格、回饋那一行、同一動線那一行）不在頁面上");
 });
 
+test("研究室卡片上不再有「Lab 301 · 量測」這類小標籤：量測／設計／驗證／處方是閉環證據鏈的分法", () => {
+  // 明確指示：「五間研究室的卡片上，還留著『Lab 301 · 量測』這類小標籤一起拿掉」。
+  // 中心首頁、來賓專頁的老師卡片、每一間的介紹頁都拿掉；房號（門牌）改寫在名稱前面
+  const labs = JSON.parse(readFileSync("public/data/labs.json", "utf8")).labs;
+  for (const l of labs) assert.ok(!("stage" in l) && !("stage_zh" in l), `${l.room} 不再帶 stage`);
+  for (const f of ["public/center.html", "public/index.html", "public/lab.html"]) {
+    const html = readFileSync(f, "utf8").replace(/<!--[\s\S]*?-->/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+    assert.doesNotMatch(html, /stage_zh|\.stage\b|roomPill|Lab \$\{esc\((?:l|lab)\.room\)\} ·/, `${f} 不再印階段標籤`);
+    assert.match(html, /class="room-no"/, `${f} 的房號寫在名稱前面`);
+  }
+});
+
 test("陳惠美老師對外稱「首任主任 Inaugural Director」，不寫 Co-PI", () => {
   // 明確指示：她是開創中心的主任，叫 Co-PI 不妥。來賓看得到的資料（首頁、老師卡片與介紹頁）都不准再出現
   const center = JSON.parse(readFileSync("public/data/center.json", "utf8"));
@@ -548,4 +560,29 @@ test("支援人力表上的星期幾照日期算，不受時區影響", () => {
   assert.equal(weekdayOf("2027-01-01"), "五");
   assert.equal(weekdayOf("2028-02-29"), "二", "閏年那一天也對");
   assert.equal(weekdayOf(""), "", "沒有日期就不寫星期");
+});
+
+test("公開的來訪紀錄：只列來過的、標了不公開的不列，原表同一列拆出來的合成一場；只給公開頁用得到的", () => {
+  const now = new Date("2026-10-01T00:00:00+08:00");
+  const v = (id, date, org, extra = {}) => ({ visit_id: id, date, start_time: "10:00", duration_minutes: 90, org: { name: org, name_local: "", country: "Taiwan", type: "university" }, guests: [{ name: "Private Person", email: "p@example.org" }], purpose: "internal purpose", itinerary: [{ room: "briefing", minutes: 20 }], ...extra });
+  const g = (id, org, people) => v(id, "2024-01-08", org, { imported: { group: "list.xlsx#1" }, public: { people_zh: people, note_zh: "研討會講者", note_en: "Workshop speakers" } });
+  const entries = visitLogEntries([
+    g("2024-01-08-illinois", "UIUC", "Sullivan 教授"),
+    g("2024-01-08-helsinki", "University of Helsinki", "Jyske 教授"),
+    v("2025-05-01-ntu", "2025-05-01", "NTU", { itinerary: [{ room: "briefing", minutes: 20 }, { room: "303", minutes: 20 }, { room: "301", minutes: 15 }, { room: "305", minutes: 0 }] }),
+    v("2025-05-01-other", "2025-05-01", "Other Co", { public: { hidden: true } }),
+    v("2099-01-01-future", "2099-01-01", "Future Ministry"),
+    v("2025-06-01-noname", "2025-06-01", ""),
+  ], now);
+  assert.deepEqual(entries.map((e) => e.id), ["2025-05-01-1", "2024-01-08-1"], "新的在前；還沒來的、不公開的、沒有單位名稱的都不列");
+  const ws = entries[1];
+  assert.deepEqual(ws.orgs.map((o) => o.name), ["University of Helsinki", "UIUC"], "原表同一列拆出來的兩個單位是同一場");
+  assert.equal(ws.people.zh, "Jyske 教授、Sullivan 教授");
+  assert.deepEqual(ws.note, { zh: "研討會講者", en: "Workshop speakers" }, "同一場的交流重點只寫一次");
+  assert.deepEqual(entries[0].rooms, ["301", "303"], "去了哪幾間：動線上排了分鐘的（總體介紹與 0 分的不算）");
+  assert.deepEqual(entries[0].note, { zh: "", en: "" }, "系統裡排的一場沒寫公開說明就是空的——來訪目的不會跑出來");
+  assert.doesNotMatch(JSON.stringify(entries), /Private Person|example\.org|internal purpose|visit_id|2024-01-08-illinois/, "名單、email、來訪目的、visit_id（來賓專頁的網址）一律不給");
+  assert.equal(sanitizePublic({ note_zh: "  a\r\nb  ", hidden: "yes", junk: 1 }).note_zh, "a\nb");
+  assert.equal(sanitizePublic({ hidden: "yes" }), undefined, "只有 true 才算不公開；什麼都沒有就是 undefined");
+  assert.deepEqual(Object.keys(sanitizePublic({ hidden: true })).sort(), ["hidden", "note_en", "note_zh", "people_en", "people_zh"]);
 });

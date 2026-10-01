@@ -37,6 +37,12 @@
   to = "/rota.html"
   status = 200
 
+# 來訪紀錄 /visits → visits.html（中心首頁的「來訪單位」連過來，一場一段說明）
+[[redirects]]
+  from = "/visits"
+  to = "/visits.html"
+  status = 200
+
 # 專屬網址 visit.healsdesign.org/<visit_id> → 來賓端專頁（既有靜態檔優先）
 [[redirects]]
   from = "/*"
