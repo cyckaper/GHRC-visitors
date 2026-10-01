@@ -1,6 +1,7 @@
 import { env, nowISO, siteUrl } from "./http.mts";
 import { getStore } from "./store.mts";
 import { toCSV } from "../../lib/visit.mjs";
+import { apiDisabled, googleAccessToken, googleReady } from "./google.mts";
 import type { ResponseRow, Visit } from "./types.mts";
 
 /**
@@ -9,7 +10,8 @@ import type { ResponseRow, Visit } from "./types.mts";
  *   functions/drive-sync-background.mts  自動備份（背景函式，15 分鐘上限，一次搬完一場）
  *   functions/drive-cron.mts             每晚掃一次，補上漏掉的
  *
- * 授權沿用寄信那組 Google OAuth（GOOGLE_* 優先，沒有就用 GMAIL_*），refresh token 需含 drive.file；
+ * 授權與寄信共用一組（`lib/google.mts`）：後台「設定 → 連上 Google」存下來的那一份優先，
+ * 沒有才用環境變數（GOOGLE_* 優先，沒有就用 GMAIL_*），要含 drive.file；
  * 檔案 owner 是中心自己的 Google 帳號，不是服務帳戶（服務帳戶沒有 Drive 配額）。
  */
 const FOLDER_MIME = "application/vnd.google-apps.folder";
@@ -21,51 +23,29 @@ export interface DriveItem {
 }
 
 export function driveConfig() {
-  const pick = (...names: string[]) => {
-    for (const n of names) {
-      const v = (globalThis as any).Netlify?.env?.get?.(n) ?? process.env[n];
-      if (v) return String(v);
-    }
-    return undefined;
-  };
-  return {
-    clientId: pick("GOOGLE_CLIENT_ID", "GMAIL_CLIENT_ID"),
-    clientSecret: pick("GOOGLE_CLIENT_SECRET", "GMAIL_CLIENT_SECRET"),
-    refreshToken: pick("GOOGLE_REFRESH_TOKEN", "GMAIL_REFRESH_TOKEN"),
-    // 通常留空：drive.file 只看得到程式自己建立的檔案，指定別人建的資料夾會存取不到
-    parent: pick("GOOGLE_DRIVE_FOLDER_ID") || "root",
-  };
+  // 通常留空：drive.file 只看得到程式自己建立的檔案，指定別人建的資料夾會存取不到
+  return { parent: env("GOOGLE_DRIVE_FOLDER_ID") || "root" };
 }
 
-export function driveConfigured(): boolean {
-  const c = driveConfig();
-  return !!(c.clientId && c.clientSecret && c.refreshToken);
-}
+/** 有沒有一組 Drive 的授權可以用：後台「連上 Google」存下來的那一份，或環境變數（`lib/google.mts`）。 */
+export const driveReady = () => googleReady("drive");
 
 export const DRIVE_HINT =
-  "尚未設定 Google Drive：Netlify 環境變數 GOOGLE_CLIENT_ID／GOOGLE_CLIENT_SECRET／GOOGLE_REFRESH_TOKEN（可沿用寄信那組，需含 drive.file 權限）。GOOGLE_DRIVE_FOLDER_ID 通常留空。";
+  "Google Drive 還沒連上：到後台「設定」分頁按「連上 Google」，用中心的 Google 帳號允許一次（Netlify 環境變數要有 GOOGLE_CLIENT_ID／GOOGLE_CLIENT_SECRET，或寄信那一組）。";
 
-let token: { value: string; exp: number } | null = null;
-
-async function accessToken(): Promise<string> {
-  if (token && token.exp > Date.now() + 60000) return token.value;
-  const c = driveConfig();
-  if (!driveConfigured()) throw new Error(DRIVE_HINT);
-  const r = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: c.clientId!, client_secret: c.clientSecret!, refresh_token: c.refreshToken!, grant_type: "refresh_token" }),
-  });
-  if (!r.ok) throw new Error(`Google 授權失敗 ${r.status}：${(await r.text()).slice(0, 200)}`);
-  const j = (await r.json()) as { access_token: string; expires_in: number };
-  token = { value: j.access_token, exp: Date.now() + j.expires_in * 1000 };
-  return j.access_token;
-}
+/** 換 access token：後台「重新連上 Google」存下來的那一份優先，沒有才用環境變數（`lib/google.mts`）。 */
+const accessToken = () => googleAccessToken("drive", DRIVE_HINT);
 
 async function api(path: string, init: RequestInit = {}): Promise<any> {
   const r = await fetch(`https://www.googleapis.com/drive/v3${path}`, { ...init, headers: { authorization: `Bearer ${await accessToken()}`, ...(init.headers || {}) } });
-  if (!r.ok) throw new Error(`Drive ${r.status}：${(await r.text()).slice(0, 200)}`);
+  if (!r.ok) throw new Error(await driveError(r, "Drive"));
   return r.json();
+}
+
+/** Drive 回錯誤時的那一行：沒啟用 Drive API 就講人話，其他照舊帶狀態碼與前 200 字。 */
+async function driveError(r: Response, what: string): Promise<string> {
+  const text = await r.text();
+  return apiDisabled(r.status, text, "Google Drive") || `${what} ${r.status}：${text.slice(0, 200)}`;
 }
 
 const q = (s: string) => s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
@@ -95,17 +75,22 @@ export async function ensureVisitFolder(visit: Visit): Promise<string> {
 
 export const folderUrl = (id: string) => `https://drive.google.com/drive/folders/${id}`;
 
-/** 上傳（同名就覆蓋內容，網址不變）。 */
-export async function uploadItem(folder: string, name: string, mime: string, bytes: Uint8Array): Promise<{ id: string; webViewLink?: string }> {
-  const existing = await findFile(name, folder);
+/** Drive 的 multipart 上傳：一段 JSON 的檔案資訊＋一段內容。 */
+function multipart(meta: Record<string, unknown>, mime: string, bytes: Uint8Array): { boundary: string; body: Uint8Array } {
   const boundary = `ghrc${Math.random().toString(36).slice(2)}`;
-  const meta = existing ? { name } : { name, parents: [folder] };
   const head = new TextEncoder().encode(`--${boundary}\r\ncontent-type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\ncontent-type: ${mime}\r\n\r\n`);
   const tail = new TextEncoder().encode(`\r\n--${boundary}--`);
   const body = new Uint8Array(head.length + bytes.length + tail.length);
   body.set(head, 0);
   body.set(bytes, head.length);
   body.set(tail, head.length + bytes.length);
+  return { boundary, body };
+}
+
+/** 上傳（同名就覆蓋內容，網址不變）。 */
+export async function uploadItem(folder: string, name: string, mime: string, bytes: Uint8Array): Promise<{ id: string; webViewLink?: string }> {
+  const existing = await findFile(name, folder);
+  const { boundary, body } = multipart(existing ? { name } : { name, parents: [folder] }, mime, bytes);
   const url = existing
     ? `https://www.googleapis.com/upload/drive/v3/files/${existing.id}?uploadType=multipart&fields=id,webViewLink&supportsAllDrives=true`
     : `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink&supportsAllDrives=true`;
@@ -114,7 +99,7 @@ export async function uploadItem(folder: string, name: string, mime: string, byt
     headers: { authorization: `Bearer ${await accessToken()}`, "content-type": `multipart/related; boundary=${boundary}` },
     body: body as BodyInit,
   });
-  if (!r.ok) throw new Error(`Drive 上傳 ${name} 失敗 ${r.status}：${(await r.text()).slice(0, 200)}`);
+  if (!r.ok) throw new Error(await driveError(r, `Drive 上傳 ${name} 失敗`));
   return r.json() as Promise<{ id: string; webViewLink?: string }>;
 }
 
@@ -219,7 +204,7 @@ export async function syncVisit(visitId: string, { force = false } = {}): Promis
  * 沒設定 Drive 就什麼都不做，所以本機與測試不受影響。
  */
 export async function triggerDriveSync(visitId: string): Promise<void> {
-  if (!visitId || !driveConfigured()) return;
+  if (!visitId || !(await driveReady())) return;
   const admin = env("ADMIN_TOKEN");
   if (!admin) return;
   try {
@@ -232,4 +217,90 @@ export async function triggerDriveSync(visitId: string): Promise<void> {
   } catch {
     /* 自動備份失敗不影響主流程；每晚的 drive-cron 會補 */
   }
+}
+
+/**
+ * ── 參訪名單（Google 試算表）──
+ * 明確指示：「每一次有增加再自動加入」「地圖應該是自動去 check 這個 Google Drive」。
+ * 授權只有 drive.file，**只看得到系統自己建立的檔案**——使用者自己放上 Drive 的那份 xlsx 讀不到。
+ * 所以匯入名單時順便把它存成一份**系統自己的 Google 試算表**（「GHRC 參訪」資料夾裡），之後就看這一份：
+ * 有人在裡面加一列，系統（`lib/visitlist.mts`）自己讀進來。
+ *
+ * DRIVE_MOCK=1：不真的打 Google，「Drive 上的試算表」存在媒體庫（測試與本機開發用，跟 MAIL_MOCK 同一個意思）。
+ * 只管名單這幾支；備份照舊看 `driveReady()`，不會因為 mock 就去打真的 API。
+ */
+const SHEET_MIME = "application/vnd.google-apps.spreadsheet";
+export const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const driveMock = () => !!env("DRIVE_MOCK");
+export const sheetsReady = async () => driveMock() || (await driveReady());
+
+export interface SheetInfo {
+  id: string;
+  name: string;
+  modifiedTime: string;
+  trashed: boolean;
+  url: string;
+}
+
+const sheetUrl = (id: string) => `https://docs.google.com/spreadsheets/d/${id}/edit`;
+const mockKey = (id: string) => `drive-mock/${id}.json`;
+const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
+
+async function mockRead(id: string): Promise<{ name: string; mime: string; modifiedTime: string; data: string; trashed?: boolean } | null> {
+  const m = await getStore().getMedia(mockKey(id));
+  if (!m) return null;
+  return JSON.parse(new TextDecoder().decode(m.bytes));
+}
+
+/** 測試用：模擬有人在試算表裡改了東西（換掉內容、修改時間往後推）。只在 DRIVE_MOCK 時有作用。 */
+export async function mockSheetWrite(id: string, bytes: Uint8Array, mime = XLSX_MIME, name?: string): Promise<void> {
+  const prev = await mockRead(id);
+  const at = new Date(Math.max(Date.now(), Date.parse(prev?.modifiedTime || "") + 1000 || 0)).toISOString();
+  const rec = { name: name || prev?.name || "GHRC 參訪名單", mime, modifiedTime: at, data: b64(bytes) };
+  await getStore().putMedia(mockKey(id), new TextEncoder().encode(JSON.stringify(rec)), "application/json");
+}
+
+/** 把上傳的名單（xlsx／csv）轉成一份 Google 試算表，放在「GHRC 參訪」資料夾。 */
+export async function createSheet(name: string, bytes: Uint8Array, mime: string): Promise<SheetInfo> {
+  if (driveMock()) {
+    const id = `mock${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    await mockSheetWrite(id, bytes, mime, name);
+    return sheetInfo(id);
+  }
+  const root = await ensureFolder(ROOT_FOLDER, driveConfig().parent);
+  // 檔案資訊寫 Google 試算表、內容給 xlsx／csv：Drive 會轉成可以直接在試算表裡編的那一種
+  const { boundary, body } = multipart({ name, mimeType: SHEET_MIME, parents: [root] }, mime, bytes);
+  const r = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id&supportsAllDrives=true", {
+    method: "POST",
+    headers: { authorization: `Bearer ${await accessToken()}`, "content-type": `multipart/related; boundary=${boundary}` },
+    body: body as BodyInit,
+  });
+  if (!r.ok) throw new Error(await driveError(r, "名單存不進 Google Drive"));
+  const made = (await r.json()) as { id: string };
+  return sheetInfo(made.id);
+}
+
+/** 名單現在的樣子（修改時間：有沒有人改過就看這個）。 */
+export async function sheetInfo(id: string): Promise<SheetInfo> {
+  if (driveMock()) {
+    const m = await mockRead(id);
+    if (!m) throw new Error("找不到這份名單");
+    return { id, name: m.name, modifiedTime: m.modifiedTime, trashed: !!m.trashed, url: sheetUrl(id) };
+  }
+  const j = await api(`/files/${encodeURIComponent(id)}?fields=id,name,modifiedTime,trashed,webViewLink&supportsAllDrives=true`);
+  return { id: j.id, name: j.name || "", modifiedTime: j.modifiedTime || "", trashed: !!j.trashed, url: j.webViewLink || sheetUrl(j.id) };
+}
+
+/** 名單的內容（Google 試算表匯出成 xlsx；試算表裡有幾張工作表就有幾張）。 */
+export async function sheetFile(id: string): Promise<{ bytes: Uint8Array; mime: string }> {
+  if (driveMock()) {
+    const m = await mockRead(id);
+    if (!m) throw new Error("找不到這份名單");
+    return { bytes: new Uint8Array(Buffer.from(m.data, "base64")), mime: m.mime };
+  }
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}/export?mimeType=${encodeURIComponent(XLSX_MIME)}`, {
+    headers: { authorization: `Bearer ${await accessToken()}` },
+  });
+  if (!r.ok) throw new Error(await driveError(r, "名單讀不出來"));
+  return { bytes: new Uint8Array(await r.arrayBuffer()), mime: XLSX_MIME };
 }

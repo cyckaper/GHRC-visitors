@@ -44,11 +44,13 @@ async function keptOutOfTen(store, id) {
  * 假的 Netlify Blobs：只做這個專案用得到的幾件事（讀、寫、刪、列表），照正式站的規矩回版本號。
  * `etagOnRead: false` 模擬「讀的時候不給版本號」（官方本機伺服器就是這樣）：那時候要從列表拿版本號。
  */
-async function fakeBlobs({ etagOnRead = true } = {}) {
+async function fakeBlobs({ etagOnRead = true, staleEdge = false } = {}) {
   const blobs = new Map();
   let version = 0;
   const jitter = () => new Promise((ok) => setTimeout(ok, Math.random() * 15));
-  const server = http.createServer(async (req, res) => {
+  // staleEdge：另開一支「邊緣快取」——列表照正式站的樣子落後一點（剛寫進去的一分鐘內還不在列表裡）；
+  // 「讀最新的」走原本那一支。讀單筆兩支都一樣（讀單筆本來就指定讀最新的）
+  const handler = (cached) => async (req, res) => {
     const chunks = [];
     for await (const c of req) chunks.push(c);
     const url = new URL(req.url, "http://x");
@@ -57,7 +59,7 @@ async function fakeBlobs({ etagOnRead = true } = {}) {
     const id = `${store}/${key}`;
     if (req.method === "GET" && !key) {
       const prefix = `${store}/${url.searchParams.get("prefix") || ""}`;
-      const list = [...blobs].filter(([k]) => k.startsWith(prefix)).map(([k, b]) => ({ key: k.slice(store.length + 1), etag: b.etag, size: b.body.length, last_modified: new Date().toISOString() }));
+      const list = [...blobs].filter(([k, b]) => k.startsWith(prefix) && !(cached && Date.now() - b.at < 60000)).map(([k, b]) => ({ key: k.slice(store.length + 1), etag: b.etag, size: b.body.length, last_modified: new Date().toISOString() }));
       await jitter();
       res.writeHead(200, { "content-type": "application/json" });
       return res.end(JSON.stringify({ blobs: list, directories: [] }));
@@ -82,7 +84,7 @@ async function fakeBlobs({ etagOnRead = true } = {}) {
         return res.end();
       }
       const etag = `"v${++version}"`;
-      blobs.set(id, { body: Buffer.concat(chunks), etag });
+      blobs.set(id, { body: Buffer.concat(chunks), etag, at: Date.now() });
       res.writeHead(200, { etag });
       return res.end();
     }
@@ -93,17 +95,21 @@ async function fakeBlobs({ etagOnRead = true } = {}) {
     }
     res.writeHead(405);
     res.end();
-  });
+  };
+  const server = http.createServer(handler(false));
   await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
   const url = `http://127.0.0.1:${server.address().port}`;
-  return { url, close: () => new Promise((ok) => server.close(ok)) };
+  const edge = staleEdge ? http.createServer(handler(true)) : null;
+  if (edge) await new Promise((ok) => edge.listen(0, "127.0.0.1", ok));
+  const edgeUrl = edge ? `http://127.0.0.1:${edge.address().port}` : url;
+  return { url, edgeUrl, close: () => Promise.all([server, edge].filter(Boolean).map((x) => new Promise((ok) => x.close(ok)))) };
 }
 
-const contextFor = (url, { uncached = true } = {}) =>
-  Buffer.from(JSON.stringify({ edgeURL: url, ...(uncached ? { uncachedEdgeURL: url } : {}), siteID: "ghrc-test", token: "t" })).toString("base64");
+const contextFor = (url, { uncached = true, edgeUrl = url } = {}) =>
+  Buffer.from(JSON.stringify({ edgeURL: edgeUrl, ...(uncached ? { uncachedEdgeURL: url } : {}), siteID: "ghrc-test", token: "t" })).toString("base64");
 
-function useBlobs(url) {
-  process.env.NETLIFY_BLOBS_CONTEXT = contextFor(url);
+function useBlobs(url, edgeUrl = url) {
+  process.env.NETLIFY_BLOBS_CONTEXT = contextFor(url, { edgeUrl });
   process.env.STORE_BACKEND = "blobs";
   process.env.CONTEXT = "production";
   resetStore();
@@ -175,6 +181,18 @@ test("Netlify Blobs：讀的時候不給版本號（官方本機伺服器那樣�
   }
 });
 
+test("Netlify Blobs：剛存的那一場馬上就在列表裡（列表也讀最新的，不走邊緣快取）", async () => {
+  // 實際踩過：匯入 26 筆，按完清單與地圖上一筆都沒有，過一陣子重新整理才出現——列表走的是邊緣快取
+  const fake = await fakeBlobs({ staleEdge: true });
+  try {
+    const store = useBlobs(fake.url, fake.edgeUrl);
+    await Promise.all(["a", "b", "c"].map((x) => store.putVisit(visit(`2026-12-02-${x}`))));
+    assert.deepEqual((await store.listVisits()).map((v) => v.visit_id).sort(), ["2026-12-02-a", "2026-12-02-b", "2026-12-02-c"]);
+  } finally {
+    await fake.close();
+  }
+});
+
 test("Netlify Blobs：環境不支援「讀最新的」（沒有 uncachedEdgeURL）時退回預設讀法，整站不會壞", async () => {
   const fake = await fakeBlobs();
   try {
@@ -186,13 +204,14 @@ test("Netlify Blobs：環境不支援「讀最新的」（沒有 uncachedEdgeURL
       await store.putVisit({ visit_id: "2026-12-01-fb", date: "2026-12-01", org: { name: "x" } });
       const r = await store.updateVisit("2026-12-01-fb", (v) => { v.presenters = { "301": "A" }; });
       const v = await store.getVisit("2026-12-01-fb");
-      console.log(JSON.stringify({ backend: store.backend, updated: r?.presenters?.["301"], read: v?.presenters?.["301"] }));`;
+      const listed = (await store.listVisits()).map((x) => x.visit_id);
+      console.log(JSON.stringify({ backend: store.backend, updated: r?.presenters?.["301"], read: v?.presenters?.["301"], listed }));`;
     const { stdout } = await promisify(execFile)(process.execPath, ["--input-type=module", "-e", script], {
       cwd: root,
       timeout: 20000,
       env: { ...process.env, STORE_BACKEND: "blobs", CONTEXT: "production", NETLIFY_BLOBS_CONTEXT: contextFor(fake.url, { uncached: false }) },
     });
-    assert.deepEqual(JSON.parse(stdout.trim().split("\n").pop()), { backend: "blobs", updated: "A", read: "A" });
+    assert.deepEqual(JSON.parse(stdout.trim().split("\n").pop()), { backend: "blobs", updated: "A", read: "A", listed: ["2026-12-01-fb"] });
   } finally {
     await fake.close();
   }

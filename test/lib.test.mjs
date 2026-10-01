@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
 import { weekdayOf } from "../public/lib/rota.mjs";
-import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
+import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -322,9 +322,33 @@ test("中心首頁的內容（center.json）：中英兩份都在、只有五間
   assert.doesNotMatch(text, /301\s*[-–—~～至]\s*304|four (research )?lab|四間|四個研究室/i, "中心只有這五間：301–305");
   assert.doesNotMatch(text, /HEALS/i, "HEALS Design 是 Lab 301 的方法論，不寫成中心的");
   assert.doesNotMatch(text, /NT\$|新臺幣|億元|萬元|預算|budget/i, "不放中心總預算數字");
-  // 閉環的每一段都有研究室，每一間也都落在某一段（303 與 305 都是驗證）——研究室改了 stage，首頁不能漏掉它
-  for (const lab of labs) assert.ok(center.loop.stages.includes(lab.stage), `${lab.room} 的 stage（${lab.stage}）要在首頁的閉環裡`);
-  for (const st of center.loop.stages) assert.ok(labs.some((l) => l.stage === st), `閉環的「${st}」那一段沒有研究室`);
+  // 「五間研究室構成一條閉環證據鏈」那一段拿掉了（明確指示：「構成一條閉環證據鏈這些不要」）
+  assert.doesNotMatch(text, /閉環|evidence loop/i, "首頁不放閉環證據鏈");
+  // 國際平台不列康乃爾大學（明確指示）；名單少了一所，標題與說明也就不寫「八校」，免得對不上
+  assert.doesNotMatch(text, /Cornell|康乃爾/i, "國際平台不列康乃爾大學");
+  assert.doesNotMatch(JSON.stringify(center.platform), /八校|eight/i, "平台的標題與說明不寫校數");
+  assert.equal(labs.length, 5);
+});
+
+test("中心首頁：五間研究室的卡片排在「組織架構」與「參訪與聯絡」之間，閉環那一段拿掉了", () => {
+  // 明確指示：「5 間研究室的介紹移到『組織架構』與『參訪與聯絡』之間」
+  const html = readFileSync("public/center.html", "utf8");
+  const at = (id) => html.indexOf(`<section class="reveal" id="${id}"`) + 1 || html.indexOf(`<section class="card reveal" id="${id}"`) + 1;
+  assert.ok(at("orgSec") && at("labsSec") && at("contactSec"), "三個區塊都在");
+  assert.ok(at("orgSec") < at("labsSec") && at("labsSec") < at("contactSec"), "研究室在組織架構之後、參訪與聯絡之前");
+  assert.doesNotMatch(html.replace(/<!--[\s\S]*?-->/g, ""), /id="loop"|閉環/, "閉環那一段（四格、回饋那一行、同一動線那一行）不在頁面上");
+});
+
+test("研究室卡片上不再有「Lab 301 · 量測」這類小標籤：量測／設計／驗證／處方是閉環證據鏈的分法", () => {
+  // 明確指示：「五間研究室的卡片上，還留著『Lab 301 · 量測』這類小標籤一起拿掉」。
+  // 中心首頁、來賓專頁的老師卡片、每一間的介紹頁都拿掉；房號（門牌）改寫在名稱前面
+  const labs = JSON.parse(readFileSync("public/data/labs.json", "utf8")).labs;
+  for (const l of labs) assert.ok(!("stage" in l) && !("stage_zh" in l), `${l.room} 不再帶 stage`);
+  for (const f of ["public/center.html", "public/index.html", "public/lab.html"]) {
+    const html = readFileSync(f, "utf8").replace(/<!--[\s\S]*?-->/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+    assert.doesNotMatch(html, /stage_zh|\.stage\b|roomPill|Lab \$\{esc\((?:l|lab)\.room\)\} ·/, `${f} 不再印階段標籤`);
+    assert.match(html, /class="room-no"/, `${f} 的房號寫在名稱前面`);
+  }
 });
 
 test("陳惠美老師對外稱「首任主任 Inaugural Director」，不寫 Co-PI", () => {
@@ -536,4 +560,78 @@ test("支援人力表上的星期幾照日期算，不受時區影響", () => {
   assert.equal(weekdayOf("2027-01-01"), "五");
   assert.equal(weekdayOf("2028-02-29"), "二", "閏年那一天也對");
   assert.equal(weekdayOf(""), "", "沒有日期就不寫星期");
+});
+
+test("公開的來訪紀錄：只列來過的、標了不公開的不列，原表同一列拆出來的合成一場；只給公開頁用得到的", () => {
+  const now = new Date("2026-10-01T00:00:00+08:00");
+  const v = (id, date, org, extra = {}) => ({ visit_id: id, date, start_time: "10:00", duration_minutes: 90, org: { name: org, name_local: "", country: "Taiwan", type: "university" }, guests: [{ name: "Private Person", email: "p@example.org" }], purpose: "internal purpose", itinerary: [{ room: "briefing", minutes: 20 }], ...extra });
+  const g = (id, org, people) => v(id, "2024-01-08", org, { imported: { group: "list.xlsx#1" }, public: { people_zh: people, note_zh: "研討會講者", note_en: "Workshop speakers" } });
+  const entries = visitLogEntries([
+    g("2024-01-08-illinois", "UIUC", "Sullivan 教授"),
+    g("2024-01-08-helsinki", "University of Helsinki", "Jyske 教授"),
+    v("2025-05-01-ntu", "2025-05-01", "NTU", { itinerary: [{ room: "briefing", minutes: 20 }, { room: "303", minutes: 20 }, { room: "301", minutes: 15 }, { room: "305", minutes: 0 }] }),
+    v("2025-05-01-other", "2025-05-01", "Other Co", { public: { hidden: true } }),
+    v("2099-01-01-future", "2099-01-01", "Future Ministry"),
+    v("2025-06-01-noname", "2025-06-01", ""),
+  ], now);
+  assert.deepEqual(entries.map((e) => e.id), ["2025-05-01-1", "2024-01-08-1"], "新的在前；還沒來的、不公開的、沒有單位名稱的都不列");
+  const ws = entries[1];
+  assert.deepEqual(ws.orgs.map((o) => o.name), ["University of Helsinki", "UIUC"], "原表同一列拆出來的兩個單位是同一場");
+  assert.equal(ws.people.zh, "Jyske 教授、Sullivan 教授");
+  assert.deepEqual(ws.note, { zh: "研討會講者", en: "Workshop speakers" }, "同一場的交流重點只寫一次");
+  assert.deepEqual(entries[0].rooms, ["301", "303"], "去了哪幾間：動線上排了分鐘的（總體介紹與 0 分的不算）");
+  assert.deepEqual(entries[0].note, { zh: "", en: "" }, "系統裡排的一場沒寫公開說明就是空的——來訪目的不會跑出來");
+  assert.doesNotMatch(JSON.stringify(entries), /Private Person|example\.org|internal purpose|visit_id|2024-01-08-illinois/, "名單、email、來訪目的、visit_id（來賓專頁的網址）一律不給");
+  assert.equal(sanitizePublic({ note_zh: "  a\r\nb  ", hidden: "yes", junk: 1 }).note_zh, "a\nb");
+  assert.equal(sanitizePublic({ hidden: "yes" }), undefined, "只有 true 才算不公開；什麼都沒有就是 undefined");
+  assert.deepEqual(Object.keys(sanitizePublic({ hidden: true })).sort(), ["hidden", "note_en", "note_zh", "people_en", "people_zh"]);
+});
+
+test("同一個單位：中文名稱一樣、或英文名稱去掉空白與標點後一樣（國家也一樣）；一路串下去；代碼跟順序無關", () => {
+  const v = (id, name, local, country) => ({ visit_id: id, org: { name, name_local: local, country } });
+  const list = [
+    // 實際發生過：同一家公司兩場，英文拼法不一樣
+    v("a", "Dun Yang Engineering Consultants Co., Ltd.", "惇陽工程顧問有限公司", "Taiwan"),
+    v("b", "Dunyang Engineering Consultants Co., Ltd.", "惇陽工程顧問有限公司", "臺灣"),
+    v("c", "DUN-YANG Engineering Consultants Co Ltd", "", "Taiwan"),
+    v("d", "Dunyang Engineering Consultants Co., Ltd.", "", "South Korea"),
+    v("e", "Konkuk University", "건국대학교", "South Korea"),
+    v("f", "Konkuk Univ.", "건국대학교", "Korea"),
+    v("g", "", "", "Japan"),
+  ];
+  const k = institutionKeys(list);
+  assert.equal(k.get("a"), k.get("b"), "中文名稱一樣：英文拼法不同、國名寫法不同都算同一個");
+  assert.equal(k.get("a"), k.get("c"), "英文名稱只差空白、標點、大小寫，國家也一樣");
+  assert.notEqual(k.get("b"), k.get("d"), "只有英文名稱一樣、國家不一樣的不算");
+  assert.equal(k.get("e"), k.get("f"), "韓文名稱一樣");
+  assert.notEqual(k.get("a"), k.get("e"));
+  assert.equal(k.get("g"), "", "沒有名稱的不給代碼（呼叫的地方自己退回原本的寫法）");
+  const r = institutionKeys([...list].reverse());
+  assert.ok(list.every((x) => r.get(x.visit_id) === k.get(x.visit_id)), "資料的先後順序不影響代碼");
+  assert.ok([...k.values()].every((x) => !/^[a-g]$/.test(x)), "代碼不是 visit_id");
+  // 串起來：A、B 中文一樣，B、C 英文一樣
+  const chain = institutionKeys([v("x", "Alpha Co", "甲公司", "Taiwan"), v("y", "Beta Co", "甲公司", "Taiwan"), v("z", "beta co.", "", "Taiwan")]);
+  assert.ok(chain.get("x") === chain.get("y") && chain.get("y") === chain.get("z"));
+  const more = institutionKeys([
+    v("p", "國立臺灣大學", "", "Taiwan"), // 英文名稱那一格寫的是中文（讀信時常見）
+    v("q", "National Taiwan University", "國立台灣大學", "臺灣"),
+    v("r", "The University of Western Australia", "", "Australia"),
+    v("s", "University of Western Australia", "西澳大學", "Australia"),
+  ]);
+  assert.equal(more.get("p"), more.get("q"), "英文那一格寫中文也照中文比；臺／台當同一個字");
+  assert.equal(more.get("r"), more.get("s"), "英文開頭的 The 不算");
+});
+
+test("公開的來訪紀錄：同一個單位的每一場帶同一個代碼；代碼只拿列出來的那幾場算，還沒來的那一場的名稱不會透出來", () => {
+  const now = new Date("2026-10-01T00:00:00+08:00");
+  const v = (id, date, name, local) => ({ visit_id: id, date, start_time: "10:00", duration_minutes: 90, org: { name, name_local: local, country: "Taiwan", type: "enterprise" }, itinerary: [] });
+  const entries = visitLogEntries([
+    v("2026-09-23-dunyang", "2026-09-23", "Dunyang Engineering Consultants Co., Ltd.", "惇陽工程顧問有限公司"),
+    v("2026-09-30-dunyang", "2026-09-30", "Dun Yang Engineering Consultants Co., Ltd.", "惇陽工程顧問有限公司"),
+    v("2026-05-01-secret", "2026-05-01", "Secret Org", ""),
+    v("2099-01-01-secret", "2099-01-01", "Secret Org", "還沒公開的中文名稱"),
+  ], now);
+  const inst = (date) => entries.find((e) => e.date === date).orgs[0].inst;
+  assert.ok(inst("2026-09-23") && inst("2026-09-23") === inst("2026-09-30"), "惇陽兩場是同一個單位");
+  assert.doesNotMatch(JSON.stringify(entries), /還沒公開的中文名稱|2099/, "還沒來的那一場不列，也不能從代碼裡透出來");
 });

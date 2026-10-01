@@ -502,7 +502,7 @@ test("drive backup: lists everything the archive folder should get; refuses to u
   const r = await api(`/api/drive?id=${visitId}`, { headers: admin });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.configured, false, "no Google credentials in the test environment");
-  assert.ok(r.body.hint.includes("GOOGLE_DRIVE_FOLDER_ID"));
+  assert.ok(r.body.hint.includes("連上 Google"), "the hint points at the settings button, not at env vars");
   const names = r.body.items.map((i) => i.name);
   assert.ok(names.includes("參訪資料.json") && names.includes("回覆.csv"));
   assert.ok(names.includes("一頁摘要.md"), "the summary written earlier is archived too");
@@ -520,7 +520,7 @@ test("drive auto-backup: the background sync endpoint needs the token and stands
   assert.equal((await api("/api/drive-sync-background", { method: "POST", body: JSON.stringify({ visit_id: visitId }) })).status, 401);
   const r = await api("/api/drive-sync-background", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId }) });
   assert.equal(r.status, 503, "no Google credentials in the test environment");
-  assert.ok(r.body.error.includes("GOOGLE_CLIENT_ID"));
+  assert.ok(r.body.error.includes("連上 Google"), "says where to fix it: the button on the settings tab, not an env var list");
   assert.equal((await api("/api/drive-sync-background", { method: "POST", headers: admin, body: "{}" })).status, 400);
   // 沒設定 Drive 時，寫入端點照常運作（triggerDriveSync 直接跳過）
   const v = await api(`/api/visits?id=${visitId}`, { headers: admin });
@@ -990,7 +990,7 @@ test("背景工作的規矩：每一支跑得久的 AI 都一樣", async () => {
   assert.equal(pending.body.input, undefined, "輪詢不會把輸入（信件全文、名片原圖的位置）再送回前端");
 
   // 六支新改的＋原本兩支，查進度與背景函式的規矩一致
-  for (const name of ["extract", "plan", "letter", "summary", "signbook", "transcribe", "cards", "translate"]) {
+  for (const name of ["extract", "plan", "letter", "summary", "signbook", "transcribe", "cards", "translate", "import"]) {
     assert.equal((await api(`/api/${name}?job=${id}`)).status, 401, `${name}：查進度要 token`);
     assert.equal((await api(`/api/${name}?job=zzzzzzzz`, { headers: admin })).status, 404, `${name}：過期或不存在的工作回 404`);
     assert.equal((await api(`/api/${name}-background`, { method: "POST", body: "{}" })).status, 401, `${name}-background：要 token`);
@@ -1267,4 +1267,370 @@ test("訪客地圖：每個單位查一次位置（背景工作），單位改�
   assert.ok(!("geo" in (await api(`/api/visits?id=${b}&public=1`)).body.visit));
 
   for (const id of [a, b, c]) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
+});
+
+test("中心首頁的世界地圖（公開）：只列已經來過的單位、所在地與來過幾次；日期、名單、email、目的一律不給", async () => {
+  const mk = async (org, date, code) => (await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ org, date, code, start_time: "10:00", end_time: "11:30", guests: [{ name: "Private Person", email: "private.person@example.org", role: "lead" }], purpose: "a confidential purpose" }) })).body.visit.visit_id;
+  const konkuk = { name: "Konkuk University", name_local: "건국대학교", country: "South Korea" };
+  const ids = [await mk(konkuk, "2025-04-21", "pubmapa"), await mk(konkuk, "2025-11-25", "pubmapb"), await mk({ name: "Ministry of Something", country: "Japan" }, "2099-12-01", "pubmapc")];
+  const r = await api("/api/visitor-map"); // 不帶任何授權：首頁誰都打得開
+  assert.equal(r.status, 200);
+  const rows = r.body.institutions;
+  const row = rows.find((x) => x.name === "Konkuk University");
+  assert.ok(row && row.visits === 2 && row.country === "South Korea" && row.local === "건국대학교", `同一個單位來過兩次合成一筆：${JSON.stringify(rows)}`);
+  assert.deepEqual(Object.keys(row).sort(), ["country", "geo", "local", "name", "visits"], "只給地圖用得到的欄位");
+  assert.ok(!rows.some((x) => x.name === "Ministry of Something"), "還沒來的不先公告（部長級的行程不該先出現在首頁上）");
+  assert.doesNotMatch(JSON.stringify(r.body), /private|@|confidential|2025-04-21|2025-11-25|visit_id|headcount|guests|purpose/i, "名單、email、日期、目的一律不給");
+  assert.match(r.headers.get("cache-control") || "", /public/, "公開的，可以讓 CDN 幫忙擋");
+  for (const id of ids) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
+});
+
+test("同一個單位英文拼法不一樣（實際發生過：惇陽工程兩場）：首頁地圖、來訪紀錄、資料分頁都算一個單位", async () => {
+  const mk = async (name, date, code) => (await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ org: { name, name_local: "測試工程顧問有限公司", country: "Taiwan", type: "enterprise" }, date, code, start_time: "10:00", end_time: "11:30" }) })).body.visit.visit_id;
+  const ids = [await mk("Ce Shi Engineering Consultants Co., Ltd.", "2025-09-23", "sameorga"), await mk("Ceshi Engineering Consultants Co., Ltd.", "2025-09-30", "sameorgb")];
+  const rows = (await api("/api/visitor-map")).body.institutions.filter((x) => x.local === "測試工程顧問有限公司");
+  assert.equal(rows.length, 1, `首頁地圖上一個點：${JSON.stringify(rows)}`);
+  assert.equal(rows[0].visits, 2);
+  assert.equal(rows[0].name, "Ceshi Engineering Consultants Co., Ltd.", "名稱照最近那一場的寫法");
+  const orgs = (await api("/api/visit-log")).body.visits.flatMap((e) => e.orgs).filter((o) => o.local === "測試工程顧問有限公司");
+  assert.ok(orgs.length === 2 && orgs[0].inst && orgs[0].inst === orgs[1].inst, `來訪紀錄上兩場帶同一個單位代碼：${JSON.stringify(orgs)}`);
+  const listed = (await api("/api/visits", { headers: admin })).body.visits.filter((v) => ids.includes(v.visit_id));
+  assert.ok(listed.length === 2 && listed[0].inst && listed[0].inst === listed[1].inst, "資料分頁的地圖照同一個代碼合成一個點");
+  for (const id of ids) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
+});
+
+test("資料一改就清掉公開頁的快取：匯入、改公開說明、改或刪來過的那一場才清；還沒來的存再多次也不清；瀏覽器不留", async () => {
+  const realFetch = globalThis.fetch;
+  const purges = [];
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).startsWith("https://api.netlify.com/api/v1/purge")) {
+      purges.push({ auth: new Headers(init.headers).get("authorization"), body: JSON.parse(String(init.body)) });
+      return new Response("", { status: 202 });
+    }
+    return realFetch(url, init);
+  };
+  process.env.NETLIFY_PURGE_API_TOKEN = "purge-token"; // Netlify 在函式執行環境裡給的；本機沒有就什麼都不做
+  process.env.SITE_ID = "site-123";
+  try {
+    for (const p of ["/api/visit-log", "/api/visitor-map"]) {
+      const r = await api(p);
+      assert.equal(r.headers.get("netlify-cache-tag"), "public-visits", `${p} 要帶得清的標籤`);
+      assert.match(r.headers.get("cache-control") || "", /max-age=0/, `${p}：瀏覽器不留，CDN 清掉之後重新整理就是新的`);
+      assert.match(r.headers.get("netlify-cdn-cache-control") || "", /s-maxage/, `${p}：CDN 照樣擋`);
+    }
+    const mk = async (date, code) => (await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ org: { name: "Purge Test University", country: "Japan" }, date, code, start_time: "10:00", end_time: "11:30" }) })).body.visit;
+    const future = await mk("2099-03-01", "purgefuture");
+    await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ ...future, purpose: "改一個字" }) });
+    assert.equal(purges.length, 0, "還沒來的那一場不在公開頁上，存再多次也不清");
+    const past = await mk("2025-03-01", "purgepast");
+    assert.equal(purges.length, 1, "已經來過的那一場一存就清");
+    assert.deepEqual(purges[0], { auth: "Bearer purge-token", body: { site_id: "site-123", cache_tags: ["public-visits"] } });
+    await api("/api/visit-log", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: past.visit_id, public: { note_zh: "說明" } }) });
+    assert.equal(purges.length, 2, "改公開頁上的說明就清");
+    const geo = await runJob("geo", {});
+    assert.ok(geo.body.updated >= 1, JSON.stringify(geo.body));
+    assert.equal(purges.length, 3, "查到位置就清：地圖上的點換到查到的地方");
+    await api(`/api/visits?id=${past.visit_id}`, { method: "DELETE", headers: admin });
+    assert.equal(purges.length, 4, "刪掉來過的那一場也清");
+    await api(`/api/visits?id=${future.visit_id}`, { method: "DELETE", headers: admin });
+    assert.equal(purges.length, 4, "刪掉還沒來的不清");
+
+    const { pastVisitsXlsx } = await import("./fixtures/past-visits.mjs");
+    const file = { name: "GHRC-參訪名單.xlsx", data: (await pastVisitsXlsx()).toString("base64") };
+    const read = await runJob("import", { file });
+    assert.equal(purges.length, 4, "讀完只是預覽，還沒寫進去，不清");
+    const done = await api("/api/import", { method: "POST", headers: admin, body: JSON.stringify({ action: "commit", file: file.name, rows: read.body.rows }) });
+    assert.equal(done.body.created.length, 3);
+    assert.equal(purges.length, 5, "匯入完就清：首頁的地圖與來訪紀錄頁重新整理就看得到");
+    for (const id of done.body.created) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
+  } finally {
+    globalThis.fetch = realFetch;
+    delete process.env.NETLIFY_PURGE_API_TOKEN;
+    delete process.env.SITE_ID;
+  }
+});
+
+test("匯入以前的參訪名單：讀完只給預覽，勾好才寫進去；一列有好幾個單位就拆開、算同一場；兩張地圖都看得到；重複匯入不會多出東西", async () => {
+  const { pastVisitsXlsx } = await import("./fixtures/past-visits.mjs");
+  const file = { name: "GHRC-參訪名單.xlsx", data: (await pastVisitsXlsx()).toString("base64") };
+  assert.equal((await api("/api/import", { method: "POST", body: JSON.stringify({ file }) })).status, 401, "要 token");
+  const read = await runJob("import", { file });
+  assert.equal(read.status, 200, JSON.stringify(read.body));
+  const rows = read.body.rows;
+  assert.equal(read.body.file, "GHRC-參訪名單.xlsx");
+  assert.equal(rows.length, 4, `第 1 列拆成兩個單位，第二張工作表（統計）不算：${JSON.stringify(rows.map((r) => r.org.name_local))}`);
+  const [uiuc, helsinki, jorjin, nodate] = rows;
+  assert.ok(uiuc.split && helsinki.split && uiuc.source_row === helsinki.source_row, "同一列拆出來的，source_row 一樣");
+  assert.equal(uiuc.date, "2024-01-08", "日期格子存的是 45299，要照格式轉回日期");
+  assert.equal(helsinki.org.country, "芬蘭", "照單位名稱開頭的國名分");
+  assert.deepEqual(uiuc.people, [{ name: "John A. Smith", title: "教授" }], "來訪人員照括號裡的單位分");
+  assert.equal(jorjin.org.type, "enterprise");
+  assert.equal(jorjin.org.name_local, "佐臻股份有限公司", "括號裡的說明拿掉");
+  assert.deepEqual(nodate.problems, ["沒有日期"]);
+  assert.equal(nodate.visit_id, "", "沒有日期的不能匯入");
+  assert.ok(uiuc.visit_id && helsinki.visit_id && uiuc.visit_id !== helsinki.visit_id, "同一天的兩筆網址不能撞在一起");
+  assert.equal((await api("/api/visits", { headers: admin })).body.visits.filter((v) => v.imported).length, 0, "讀完只是預覽，還沒有寫進去");
+
+  const done = await api("/api/import", { method: "POST", headers: admin, body: JSON.stringify({ action: "commit", file: file.name, rows }) });
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.equal(done.body.created.length, 3);
+  assert.deepEqual(done.body.skipped.map((x) => x.reason), ["沒有日期"], "沒有日期的那一筆送上來也不建");
+
+  const list = (await api("/api/visits", { headers: admin })).body.visits.filter((v) => v.imported);
+  assert.equal(list.length, 3);
+  const g = list.filter((v) => v.date === "2024-01-08");
+  assert.ok(g.length === 2 && g[0].group && g[0].group === g[1].group, "同一列拆出來的那兩筆 group 相同（資料分頁算一場）");
+  assert.ok(list.every((v) => v.geo_stale), "匯入之後位置照舊由 /api/geo 去查");
+  const one = (await api(`/api/visits?id=${list.find((v) => v.org === "佐臻股份有限公司").visit_id}`, { headers: admin })).body.visit;
+  assert.equal(one.status, "done");
+  assert.equal(one.headcount, 1, "只有一個有名字的人、沒有其他人");
+  assert.equal(one.contact_teacher, "", "原表沒寫對口老師就不補");
+  assert.equal(one.purpose, "參訪 303 與 304");
+  assert.equal(one.imported.from, "GHRC-參訪名單.xlsx");
+  assert.equal(one.imported.people, "王大明副總經理");
+  assert.deepEqual(one.guests.map((x) => x.name), ["王大明"]);
+
+  // 一般存檔沒帶 imported 也不會把它清掉
+  const { imported, ...rest } = one;
+  await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ ...rest, purpose: "參訪 303 與 304（改過）" }) });
+  assert.equal((await api(`/api/visits?id=${one.visit_id}`, { headers: admin })).body.visit.imported?.row, "2");
+
+  // 中心首頁的地圖：都是過去的參訪，所以都列；支援人力表：系統上線之前的，不列
+  const pub = (await api("/api/visitor-map")).body.institutions.map((x) => x.name);
+  assert.ok(["美國伊利諾大學", "芬蘭赫爾辛基大學", "佐臻股份有限公司"].every((n) => pub.includes(n)), JSON.stringify(pub));
+  const rota = (await api("/api/rota", { headers: admin })).body.visits;
+  assert.ok(!rota.some((v) => list.some((x) => x.visit_id === v.visit_id)), "支援人力表不列匯入的舊紀錄");
+
+  // 同一份再匯入一次：同一天、同一個單位的已經有了，不重複建立
+  const again = await runJob("import", { file });
+  assert.equal(again.body.rows.filter((r) => r.exists).length, 3, JSON.stringify(again.body.rows.map((r) => [r.org.name_local, r.exists])));
+  const twice = await api("/api/import", { method: "POST", headers: admin, body: JSON.stringify({ action: "commit", file: file.name, rows: again.body.rows }) });
+  assert.equal(twice.body.created.length, 0);
+
+  // 不是試算表／文字的檔：直接說，不開工作
+  const pdf = await api("/api/import", { method: "POST", headers: admin, body: JSON.stringify({ file: { name: "list.pdf", data: Buffer.from("%PDF-1.4").toString("base64") } }) });
+  assert.equal(pdf.status, 400);
+  assert.match(pdf.body.error, /試算表/);
+
+  for (const v of list) await api(`/api/visits?id=${v.visit_id}`, { method: "DELETE", headers: admin });
+});
+
+test("參訪名單（Google 試算表）：匯入時存成一份，之後有人加一列就自己加進來；沒改就不讀；改舊的那一列、勾掉的那一筆不會被加回來", async () => {
+  const { pastVisitsXlsx } = await import("./fixtures/past-visits.mjs");
+  const { mockSheetWrite } = await import("../netlify/lib/drive.mts");
+  const { getStore } = await import("../netlify/lib/store.mts");
+  const post = (body) => api("/api/visit-list", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  assert.equal((await api("/api/visit-list")).status, 401, "要 token");
+  assert.equal((await api("/api/visit-list", { headers: admin })).body.configured, false, "Google Drive 還沒接好");
+  process.env.DRIVE_MOCK = "1"; // 不真的打 Google：「Drive 上的試算表」存在媒體庫
+  const ids = [];
+  try {
+    const st0 = (await api("/api/visit-list", { headers: admin })).body;
+    assert.ok(st0.configured && !st0.linked);
+    assert.equal((await post({ action: "check" })).status, 409, "還沒連上名單");
+
+    // 匯入照舊：先預覽、勾好才寫——主辦端把赫爾辛基那一筆勾掉了
+    const file = { name: "GHRC-參訪名單.xlsx", data: (await pastVisitsXlsx()).toString("base64") };
+    const read = await runJob("import", { file });
+    const rows = read.body.rows.filter((r) => r.org.name_local !== "芬蘭赫爾辛基大學");
+    const done = await api("/api/import", { method: "POST", headers: admin, body: JSON.stringify({ action: "commit", file: file.name, rows }) });
+    assert.equal(done.body.created.length, 2, JSON.stringify(done.body));
+    ids.push(...done.body.created);
+
+    // 同時存成 Google 試算表
+    const link = await runJob("visit-list", { action: "link", file });
+    assert.equal(link.status, 200, JSON.stringify(link.body));
+    const st = (await api("/api/visit-list", { headers: admin })).body;
+    assert.ok(st.linked && st.file_id && /docs\.google\.com\/spreadsheets/.test(st.url), JSON.stringify(st));
+    assert.equal(st.name, "GHRC 參訪名單");
+    assert.equal(st.from, "GHRC-參訪名單.xlsx");
+    assert.equal(st.rows, 3, "這份檔裡現在有的列都算讀過了（含勾掉的那一筆與沒寫日期的那一列）");
+    assert.ok(!("seen" in st), "讀過哪幾列那一長串不必送給後台");
+    assert.equal((await post({ action: "link", file })).body.file_id, st.file_id, "已經連上了就不另外再建一份");
+    assert.equal((await post({ action: "link", file: { name: "list.docx", data: file.data } })).body.file_id, st.file_id);
+
+    // 沒人改過：當場回，不開工作
+    const same = await post({ action: "check" });
+    assert.equal(same.status, 200);
+    assert.equal(same.body.unchanged, true);
+
+    // 有人在試算表裡加了一列，也順手改了佐臻那一列的交流重點
+    const edited = await pastVisitsXlsx({ extra: [[4, 45930, "國際", "日本", "日本千葉大學園藝學院", "山田太郎教授", "", "園藝療法交流"]], jorjinPurpose: "參訪 303、304（改過）" });
+    await mockSheetWrite(st.file_id, new Uint8Array(edited));
+    const synced = await runJob("visit-list", { action: "check" });
+    assert.equal(synced.status, 200, JSON.stringify(synced.body));
+    ids.push(...synced.body.added);
+    assert.equal(synced.body.added.length, 1, `只有新加的那一列；改了交流重點的不是新的一列，勾掉的赫爾辛基也不會被偷偷加回來：${JSON.stringify(synced.body)}`);
+    const v = (await api(`/api/visits?id=${synced.body.added[0]}`, { headers: admin })).body.visit;
+    assert.equal(v.org.name_local, "日本千葉大學園藝學院");
+    assert.equal(v.date, "2025-09-30");
+    assert.equal(v.imported.from, "GHRC 參訪名單");
+    assert.equal(v.public?.note_zh, "園藝療法交流", "交流重點跟匯入的一樣帶過來（公開頁要用）");
+    assert.ok((await api("/api/visit-log")).body.visits.some((e) => e.orgs.some((o) => o.local === "日本千葉大學園藝學院")), "公開的來訪紀錄上看得到");
+    const after = (await api("/api/visit-list", { headers: admin })).body;
+    assert.equal(after.rows, 4);
+    assert.deepEqual(after.last.added, synced.body.added, "後台那一行寫得出上一次加了幾筆");
+    assert.ok(!after.error && !after.running_since);
+
+    // 再看一次：讀過了；「現在就看一次」不管修改時間，但沒有新的列就什麼都不加
+    assert.equal((await post({ action: "check" })).body.unchanged, true);
+    const forced = await runJob("visit-list", { action: "sync" });
+    assert.equal(forced.body.added.length, 0);
+
+    // 排程與「打開資料分頁」剛好同時讀：只讓一輪讀，同一列不會建兩次
+    const twoRows = await pastVisitsXlsx({ extra: [[4, 45930, "國際", "日本", "日本千葉大學園藝學院", "山田太郎教授", "", "園藝療法交流"], [5, 45931, "國內", "臺灣", "某某科技大學", "", "", ""]] });
+    await mockSheetWrite(st.file_id, new Uint8Array(twoRows));
+    const jobs = [await post({ action: "sync" }), await post({ action: "sync" })];
+    await Promise.all(jobs.map((j) => api("/api/visit-list-background", { method: "POST", headers: admin, body: JSON.stringify({ job_id: j.body.job_id }) })));
+    const results = await Promise.all(jobs.map(async (j) => (await api(`/api/visit-list?job=${j.body.job_id}`, { headers: admin })).body.result));
+    const both = results.flatMap((r) => r.added || []);
+    ids.push(...both);
+    assert.equal(both.length, 1, `兩輪同時讀，新的那一列只建一次：${JSON.stringify(results)}`);
+    assert.ok(results.some((r) => r.busy), "另一輪讓給正在讀的那一輪");
+
+    // 排程那一支：要授權；名單沒改過就不開工作
+    assert.equal((await api("/api/visit-list-cron")).status, 401);
+    assert.match(String((await api("/api/visit-list-cron", { method: "POST", headers: admin, body: "{}" })).body), /沒有改過/);
+  } finally {
+    delete process.env.DRIVE_MOCK;
+    await getStore().deleteMedia("sync/visit-list.json");
+    for (const id of ids) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
+  }
+});
+
+test("連上 Google：後台按一下走 Google 的同意畫面，refresh token 存在站台；過期了講人話、設定分頁看得出來；金鑰不外流", async () => {
+  const { getStore } = await import("../netlify/lib/store.mts");
+  const realFetch = globalThis.fetch;
+  let refresh = "ok"; // 換 access token 時 Google 怎麼回：ok／expired
+  const exchanged = [];
+  const jwt = (o) => ["e30", Buffer.from(JSON.stringify(o)).toString("base64url"), "sig"].join(".");
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url) === "https://oauth2.googleapis.com/token") {
+      const body = new URLSearchParams(String(init.body));
+      if (body.get("grant_type") === "authorization_code") {
+        exchanged.push(Object.fromEntries(body));
+        return new Response(JSON.stringify({ access_token: "at-1", expires_in: 3600, refresh_token: "rt-secret-1", scope: "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/gmail.send", id_token: jwt({ email: "center@example.test" }) }), { status: 200 });
+      }
+      if (refresh === "expired") return new Response(JSON.stringify({ error: "invalid_grant", error_description: "Bad Request" }), { status: 400 });
+      return new Response(JSON.stringify({ access_token: `at-${body.get("refresh_token")}`, expires_in: 3600 }), { status: 200 });
+    }
+    if (String(url).startsWith("https://gmail.googleapis.com/")) {
+      // 這個用戶端的專案沒有啟用 Gmail API（Google 實際回的樣子）
+      return new Response(JSON.stringify({ error: { code: 403, message: "Gmail API has not been used in project 123 before or it is disabled.", status: "PERMISSION_DENIED", details: [{ reason: "SERVICE_DISABLED" }] } }), { status: 403 });
+    }
+    return realFetch(url, init);
+  };
+  const manual = (p, headers = {}) => api(p, { redirect: "manual", headers });
+  try {
+    assert.equal((await manual("/api/google-auth?start=1")).status, 401, "要登入");
+    assert.equal((await manual("/api/google-auth?start=1", admin)).status, 409, "Netlify 環境變數裡沒有 OAuth 用戶端");
+    process.env.GOOGLE_CLIENT_ID = "client-1.apps.googleusercontent.com";
+    process.env.GOOGLE_CLIENT_SECRET = "client-secret-1";
+    const st0 = (await api("/api/settings", { headers: admin })).body.status;
+    assert.deepEqual({ drive: st0.drive, gmail: st0.gmail, connected: st0.google.connected, client: st0.google.client }, { drive: false, gmail: false, connected: false, client: true }, "只有用戶端、還沒連上");
+    const start = await manual("/api/google-auth?start=1", admin);
+    assert.equal(start.status, 302);
+    const to = new URL(start.headers.get("location"));
+    assert.equal(to.origin + to.pathname, "https://accounts.google.com/o/oauth2/v2/auth");
+    assert.equal(to.searchParams.get("client_id"), "client-1.apps.googleusercontent.com");
+    assert.equal(to.searchParams.get("redirect_uri"), "https://visit.example.test/api/google-auth");
+    assert.match(to.searchParams.get("scope"), /drive\.file/);
+    assert.match(to.searchParams.get("scope"), /gmail\.send/);
+    assert.equal(to.searchParams.get("access_type"), "offline");
+    assert.equal(to.searchParams.get("prompt"), "consent", "每次都要給 refresh token");
+    const state = to.searchParams.get("state");
+
+    // 導回來：state 不對、被改過、或沒有允許
+    const back = async (q) => new URL((await manual(`/api/google-auth?${q}`)).headers.get("location"));
+    assert.equal((await back(`code=x&state=${encodeURIComponent(state.replace(/.$/, "0"))}`)).searchParams.get("google"), "expired", "簽章對不上");
+    assert.equal((await back("error=access_denied")).searchParams.get("google"), "denied");
+    assert.equal(exchanged.length, 0, "state 不對就不去換");
+
+    // 正常導回來：換到 refresh token、存起來；同一個 state 用第二次就不算
+    const ok = await back(`code=auth-code-1&state=${encodeURIComponent(state)}`);
+    assert.equal(ok.pathname, "/admin.html");
+    assert.equal(ok.searchParams.get("google"), "ok");
+    assert.equal(exchanged.length, 1);
+    assert.equal(exchanged[0].redirect_uri, "https://visit.example.test/api/google-auth");
+    assert.equal((await back(`code=auth-code-1&state=${encodeURIComponent(state)}`)).searchParams.get("google"), "expired", "一次性");
+
+    // 設定分頁：連上了、哪個帳號、能用；不回任何金鑰
+    const st = await api("/api/settings", { headers: admin });
+    assert.deepEqual({ connected: st.body.status.google.connected, ok: st.body.status.google.ok, email: st.body.status.google.email, via: st.body.status.google.via }, { connected: true, ok: true, email: "center@example.test", via: "stored" });
+    assert.doesNotMatch(JSON.stringify(st.body), /rt-secret-1|client-secret-1|at-rt/, "refresh token、密鑰、access token 都不出去");
+    assert.equal((await api("/api/media?key=secrets/google.json", { headers: admin })).status, 400, "存下來的那一份不經過 /api/media");
+    // 環境變數裡沒有 refresh token、只在後台連上，也算接好——Drive 備份與寄信不會被當成「沒設定」略過
+    assert.deepEqual({ drive: st.body.status.drive, gmail: st.body.status.gmail }, { drive: true, gmail: true });
+    // 授權是哪一個用戶端給的，就要在那一個專案裡啟用 Gmail API——沒啟用時講人話，不是一串 JSON
+    const { gmailSend } = await import("../netlify/lib/mail.mts");
+    await assert.rejects(gmailSend("someone@example.test", "主旨", "內文"), (e) => /還沒啟用 Gmail API/.test(e.message) && !/PERMISSION_DENIED/.test(e.message));
+
+    // 過期了：設定分頁寫「授權過期」；Drive 那邊的錯誤講人話，不是一串 invalid_grant
+    refresh = "expired";
+    await getStore().deleteMedia("secrets/google.json");
+    process.env.GOOGLE_REFRESH_TOKEN = "rt-env-expired"; // 環境變數那一份過期了（九月就是這樣）
+    const st2 = (await api("/api/settings", { headers: admin })).body.status.google;
+    assert.ok(st2.connected && !st2.ok && st2.expired && st2.via === "env", JSON.stringify(st2));
+    const file = { name: "list.csv", data: Buffer.from("日期,來訪單位\n2024-01-08,美國伊利諾大學\n").toString("base64") };
+    const started = await api("/api/visit-list", { method: "POST", headers: admin, body: JSON.stringify({ action: "link", file }) });
+    assert.equal(started.status, 202, JSON.stringify(started.body));
+    await api("/api/visit-list-background", { method: "POST", headers: admin, body: JSON.stringify({ job_id: started.body.job_id }) });
+    const job = (await api(`/api/visit-list?job=${started.body.job_id}`, { headers: admin })).body;
+    assert.equal(job.status, "error");
+    assert.match(job.error, /Google 的授權過期了/);
+    assert.match(job.error, /重新連上 Google/);
+    assert.doesNotMatch(job.error, /invalid_grant/);
+  } finally {
+    globalThis.fetch = realFetch;
+    for (const k of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN"]) delete process.env[k];
+    await getStore().deleteMedia("secrets/google.json");
+    await getStore().deleteMedia("sync/visit-list.json");
+  }
+});
+
+test("來訪紀錄（公開）：匯入的帶原表的說明，同一列拆出來的算一場；後台可以改說明、整場不公開；名單與 email 不出去", async () => {
+  const { pastVisitsXlsx } = await import("./fixtures/past-visits.mjs");
+  const file = { name: "GHRC-參訪名單.xlsx", data: (await pastVisitsXlsx()).toString("base64") };
+  const read = await runJob("import", { file });
+  const done = await api("/api/import", { method: "POST", headers: admin, body: JSON.stringify({ action: "commit", file: file.name, rows: read.body.rows }) });
+  assert.equal(done.body.created.length, 3, JSON.stringify(done.body));
+  const ids = done.body.created;
+
+  const log = await api("/api/visit-log"); // 不帶任何授權：公開頁誰都打得開
+  assert.equal(log.status, 200);
+  assert.match(log.headers.get("cache-control") || "", /public/);
+  const ws = log.body.visits.find((e) => e.date === "2024-01-08");
+  assert.ok(ws && ws.orgs.length === 2, `研討會那一列拆成兩個單位，但是同一場：${JSON.stringify(log.body.visits)}`);
+  assert.equal(ws.note.zh, "研討會講者", "交流重點照原表");
+  assert.match(ws.people.zh, /John A\. Smith 教授/);
+  const jorjin = log.body.visits.find((e) => e.orgs.some((o) => o.local === "佐臻股份有限公司"));
+  assert.equal(jorjin.people.zh, "王大明副總經理");
+  // 比的是欄位名稱（單位代碼是小寫的名稱，「Summary Cron University」那種測試用的名字不算）
+  assert.doesNotMatch(JSON.stringify(log.body), /"(visit_id|purpose|guests|headcount|background|summary)"|@/, "名單、email、來訪目的、背景研判、摘要、visit_id 一律不給");
+  assert.ok(!log.body.visits.some((e) => e.orgs.some((o) => ids.includes(o.inst))), "單位代碼不是 visit_id");
+
+  assert.equal((await api("/api/visit-log", { method: "POST", body: JSON.stringify({ visit_id: ids[0], public: { hidden: true } }) })).status, 401, "改要 token");
+  const jid = ids.find((id) => id.startsWith("2025-02-26"));
+  const hide = await api("/api/visit-log", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: jid, public: { people_zh: "王大明副總經理", note_zh: "參訪 303 與 304", hidden: true } }) });
+  assert.equal(hide.status, 200, JSON.stringify(hide.body));
+  assert.ok(!(await api("/api/visit-log")).body.visits.some((e) => e.orgs.some((o) => o.local === "佐臻股份有限公司")), "標了不公開就不列");
+  assert.ok(!(await api("/api/visitor-map")).body.institutions.some((x) => x.local === "佐臻股份有限公司"), "首頁的地圖也不畫");
+
+  // 同一場（原表同一列拆出來的）：交流重點一起改，來訪人員各自留著
+  const [a, b] = ids.filter((id) => id.startsWith("2024-01-08"));
+  await api("/api/visit-log", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: a, public: { people_zh: "改過的講者", note_zh: "改過的重點", note_en: "Edited focus" } }) });
+  const other = (await api(`/api/visits?id=${b}`, { headers: admin })).body.visit.public;
+  assert.equal(other.note_zh, "改過的重點");
+  assert.equal(other.note_en, "Edited focus");
+  assert.notEqual(other.people_zh, "改過的講者");
+  // 一般存檔不會把公開說明清掉，也不會用手上那一份舊的蓋回去（「訪前」開著的那一份是改之前讀的）
+  const va = (await api(`/api/visits?id=${a}`, { headers: admin })).body.visit;
+  const { public: _p, ...rest } = va;
+  await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(rest) });
+  assert.equal((await api(`/api/visits?id=${a}`, { headers: admin })).body.visit.public?.note_zh, "改過的重點");
+  await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ ...rest, public: { note_zh: "舊的那一份", hidden: true } }) });
+  const kept = (await api(`/api/visits?id=${a}`, { headers: admin })).body.visit.public;
+  assert.ok(kept.note_zh === "改過的重點" && !kept.hidden, "公開說明只有 /api/visit-log 在寫");
+
+  for (const id of ids) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
 });

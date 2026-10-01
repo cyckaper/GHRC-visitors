@@ -1,4 +1,5 @@
 import { env, nowISO } from "./http.mts";
+import { apiDisabled, googleAccessToken, googleReady } from "./google.mts";
 import { getStore } from "./store.mts";
 
 /**
@@ -6,26 +7,18 @@ import { getStore } from "./store.mts";
  * 兩個地方用：訪後信與確認信（letter-background，一封一封寄給來賓），
  * 以及參訪結束的後續提醒（reminder-cron，寄給中心自己）。
  */
-let cached: { token: string; exp: number } | null = null;
 
 /** MAIL_MOCK=1：不真的寄，把信寫進媒體庫（測試與本機開發用，跟 AI_MOCK 同一個意思）。 */
 const mock = () => !!env("MAIL_MOCK");
 
-export function gmailConfigured(): boolean {
-  return mock() || !!(env("GMAIL_CLIENT_ID") && env("GMAIL_CLIENT_SECRET") && env("GMAIL_REFRESH_TOKEN"));
+/** 有沒有一組可以寄信的授權：後台「連上 Google」存下來的那一份（有允許寄信的話），或 GMAIL_* 環境變數。 */
+export async function gmailReady(): Promise<boolean> {
+  return mock() || (await googleReady("gmail"));
 }
 
+/** 換 access token：後台「重新連上 Google」存下來的那一份（有允許寄信的話）優先，沒有才用 GMAIL_* 環境變數（`lib/google.mts`）。 */
 async function accessToken(): Promise<string> {
-  if (cached && cached.exp > Date.now() + 60000) return cached.token;
-  const r = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ client_id: env("GMAIL_CLIENT_ID")!, client_secret: env("GMAIL_CLIENT_SECRET")!, refresh_token: env("GMAIL_REFRESH_TOKEN")!, grant_type: "refresh_token" }),
-  });
-  if (!r.ok) throw new Error(`Gmail token ${r.status}: ${await r.text()}`);
-  const j = (await r.json()) as { access_token: string; expires_in: number };
-  cached = { token: j.access_token, exp: Date.now() + j.expires_in * 1000 };
-  return j.access_token;
+  return googleAccessToken("gmail", "Gmail 還沒接好：到後台「設定」分頁按「連上 Google」，允許時「寄信」那一格要勾");
 }
 
 /** 中文主旨要 base64 編碼，不然收件端會看到亂碼。 */
@@ -55,5 +48,8 @@ export async function gmailSend(to: string, subject: string, text: string): Prom
     headers: { authorization: `Bearer ${await accessToken()}`, "content-type": "application/json" },
     body: JSON.stringify({ raw }),
   });
-  if (!r.ok) throw new Error(`Gmail send ${r.status}: ${await r.text()}`);
+  if (!r.ok) {
+    const body = await r.text();
+    throw new Error(apiDisabled(r.status, body, "Gmail") || `Gmail send ${r.status}: ${body}`);
+  }
 }

@@ -244,11 +244,22 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (x: T) => Promise<R
   return out;
 }
 
-async function blobStore() {
+/**
+ * `consistency`：列表（list）沒辦法一次一次指定讀法，只能整個 store 指定——要「讀最新的」列表就開一個 strong 的 store。
+ * 預設的列表走邊緣快取：剛存的那一場一分鐘內可能還不在列表裡（實際踩過：匯入 26 筆，清單與地圖上一筆都沒有，
+ * 重新整理才出現；公開頁還可能把那一份舊的擋在 CDN 十分鐘）。
+ */
+async function blobStore(consistency?: "strong" | "eventual") {
   const mod = await import("@netlify/blobs");
   const ctx = (globalThis as any).Netlify?.context?.deploy?.context ?? env("CONTEXT") ?? "production";
+  const opts = consistency === "strong" ? { consistency } : {};
   // 正式站用全域 store；預覽／分支部署用 deploy store，避免測試資料混進正式資料
-  return ctx === "production" ? mod.getStore("ghrc-visit") : mod.getDeployStore("ghrc-visit");
+  return ctx === "production" ? mod.getStore({ name: "ghrc-visit", ...opts }) : mod.getDeployStore({ name: "ghrc-visit", ...opts });
+}
+
+/** 列表也讀最新的（環境不支援就退回預設讀法，跟 readLatest 同一套）。 */
+async function listLatest(prefix: string) {
+  return readLatest(async (consistency) => (await blobStore(consistency)).list({ prefix }));
 }
 
 function blobsMedia() {
@@ -274,7 +285,7 @@ function blobsMedia() {
 function blobsStore(): Store {
   const listJson = async <T,>(prefix: string): Promise<T[]> => {
     const s = await blobStore();
-    const { blobs } = await s.list({ prefix });
+    const { blobs } = await listLatest(prefix);
     const rows = await mapLimit(blobs, 8, (b) => readLatest((consistency) => s.get(b.key, { type: "json", consistency })));
     return rows.filter(Boolean) as T[];
   };
@@ -312,7 +323,7 @@ function blobsStore(): Store {
         if (!cur || cur.data == null) return null;
         if (cur.etag) return { data: cur.data as Visit, etag: cur.etag };
         shaky = true;
-        const listed = (await s.list({ prefix: key })).blobs.find((b) => b.key === key)?.etag;
+        const listed = (await listLatest(key)).blobs.find((b) => b.key === key)?.etag;
         const again = await get();
         if (!again || again.data == null) return null;
         return { data: again.data as Visit, etag: again.etag || listed };

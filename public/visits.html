@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visits · Green Health Research Center</title>
+<meta name="description" content="Universities, government agencies, companies and media that have visited the Green Health Research Center (GHRC), National Taiwan University. 綠色健康研究中心 來訪紀錄。">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  /* 跟中心首頁、老師介紹頁同一套 */
+  :root { --ink: #1c1917; --accent: #0f766e; --tone: #0f766e;
+          --c301: #047857; --c302: #0369a1; --c303: #6d28d9; --c304: #b45309; --c305: #a21caf; }
+  body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 5px; z-index: 60; background: linear-gradient(90deg, var(--c301), var(--c302) 25%, var(--c303) 50%, var(--c304) 75%, var(--c305)); }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Apple SD Gothic Neo", "Hiragino Sans", sans-serif; background: #fafaf9; color: var(--ink); }
+  .hero { position: relative; overflow: hidden; border-radius: 1.5rem; padding: 1.75rem 1.5rem 1.5rem; background: linear-gradient(135deg, #d1fae5 0%, #cffafe 48%, #fef3c7 100%); border: 1px solid #6ee7b7; }
+  .lang-btn { font-size: .8rem; font-weight: 600; padding: .25rem .3rem; border-radius: 9999px; background: rgba(255, 255, 255, .8); color: #6b7280; border: 1px solid #6ee7b7; display: inline-flex; gap: .15rem; }
+  .lang-btn span { padding: .05rem .6rem; border-radius: 9999px; }
+  .lang-btn .on { background: #065f46; color: #fff; }
+  .grad-text { background: linear-gradient(90deg, #065f46, #0f766e 60%, #4d7c0f); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .card { background: #fff; border: 1px solid #e7e5e4; border-radius: 1rem; padding: 1.1rem 1.25rem; }
+  section > h2 { border-left: 4px solid var(--tone); padding-left: .6rem; font-size: 1.125rem; font-weight: 600; }
+  .name-2nd { color: #78716c; font-size: .9em; font-weight: 400; }
+  .second { color: #a8a29e; font-size: .84em; }
+  .label { font-size: .78rem; font-weight: 600; letter-spacing: .02em; color: #57534e; margin-top: .7rem; }
+  .visit { scroll-margin-top: 1rem; border-left: 5px solid #99f6e4; }
+  .visit.focus { border-color: var(--accent); box-shadow: 0 0 0 3px #ccfbf1; }
+  .room { display: inline-flex; align-items: center; gap: .35rem; font-size: .85rem; padding: .15rem .6rem; border-radius: 9999px; border: 1px solid var(--tone); color: var(--tone); background: #fff; margin: .25rem .3rem 0 0; }
+  .room b { font-variant-numeric: tabular-nums; }
+  @supports (color: color-mix(in srgb, #000 10%, #fff)) { .room { background: color-mix(in srgb, var(--tone) 8%, #fff); } }
+  a.u { text-decoration: underline; text-decoration-color: #d6d3d1; }
+  a.u:hover { text-decoration-color: var(--ink); }
+  #visitMap { --wm-dot: var(--accent); }
+  .map-ctl { display: inline-flex; gap: .3rem; }
+  .map-ctl button { min-width: 2.4rem; height: 2.2rem; padding: 0 .6rem; border-radius: .55rem; background: #fff; border: 1px solid #d6d3d1; font-size: .95rem; line-height: 1; color: #292524; }
+  .map-ctl button:hover { border-color: #a8a29e; }
+  .map-ctl button:disabled { opacity: .4; }
+  .only { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .5rem .75rem; border-radius: .8rem; background: #ecfdf5; border: 1px solid #a7f3d0; font-size: .9rem; }
+  .only button { padding: .15rem .65rem; border-radius: 9999px; background: #fff; border: 1px solid #a7f3d0; }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+<main class="max-w-3xl mx-auto px-4 py-8 space-y-8" id="app">
+  <div class="flex items-center justify-between gap-3">
+    <a class="text-sm u text-stone-500" href="/" id="homeLink">← Green Health Research Center</a>
+    <button type="button" class="lang-btn" id="langToggle" title="English / 中文"></button>
+  </div>
+
+  <header class="hero">
+    <h1 class="text-3xl font-semibold leading-tight grad-text" id="heading">Visits to the centre</h1>
+    <p class="mt-3 text-stone-700" id="intro"></p>
+    <p class="mt-3 text-sm text-stone-600" id="summary"></p>
+  </header>
+
+  <!-- 地圖：跟中心首頁、後台「資料」分頁同一張（/lib/worldmap.mjs）。點一個點＝只看那個單位的參訪 -->
+  <section id="mapSec" hidden>
+    <p class="text-sm text-stone-500" id="hint"></p>
+    <div class="mt-2"><span class="map-ctl"><button type="button" id="mapIn">＋</button><button type="button" id="mapOut">－</button><button type="button" id="mapReset"></button></span></div>
+    <div class="mt-2" id="visitMap"></div>
+  </section>
+
+  <div class="only" id="only" hidden><span id="onlyText"></span><button type="button" id="onlyClear"></button></div>
+  <div class="space-y-8" id="list"></div>
+
+  <footer class="text-xs text-stone-400 pt-4 border-t border-stone-200">
+    <p id="footerLine"></p>
+  </footer>
+</main>
+
+<script>
+(async () => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const qs = new URLSearchParams(location.search);
+
+  /**
+   * 來訪紀錄（明確要求：「參訪者多，把這些參訪另外作一頁連過去詳細說明」）：中心首頁的「來訪單位」連過來，
+   * 一場一段——哪一天、哪個單位、誰來、交流了什麼、去了哪幾間。資料是公開的 /api/visit-log：
+   * **只有已經來過的**、主辦端願意公開的說明（`visit.public`）；名單、email、來訪目的、背景研判一律不在這裡。
+   *
+   * 語言跟中心首頁同一套（英文為預設，右上角切中文，記在這台裝置，也可以用 ?ui=zh 帶）。
+   * 說明只有中文的（照欄名匯入、或主辦端只寫了中文）英文頁照放中文、標一句「中文」——比整段不見好。
+   * `?org=<單位名稱>`：從首頁的地圖點進來時只看那個單位；`#<id>`：直接跳到那一場。
+   */
+  const UI_KEY = "ghrc-ui-lang";
+  const stored = () => { try { return localStorage.getItem(UI_KEY) || ""; } catch (e) { return ""; } };
+  const asked = qs.get("ui");
+  const primary = (asked === "zh" || asked === "en" ? asked : stored()) === "zh" ? "zh" : "en";
+  const other = primary === "zh" ? "en" : "zh";
+  document.documentElement.lang = primary === "zh" ? "zh-Hant" : "en";
+  const L = {
+    en: {
+      title: "Visits · Green Health Research Center", back: "← Green Health Research Center", heading: "Visits to the centre",
+      intro: "Universities, government agencies, companies and media that have come to the Green Health Research Center since it opened in 2024 — newest first.",
+      hint: "Tap a dot to see only that institution's visits; numbered dots zoom in.",
+      visitors: "Visitors", focus: "Focus and outcome", rooms: "Laboratories visited", only: "Showing visits from", all: "Show all",
+      none: "No visits to show yet.", failed: "Could not load the visits. Please try again later.", inZh: "in Chinese",
+      mapIn: "Zoom in", mapOut: "Zoom out", mapReset: "Whole world", mapAria: "World map of the institutions that have visited the center",
+      footer: "Green Health Research Center · College of Bioresources and Agriculture, National Taiwan University",
+      types: { university: "University", government: "Government", enterprise: "Company", school: "School", ngo: "Organisation", other: "" },
+    },
+    zh: {
+      title: "來訪紀錄 · 綠色健康研究中心", back: "← 綠色健康研究中心", heading: "來訪紀錄",
+      intro: "中心 2024 年成立以來，來過的大學、政府機關、企業與媒體，新的在前。",
+      hint: "點地圖上的點，只看那個單位的參訪；有數字的點下去會放大。",
+      visitors: "來訪人員", focus: "交流重點／成果", rooms: "參訪的研究室", only: "只看", all: "看全部",
+      none: "還沒有可以公開的來訪紀錄。", failed: "讀不到來訪紀錄，請稍後再試。", inZh: "中文",
+      mapIn: "放大", mapOut: "縮小", mapReset: "全圖", mapAria: "曾來訪單位的世界地圖",
+      footer: "綠色健康研究中心 · 國立臺灣大學生物資源暨農學院",
+      types: { university: "大學", government: "政府機關", enterprise: "企業", school: "學校", ngo: "團體", other: "" },
+    },
+  };
+  const T = (k) => L[primary][k];
+  const inLang = (href) => (primary === "zh" ? `${href}${href.includes("?") ? "&" : "?"}ui=zh` : href);
+
+  document.title = T("title");
+  $("homeLink").textContent = T("back");
+  $("homeLink").href = inLang("/");
+  $("heading").textContent = T("heading");
+  $("intro").textContent = T("intro");
+  $("footerLine").textContent = T("footer");
+  $("langToggle").innerHTML = `<span class="${primary === "en" ? "on" : ""}">EN</span><span class="${primary === "zh" ? "on" : ""}">中文</span>`;
+  $("langToggle").onclick = () => {
+    try { localStorage.setItem(UI_KEY, other); } catch (e) {}
+    const u = new URL(location.href);
+    u.searchParams.set("ui", other);
+    location.href = u.toString();
+  };
+
+  let data;
+  try {
+    data = await (await fetch("/api/visit-log")).json();
+    if (!data || !data.ok) throw new Error("bad response");
+  } catch (e) {
+    $("list").innerHTML = `<p class="card">${esc(T("failed"))}</p>`;
+    return;
+  }
+  const visits = data.visits || [];
+  if (!visits.length) { $("list").innerHTML = `<p class="card text-stone-500">${esc(T("none"))}</p>`; return; }
+
+  // 研究室的名稱與顏色（跟其他頁同一份；抓不到就只寫房號）
+  let labs = [];
+  try { labs = ((await (await fetch("/api/labs")).json()).labs) || []; } catch (e) {}
+  if (!labs.length) { try { labs = ((await (await fetch("/data/labs.json")).json()).labs) || []; } catch (e) {} }
+  for (const l of labs) if (l.color) document.documentElement.style.setProperty(`--c${l.room}`, l.color);
+  const labName = (room) => { const l = labs.find((x) => String(x.room) === String(room)); return l ? (primary === "zh" ? l.name_zh : l.name_en) || l.name_en || "" : ""; };
+
+  // 國名與地點照頁面的語言（世界地圖那一份順便拿來對國名；載不到就照原本的寫法）
+  let W = null, world = null;
+  try { W = await import("/lib/worldmap.mjs"); world = await W.loadWorld(); } catch (e) { W = null; world = null; }
+  const countryOf = (o) => { const at = W && world ? W.placeOf(world, { country: o.country, geo: null }) : null; return at && W ? W.countryName(world, at.country, primary) : o.country; };
+  const nameOf = (o) => (primary === "zh" && /[一-鿿]/.test(o.local) ? o.local : o.name);
+  const otherName = (o) => { const x = primary === "zh" ? o.name : o.local; return x && x !== nameOf(o) ? x : ""; };
+  // 同一個單位：伺服器給的 inst（中文名稱一樣、或英文名稱去掉空白與標點後一樣）；拼法不同的同一家公司不要算成兩個
+  const orgKey = (o) => o.inst || `${String(o.name).trim().toLowerCase()}|${String(o.country).trim().toLowerCase()}`;
+  const WEEK = { zh: ["日", "一", "二", "三", "四", "五", "六"], en: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] };
+  const MONTH = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  // 日期本身沒有時區：照字串的年月日算星期幾（支援人力表踩過：拿台北的午夜問 UTC 會早一天）
+  const dateText = (d) => {
+    const [y, m, dd] = String(d).split("-").map(Number);
+    if (!y || !m || !dd) return String(d || "");
+    const w = new Date(Date.UTC(y, m - 1, dd)).getUTCDay();
+    return primary === "zh" ? `${y} 年 ${m} 月 ${dd} 日（${WEEK.zh[w]}）` : `${WEEK.en[w]} ${dd} ${MONTH[m - 1]} ${y}`;
+  };
+  // 說明照頁面的語言；英文頁上只有中文的，照放中文、標一句（比整段不見好）
+  const textOf = (pair) => {
+    const mine = (pair && pair[primary]) || "";
+    if (mine) return { text: mine, lang: "" };
+    const zh = (pair && pair.zh) || "";
+    return zh ? { text: zh, lang: "zh-Hant" } : null;
+  };
+  const block = (label, pair) => {
+    const t = textOf(pair);
+    if (!t) return "";
+    return `<p class="label">${esc(T(label))}${t.lang && primary !== "zh" ? ` <span class="second">(${esc(T("inZh"))})</span>` : ""}</p><p class="mt-0.5 text-stone-700 whitespace-pre-line"${t.lang ? ` lang="${t.lang}"` : ""}>${esc(t.text)}</p>`;
+  };
+  const entry = (v) => `
+    <article class="card visit" id="${esc(v.id)}" data-orgs="${esc(v.orgs.map(orgKey).join("\n"))}">
+      <p class="text-sm text-stone-500 tabular-nums">${esc(dateText(v.date))}</p>
+      ${v.orgs.map((o) => `<h3 class="font-semibold text-lg leading-snug mt-1">${esc(nameOf(o))}${otherName(o) ? ` <span class="name-2nd">${esc(otherName(o))}</span>` : ""}</h3>
+        <p class="text-sm text-stone-500">${esc([primary === "zh" && o.geo && o.geo.place ? o.geo.place : countryOf(o), T("types")[o.type] || ""].filter(Boolean).join(" · "))}</p>`).join("")}
+      ${block("visitors", v.people)}
+      ${block("focus", v.note)}
+      ${v.rooms && v.rooms.length ? `<p class="label">${esc(T("rooms"))}</p><p>${v.rooms.map((r) => `<a class="room" style="--tone:var(--c${esc(r)})" href="${esc(inLang(`/lab/${r}`))}"><b>${esc(r)}</b>${labName(r) ? ` ${esc(labName(r))}` : ""}</a>`).join("")}</p>` : ""}
+    </article>`;
+
+  // 一年一段，新的在前
+  const years = [...new Set(visits.map((v) => String(v.date).slice(0, 4)))];
+  $("list").innerHTML = years.map((y) => `
+    <section data-year="${esc(y)}">
+      <h2>${esc(primary === "zh" ? `${y} 年` : y)}</h2>
+      <div class="space-y-3 mt-3">${visits.filter((v) => String(v.date).startsWith(y)).map(entry).join("")}</div>
+    </section>`).join("");
+
+  // 上面那一行數字：幾場、幾個單位、幾個國家
+  // 名稱照最近那一場的寫法（visits 是新的在前）；這個單位用過的每一種寫法都留著，?org= 用哪一種帶進來都對得到
+  const orgs = new Map();
+  const spellings = new Map();
+  for (const v of visits) for (const o of v.orgs) {
+    const k = orgKey(o);
+    if (!orgs.has(k)) orgs.set(k, o);
+    const set = spellings.get(k) || new Set();
+    for (const s of [o.name, o.local]) if (s) set.add(String(s).trim().toLowerCase());
+    spellings.set(k, set);
+  }
+  const countries = new Set([...orgs.values()].map(countryOf).filter(Boolean)).size;
+  $("summary").textContent = primary === "zh"
+    ? `共 ${visits.length} 場 · ${orgs.size} 個單位 · 來自 ${countries} 個國家`
+    : `${visits.length} ${visits.length === 1 ? "visit" : "visits"} · ${orgs.size} ${orgs.size === 1 ? "institution" : "institutions"} · ${countries} ${countries === 1 ? "country" : "countries"}`;
+
+  // 只看某幾個單位（點地圖、或從首頁帶 ?org= 進來）
+  let map = null;
+  const showOnly = (keys, label) => {
+    const set = new Set(keys);
+    let first = null;
+    document.querySelectorAll(".visit").forEach((el) => {
+      const hit = !set.size || el.dataset.orgs.split("\n").some((k) => set.has(k));
+      el.hidden = !hit;
+      if (hit && !first) first = el;
+    });
+    document.querySelectorAll("#list > section").forEach((sec) => { sec.hidden = ![...sec.querySelectorAll(".visit")].some((el) => !el.hidden); });
+    $("only").hidden = !set.size;
+    $("onlyText").textContent = set.size ? `${T("only")}${primary === "zh" ? "：" : " "}${label}` : "";
+    $("onlyClear").textContent = T("all");
+    if (map) map.highlight(set.size ? [...set] : []);
+    return first;
+  };
+  $("onlyClear").onclick = () => { showOnly([], ""); history.replaceState(null, "", inLang("/visits")); };
+
+  if (W && world) {
+    const points = new Map();
+    for (const v of visits) for (const o of v.orgs) {
+      const at = W.placeOf(world, { country: o.country, geo: o.geo });
+      if (!at) continue;
+      const key = orgKey(o);
+      const p = points.get(key) || { key, o: orgs.get(key) || o, x: at.x, y: at.y, approx: at.approx, n: 0 };
+      // 位置：查到城市的優先（同一個單位另一場只查到國家的不要把它蓋掉）
+      if (p.approx && !at.approx) Object.assign(p, { x: at.x, y: at.y, approx: false });
+      p.n += 1;
+      points.set(key, p);
+    }
+    if (points.size) {
+      for (const id of ["mapIn", "mapOut", "mapReset"]) { $(id).title = T(id); $(id).setAttribute("aria-label", T(id)); }
+      $("mapReset").textContent = T("mapReset");
+      $("hint").textContent = T("hint");
+      $("mapSec").hidden = false; // 先讓它有寬度，地圖才量得到要畫多大
+      map = W.mountWorldMap($("visitMap"), world, {
+        ariaLabel: T("mapAria"),
+        controls: { zoomIn: $("mapIn"), zoomOut: $("mapOut"), reset: $("mapReset") },
+        onPick: (keys) => {
+          const first = showOnly(keys, keys.map((k) => nameOf(points.get(k).o)).join(primary === "zh" ? "、" : ", "));
+          if (first) first.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+        },
+        clusterTitle: (members) => (primary === "zh" ? `${members.length} 個單位：${members.map((p) => nameOf(p.o)).join("、")}` : `${members.length} institutions: ${members.map((p) => nameOf(p.o)).join(", ")}`),
+      });
+      // 點的資料整個交給地圖（群集的說明 clusterTitle 拿到的就是這幾個物件，要帶著 o）
+      map.setPoints([...points.values()].map((p) => ({ ...p, label: nameOf(p.o), title: `${nameOf(p.o)} · ${countryOf(p.o)}` })));
+    }
+  }
+
+  // 從首頁的地圖帶進來的（?org=單位名稱）：只看那個單位；#<id>：跳到那一場
+  const askedOrg = String(qs.get("org") || "").trim().toLowerCase();
+  if (askedOrg) {
+    const keys = [...spellings.entries()].filter(([, set]) => set.has(askedOrg)).map(([k]) => k);
+    if (keys.length) { const first = showOnly(keys, nameOf(orgs.get(keys[0]))); if (first) first.scrollIntoView({ block: "start" }); }
+  }
+  if (location.hash.length > 1) {
+    const el = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+    if (el && el.classList.contains("visit")) { el.classList.add("focus"); el.scrollIntoView({ block: "start" }); }
+  }
+})();
+</script>
+</body>
+</html>

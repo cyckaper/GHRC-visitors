@@ -1,6 +1,6 @@
 import { fail, json, nowISO, readJSON, requireAdmin } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
-import { DRIVE_HINT, driveConfig, driveConfigured, ensureVisitFolder, folderUrl, itemBytes, plan, uploadItem } from "../lib/drive.mts";
+import { DRIVE_HINT, driveConfig, driveReady, ensureVisitFolder, folderUrl, itemBytes, plan, uploadItem } from "../lib/drive.mts";
 
 /**
  * 後台的手動備份（自動備份走 drive-sync-background，見 lib/drive.mts）。
@@ -12,7 +12,7 @@ import { DRIVE_HINT, driveConfig, driveConfigured, ensureVisitFolder, folderUrl,
 export default async (req: Request) => {
   const denied = requireAdmin(req);
   if (denied) return denied;
-  const configured = driveConfigured();
+  const configured = await driveReady();
   const store = getStore();
 
   if (req.method === "GET") {

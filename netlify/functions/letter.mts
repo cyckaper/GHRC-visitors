@@ -1,6 +1,6 @@
 import { env, fail, json, nowISO, readJSON, requireAdmin } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
-import { gmailConfigured } from "../lib/mail.mts";
+import { gmailReady } from "../lib/mail.mts";
 import { pollJob, startBackground } from "../lib/jobs.mts";
 import { labRecipients, recipientList } from "../../lib/visit.mjs";
 import { loadPublicData } from "../lib/data.mts";
@@ -47,7 +47,7 @@ export default async (req: Request) => {
     const subject = String(body.subject || "").trim();
     const text = String(body.body || "").trim();
     if (!recipients.length || !subject || !text) return fail(400, "需要 subject、body、recipients");
-    if (!gmailConfigured()) {
+    if (!(await gmailReady())) {
       // 沒設定 Gmail 就沒有等待可言，當場把 mailto 交回去。
       // **內文不放進 mailto**：整封信 percent-encode 之後輕易破兩千字元，作業系統的信件程式
       // 會直接不開（按了沒反應，實際踩過）。收件人與主旨夠短，內文由後台複製到剪貼簿讓人貼上。

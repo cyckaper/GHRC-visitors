@@ -71,20 +71,8 @@
   .type-ngo { background: #ffe4e6; color: #9f1239; }
   pre.wrap { white-space: pre-wrap; word-break: break-word; font-family: inherit; }
   [hidden] { display: none !important; }
-  /* 訪客地圖：一個單位一個點，選到的亮起來；滑鼠點的時候不要跳出對焦外框，但鍵盤按到還是要看得見 */
-  #worldMap svg { display: block; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
-  #worldMap svg.zoomed { touch-action: none; cursor: grab; }
-  #worldMap svg.dragging { cursor: grabbing; }
-  #worldMap g:focus { outline: none; }
-  #worldMap g circle.dot { fill: var(--brand); fill-opacity: .85; stroke: #fff; stroke-width: 1.5; }
-  #worldMap g circle.dot.approx { fill: #fff; stroke: var(--brand); stroke-width: 2; }
-  #worldMap g:hover circle.dot, #worldMap g[data-on] circle.dot { fill: #b45309; fill-opacity: 1; }
-  #worldMap g:hover circle.dot.approx, #worldMap g[data-on] circle.dot.approx { fill: #fff; stroke: #b45309; }
-  #worldMap g:focus-visible circle.dot { stroke: #b45309; stroke-width: 3; }
-  #worldMap g circle.hit { fill: transparent; stroke: none; }
-  #worldMap text { pointer-events: none; font-family: inherit; }
-  #worldMap text.count { fill: #fff; font-weight: 700; }
-  #worldMap text.lbl { fill: #292524; paint-order: stroke; stroke: rgba(255,255,255,.92); stroke-linejoin: round; }
+  /* 訪客地圖本身的樣式在 public/lib/worldmap.mjs（首頁共用）；這裡只有上面那三顆鍵，點的顏色跟著後台的主色 */
+  #worldMap { --wm-dot: var(--brand); }
   .map-ctl { display: inline-flex; gap: .3rem; }
   .map-ctl button { min-width: 2.4rem; height: 2.2rem; padding: 0 .6rem; border-radius: .55rem; background: #fff; border: 1px solid #d6d3d1; font-size: .95rem; line-height: 1; color: #292524; }
   .map-ctl button:hover { background: #fff; border-color: #a8a29e; }
@@ -118,6 +106,9 @@
     <button class="tab" role="tab" data-tab="data">資料</button>
     <button class="tab" role="tab" data-tab="settings">設定</button>
   </nav>
+
+  <!-- Google 的授權過期了：備份、名單同步、寄信都停了——要讓人看得到，不能只寫在設定分頁裡（以前默默停了兩週） -->
+  <p id="googleWarn" class="card !py-2 text-sm border-amber-300 bg-amber-50 text-amber-900" hidden><span>Google 的授權過期了：Drive 備份、參訪名單的自動同步、從後台寄信都停了。</span> <a class="underline font-medium" href="/api/google-auth?start=1">重新連上 Google</a></p>
 
   <!-- 全站一個「這一場」：每個分頁都在同一場上做事，不必一頁選一次 -->
   <div class="card !py-2 flex flex-wrap items-center gap-2">
@@ -185,7 +176,7 @@
 
     <div class="card space-y-3" id="noticeCard">
       <h2 class="font-semibold"><span class="num">4</span>通告研究室 <span class="muted font-normal">多半是貼到 LINE 群組</span></h2>
-      <p class="muted">查完背景就先告訴各研究室哪個單位什麼時候來，<b>請各室填接待人員與共需幾分鐘</b>——通告最後附支援人力表的連結，老師點進去填。<b>各室填的分鐘會自動排進下面的行程</b>，也會出現在來賓專頁；定案之後再回報一次。<br>這幾則是寫給中心同事看的，所以一律中文、條列、不署名，貼得進 LINE。</p>
+      <p class="muted">查完背景就先告訴各研究室哪個單位什麼時候來，<b>請各室填接待人員與共需幾分鐘</b>——通告最後附支援人力表的連結，老師點進去填。<b>各室填的分鐘會自動排進下面的今日流程</b>，也會出現在來賓專頁；定案之後再回報一次。<br>這幾則是寫給中心同事看的，所以一律中文、條列、不署名，貼得進 LINE。</p>
 
       <div class="space-y-2">
         <div class="f mb-0">一、通告與徵詢簡報人員</div>
@@ -224,19 +215,18 @@
       </div>
     </div>
 
-    <div class="card space-y-4">
-      <h2 class="font-semibold"><span class="num">5</span>行程</h2>
-      <p class="muted">這一張表就是這一場的行程：會印在簡報第 2 頁，也會出現在來賓專頁。「研究室參訪」那一列底下是每一間幾分鐘（留 0 表示不去）——<b>各研究室在支援人力表上填的分鐘會自動排進來</b>（標「研究室填」），<b>時間會照著往後推算</b>，不必再對一次。預設總體介紹 20 分、每間 20 分，剩下的時間給綜合討論。</p>
-      <div class="flex flex-wrap gap-2 items-center">
-        <button class="btn" id="planBtn" title="依人數、時間、興趣排出這一場的行程">AI 排行程</button>
-        <span class="muted" id="planInfo"></span>
-      </div>
-      <p class="muted" id="rationale"></p>
-      <div>
-        <div class="flex items-center justify-between"><label class="f">今日流程（第 2 頁 Programme；固定含總體簡報、研究室參訪、綜合討論）</label><button class="btn btn-soft" id="addBlock" title="自己加一個流程區塊（AI 排的不合就直接改）" type="button">＋ 區塊</button></div>
-        <table id="programmeTable"><thead><tr><th>開始</th><th>結束</th><th>類型</th><th>英文</th><th>第二語言</th><th>頁碼</th><th></th></tr></thead><tbody></tbody></table>
-        <p class="muted mt-1" id="programmeTotal"></p>
-      </div>
+    <div class="card space-y-3" id="programmeCard">
+      <h2 class="font-semibold"><span class="num">5</span>今日流程 <span class="muted font-normal">自動排好，看一眼就好</span></h2>
+      <p class="muted">不必自己排：各研究室在支援人力表上填的分鐘會自動排進來，時間照著往後推算。這一份會印在簡報第 2 頁，也會出現在來賓專頁。</p>
+      <div id="programmeView" class="space-y-1 text-sm"></div>
+      <p class="muted" id="programmeTotal"></p>
+      <details id="programmeEdit">
+        <summary class="muted cursor-pointer">要改再點開：不去某一間（分鐘改成 0）、總體介紹換地點、加合照</summary>
+        <div class="mt-2 space-y-1">
+          <div class="flex justify-end"><button class="btn btn-soft" id="addBlock" title="自己加一個流程區塊，例如合照" type="button">＋ 區塊</button></div>
+          <table id="programmeTable"><thead><tr><th>開始</th><th>結束</th><th>類型</th><th>英文</th><th>第二語言</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
+      </details>
     </div>
 
     <div class="card space-y-4">
@@ -313,7 +303,8 @@
     <div id="deckWork" class="space-y-5">
       <div class="card space-y-3">
         <div class="flex flex-wrap items-center justify-between gap-2"><h2 class="font-semibold">選用頁次 <span id="slideCount" class="muted font-normal"></span></h2><span class="muted">一個區塊一個勾，整區一起進去——不必逐頁挑。「只選這區」會清掉其他區塊；必選頁（封面、流程、架構、核心宣稱、謝謝）永遠保留，畫面上是鎖住的。勾完自己會存</span></div>
-        <div class="flex flex-wrap gap-2"><button type="button" class="btn btn-soft" id="slidesAll" title="把母簡報的每一個區塊都選上（很少這樣做，時間不夠）">全選</button><button type="button" class="btn btn-soft" id="slidesNone" title="清掉所有勾選，只留封面、流程、架構、核心宣稱、謝謝這幾頁">全不選（保留必選頁）</button></div>
+        <div class="flex flex-wrap gap-2 items-center"><button type="button" class="btn" id="pickBtn" title="依單位類型、來訪目的、興趣與今日流程上要去的那幾間挑區塊，也參考過去同類單位選過哪幾頁、哪幾頁被提問">AI 挑頁</button><button type="button" class="btn btn-soft" id="slidesAll" title="把母簡報的每一個區塊都選上（很少這樣做，時間不夠）">全選</button><button type="button" class="btn btn-soft" id="slidesNone" title="清掉所有勾選，只留封面、流程、架構、核心宣稱、謝謝這幾頁">全不選（保留必選頁）</button><span class="muted" id="pickInfo"></span></div>
+        <p class="muted" id="pickRationale" translate="no" data-ai-text></p>
         <div class="space-y-2" id="slideGrid"></div>
         <p class="muted" id="deckNeedsVisit" hidden>這裡列的是母簡報的區塊，先看先勾都可以；但要記得住、產得出 .pptx，得先到「訪前」填一場參訪（填了單位名稱就會自己建一場）。</p>
         <p class="muted" id="slidesInfo"></p>
@@ -476,15 +467,36 @@
     <div class="card space-y-3">
       <div class="flex flex-wrap items-center gap-2">
         <h2 class="font-semibold mr-auto">歷次參訪 <span class="muted font-normal">點一列看那一場的摘要、回覆與動線</span></h2>
+        <label class="btn btn-soft cursor-pointer" title="系統上線之前的參訪（試算表、Word 或簡報檔）：AI 讀完先列出來給你看，勾好才匯入；匯入之後兩張地圖上就有">匯入以前的參訪<input type="file" id="importFile" accept=".xlsx,.xlsm,.csv,.tsv,.txt,.docx,.pptx" hidden></label>
         <a class="btn btn-soft" id="csvVisits" download>visits.csv</a>
         <a class="btn btn-soft" id="csvResponses" download>responses.csv</a>
         <a class="btn btn-soft" id="csvPerf" download>slide_performance.csv</a>
+      </div>
+      <div class="text-sm flex flex-wrap items-baseline gap-x-2 gap-y-1" id="listBox" hidden><span id="listInfo"></span><button class="btn btn-soft" id="listSync" title="不必等：現在就去看名單裡有沒有新加的列">現在就看一次</button></div>
+      <p class="text-sm" id="listNote"></p>
+      <p class="text-sm" id="importInfo"></p>
+      <div id="importBox" class="space-y-2 border rounded-xl p-3" hidden>
+        <div class="overflow-x-auto"><table id="importTable"><thead><tr><th><input type="checkbox" id="importAll" checked title="全選／全不選"></th><th>日期</th><th>單位</th><th class="whitespace-nowrap">國家</th><th class="whitespace-nowrap">類型</th><th>來訪人員</th><th>交流重點／成果</th></tr></thead><tbody></tbody></table></div>
+        <p class="text-sm muted" id="importSkipped"></p>
+        <label class="flex items-start gap-2 text-sm" id="importLinkRow" hidden><input type="checkbox" id="importLink" checked class="mt-1"><span>同時存成 Google 試算表（放在 Drive 的「GHRC 參訪」資料夾）：以後在那份試算表加一列，系統會自動加進來</span></label>
+        <div class="flex flex-wrap gap-2"><button class="btn" id="importGo">匯入</button><button class="btn btn-soft" id="importCancel">不匯入</button></div>
       </div>
       <table id="visitsTable"><thead><tr><th>日期</th><th>單位</th><th>類型</th><th>國家</th><th>人數</th><th>狀態</th></tr></thead><tbody></tbody></table>
     </div>
     <div class="card space-y-3" id="visitDetail" hidden>
       <div class="flex flex-wrap gap-2 items-center"><h2 class="font-semibold mr-auto" id="detailTitle"></h2><button class="btn" id="summaryBtn" title="現在就產一份：把這一場的回覆、動線、口述整理成一頁摘要，並記下哪幾頁被提問、被提到。平常不必按——有回覆之後每天凌晨會自己產，回覆變多也會自己重寫">AI 產一頁摘要</button><button class="btn btn-soft" id="driveBtn" title="手動補救用：把這一場的資料與檔案另存到中心的 Google Drive（平常會自動備份）">立即備份到 Drive</button></div>
       <p class="text-sm" id="driveInfo"></p>
+      <div class="border rounded-xl p-3 space-y-2" id="publicBox">
+        <div class="flex flex-wrap items-baseline gap-2"><h3 class="font-medium mr-auto">公開頁上的說明 <span class="muted font-normal">中心首頁的地圖與「來訪紀錄」頁，參訪過後才出現；改了重新整理就看得到</span></h3><a class="underline text-sm" id="publicView" target="_blank" rel="noopener" href="/visits">看公開頁</a></div>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="pubHidden"> 這一場不公開（地圖與來訪紀錄都不放）</label>
+        <div class="grid sm:grid-cols-2 gap-2 text-sm">
+          <label class="space-y-1"><span class="muted block">來訪人員（中文）</span><input type="text" id="pubPeopleZh" class="w-full"></label>
+          <label class="space-y-1"><span class="muted block">來訪人員（英文）</span><input type="text" id="pubPeopleEn" class="w-full"></label>
+          <label class="space-y-1"><span class="muted block">交流重點／成果（中文）</span><textarea id="pubNoteZh" rows="3" class="w-full"></textarea></label>
+          <label class="space-y-1"><span class="muted block">交流重點／成果（英文）</span><textarea id="pubNoteEn" rows="3" class="w-full"></textarea></label>
+        </div>
+        <p class="text-sm muted" id="pubInfo"></p>
+      </div>
       <pre class="wrap text-sm" id="summary"></pre>
       <h3 class="font-medium">來賓回覆</h3>
       <table id="responsesTable"><thead><tr><th>來源</th><th>姓名</th><th>email</th><th>最想看</th><th>想合作</th><th>希望我們</th><th>簽名簿／建議／備註</th><th>時間</th></tr></thead><tbody></tbody></table>
@@ -536,7 +548,8 @@
 
     <div class="card space-y-3">
       <h2 class="font-semibold">外部服務</h2>
-      <p class="muted">金鑰一律放 Netlify 的環境變數，這裡只看得到「接好了沒」。改完要重新部署才會生效。</p>
+      <p class="muted">金鑰放在 Netlify 的環境變數，改完要重新部署才會生效；Google 的授權不必動環境變數，按下面的「連上 Google」就好。這裡只看得到「接好了沒」。</p>
+      <div class="flex flex-wrap items-center gap-2 text-sm"><span id="googleInfo"></span><a class="btn btn-soft" id="googleConnect" href="/api/google-auth?start=1" title="用中心的 Google 帳號允許一次：Drive 備份、參訪名單的 Google 試算表、從後台寄信都用這一組。授權過期了也按這裡">連上 Google</a></div>
       <ul class="text-sm space-y-1" id="statusList"></ul>
     </div>
 
@@ -806,6 +819,14 @@
     await loadVisits({ autoPick: true });
     // 預設值（例如訪後信寄件者）與「哪些外部服務接好了」一開場就拿，不必等人打開「設定」
     api("/api/settings").then((r) => { if (r.ok) { state.settings = r.settings; state.services = r.status; renderServiceNotes(); } });
+    // 從 Google 的同意畫面回來（/api/google-auth 導回 ?google=…）：說一聲結果，停在設定分頁
+    const g = new URLSearchParams(location.search).get("google");
+    if (g) {
+      history.replaceState(null, "", location.pathname + location.hash);
+      const msg = { ok: "已經連上 Google：Drive 備份、參訪名單、寄信都用這一組。", denied: "沒有允許，Google 沒有連上。", noscope: "要勾「Google 雲端硬碟」那一項，系統才看得到名單與備份；請再按一次「連上 Google」。", expired: "這一次連結逾時了，請再按一次「連上 Google」。" }[g] || "Google 沒有連上，請再按一次「連上 Google」。";
+      flash(msg, g === "ok" ? "ok" : "err");
+      setTimeout(() => showTab("settings"), 0);
+    }
     // 打開後台就停在今天（或最近）那一場——不必自己先去選
     const m = /wrapup=([\w-]+)/.exec(location.hash);
     if (m) $("visitSelect").value = m[1];
@@ -902,7 +923,7 @@
     $("draftDiscard").hidden = state.saved || !state.draft?.fields?.form;
     if (!state.saved) $("saveInfo").textContent = "";
     renderGuests(v.guests || []); renderProgramme(v.programme || [], v.itinerary); renderBackground(v.background);
-    $("rationale").textContent = v.plan_rationale || ""; $("uncertainties").innerHTML = (v.uncertainties || []).map((u) => `<li>${esc(u)}</li>`).join("");
+    $("uncertainties").innerHTML = (v.uncertainties || []).map((u) => `<li>${esc(u)}</li>`).join("");
     $("afterSave").hidden = !state.saved;
     renderProgress(v);
     if (state.saved) showSaved(v);
@@ -951,9 +972,13 @@
     if (inPre) scheduleSave();
   });
   /**
-   * 行程**只有一張表**。以前是兩張：「今日流程」排時間區塊，底下另一張「現場動線」再填每一間幾分鐘——
-   * 同一件事要看懂兩套、改兩個地方。現在每一間的分鐘數就長在「研究室參訪」那一列底下，
-   * 分鐘一改就把後面各段的時間往後推算一次（`retimeProgramme`）：**時間是算出來的，不是第二個要填的欄位**。
+   * 今日流程**是自動排的**：各研究室在支援人力表上填的分鐘由伺服器排進動線，時間照著往後推，
+   * 開始時間一改也整排跟著推。所以第 5 步平常只給看（`renderProgrammeView`），可以改的那張表收在
+   * 「要改再點開」裡——只有例外才需要打開：不去某一間（分鐘改成 0）、總體介紹換地點、加合照。
+   * 以前這一步還有一顆「AI 排行程」，行程交給研究室填之後它只剩挑頁的用處，搬到「簡報」分頁變成「AI 挑頁」。
+   *
+   * 那張表仍然**只有一張**：每一間的分鐘數長在「研究室參訪」那一列底下，分鐘一改就把後面各段的時間
+   * 往後推算一次（`retimeProgramme`）——**時間是算出來的，不是第二個要填的欄位**。
    * 存回去的資料結構沒變（`programme` ＋ `itinerary`），所以簡報第 2 頁、ICS、來賓專頁、摘要都照舊。
    */
   function renderProgramme(blocks, itinerary) {
@@ -964,7 +989,8 @@
   }
   const KIND_LABEL = { briefing: "總體簡報", tour: "研究室參訪", discussion: "綜合討論", photo: "合照", other: "其他" };
   const briefingLocationOf = (it) => ((it || []).find((s) => String(s.room) === "briefing") || {}).location || "";
-  const blockRow = (b = { kind: "discussion", title_en: "General discussion", title_2nd: "綜合討論" }, it) => `<tr><td><input type="time" value="${esc(b.start)}"></td><td><input type="time" value="${esc(b.end)}"></td><td><select>${Object.entries(KIND_LABEL).map(([k, label]) => `<option value="${k}" ${b.kind === k ? "selected" : ""}>${label}</option>`).join("")}</select>${b.kind === "briefing" ? `<input type="text" class="!w-20 ml-1" placeholder="地點 302" title="總體介紹在哪一間（空白就是 302）" value="${esc(briefingLocationOf(it === undefined ? state.visit?.itinerary : it))}" data-briefing-location>` : ""}</td><td><input type="text" value="${esc(b.title_en)}"></td><td><input type="text" value="${esc(b.title_2nd)}"></td><td><input type="text" value="${esc(b.slides_range || "")}"></td><td><button type="button" class="muted" data-del-row title="刪掉這一列">✕</button></td></tr>`;
+  // 簡報第 2 頁的「頁碼」那一欄不再給人填：產檔時照選了幾頁自己算（pptx.mjs）。舊資料裡 AI 填過的照樣帶著走
+  const blockRow = (b = { kind: "discussion", title_en: "General discussion", title_2nd: "綜合討論" }, it) => `<tr data-slides-range="${esc(b.slides_range || "")}"><td><input type="time" value="${esc(b.start)}"></td><td><input type="time" value="${esc(b.end)}"></td><td><select>${Object.entries(KIND_LABEL).map(([k, label]) => `<option value="${k}" ${b.kind === k ? "selected" : ""}>${label}</option>`).join("")}</select>${b.kind === "briefing" ? `<input type="text" class="!w-20 ml-1" placeholder="地點 302" title="總體介紹在哪一間（空白就是 302）" value="${esc(briefingLocationOf(it === undefined ? state.visit?.itinerary : it))}" data-briefing-location>` : ""}</td><td><input type="text" value="${esc(b.title_en)}"></td><td><input type="text" value="${esc(b.title_2nd)}"></td><td><button type="button" class="muted" data-del-row title="刪掉這一列">✕</button></td></tr>`;
   /** 「研究室參訪」那一列底下的五間：一間一個分鐘數，留 0 就是不去。 */
   const roomsRow = (it) => {
     const by = new Map((it || []).map((s, i) => [String(s.room), { ...s, order: i }]));
@@ -976,12 +1002,12 @@
       const fromLab = s && state.visit?.lab_minutes?.[room] != null && Number(state.visit.lab_minutes[room]) === Number(s.minutes);
       return `<label class="card !p-2 !rounded-lg flex items-center gap-2" style="--tone:${roomTone(room)}"><span class="room">${room}</span><span class="muted">${esc(lab?.lead?.name_zh || "")}</span><input type="number" min="0" class="!w-16" value="${s ? s.minutes : 0}" data-room="${room}"> 分${fromLab ? `<span class="muted text-xs" data-from-lab title="研究室在支援人力表上填的">研究室填</span>` : ""}</label>`;
     }).join("");
-    return `<tr data-rooms-row><td colspan="7" class="!pt-0"><div class="flex flex-wrap gap-2 items-center" id="itinerary">${chips}<span class="muted" id="roomsTotal"></span></div></td></tr>`;
+    return `<tr data-rooms-row><td colspan="6" class="!pt-0"><div class="flex flex-wrap gap-2 items-center" id="itinerary">${chips}<span class="muted" id="roomsTotal"></span></div></td></tr>`;
   };
   /** 流程區塊那幾列（跳過底下那一列研究室分鐘）。 */
   const programmeRows = () => [...($("programmeTable").tBodies[0]?.rows || [])].filter((r) => !r.hasAttribute("data-rooms-row"));
   const rowKind = (tr) => tr.cells[2].querySelector("select").value;
-  const readProgramme = () => programmeRows().map((tr) => ({ start: tr.cells[0].firstChild.value, end: tr.cells[1].firstChild.value, kind: rowKind(tr), title_en: tr.cells[3].firstChild.value, title_2nd: tr.cells[4].firstChild.value, slides_range: tr.cells[5].firstChild.value, rooms: rowKind(tr) === "tour" ? labRoute() : [] }));
+  const readProgramme = () => programmeRows().map((tr) => ({ start: tr.cells[0].firstChild.value, end: tr.cells[1].firstChild.value, kind: rowKind(tr), title_en: tr.cells[3].firstChild.value, title_2nd: tr.cells[4].firstChild.value, slides_range: tr.dataset.slidesRange || "", rooms: rowKind(tr) === "tour" ? labRoute() : [] }));
   /** 類型改了、加一列、刪一列：讀出畫面上現在這一份，整表重畫（研究室那一列才會跟著搬家）。 */
   function syncProgramme() {
     const blocks = readProgramme();
@@ -1027,6 +1053,34 @@
     const whole = minutesBetween($("startTime").value, $("endTime").value);
     const diff = planned && whole ? planned - whole : 0;
     $("programmeTotal").textContent = !planned ? "" : `流程排了 ${planned} 分${!whole ? "" : diff === 0 ? `，跟「幾點到幾點」一樣` : diff > 0 ? `，比 ${whole} 分多 ${diff} 分` : `，比 ${whole} 分少 ${-diff} 分`}`;
+    renderProgrammeView();
+  }
+  /**
+   * 第 5 步平常看到的那一份：一段一行，研究室參訪底下一間一行、各自的時段（跟來賓專頁同一個算法：
+   * 從研究室參訪那一段的開始往後推）。讀的是下面那張表現在的樣子，表上改什麼這裡就跟著變。
+   * 每一間寫「研究室填」（分鐘是研究室在支援人力表上填的）或「未填」（還沒回，先照預設）；
+   * 填了接待人員就寫出來——看一眼就知道哪幾間還沒回、誰接待。
+   */
+  function renderProgrammeView() {
+    const it = readItinerary();
+    const where = it[0]?.location || "302";
+    const v = state.visit || {};
+    const row = (time, body, indent = "") => `<div class="flex flex-wrap items-baseline gap-x-3 ${indent}"><span class="tabular-nums muted">${time}</span>${body}</div>`;
+    const blockName = (b) => (b.kind !== "other" && KIND_LABEL[b.kind]) || b.title_2nd || b.title_en || KIND_LABEL.other;
+    $("programmeView").innerHTML = readProgramme().map((b) => {
+      const head = row(`${esc(b.start)}–${esc(b.end)}`, `<span class="font-medium">${esc(blockName(b))}</span>${b.kind === "briefing" ? `<span class="muted">${esc(where)}</span>` : ""}`);
+      if (b.kind !== "tour") return head;
+      let cur = hhmm(b.start);
+      return head + it.filter((s) => s.room !== "briefing").map((s) => {
+        const start = cur == null ? "" : toHHMM(cur);
+        if (cur != null) cur += s.minutes;
+        const host = v.presenters?.[s.room];
+        const filled = v.lab_minutes?.[s.room] != null;
+        const fromLab = filled && Number(v.lab_minutes[s.room]) === s.minutes;
+        const note = fromLab ? `<span class="muted" data-from-lab>研究室填</span>` : !filled && !host ? `<span class="muted" data-not-filled>未填</span>` : "";
+        return row(`${start}–${cur == null ? "" : toHHMM(cur)}`, `<span class="room" style="--tone:${roomTone(s.room)}">${esc(s.room)}</span><span>${s.minutes} 分</span>${host ? `<span><span class="muted">接待</span> ${esc(host)}</span>` : ""}${note}`, "pl-6");
+      }).join("");
+    }).join("");
   }
   const readItinerary = () => {
     const rooms = [...document.querySelectorAll("#itinerary input[data-room]")].map((i) => ({ room: i.dataset.room, minutes: Number(i.value) || 0 })).filter((s) => s.minutes > 0);
@@ -1044,6 +1098,7 @@
     if (!id) {
       // 沒有參訪也要看得到母簡報的頁次；只是還不能存、不能產檔
       state.deckVisit = null;
+      $("pickInfo").textContent = ""; $("pickRationale").textContent = "";
       $("noDeck").checked = false;
       $("deckWork").hidden = false;
       renderSlideGrid([]);
@@ -1060,7 +1115,9 @@
     }
     const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
     if (!r.ok) { state.deckVisit = null; $("deckWork").hidden = true; dnote(`讀不到這場參訪：${r.error}`, "err"); return flash(r.error, "err"); }
+    if (state.deckVisit?.visit_id !== r.visit.visit_id) $("pickInfo").textContent = ""; // 上一場「挑了幾頁」那一行不要掛在這一場
     state.deckVisit = r.visit;
+    $("pickRationale").textContent = r.visit.plan_rationale || "";
     state.deckStale = r.stale || [];
     deckNeedsVisit(false);
     $("noDeck").checked = !!r.visit.deck?.skip;
@@ -1075,6 +1132,7 @@
   function deckNeedsVisit(on) {
     $("deckNeedsVisit").hidden = !on;
     $("deckBtn").disabled = on;
+    $("pickBtn").disabled = on;
     $("noDeck").disabled = on;
   }
   function applyNoDeck() {
@@ -1098,7 +1156,8 @@
     state.deckVisit = visit;
     if (stale) state.deckStale = stale;
     renderDeckStale();
-    if (state.visit?.visit_id === visit.visit_id) { state.visit.slides = visit.slides; state.visit.deck = visit.deck; state.stale = state.deckStale || []; renderProgress(state.visit); }
+    // AI 挑頁寫的第 1–3 頁替換文字也要同步回去：訪前一自動存檔，送的是 state.visit 那一份
+    if (state.visit?.visit_id === visit.visit_id) { Object.assign(state.visit, { slides: visit.slides, deck: visit.deck, text_edits: visit.text_edits, cover_text: visit.cover_text, plan_rationale: visit.plan_rationale }); state.stale = state.deckStale || []; renderProgress(state.visit); }
   }
   $("noDeck").onchange = async () => {
     applyNoDeck();
@@ -1124,7 +1183,12 @@
     if (saveSlides.running) { scheduleSlidesSave.t = setTimeout(saveSlides, AUTOSAVE_DELAY); return; }
     saveSlides.running = true;
     try {
-      const r = await api("/api/visits", { method: "POST", body: { ...forSave(v), slides: chosenSlides() } });
+      // **拿伺服器上最新的那一份當底**，只換上簡報分頁自己管的幾格（選頁、AI 挑頁寫的第 1–3 頁替換文字）。
+      // 存檔是整筆覆寫，手上這一份卻是打開分頁時讀的——AI 挑頁一等就是一兩分鐘，這中間訪前改的
+      // （或另一台電腦存的）若照手上的舊版整筆送回去，就被蓋回舊的了。
+      const fresh = await api(`/api/visits?id=${encodeURIComponent(v.visit_id)}`);
+      const base = fresh.ok && fresh.visit ? fresh.visit : v;
+      const r = await api("/api/visits", { method: "POST", body: { ...forSave(base), slides: chosenSlides(), text_edits: v.text_edits ?? base.text_edits, cover_text: v.cover_text ?? base.cover_text, plan_rationale: v.plan_rationale ?? base.plan_rationale } });
       if (!r.ok) { $("slidesInfo").textContent = ""; return flash(`選頁存不起來：${r.error}`, "err"); }
       afterDeckSave(r.visit, r.stale);
       $("slidesInfo").textContent = `已存 ${r.visit.slides.length} 頁 ${(r.visit.updated_at || "").slice(11, 16)}`;
@@ -1191,6 +1255,31 @@
   });
   $("slidesAll").onclick = () => { setBlocks(true); updateSlideCount(); scheduleSlidesSave(); };
   $("slidesNone").onclick = () => { setBlocks(false); updateSlideCount(); scheduleSlidesSave(); };
+  /**
+   * AI 挑頁（`/api/plan`）：依單位類型、來訪目的、興趣與今日流程上要去的那幾間挑區塊，
+   * 參考過去同類單位選過哪幾頁、哪幾頁被提問。以前這顆在訪前、叫「AI 排行程」順便挑頁；
+   * 行程交給各研究室在支援人力表上填之後，它只剩挑頁的用處，所以搬來這裡。
+   * **只拿挑頁那幾樣**（選頁、第 1–3 頁的替換文字、為什麼這樣挑）——今日流程與動線一律不動：
+   * 那是研究室填的，AI 排回來的那一份不該蓋掉。
+   */
+  $("pickBtn").onclick = () => busy($("pickBtn"), async () => {
+    const v = state.deckVisit;
+    if (!v) return;
+    // 同一場就送訪前表單上現在那一份（剛改、還沒存的也算）；動線照它挑——不去的那一間就不挑它的頁
+    const visit = state.visit?.visit_id === v.visit_id ? readForm() : v;
+    const out = await runJob("/api/plan", { visit }, noteInto("pickInfo"), "AI 挑頁中……大約一兩分鐘。");
+    if (!out?.visit || state.deckVisit?.visit_id !== v.visit_id) return;
+    const p = out.visit;
+    // 「這場不用簡報」那個勾不歸它管：等 AI 的那一分鐘裡勾起來的，照人的意思
+    state.deckVisit = { ...state.deckVisit, text_edits: p.text_edits || [], cover_text: p.cover_text, plan_rationale: p.plan_rationale || "" };
+    renderSlideGrid(p.slides || []);
+    // 訪前手上那一份也先換上：那邊的自動存檔送的是 state.visit，不先換的話會把剛挑好的頁蓋回去
+    if (state.visit?.visit_id === v.visit_id) Object.assign(state.visit, { slides: chosenSlides(), text_edits: state.deckVisit.text_edits, cover_text: state.deckVisit.cover_text, plan_rationale: state.deckVisit.plan_rationale });
+    $("pickRationale").textContent = p.plan_rationale || "";
+    const hist = out.history ? `；參考了過去 ${out.history.visits} 場（同類單位 ${out.history.same_type.visits} 場）哪幾頁被提問、被提到` : "";
+    $("pickInfo").textContent = `挑了 ${chosenSlides().length} 頁、約 ${out.estimated_briefing_minutes} 分鐘${hist}${out.master_text_available ? "" : "（尚無母簡報文字：第 1–3 頁的替換文字要在產檔時處理）"}`;
+    await saveSlides();
+  });
   function updateSlideCount() {
     const chosen = chosenSlides();
     const blocks = blockInputs().filter((i) => i.checked).length;
@@ -1279,31 +1368,13 @@
     $("listFilesInfo").innerHTML = (out.files_read || []).map((f) => `<li>${esc(f.name)} <span class="ok">已讀（${f.kind === "text" ? `${f.chars} 字` : f.kind === "document" ? "PDF 交給 AI 直接讀" : "照片交給 AI 直接讀"}）</span></li>`).join("") + (out.warnings || []).map((w) => `<li class="err">${esc(w)}</li>`).join("");
     state.saved = false; $("visitSelect").value = "";
     if (state.draft && state.draft.id !== "new") await migrateDraft(state.draft.id, "new"); // 貼進來的那封信是這一場新的，不留在剛才那一場底下
-    fillForm({ ...emptyVisit(), ...out.visit, visit_id: "" });
+    // 信裡讀不出動線（讀出來的只有總體介紹）：跟自己打字建的一場一樣，先擺五間各 20 分的預設——
+    // 行程是自動排的，研究室在支援人力表上填了分鐘就換成填的；以前靠「AI 排行程」補上這五間，那顆鍵拿掉了
+    const ex = out.visit || {};
+    const hasLabs = (ex.itinerary || []).some((s) => String(s.room) !== "briefing" && Number(s.minutes) > 0);
+    fillForm({ ...emptyVisit(), ...ex, ...(hasLabs ? {} : { itinerary: emptyVisit().itinerary, programme: [] }), visit_id: "" });
     await saveVisit();
     flash("抽取完成，請逐項確認（尤其是名單的 email）");
-  }
-  $("planBtn").onclick = () => busy($("planBtn"), async () => {
-    const visitSeq = selectVisit.seq || 0;
-    const r = await api("/api/plan", { method: "POST", body: { visit: readForm() } });
-    if (!r.ok || !r.job_id) return flash(r.error || "排程沒有開始，請再按一次", "err");
-    $("planInfo").textContent = "AI 排行程中……大約一兩分鐘。";
-    pollPlan(r.job_id, visitSeq);
-  });
-  async function pollPlan(jobId, visitSeq) {
-    const out = await waitForJob("/api/plan", jobId, noteInto("planInfo"), { visitSeq });
-    if (!out) return;
-    // 排行程決定的是行程與選頁（加上研究室在支援人力表上填的那幾格，行程表上「研究室填」的標記才對得上）。
-    // **其他的不歸它管**：簡報那邊的狀態——等 AI 的那一分鐘裡，人可能已經切到「簡報」分頁勾了「這場不用簡報」
-    // 或產了檔；信件、簽名簿這些別的端點寫的，送去排行程的那一份本來就沒帶（見 forSave），回來的是空的。
-    const v = out.visit;
-    const PLANNED = ["programme", "itinerary", "slides", "text_edits", "cover_text", "plan_rationale", "presenters", "lab_minutes", "lab_minutes_at", "lab_added"];
-    state.visit = { ...state.visit, ...Object.fromEntries(PLANNED.filter((k) => v[k] !== undefined).map((k) => [k, v[k]])), visit_id: state.saved ? state.visit.visit_id : "" };
-    renderProgramme(v.programme, v.itinerary);
-    $("rationale").textContent = v.plan_rationale || ""; const hist = out.history ? `；參考了過去 ${out.history.visits} 場（同類單位 ${out.history.same_type.visits} 場）哪幾頁被提問、被提到` : "";
-    $("planInfo").textContent = `也挑了 ${(v.slides || []).length} 頁、簡報約 ${out.estimated_briefing_minutes} 分鐘，到「簡報」分頁確認${hist}${out.master_text_available ? "" : "（尚無母簡報文字：第 1–3 頁的替換文字要在產檔時處理）"}`;
-    await saveVisit();
-    flash((out.warnings || []).length ? out.warnings.join(" ") : "已排好，時間不對就直接改", (out.warnings || []).length ? "err" : "ok");
   }
   /**
    * 自己存。填完就存好了，不必找存檔鍵；不要的那一場按「刪掉這一場」。
@@ -1343,14 +1414,16 @@
     }
   }
   // 訪前分頁裡任何一個欄位改動都會自己存（含名單、行程那張表）
-  $("startTime").addEventListener("input", showDuration);
-  $("endTime").addEventListener("input", showDuration);
+  // 今日流程是自動排的：開始時間一改整排跟著往後推（以前流程停在舊的時間，要自己一列一列改）；
+  // 結束時間只影響「流程排了幾分，比幾點到幾點多或少」那一行
+  $("startTime").addEventListener("input", () => { showDuration(); retimeProgramme(); });
+  $("endTime").addEventListener("input", () => { showDuration(); updateProgrammeTotal(); });
   $("tab-pre").addEventListener("input", scheduleSave);
   $("tab-pre").addEventListener("change", scheduleSave);
   // 行程那張表：研究室的分鐘改了就把後面各段的時間推算一次；類型改了要換這一列有沒有研究室分鐘
   $("programmeTable").addEventListener("input", (e) => {
     if (e.target.matches("input[data-room]")) retimeProgramme();
-    else if (e.target.matches('input[type="time"]')) updateProgrammeTotal();
+    else updateProgrammeTotal(); // 時間、地點、標題：上面那一份看的跟著變
   });
   $("programmeTable").addEventListener("change", (e) => { if (e.target.matches("select")) syncProgramme(); });
 
@@ -1555,7 +1628,6 @@
         ["pre", (v.guests || []).length ? `名單 ${v.guests.length} 人` : "名單", (v.guests || []).length > 0, "訪後信會寄給名單上每一個人，所以名單就是回饋的上限"],
         ["pre", "背景研判", v.background?.status === "done", "查過對方的公開資料，判斷可能的參訪目的"],
         ["pre", replied ? `通告 ${replied} 間已回` : "通告研究室", !!(v.letters?.notice?.body && replied), "告訴各研究室哪個單位什麼時候來，請各室在支援人力表上填接待人員與共需幾分鐘——填的分鐘會自動排進今日流程"],
-        ["pre", "今日流程", (v.programme || []).length > 0, "這一場的行程：幾點做什麼、每一間幾分鐘。會印在簡報第 2 頁與來賓專頁"],
         ["deck", v.deck?.skip ? "不用簡報" : stale("deck") ? "簡報 需重產" : v.deck?.generated_at ? "簡報已產" : `選了 ${(v.slides || []).length} 頁`, !!(v.deck?.skip || (v.deck?.generated_at && !stale("deck"))), stale("deck") ? "行程或選頁在產檔之後改過，手上那份 .pptx 是舊的" : "挑頁並產出這一場的 .pptx；只口頭介紹的場次可以整頁關掉"],
         ["pre", stale("confirmation") ? "確認信 行程已改" : v.letters?.confirmation?.sent_at ? "確認信 已寄" : "確認信", !!(v.letters?.confirmation?.sent_at && !stale("confirmation")), stale("confirmation") ? "寄出之後行程又改過，對方手上的時間是舊的" : "跟對方確認日期時間，順便把來賓專頁網址交出去"],
       ]],
@@ -1595,17 +1667,30 @@
   const PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
   const PART = 4 * 1024 * 1024;
   const mb = (n) => `${(n / 1e6).toFixed(1)} MB`;
-  async function checkMaster() {
-    state.master = null; state.masterOnSite = false;
-    const r = await api("/api/master");
-    if (r.ok) state.master = r.master || null;
-    if (!state.master) {
-      try {
-        const h = await fetch(MASTER_URL, { method: "HEAD", cache: "no-store" });
-        // 站台對不存在的路徑會回 index.html（200），所以看型別不看狀態碼
-        state.masterOnSite = h.ok && !/text\/html/i.test(h.headers.get("content-type") || "");
-      } catch (e) { state.masterOnSite = false; }
-    }
+  /**
+   * 站台上有沒有母簡報。**問完才換**：以前一開始就先清成「沒有」再去問，這一兩百毫秒裡按「產生簡報」
+   * 就跳出選檔視窗——站台上明明有一份（換一場、切到簡報分頁都會再問一次，所以不是只有剛打開才會遇到）。
+   * 後面又問了一次（或剛上傳、剛移除）就以那一次為準，舊的答案後回來不蓋掉新的。
+   */
+  function checkMaster() {
+    const seq = (checkMaster.seq = (checkMaster.seq || 0) + 1);
+    return (state.masterChecking = (async () => {
+      let master = null, onSite = false;
+      const r = await api("/api/master");
+      if (r.ok) master = r.master || null;
+      if (!master) {
+        try {
+          const h = await fetch(MASTER_URL, { method: "HEAD", cache: "no-store" });
+          // 站台對不存在的路徑會回 index.html（200），所以看型別不看狀態碼
+          onSite = h.ok && !/text\/html/i.test(h.headers.get("content-type") || "");
+        } catch (e) { onSite = false; }
+      }
+      if (seq === checkMaster.seq) setMaster(master, onSite);
+    })());
+  }
+  function setMaster(master, onSite = false) {
+    checkMaster.seq = (checkMaster.seq || 0) + 1; // 還在路上的那一次作廢
+    state.master = master; state.masterOnSite = onSite; state.masterKnown = true;
     renderMasterRow();
   }
   function renderMasterRow() {
@@ -1619,7 +1704,7 @@
     else if (state.masterOnSite) row.innerHTML = `<span class="muted">母簡報：站台上的 slim-master.pptx</span>`;
     else row.innerHTML = `<span class="muted">母簡報還沒放上站台（只要做一次；可直接選原始母簡報，會先在瀏覽器裡瘦身）</span><label class="btn btn-soft cursor-pointer">上傳母簡報 .pptx<input type="file" id="masterUpload" accept=".pptx" hidden></label>`;
     const up = $("masterUpload"); if (up) up.onchange = () => { const f = up.files[0]; if (f) uploadMaster(f); };
-    const rm = $("masterRemove"); if (rm) rm.onclick = async () => { if (!confirm(t("移除站台上的母簡報？"))) return; const r = await api("/api/master", { method: "DELETE" }); if (!r.ok) return flash(r.error, "err"); state.masterBytes = null; await checkMaster(); };
+    const rm = $("masterRemove"); if (rm) rm.onclick = async () => { if (!confirm(t("移除站台上的母簡報？"))) return; const r = await api("/api/master", { method: "DELETE" }); if (!r.ok) return flash(r.error, "err"); state.masterBytes = null; setMaster(null); await checkMaster(); };
   }
   async function uploadMaster(file) {
     const info = $("deckInfo"); info.hidden = false;
@@ -1671,7 +1756,7 @@
     }
     const c = await api(`/api/master?upload=${id}&commit=1&total=${total}&name=${encodeURIComponent(name)}`, { method: "POST" });
     if (!c.ok) throw new Error(c.error || "上傳沒有完成");
-    state.master = c.master; state.masterOnSite = false; state.masterBytes = bytes; renderMasterRow();
+    state.masterBytes = bytes; setMaster(c.master);
   }
   function loadScript(src) { return new Promise((resolve, reject) => { const el = document.createElement("script"); el.src = src; el.onload = resolve; el.onerror = () => reject(new Error("載入失敗：" + src)); document.head.appendChild(el); }); }
   async function deckCore() {
@@ -1731,8 +1816,11 @@
     return out;
   }
   // 按「產生簡報」：站台有母簡報就直接產；沒有就先跳選檔視窗（要在同一個點擊裡同步呼叫），選完立刻產
-  $("deckBtn").onclick = () => {
+  $("deckBtn").onclick = async () => {
     if (!state.deckVisit) return flash("請先選一場參訪", "err");
+    // 剛打開、還不知道站台上有沒有母簡報：等第一次問完再決定（不然站台上明明有，卻跳出選檔視窗）。
+    // 問過一次之後就不等——選檔視窗要在同一個點擊裡同步打開（iPad 的 Safari 等久了就不給開）
+    if (!state.masterKnown) await state.masterChecking;
     if (!state.masterBytes && !state.master && !state.masterOnSite) { state.buildAfterPick = true; $("masterFile").value = ""; $("masterFile").click(); return; }
     buildDeck();
   };
@@ -2176,7 +2264,7 @@
       const r = await runJob("/api/letter", { visit_id: $("visitSelect").value, action: "send", kind, sender: $(ids.sender).value, subject: $(ids.subject).value, body: $(ids.body).value, recipients }, note, `寄送中……一封一封寄，${recipients.length} 人大約要一分鐘。`);
       if (!r) return;
       if (r.sent) { $(ids.info).innerHTML = `<span class="ok">已寄給 ${r.sent_to.length} 人${r.failed?.length ? `，${r.failed.length} 人失敗：${esc(r.failed.map((f) => f.email).join("、"))}` : ""}</span>`; $(ids.mailto).hidden = true; flash(`${label}已寄出`); rebase([ids.subject, ids.body]); queueDraft(); applyDraft(); loadVisits(); loadRecipients(); }
-      else if (r.reason === "gmail_not_configured") { $(ids.info).innerHTML = `<span class="err">尚未寄出：Netlify 沒有設定 Gmail（GMAIL_CLIENT_ID／SECRET／REFRESH_TOKEN）。用右邊那顆自己寄，或按「複製信件」貼到你的信箱。</span>`; const m = $(ids.mailto); m.dataset.mailto = r.mailto; m.hidden = false; m.onclick = () => openMailto(m, $(ids.body).value, $(ids.info)); }
+      else if (r.reason === "gmail_not_configured") { $(ids.info).innerHTML = `<span class="err">尚未寄出：Gmail 還沒接好（到「設定」分頁按「連上 Google」）。用右邊那顆自己寄，或按「複製信件」貼到你的信箱。</span>`; const m = $(ids.mailto); m.dataset.mailto = r.mailto; m.hidden = false; m.onclick = () => openMailto(m, $(ids.body).value, $(ids.info)); }
       else { $(ids.info).innerHTML = `<span class="err">一封都沒寄成功：${esc((r.failed || []).map((f) => `${f.email}（${f.error}）`).join("；")) || "未知原因"}</span>`; flash("寄送失敗", "err"); }
     });
   }
@@ -2222,8 +2310,8 @@
   const STATUS_ROWS = [
     ["ai", "Claude（抽取、排程、信件、讀字、摘要）", "ANTHROPIC_API_KEY"],
     ["whisper", "Whisper（口述轉文字）", "OPENAI_API_KEY；沒有也能用打字的逐字稿"],
-    ["gmail", "Gmail（從後台寄信）", "GMAIL_CLIENT_ID／SECRET／REFRESH_TOKEN；沒有就用 mailto 自己寄"],
-    ["drive", "Google Drive（每場自動備份）", "GOOGLE_*（沒有就用 GMAIL_* 那一組），refresh token 要含 drive.file"],
+    ["gmail", "Gmail（從後台寄信）", "上面那一行的「連上 Google」（要允許寄信）；沒有就用 mailto 自己寄"],
+    ["drive", "Google Drive（每場自動備份）", "上面那一行的「連上 Google」"],
     ["reminder", "後續提醒（參訪結束時寄信給自己）", "需要 Gmail ＋上面那個收件信箱"],
     ["master", "母簡報", "在上面放一份，或 commit 到 public/assets/master/"],
   ];
@@ -2239,6 +2327,7 @@
     loadLabsTab();
     $("reminderInfo").textContent = r.settings.reminder_to ? "" : r.effective?.reminder_to ? `留空：現在寄到 ${r.effective.reminder_to}` : "還沒有收件信箱，現在不會寄提醒";
     loadRotaTable(); // 不等它：表慢一點出來，設定分頁其他東西先能用
+    renderGoogle();
     $("statusList").innerHTML = STATUS_ROWS.map(([k, label, where]) => {
       const on = !!r.status[k];
       const note = k === "ai" && r.status.ai_mock ? "（AI_MOCK：回固定範例，不會真的問 Claude）" : "";
@@ -2251,8 +2340,30 @@
    * 「不必記得」那一句仍然寫著——等於答應了一件不會發生的事（「留 email」那個洞就是這樣來的）。
    * 寄信與通告按下去當場就會說沒接 Gmail，所以不必再多一句。
    */
+  /**
+   * Google（Drive 備份、參訪名單、寄信共用那一組授權）連上了沒、哪個帳號、現在能不能用。
+   * 過期了：設定分頁那一行寫出來，**每一頁上面也掛一條**——以前只看環境變數在不在，過期了照樣寫「已設定」，
+   * Drive 備份從九月中默默停了兩週。按「重新連上 Google」走 /api/google-auth，用中心的帳號允許一次就好。
+   */
+  function renderGoogle() {
+    const g = state.services?.google;
+    if (!g) return;
+    $("googleWarn").hidden = !(g.connected && !g.ok && g.expired);
+    const info = $("googleInfo");
+    if (!info) return;
+    $("googleConnect").textContent = g.connected ? "重新連上 Google" : "連上 Google";
+    $("googleConnect").hidden = !g.client;
+    info.innerHTML = !g.client
+      ? `<span class="err">未設定</span> <span>Google（Drive 備份、參訪名單、寄信）</span> <span class="muted">· Netlify 環境變數要有 GOOGLE_CLIENT_ID／SECRET（或 GMAIL_ 那一組）</span>`
+      : !g.connected
+        ? `<span class="err">還沒連上</span> <span>Google（Drive 備份、參訪名單、寄信）</span>`
+        : g.ok
+          ? `<span class="ok">已連上</span> <span>Google（Drive 備份、參訪名單、寄信）</span>${g.email ? ` <span class="muted" translate="no">${esc(g.email)}</span>` : ""}`
+          : `<span class="err">${g.expired ? "授權過期了" : "連不上"}</span> <span>Google（Drive 備份、參訪名單、寄信）</span>${g.email ? ` <span class="muted" translate="no">${esc(g.email)}</span>` : ""}${g.expired ? "" : ` <span class="muted">${esc(g.error || "")}</span>`}`;
+  }
   function renderServiceNotes() {
     if (!state.services) return;
+    renderGoogle();
     const gmail = !!state.services.gmail;
     const el = $("reminderOff");
     if (el) el.hidden = gmail;
@@ -2486,267 +2597,70 @@
    *   點下去就直接列出那幾個單位。點旁邊放得下就寫單位名稱。
    * - 放大之後換成比較細的海岸線（`world-detail.json`，Natural Earth 1:50m，第一次放大才載）。
    *
-   * 地圖資料是 `public/data/world.json`（Natural Earth 1:110m，座標已經投影好，見 scripts/make-world.mjs），
-   * 所以不必為了一張圖去載一套地圖函式庫——後台是單檔 HTML、沒有建置步驟，而且現場網路不一定好。
+   * **畫法（投影、放大、拖曳、群集、名稱）在 `public/lib/worldmap.mjs`**，中心首頁的「來訪單位」用的是同一份；
+   * 這裡只管後台自己的事：哪幾場算同一個單位、點下去列出那幾場、還沒查過位置的去查、上面那一行數字。
    * 國名對不到、位置也還沒查到的**不會消失**，會列在圖下面（來信裡的國名寫法千百種，寧可講出來也不要靜靜地漏掉）。
    */
-  const normCountry = (x) => String(x || "").trim().toLowerCase().replace(/^the\s+/, "").replace(/[.,\s]+/g, " ").trim();
-  function ensureWorld() {
-    if (!state.world) state.world = fetch("/data/world.json").then((r) => r.json()).then((w) => {
-      w.byName = new Map(w.countries.map((c) => [normCountry(c.name), c]));
-      w.alias = new Map(Object.entries(w.aliases).map(([k, v]) => [normCountry(k), normCountry(v)]));
-      return w;
-    }).catch((e) => { state.world = null; throw e; });
-    return state.world;
-  }
-  const countryPoint = (w, raw) => { const n = normCountry(raw); return (n && (w.byName.get(n) || w.byName.get(w.alias.get(n) || ""))) || null; };
-
-  const MAP_FULL = { x: 0, y: 12, w: 720, h: 288 }; // 上下切掉南北極的空白（北緯 84 以北、南緯 60 以南沒有訪客）
-  const MAP_MAX_ZOOM = 20; // 放到看得出臺北、桃園、新竹是不同的點；再大 1:50m 的海岸線就撐不住了
-  const MAP_DETAIL_AT = 3; // 放大超過這個倍數換細海岸線
-  const project = (lat, lon) => ({ x: ((Number(lon) + 180) * 720) / 360, y: ((90 - Number(lat)) * 360) / 180 });
-  const mapZoom = () => MAP_FULL.w / (state.map?.view?.w || MAP_FULL.w);
-
-  /** 一個單位一個點：同一個單位來過好幾次合成一個（名稱＋國家相同就算同一個）。 */
-  function mapPoints(world) {
+  /**
+   * 一個單位一個點：同一個單位來過好幾次合成一個。「同一個單位」是伺服器算好的 `inst`
+   * （中文名稱一樣、或英文名稱去掉空白與標點後一樣；`lib/visit.mjs institutionKeys`）——
+   * 英文名稱拼法不同的同一家公司不要變成兩個點（惇陽工程就是）。名稱照最近那一場的寫法。
+   */
+  function mapPoints(W, world) {
     const byOrg = new Map();
     const unmatched = new Map();
     for (const v of state.visits || []) {
-      const c = countryPoint(world, v.country);
-      const g = v.geo;
-      const exact = !!g && g.precision !== "country" && g.lat != null && g.lon != null;
-      const at = exact ? project(g.lat, g.lon) : c ? { x: c.x, y: c.y } : null;
+      const at = W.placeOf(world, { country: v.country, geo: v.geo });
       if (!at) { const k = v.country?.trim() || "（沒填國家）"; unmatched.set(k, (unmatched.get(k) || 0) + 1); continue; }
-      const key = `${normCountry(v.org || v.visit_id)}|${c ? c.name : normCountry(v.country)}`;
-      const p = byOrg.get(key) || { key, name: v.org || v.visit_id, local: v.org_local || "", country: c?.name || v.country || "", place: exact ? g.place || "" : "", approx: !exact, x: at.x, y: at.y, visits: [] };
+      const key = v.inst || `${W.normCountry(v.org || v.visit_id)}|${W.normCountry(at.country)}`;
+      const p = byOrg.get(key) || { key, name: v.org || v.visit_id, local: v.org_local || "", country: at.country, place: at.place, approx: at.approx, x: at.x, y: at.y, visits: [], latest: String(v.date || "") };
+      if (String(v.date || "") > p.latest) Object.assign(p, { name: v.org || p.name, local: v.org_local || p.local, latest: String(v.date) });
+      // 位置：查到城市的優先（同一個單位另一場只查到國家的不要把它蓋掉）
+      if (p.approx && !at.approx) Object.assign(p, { x: at.x, y: at.y, approx: false, place: at.place, country: at.country });
       p.visits.push(v);
       byOrg.set(key, p);
     }
     return { points: [...byOrg.values()], unmatched };
   }
+  const mapTitle = (p) => `${p.name}${p.place ? `（${p.place}）` : p.approx ? "（位置只查到國家）" : ""}：${p.visits.length} 場`;
 
   async function renderWorldMap() {
-    let world;
-    try { world = await ensureWorld(); } catch (e) { $("worldMap").innerHTML = ""; $("mapNote").textContent = "地圖資料載不到，其他東西照常用。"; return; }
-    const { points, unmatched } = mapPoints(world);
-    state.map = { view: { ...MAP_FULL }, ...(state.map || {}), points };
-    if (!$("worldMap").querySelector("svg")) {
-      $("worldMap").innerHTML = `<svg viewBox="${MAP_FULL.x} ${MAP_FULL.y} ${MAP_FULL.w} ${MAP_FULL.h}" class="w-full h-auto rounded-xl border" style="background:#f0fdfa" role="group" aria-label="訪客來自哪裡的世界地圖"><path id="mapLand" d="${world.land}" fill="#e7e5e4" stroke="#a8a29e" stroke-width="0.6" vector-effect="non-scaling-stroke"></path><path id="mapLandDetail" fill="#e7e5e4" stroke="#a8a29e" stroke-width="0.6" vector-effect="non-scaling-stroke" display="none"></path><g id="mapDots"></g><g id="mapLabels"></g></svg>`;
-      wireMap($("worldMap").querySelector("svg"));
+    let W, world;
+    try { W = await import("/lib/worldmap.mjs"); world = await W.loadWorld(); } catch (e) { $("worldMap").innerHTML = ""; $("mapNote").textContent = "地圖資料載不到，其他東西照常用。"; return; }
+    const { points, unmatched } = mapPoints(W, world);
+    state.mapPoints = points;
+    if (!state.map || !$("worldMap").querySelector("svg")) {
+      state.map = W.mountWorldMap($("worldMap"), world, {
+        ariaLabel: "訪客來自哪裡的世界地圖",
+        controls: { zoomIn: $("mapIn"), zoomOut: $("mapOut"), reset: $("mapReset") },
+        onPick: (keys) => showPick(keys),
+        clusterTitle: (members) => `${members.length} 個單位：${members.map((p) => p.name).join("、")}`,
+      });
     }
-    drawMap();
-    // 地圖是跟著版面寬度縮放的：寬度一變就重畫（點的大小是螢幕上的像素，群集也跟著變）
-    if (window.ResizeObserver && !state.mapResize) { state.mapResize = new ResizeObserver(() => requestDraw()); state.mapResize.observe($("worldMap")); }
-    const visits = points.reduce((n, p) => n + p.visits.length, 0);
-    const people = points.reduce((n, p) => n + p.visits.reduce((m, v) => m + (Number(v.headcount) || 0), 0), 0);
+    // 點旁邊的名字：中文介面用中文名（有的話），英文介面用英文名；太長的由地圖自己截短
+    state.map.setPoints(points.map((p) => ({ ...p, n: p.visits.length, label: (uiLang() !== "en" && /[一-鿿]/.test(p.local) ? p.local : "") || p.name, title: mapTitle(p) })));
+    // 幾場：匯入的舊紀錄裡，原表同一列拆成好幾個單位的（研討會的幾位講者）算同一場——年報要跟原表的場次對得上。
+    // 人次：原表沒寫人數的是 0（不知道），不拿名單上有名字的人數充數，另外說有幾場不知道
+    const byGroup = new Map();
+    for (const p of points) for (const v of p.visits) { const g = v.group || v.visit_id; byGroup.set(g, (byGroup.get(g) || 0) + (Number(v.headcount) || 0)); }
+    const visits = byGroup.size;
+    const people = [...byGroup.values()].reduce((a, b) => a + b, 0);
+    const unknown = [...byGroup.values()].filter((n) => !n).length;
     const countries = new Set(points.map((p) => p.country).filter(Boolean)).size;
-    $("mapSummary").textContent = points.length ? `${countries} 個國家 · ${points.length} 個單位 · ${visits} 場 · 共 ${people} 人次` : "";
+    $("mapSummary").textContent = points.length ? `${countries} 個國家 · ${points.length} 個單位 · ${visits} 場 · 共 ${people} 人次${unknown ? `（${unknown} 場不知道人數）` : ""}` : "";
     $("mapNote").innerHTML = unmatched.size
       ? `<span class="muted"><span>地圖上沒有：</span>${[...unmatched].map(([k, n]) => `<span>${esc(k)}</span>（<span>${n} 場</span>）`).join("、")}<span>——國名寫法對不到就先列在這裡，改「訪前」那一場的國家欄位就會歸位。</span></span>`
       : points.length ? "" : `<span class="muted">還沒有填了國家的參訪。</span>`;
-    if (!(state.mapPick && showPick(state.mapPick))) { state.mapPick = null; $("mapVisits").innerHTML = ""; }
+    if (!(state.mapPick && showPick(state.mapPick))) { state.mapPick = null; state.map.highlight([]); $("mapVisits").innerHTML = ""; }
     locateOrgs();
   }
 
-  /**
-   * 照現在的放大倍數畫點。**圓點的大小是螢幕上的像素，不是地圖座標**：地圖放得越大，點在地圖上就越小，
-   * 螢幕上看起來一樣大、蓋住的地方越來越少。場次多的大一點（絕對尺度，最大 8 px）；另外疊一顆透明的圓當點擊範圍，
-   * 至少 11 px，手指才點得到。靠得比 14 px 近的合成一顆群集。每次放大、拖曳、寬度改變都整個重畫（點不多）。
-   */
-  function drawMap() {
-    const m = state.map;
-    const svg = $("worldMap").querySelector("svg");
-    if (!m || !svg) return;
-    const box = svg.getBoundingClientRect();
-    if (!box.width) return;
-    const v = m.view;
-    svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${v.h}`);
-    svg.classList.toggle("zoomed", mapZoom() > 1.01);
-    $("mapOut").disabled = $("mapReset").disabled = mapZoom() <= 1.01;
-    $("mapIn").disabled = mapZoom() >= MAP_MAX_ZOOM * 0.99;
-    showDetailLand(svg);
-    const k = v.w / box.width; // 一個螢幕像素等於幾個地圖座標
-    const clusters = [];
-    for (const p of [...m.points].sort((a, b) => b.visits.length - a.visits.length || a.name.localeCompare(b.name))) {
-      const c = clusters.find((c) => Math.hypot(c.x - p.x, c.y - p.y) / k < 14);
-      if (c) c.members.push(p);
-      else clusters.push({ x: p.x, y: p.y, members: [p] });
-    }
-    m.clusters = clusters;
-    const pick = state.mapPick || [];
-    const radius = (c) => (c.members.length === 1 ? Math.min(8, 4 + 1.5 * Math.sqrt(c.members[0].visits.length)) : Math.min(14, 8 + 1.5 * Math.sqrt(c.members.length)));
-    svg.querySelector("#mapDots").innerHTML = clusters.map((c, i) => {
-      const one = c.members.length === 1 ? c.members[0] : null;
-      const r = radius(c);
-      const n = c.members.reduce((s, p) => s + p.visits.length, 0);
-      const title = one ? `${one.name}${one.place ? `（${one.place}）` : one.approx ? "（位置只查到國家）" : ""}：${n} 場` : `${c.members.length} 個單位：${c.members.map((p) => p.name).join("、")}`;
-      const on = c.members.some((p) => pick.includes(p.key)) ? " data-on" : "";
-      return `<g data-cluster="${i}"${on} tabindex="0" role="button" aria-label="${esc(title)}" class="cursor-pointer"><circle class="hit" cx="${c.x}" cy="${c.y}" r="${(Math.max(r, 11) * k).toFixed(4)}"></circle><circle class="dot${one ? (one.approx ? " approx" : "") : " cluster"}" cx="${c.x}" cy="${c.y}" r="${(r * k).toFixed(4)}" vector-effect="non-scaling-stroke"><title>${esc(title)}</title></circle>${one ? "" : `<text class="count" x="${c.x}" y="${c.y}" font-size="${(11 * k).toFixed(4)}" text-anchor="middle" dominant-baseline="central">${c.members.length}</text>`}</g>`;
-    }).join("");
-    // 名稱：點旁邊放得下才寫（場次多的先放；右邊放不下試左邊），跟別的名稱或點重疊就不寫
-    const FS = 12;
-    const taken = clusters.map((c) => { const r = radius(c); const sx = (c.x - v.x) / k; const sy = (c.y - v.y) / k; return { x0: sx - r, y0: sy - r, x1: sx + r, y1: sy + r }; });
-    const overlaps = (b) => taken.some((a) => b.x0 < a.x1 && b.x1 > a.x0 && b.y0 < a.y1 && b.y1 > a.y0);
-    const labels = [];
-    for (const c of clusters) {
-      if (c.members.length !== 1) continue; // 群集的數字已經寫在圈裡
-      const text = mapLabel(c.members[0]);
-      const w = textWidth(text) * FS;
-      const r = radius(c);
-      const sx = (c.x - v.x) / k;
-      const sy = (c.y - v.y) / k;
-      for (const side of [1, -1]) {
-        const x0 = side > 0 ? sx + r + 3 : sx - r - 3 - w;
-        const b = { x0, y0: sy - FS * 0.65, x1: x0 + w, y1: sy + FS * 0.65 };
-        if (b.x0 < 2 || b.x1 > box.width - 2 || b.y0 < 0 || b.y1 > box.height || overlaps(b)) continue;
-        taken.push(b);
-        labels.push(`<text class="lbl" x="${(v.x + b.x0 * k).toFixed(4)}" y="${c.y}" font-size="${(FS * k).toFixed(4)}" stroke-width="${(3 * k).toFixed(4)}" dominant-baseline="central">${esc(text)}</text>`);
-        break;
-      }
-    }
-    svg.querySelector("#mapLabels").innerHTML = labels.join("");
-  }
-  const WIDE_CHAR = /[⺀-鿿가-힯぀-ヿ＀-￯]/;
-  const textWidth = (s) => [...s].reduce((w, ch) => w + (WIDE_CHAR.test(ch) ? 1 : 0.58), 0);
-  /**
-   * 點旁邊的名字：中文介面用中文名（有的話），太長就截短——完整的名稱在點一下之後的清單裡。
-   * 英文名截在字與字之間（「University of Western…」，不是「University of Wester…」）。
-   */
-  function mapLabel(p) {
-    const s = (uiLang() !== "en" && /[一-鿿]/.test(p.local) ? p.local : "") || p.name || "";
-    let w = 0;
-    let out = "";
-    for (const ch of s) {
-      w += WIDE_CHAR.test(ch) ? 1 : 0.58;
-      if (w > 15) return `${(/\s/.test(out) && !WIDE_CHAR.test(out) ? out.replace(/\s+\S*$/, "") : out).trimEnd()}…`;
-      out += ch;
-    }
-    return out;
-  }
-  function requestDraw() {
-    if (requestDraw.t) return;
-    requestDraw.t = requestAnimationFrame(() => { requestDraw.t = 0; drawMap(); });
-  }
-  /** 放大超過幾倍就換細海岸線（第一次才載，壓縮後約 120 KB）；載不到就繼續用粗的，不影響其他東西。 */
-  function showDetailLand(svg) {
-    const want = mapZoom() >= MAP_DETAIL_AT;
-    const detail = svg.querySelector("#mapLandDetail");
-    if (want && !detail.getAttribute("d") && !detail.dataset.loading && !state.worldDetailFailed) {
-      detail.dataset.loading = "1";
-      state.worldDetail ||= fetch("/data/world-detail.json").then((r) => r.json());
-      // 載不到就這一次不再試（不然放大、拖曳的每一格畫面都會再要一次）
-      state.worldDetail.then((w) => { detail.setAttribute("d", w.land); requestDraw(); }).catch(() => { state.worldDetail = null; state.worldDetailFailed = true; }).finally(() => { delete detail.dataset.loading; });
-    }
-    const on = want && !!detail.getAttribute("d");
-    detail.setAttribute("display", on ? "inline" : "none");
-    svg.querySelector("#mapLand").setAttribute("display", on ? "none" : "inline");
-  }
-
-  /** 換一個看的範圍：不能比整張世界大、不能放大超過 MAP_MAX_ZOOM 倍，也不能拖出地圖外。 */
-  function setView({ x, y, w }) {
-    const F = MAP_FULL;
-    const vw = Math.min(F.w, Math.max(F.w / MAP_MAX_ZOOM, w));
-    const vh = (vw * F.h) / F.w;
-    state.map.view = { x: Math.min(F.x + F.w - vw, Math.max(F.x, x)), y: Math.min(F.y + F.h - vh, Math.max(F.y, y)), w: vw, h: vh };
-    requestDraw();
-  }
-  /** 以地圖上 (cx, cy) 為中心放大 f 倍（f 小於 1 是縮小）：那一點留在螢幕上原來的位置。 */
-  function zoomAt(f, cx, cy) {
-    const v = state.map.view;
-    const w = Math.min(MAP_FULL.w, Math.max(MAP_FULL.w / MAP_MAX_ZOOM, v.w / f));
-    const s = w / v.w;
-    setView({ x: cx - (cx - v.x) * s, y: cy - (cy - v.y) * s, w });
-  }
-  /** 放大到看得開這幾個點（四周留一些邊）。 */
-  function fitPoints(points) {
-    const xs = points.map((p) => p.x);
-    const ys = points.map((p) => p.y);
-    const F = MAP_FULL;
-    const w = Math.max((Math.max(...xs) - Math.min(...xs)) * 2.2, ((Math.max(...ys) - Math.min(...ys)) * 2.2 * F.w) / F.h, F.w / MAP_MAX_ZOOM);
-    const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
-    const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
-    setView({ x: cx - w / 2, y: cy - (w * F.h) / F.w / 2, w });
-  }
-  const toMap = (svg, clientX, clientY) => {
-    const r = svg.getBoundingClientRect();
-    const v = state.map.view;
-    return { x: v.x + ((clientX - r.left) / r.width) * v.w, y: v.y + ((clientY - r.top) / r.height) * v.h };
-  };
-  /** 拖曳、雙指、滾輪、雙擊。 */
-  function wireMap(svg) {
-    const ptrs = new Map(); // 按著的手指（或滑鼠）→ 上一次的位置
-    let moved = false;
-    let downAt = null;
-    svg.addEventListener("pointerdown", (e) => {
-      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      if (ptrs.size === 1) { moved = false; downAt = { x: e.clientX, y: e.clientY }; }
-    });
-    svg.addEventListener("pointermove", (e) => {
-      const prev = ptrs.get(e.pointerId);
-      if (!prev || !state.map) return;
-      const now = { x: e.clientX, y: e.clientY };
-      const r = svg.getBoundingClientRect();
-      const v = state.map.view;
-      if (ptrs.size >= 2) {
-        // 雙指：兩指距離變幾倍就放大幾倍，兩指中間底下那一點跟著手指走
-        const other = [...ptrs].find(([id]) => id !== e.pointerId)[1];
-        const d0 = Math.hypot(prev.x - other.x, prev.y - other.y);
-        const d1 = Math.hypot(now.x - other.x, now.y - other.y);
-        if (d0 > 0 && d1 > 0) {
-          const anchor = toMap(svg, (prev.x + other.x) / 2, (prev.y + other.y) / 2);
-          const w = Math.min(MAP_FULL.w, Math.max(MAP_FULL.w / MAP_MAX_ZOOM, (v.w * d0) / d1));
-          const h = (w * MAP_FULL.h) / MAP_FULL.w;
-          setView({ x: anchor.x - (((now.x + other.x) / 2 - r.left) / r.width) * w, y: anchor.y - (((now.y + other.y) / 2 - r.top) / r.height) * h, w });
-        }
-        moved = true;
-      } else if (mapZoom() > 1.01) {
-        // 放大之後一指（或滑鼠）拖曳。移動不到 5 px 算點一下，不算拖
-        if (!moved && Math.hypot(now.x - downAt.x, now.y - downAt.y) < 5) return;
-        if (!moved) { moved = true; svg.classList.add("dragging"); try { svg.setPointerCapture(e.pointerId); } catch (err) { /* 某些瀏覽器不給，不影響拖曳 */ } }
-        setView({ x: v.x - ((now.x - prev.x) / r.width) * v.w, y: v.y - ((now.y - prev.y) / r.height) * v.h, w: v.w });
-      }
-      ptrs.set(e.pointerId, now);
-    });
-    const up = (e) => { ptrs.delete(e.pointerId); if (!ptrs.size) svg.classList.remove("dragging"); };
-    svg.addEventListener("pointerup", up);
-    svg.addEventListener("pointercancel", up);
-    // 拖完或雙指放大完放開，不算點了一個點
-    svg.addEventListener("click", (e) => { if (moved) { e.stopPropagation(); moved = false; } }, true);
-    // 觸控板雙指（瀏覽器送 ctrl＋滾輪）隨時可以縮放；一般滾輪只在已經放大的時候縮放，還在整張世界地圖時是捲頁面
-    svg.addEventListener("wheel", (e) => {
-      if (!e.ctrlKey && mapZoom() <= 1.01) return;
-      e.preventDefault();
-      const p = toMap(svg, e.clientX, e.clientY);
-      zoomAt(Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.002)), p.x, p.y);
-    }, { passive: false });
-    svg.addEventListener("dblclick", (e) => {
-      if (e.target.closest("[data-cluster]")) return;
-      const p = toMap(svg, e.clientX, e.clientY);
-      zoomAt(2, p.x, p.y);
-    });
-  }
-  const mapCenter = () => ({ x: state.map.view.x + state.map.view.w / 2, y: state.map.view.y + state.map.view.h / 2 });
-  $("mapIn").onclick = () => { if (state.map) { const c = mapCenter(); zoomAt(2, c.x, c.y); } };
-  $("mapOut").onclick = () => { if (state.map) { const c = mapCenter(); zoomAt(0.5, c.x, c.y); } };
-  $("mapReset").onclick = () => { if (state.map) setView({ ...MAP_FULL }); };
-
-  /**
-   * 點一個點：一個單位就列出那個單位的每一場；一群就放大到看得開。放到最大還是疊在一起
-   * （同一個城市裡的幾個單位——查到的座標本來就只到城市），就直接列出那幾個單位。
-   */
-  function pickCluster(i) {
-    const c = state.map?.clusters?.[i];
-    if (!c) return;
-    const spread = Math.max(...c.members.map((p) => p.x)) - Math.min(...c.members.map((p) => p.x)) + Math.max(...c.members.map((p) => p.y)) - Math.min(...c.members.map((p) => p.y));
-    if (c.members.length > 1 && mapZoom() < MAP_MAX_ZOOM * 0.99 && spread > 0.05) return fitPoints(c.members);
-    showPick(c.members.map((p) => p.key));
-  }
   /** 列出這幾個單位的每一場，再點一列就跳到那一場的紀錄（摘要、回覆、動線）。 */
   function showPick(keys) {
-    const pts = (state.map?.points || []).filter((p) => keys.includes(p.key));
+    const pts = (state.mapPoints || []).filter((p) => keys.includes(p.key));
     if (!pts.length) return false;
     state.mapPick = keys;
-    for (const el of $("worldMap").querySelectorAll("[data-cluster]")) el.toggleAttribute("data-on", !!state.map.clusters?.[Number(el.dataset.cluster)]?.members.some((p) => keys.includes(p.key)));
+    state.map?.highlight(keys);
     const row = (v) => `<button type="button" data-visit="${esc(v.visit_id)}" title="看這一場的紀錄：一頁摘要與來賓回覆" class="w-full text-left border-b last:border-0 py-1.5 hover:bg-stone-50 flex flex-wrap items-baseline gap-x-2">
         <span class="tabular-nums muted">${esc(v.date)}</span>
         ${typeTag(v.type)}
@@ -2759,8 +2673,6 @@
       </div>`).join("");
     return true;
   }
-  $("worldMap").addEventListener("click", (e) => { const g = e.target.closest("[data-cluster]"); if (g) pickCluster(Number(g.dataset.cluster)); });
-  $("worldMap").addEventListener("keydown", (e) => { if (e.key !== "Enter" && e.key !== " ") return; const g = e.target.closest("[data-cluster]"); if (g) { e.preventDefault(); pickCluster(Number(g.dataset.cluster)); } });
   $("mapVisits").addEventListener("click", (e) => {
     const b = e.target.closest("[data-visit]");
     if (!b) return;
@@ -2806,17 +2718,206 @@
     $("csvVisits").href = `/api/visits?export=csv&table=visits&token=${t}`; $("csvResponses").href = `/api/visits?export=csv&table=responses&token=${t}`; $("csvPerf").href = `/api/visits?export=csv&table=slide_performance&token=${t}`;
     await loadVisits();
     renderWorldMap();
-    $("visitsTable").tBodies[0].innerHTML = state.visits.map((v) => `<tr class="cursor-pointer hover:bg-stone-50" data-id="${esc(v.visit_id)}"><td>${esc(v.date)}</td><td>${esc(v.org)}</td><td>${typeTag(v.type) || esc(v.type)}</td><td>${esc(v.country)}</td><td>${esc(v.headcount)}</td><td>${esc(v.status)}</td></tr>`).join("");
+    loadVisitList().then(() => checkVisitList()); // 名單有人加了列就自己讀進來（不必等，清單先畫）
+    $("visitsTable").tBodies[0].innerHTML = state.visits.map((v) => `<tr class="cursor-pointer hover:bg-stone-50" data-id="${esc(v.visit_id)}"><td>${esc(v.date)}</td><td>${esc(v.org)}</td><td>${typeTag(v.type) || esc(v.type)}</td><td>${esc(v.country)}</td><td>${Number(v.headcount) > 0 ? esc(v.headcount) : ""}</td><td>${esc(v.status)}</td></tr>`).join("");
   }
   $("visitsTable").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-id]"); if (tr) showDetail(tr.dataset.id); });
+  /**
+   * 公開頁上的說明（中心首頁的地圖與 /visits 來訪紀錄頁；明確要求：「參訪者多，把這些參訪另外作一頁連過去詳細說明」）。
+   * 匯入的舊紀錄帶原表的「來訪人員」「交流重點／成果」；系統裡排的一場預設是空的（公開頁只有日期、單位、國家、去了哪幾間）。
+   * 打完字自己存（`/api/visit-log`）；勾「不公開」就整場不放。名單、email、來訪目的、背景研判不會出現在公開頁。
+   */
+  const PUB_FIELDS = { pubPeopleZh: "people_zh", pubPeopleEn: "people_en", pubNoteZh: "note_zh", pubNoteEn: "note_en" };
+  function fillPublic(v) {
+    const pub = v.public || {};
+    for (const [id, k] of Object.entries(PUB_FIELDS)) $(id).value = pub[k] || "";
+    $("pubHidden").checked = !!pub.hidden;
+    $("pubInfo").textContent = "";
+    $("publicView").href = `/visits?org=${encodeURIComponent(v.org?.name || "")}`;
+    clearTimeout(fillPublic.t);
+  }
+  async function savePublic() {
+    const id = state.detailId;
+    if (!id) return;
+    const body = { visit_id: id, public: { hidden: $("pubHidden").checked } };
+    for (const [elId, k] of Object.entries(PUB_FIELDS)) body.public[k] = $(elId).value;
+    const r = await api("/api/visit-log", { method: "POST", body });
+    if (state.detailId !== id) return; // 存的時候換去看別場了
+    $("pubInfo").textContent = r.ok ? `已存 ${new Date().toTimeString().slice(0, 5)}` : `存不起來：${r.error}`;
+  }
+  $("publicBox").addEventListener("input", () => { clearTimeout(fillPublic.t); $("pubInfo").textContent = "存檔中…"; fillPublic.t = setTimeout(savePublic, 1200); });
+  $("pubHidden").addEventListener("change", () => { clearTimeout(fillPublic.t); savePublic(); });
+
+  /** 從以前的名單匯入的那一場：原表那一列寫了什麼（沒有摘要時給人看這個）。 */
+  function importedNote(v) {
+    const m = v.imported;
+    if (!m) return "";
+    return [
+      `從「${m.from}」第 ${m.row} 列匯入（系統上線之前的紀錄）。`,
+      m.people ? `來訪人員：${m.people}` : "",
+      m.companions ? `同行單位：${m.companions}` : "",
+      v.purpose ? `交流重點／成果：${v.purpose}` : "",
+    ].filter(Boolean).join("\n");
+  }
+
+  /**
+   * 匯入以前的參訪（系統上線之前的紀錄；明確要求：「把所有參訪者加入中心首頁地圖，以及主辦端網頁資料地圖中」）。
+   * 選一個檔（試算表、Word、簡報）→ AI 讀成一筆一筆（英文正式名稱、類型；一列有好幾個單位就拆開，算同一場）
+   * → **先列出來給人看，勾好才寫進去**。系統裡已經有的（同一天、同一個單位）不勾也勾不了，重複匯入同一份不會多出東西。
+   * 匯入之後就是一般的一場：地圖、清單、中心首頁的來訪單位都照舊從參訪紀錄來，位置照舊自己去查。
+   */
+  $("importFile").onchange = async () => {
+    const f = $("importFile").files[0];
+    $("importFile").value = ""; // 同一個檔再選一次也要有反應
+    if (!f) return;
+    const note = noteInto("importInfo");
+    state.importPlan = null;
+    $("importBox").hidden = true;
+    if (f.size > 4.5 * 1024 * 1024) return note(`${f.name} 超過 4.5 MB`);
+    let data;
+    try { data = await readFileB64(f); } catch (e) { return note(`讀不到這個檔案：${e?.message || e}`); }
+    state.importFile = { name: f.name, type: f.type, data }; // 勾了「同時存成 Google 試算表」的話，匯入之後拿這一份去建
+    const r = await runJob("/api/import", { file: { name: f.name, type: f.type, data } }, note, "AI 讀名單中……大約一兩分鐘。", { anyVisit: true });
+    if (!r || !Array.isArray(r.rows)) return;
+    state.importPlan = { file: r.file || f.name, rows: r.rows, skipped: r.skipped || [], by: r.by || "" };
+    renderImport();
+  };
+  function renderImport() {
+    const p = state.importPlan;
+    if (!p) { $("importBox").hidden = true; return; }
+    const why = (r) => (r.problems || []).join("、") || (r.exists ? "已經有了" : r.duplicate ? "名單裡重複" : "");
+    $("importTable").tBodies[0].innerHTML = p.rows.map((r, i) => `<tr data-i="${i}" class="${why(r) ? "muted" : ""}">
+        <td class="text-center">${why(r) ? "" : `<input type="checkbox" data-import checked>`}</td>
+        <td class="tabular-nums whitespace-nowrap">${esc(r.date || "—")}</td>
+        <td><span translate="no" data-ai-text>${esc(r.org.name_local || r.org.name)}</span>${r.org.name_local && r.org.name && r.org.name !== r.org.name_local ? `<span class="block muted text-xs" translate="no" data-ai-text>${esc(r.org.name)}</span>` : ""}${r.split ? `<span class="block muted text-xs">原表同一列拆出來的，算同一場</span>` : ""}${why(r) ? `<span class="block err text-xs">${esc(why(r))}</span>` : ""}</td>
+        <td class="whitespace-nowrap" translate="no" data-ai-text>${esc(r.org.country)}</td>
+        <td class="whitespace-nowrap">${typeTag(r.org.type) || esc(r.org.type)}</td>
+        <td class="text-xs" translate="no" data-ai-text>${esc(r.people_text || (r.people || []).map((x) => `${x.name} ${x.title}`.trim()).join("、"))}</td>
+        <td class="text-xs" translate="no" data-ai-text>${esc(String(r.purpose || "").length > 90 ? `${r.purpose.slice(0, 88)}…` : r.purpose || "")}</td>
+      </tr>`).join("");
+    const rows = new Set(p.rows.map((r) => r.source_row)).size;
+    $("importInfo").textContent = p.rows.length
+      ? `讀到 ${p.rows.length} 個單位（原表 ${rows} 列）。勾好要匯入的，按下面的「匯入」；匯入之後地圖上就有，位置會自己去查。${p.by === "columns" ? "（Claude 還沒接好：照欄名讀，單位名稱照原表的寫法。）" : ""}`
+      : "這個檔裡讀不到參訪紀錄。";
+    $("importSkipped").textContent = p.skipped.length ? `沒有列進來的：${p.skipped.join("；")}` : "";
+    $("importAll").checked = true;
+    // 還沒有連上名單、Drive 也接好了，而且這是一份試算表：預設勾著（明確指示：「每一次有增加再自動加入」）
+    $("importLinkRow").hidden = !(state.list?.configured && !state.list?.linked && /\.(xlsx|xlsm|csv)$/i.test(state.importFile?.name || ""));
+    $("importLink").checked = true;
+    updateImportGo();
+    $("importBox").hidden = !p.rows.length;
+  }
+  const importPicked = () => [...$("importTable").querySelectorAll("tr[data-i]")].filter((tr) => tr.querySelector("[data-import]")?.checked).map((tr) => state.importPlan.rows[Number(tr.dataset.i)]);
+  function updateImportGo() {
+    const n = state.importPlan ? importPicked().length : 0;
+    // 都已經匯入過了（上一次存成 Google 試算表那一步沒做成）：還是可以只把這份存成 Google 試算表
+    const onlyLink = !n && !$("importLinkRow").hidden && $("importLink").checked;
+    $("importGo").textContent = onlyLink ? "只存成 Google 試算表" : `匯入 ${n} 筆`;
+    $("importGo").disabled = !n && !onlyLink;
+  }
+  $("importLink").onchange = updateImportGo;
+  $("importTable").addEventListener("change", (e) => {
+    if (e.target.id === "importAll") $("importTable").querySelectorAll("[data-import]").forEach((c) => (c.checked = e.target.checked));
+    updateImportGo();
+  });
+  $("importCancel").onclick = () => { state.importPlan = null; $("importBox").hidden = true; $("importInfo").textContent = ""; };
+  $("importGo").onclick = () => busy($("importGo"), async () => {
+    const p = state.importPlan;
+    const rows = p ? importPicked() : [];
+    const link = !$("importLinkRow").hidden && $("importLink").checked && state.importFile;
+    if (!rows.length) {
+      if (!link) return;
+      state.importPlan = null;
+      $("importBox").hidden = true;
+      $("importInfo").textContent = "";
+      await linkList();
+      return;
+    }
+    const r = await api("/api/import", { method: "POST", body: { action: "commit", file: p.file, rows } });
+    if (!r.ok) { $("importInfo").textContent = r.error || ""; return flash(r.error || "沒有匯入", "err"); }
+    state.importPlan = null;
+    $("importBox").hidden = true;
+    const skipped = (r.skipped || []).map((x) => `${x.org}：${x.reason}`).join("；");
+    flash(`匯入了 ${r.created.length} 筆`);
+    await loadDataTab(); // 清單與地圖跟著更新；還沒查過位置的，地圖自己會去查
+    $("importInfo").textContent = `匯入了 ${r.created.length} 筆${skipped ? `（沒有匯入：${skipped}）` : ""}。地圖上的位置正在查，查好會自己更新。`;
+    if (link) await linkList();
+    state.importFile = null;
+  });
+  /** 把剛剛選的那一份存成系統自己的 Google 試算表，之後就看那一份。 */
+  async function linkList() {
+    const done = await runJob("/api/visit-list", { action: "link", file: state.importFile }, noteInto("listNote"), "正在把名單存成 Google 試算表……", { anyVisit: true });
+    if (done?.linked) $("listNote").textContent = "名單已經存成 Google 試算表：以後在那份試算表加一列，系統每十五分鐘看一次，自動加進來。";
+    await loadVisitList();
+    if (!done) api("/api/settings").then((r) => { if (r.ok) { state.services = r.status; renderServiceNotes(); } }); // 授權過期的話，上面那一條要掛出來
+  }
+
+  /**
+   * 參訪名單（Google 試算表）自動同步（明確指示：「每一次有增加再自動加入」「地圖應該是自動去 check 這個 Google Drive」）。
+   * 名單是系統自己的那一份 Google 試算表（匯入時勾「同時存成 Google 試算表」建的）：有人在裡面加一列，
+   * 系統每十五分鐘看一次、打開這一頁也看一次，新的那幾列自己加進參訪紀錄（規則在 `netlify/lib/visitlist.mts`）。
+   * 這裡只顯示連到哪一份、上次看的時間與結果，留一顆「現在就看一次」。自己看的那一次不跳紅色錯誤，只寫在這一行。
+   */
+  async function loadVisitList() {
+    const r = await api("/api/visit-list");
+    state.list = r.ok ? r : null;
+    renderListInfo();
+    return state.list;
+  }
+  function renderListInfo() {
+    const l = state.list;
+    $("listBox").hidden = !(l && l.linked);
+    if (!l || !l.linked) return;
+    // 台北時間的「月/日 時:分」（日期也照台北算：UTC 的日期在半夜會差一天）
+    const when = (iso) => {
+      const d = new Date(iso || "");
+      if (isNaN(d)) return "";
+      const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(d).map((x) => [x.type, x.value]));
+      return `${p.month}/${p.day} ${p.hour}:${p.minute}`;
+    };
+    const last = l.last?.added?.length ? `<span>上一次加了 ${l.last.added.length} 筆</span>` : "";
+    $("listInfo").innerHTML = `<span>名單：</span><a class="underline" target="_blank" rel="noopener" href="${esc(l.url || "")}" translate="no">${esc(l.name || "GHRC 參訪名單")}</a><span>（Google 試算表）——在這份試算表加一列，系統每十五分鐘看一次，自動加進來。</span>${l.checked_at ? `<span class="muted"><span>上次看</span> <span class="tabular-nums">${esc(when(l.checked_at))}</span></span>` : ""}${last ? ` <span class="muted">${last}</span>` : ""}${l.error ? `<span class="err block">${esc(l.error)}${/授權過期/.test(l.error) ? ` <a class="underline" href="/api/google-auth?start=1">重新連上 Google</a>` : ""}</span>` : ""}`;
+  }
+  /** 打開「資料」分頁時看一次（名單沒改過就當場回，不必等）；改過了就等它讀完、清單與地圖跟著更新。 */
+  async function checkVisitList(force = false) {
+    if (!state.list?.linked || checkVisitList.running) return;
+    checkVisitList.running = true;
+    const note = noteInto("listNote");
+    try {
+      const r = await api("/api/visit-list", { method: "POST", body: { action: force ? "sync" : "check" } });
+      if (!r.ok) return note(force ? r.error || "" : "");
+      if (!r.job_id) { await loadVisitList(); if (force) note("名單裡沒有新的列。"); return; }
+      note("正在讀名單裡新加的列……大約一兩分鐘。");
+      let misses = 0;
+      const until = Date.now() + 15 * 60000; // 背景函式的上限
+      for (let i = 0; Date.now() < until; i++) {
+        await new Promise((res) => setTimeout(res, i < 20 ? 3000 : 10000));
+        const j = await api(`/api/visit-list?job=${encodeURIComponent(r.job_id)}`);
+        if (!j.ok) { if (++misses < 3) continue; return note(""); }
+        if (j.status === "running") continue;
+        if (j.status !== "done") { await loadVisitList(); return note(""); } // 原因寫在名單那一行
+        if (j.result?.busy) { note("名單正在讀，讀完這一行會更新。"); return; } // 排程那一輪剛好在讀
+        const added = j.result?.added || [];
+        note(added.length ? `從名單加了 ${added.length} 筆，地圖跟著更新。` : "名單裡沒有新的列。");
+        if (added.length) await loadDataTab();
+        else await loadVisitList();
+        return;
+      }
+      note("");
+    } finally {
+      checkVisitList.running = false;
+    }
+  }
+  $("listSync").onclick = () => busy($("listSync"), () => checkVisitList(true));
   async function showDetail(id) {
     const v = await api(`/api/visits?id=${encodeURIComponent(id)}`);
     if (!v.ok) return flash(v.error, "err");
-    state.detailId = id; $("visitDetail").hidden = false; $("detailTitle").textContent = `${v.visit.date} ${v.visit.org?.name}`; $("summary").textContent = v.visit.summary || "（還沒有摘要。參訪過完、有來賓回覆之後，系統會在每天凌晨自己產一份；想現在就要就按上面那顆按鈕。）";
+    state.detailId = id; $("visitDetail").hidden = false; $("detailTitle").textContent = `${v.visit.date} ${v.visit.org?.name}`; $("summary").textContent = v.visit.summary || importedNote(v.visit) || "（還沒有摘要。參訪過完、有來賓回覆之後，系統會在每天凌晨自己產一份；想現在就要就按上面那顆按鈕。）";
     const d = v.visit.drive;
 $("driveInfo").innerHTML = d?.backed_up_at
       ? `<span class="ok">Google Drive 已自動備份 ${esc(d.backed_up_at.slice(0, 16).replace("T", " "))}${d.items ? `（${d.items} 個檔案）` : ""}</span> <a class="underline" target="_blank" rel="noopener" href="${esc(d.url || "")}">在 Drive 開啟</a>${d.failed?.length ? `<span class="err block">${esc(d.failed.join("；"))}</span>` : ""}`
       : `<span class="muted">資料一有變動就會自動備份到 Google Drive，不必手動按。</span>`;
+    fillPublic(v.visit);
     $("responsesTable").tBodies[0].innerHTML = v.responses.map((r) => `<tr><td>${esc(r.source)}${r.anonymous ? "<br><span class='muted'>不具名</span>" : ""}</td><td>${esc(r.name)}</td><td>${esc(r.email)}</td><td>${esc((r.most_wanted_rooms || []).join(" "))}</td><td>${esc((r.cooperate_rooms || []).join(" "))}</td><td>${esc((r.next_actions || []).join(" "))}${r.next_other ? "<br>" + esc(r.next_other) : ""}</td><td>${esc([r.signbook_text, r.suggestion, r.note].filter(Boolean).join("\n"))}</td><td class="muted">${esc(r.submitted_at.slice(0, 16).replace("T", " "))}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">（尚無回覆）</td></tr>`;
   }
   $("summaryBtn").onclick = () => busy($("summaryBtn"), async () => {

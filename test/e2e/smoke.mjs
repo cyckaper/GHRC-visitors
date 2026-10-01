@@ -29,6 +29,7 @@ const tmp = await mkdtemp(path.join(os.tmpdir(), "ghrc-e2e-"));
 process.env.STORE_BACKEND = "file";
 process.env.STORE_DIR = tmp;
 process.env.AI_MOCK = "1";
+process.env.DRIVE_MOCK = "1"; // 參訪名單的 Google 試算表存在媒體庫（備份照舊看真的 Google 設定，不受影響）
 process.env.ADMIN_TOKEN = "e2e-token";
 const { createServer } = await import("../../scripts/dev-server.mjs");
 const server = createServer();
@@ -114,26 +115,35 @@ try {
   await page.waitForFunction(() => /名單 2 人/.test(document.getElementById("progress").textContent), null, { timeout: 30000 });
   check(true, "deleting someone from the guest list saves by itself — they do not come back");
 
-  await page.click("#planBtn");
-  // 排行程也跑在背景（提示詞帶整份頁次索引，10 秒同樣不夠）
-  await page.waitForFunction(() => /排行程中/.test(document.getElementById("planInfo").textContent));
-  check(true, "排行程 runs in the background too");
-  // 排完的判斷要看 AI 回來了沒（表上本來就有一份預設流程，不能用「有沒有列」判斷）
-  await page.waitForFunction(() => /也挑了/.test(document.getElementById("planInfo").textContent), null, { timeout: 90000 });
-  check((await page.locator("#programmeTable tbody tr select").evaluateAll((els) => els.map((e) => e.options[e.selectedIndex].text))).includes("綜合討論"), "programme table shows a 綜合討論 block");
+  // 今日流程是自動排的（各研究室在支援人力表上填的分鐘會自己排進來）：訪前不再有「AI 排行程」，
+  // 平常只看一份排好的流程；可以改的那張表收在「要改再點開」裡
+  check((await page.$("#planBtn")) === null, "the pre-visit tab has no AI scheduling button any more — the labs' own minutes fill the schedule");
   check((await page.locator("#tab-pre #slideGrid").count()) === 0, "the pre-visit tab no longer carries the slide picker");
+  check(/綜合討論/.test(await page.textContent("#programmeView")) && (await page.locator("#programmeView .room").count()) === 5, "the schedule is already laid out to look at: 綜合討論 included, a line per lab under the tour");
+  check(!(await page.$eval("#programmeEdit", (d) => d.open)) && !(await page.isVisible("#programmeTable")), "the editable table stays folded away until it is needed");
+  await page.click("#programmeEdit summary");
   // 行程只有一張表：每一間幾分鐘就長在「研究室參訪」那一列底下，總體介紹的地點在 briefing 那一列
   check((await page.locator("#programmeTable tr[data-rooms-row]").count()) === 1, "the lab minutes live inside the one schedule table");
   check((await page.inputValue("#programmeTable [data-briefing-location]")) === "302", "briefing room defaults to 302, on the briefing row itself");
   check((await page.locator("#itinerary input[data-room]").count()) === 5, "one minutes box per lab");
   check(/五間合計 \d+ 分/.test(await page.textContent("#roomsTotal")), "it adds the lab minutes up");
+  check((await page.locator("#programmeTable thead th").allTextContents()).every((t) => t !== "頁碼"), "nobody is asked to type slide numbers — the deck works them out");
   {
     // 分鐘一改，後面各段的時間就跟著往後推——**時間是算出來的，不是第二個要填的欄位**
     const before = await page.inputValue("#programmeTable tbody tr:last-child input[type=time]");
     const box = page.locator('#itinerary input[data-room="301"]');
-    await box.fill(String((Number(await box.inputValue()) || 0) + 30));
+    const minutes = (Number(await box.inputValue()) || 0) + 30;
+    await box.fill(String(minutes));
     await page.waitForFunction((was) => document.querySelector("#programmeTable tbody tr:last-child input[type=time]").value !== was, before, { timeout: 15000 });
     check(/流程排了 \d+ 分/.test(await page.textContent("#programmeTotal")), "and says how long the whole thing runs");
+    check(await page.evaluate((m) => [...document.querySelectorAll("#programmeView .room")].some((el) => el.textContent === "301" && el.parentElement.textContent.includes(`${m} 分`)), minutes), "the schedule you look at follows the table");
+    // 開始時間一改，整排跟著往後推（以前流程停在舊的時間，要一列一列自己改）
+    const start = await page.inputValue("#startTime");
+    await page.fill("#startTime", "10:30");
+    await page.waitForFunction(() => /^10:30–/.test(document.querySelector("#programmeView span").textContent), null, { timeout: 15000 });
+    check((await page.inputValue("#programmeTable tbody tr:first-child input[type=time]")) === "10:30", "moving the start time moves the whole programme with it");
+    await page.fill("#startTime", start);
+    await page.waitForFunction((s) => document.querySelector("#programmeView span").textContent.startsWith(`${s}–`), start, { timeout: 15000 });
   }
   // 進度線：這一場到哪一步了，點一格跳到該做那件事的分頁
   check(/名單 2 人/.test(await page.textContent("#progress")), "the progress line counts the guest list");
@@ -158,7 +168,15 @@ try {
   await page.click('#progress [data-go="deck"]');
   await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]").length > 0);
   check((await page.inputValue("#visitSelect")) === "2026-10-07-uwa", "the progress line's 簡報 cell opens the deck tab on this visit");
-  check((await page.locator("#slideGrid input[data-block]:checked").count()) >= 2, "the plan's blocks are waiting in the deck tab");
+  // 挑頁搬來這裡（以前是訪前「AI 排行程」順便挑）：跑在背景，挑完勾好區塊、寫一句為什麼、自己存——行程不動
+  const routeBefore = JSON.stringify((await (await fetch(`${base}/api/visits?id=2026-10-07-uwa`, { headers: { authorization: "Bearer e2e-token" } })).json()).visit.itinerary);
+  await page.click("#pickBtn");
+  await page.waitForFunction(() => /AI 挑頁中/.test(document.getElementById("pickInfo").textContent));
+  await page.waitForFunction(() => /挑了 \d+ 頁/.test(document.getElementById("pickInfo").textContent), null, { timeout: 90000 });
+  check((await page.locator("#slideGrid input[data-block]:checked").count()) > 2 && (await page.textContent("#pickRationale")).trim().length > 0, "AI 挑頁 ticks blocks beyond the mandatory two, and says why");
+  await page.waitForFunction(() => /已存 \d+ 頁/.test(document.getElementById("slidesInfo").textContent), null, { timeout: 30000 });
+  const picked = (await (await fetch(`${base}/api/visits?id=2026-10-07-uwa`, { headers: { authorization: "Bearer e2e-token" } })).json()).visit;
+  check(picked.slides.length > 5 && !!picked.plan_rationale && JSON.stringify(picked.itinerary) === routeBefore, "…saves the pick by itself, and leaves the schedule the labs filled in alone");
   // 顏色：研究室的區塊用那一間的顏色，值來自 public/data/labs.json（不是抄在頁面裡的第二份）
   const hexToRgb = (h) => `rgb(${parseInt(h.slice(1, 3), 16)}, ${parseInt(h.slice(3, 5), 16)}, ${parseInt(h.slice(5, 7), 16)})`;
   const labColor = Object.fromEntries(JSON.parse(await readFile("public/data/labs.json", "utf8")).labs.map((l) => [l.room, hexToRgb(l.color)]));
@@ -227,7 +245,18 @@ try {
     await page.selectOption("#visitSelect", "2026-10-07-uwa");
     await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]").length > 0);
     await page.waitForFunction(() => /移除/.test(document.getElementById("masterRow").textContent));
+    // 換一場、切分頁都會再問一次站台上有沒有母簡報。以前一問就先清成「沒有」，這時候按「產生簡報」
+    // 就跳出選檔視窗（站台上明明有一份；這支測試偶爾就卡在這裡）。讓那一問慢一點，問的時候按下去
+    let picked = false;
+    page.on("filechooser", () => { picked = true; });
+    const masterCheck = (u) => u.pathname === "/api/master" && !u.search;
+    await page.route(masterCheck, async (route) => { await new Promise((r) => setTimeout(r, 1500)); await route.continue(); });
+    const asked = page.waitForRequest((q) => masterCheck(new URL(q.url())));
+    await page.selectOption("#visitSelect", "2026-10-07-uwa");
+    await asked;
     const [download2] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), page.click("#deckBtn")]);
+    check(!picked, "pressing 產生簡報 while the site is being asked about the master again builds from the stored one — no file picker");
+    await page.unroute(masterCheck);
     const pptxPath2 = path.join(tmp, "browser2.pptx");
     await download2.saveAs(pptxPath2);
     const v2 = await (await Deck.load(await readFile(pptxPath2))).validate();
@@ -423,8 +452,8 @@ try {
   await page.click("#mapIn");
   await page.waitForFunction(() => Number(document.querySelector("#worldMap svg").getAttribute("viewBox").split(" ")[2]) === 180);
   check(true, "＋ zooms in");
-  await page.waitForFunction(() => (document.getElementById("mapLandDetail").getAttribute("d") || "").length > 100000 && document.getElementById("mapLandDetail").getAttribute("display") === "inline", null, { timeout: 30000 });
-  check((await page.getAttribute("#mapLand", "display")) === "none", "…and once zoomed in, the finer coastline takes over");
+  await page.waitForFunction(() => (document.querySelector("#worldMap .wm-land-detail").getAttribute("d") || "").length > 100000 && document.querySelector("#worldMap .wm-land-detail").getAttribute("display") === "inline", null, { timeout: 30000 });
+  check((await page.getAttribute("#worldMap .wm-land:not(.wm-land-detail)", "display")) === "none", "…and once zoomed in, the finer coastline takes over");
   const viewBox = () => page.evaluate(() => document.querySelector("#worldMap svg").getAttribute("viewBox").split(" ").map(Number));
   const mapBox = await page.locator("#worldMap svg").boundingBox();
   const beforeDrag = await viewBox();
@@ -441,7 +470,7 @@ try {
   check(true, "…and a trackpad pinch zooms further in");
   await page.click("#mapReset");
   await page.waitForFunction(() => Number(document.querySelector("#worldMap svg").getAttribute("viewBox").split(" ")[2]) === 720);
-  check((await page.getAttribute("#mapLand", "display")) === "inline", "全圖 goes back to the whole world");
+  check((await page.getAttribute("#worldMap .wm-land:not(.wm-land-detail)", "display")) === "inline", "全圖 goes back to the whole world");
   // 還在整張世界地圖時，一般滾輪是捲頁面，不會被地圖吃掉
   const scrolled = await page.evaluate(() => window.scrollY);
   await page.mouse.move(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2);
@@ -454,6 +483,8 @@ try {
     const auth = { authorization: "Bearer e2e-token", "content-type": "application/json" };
     const mk = async (name, date, code) => (await (await fetch(`${base}/api/visits`, { method: "POST", headers: auth, body: JSON.stringify({ org: { name, country: "Taiwan", type: "university" }, date, code, start_time: "10:00", end_time: "11:30" }) })).json()).visit.visit_id;
     const ids = [await mk("National Taiwan University", "2025-03-01", "ntu"), await mk("惇陽工程顧問有限公司", "2025-04-01", "dunyang")];
+    // 同一家公司早一點的另一場：這次英文名稱寫英文、中文寫在在地名稱（實際發生過：拼法不一樣就被算成兩個單位）
+    ids.push((await (await fetch(`${base}/api/visits`, { method: "POST", headers: auth, body: JSON.stringify({ org: { name: "Dun Yang Engineering Consultants Co., Ltd.", name_local: "惇陽工程顧問有限公司", country: "Taiwan", type: "enterprise" }, date: "2024-12-01", code: "dunyangen", start_time: "10:00", end_time: "11:30" }) })).json()).visit.visit_id);
     await page.click('[data-tab="pre"]');
     await page.click('[data-tab="data"]');
     const twGroup = () => page.evaluate(() => [...document.querySelectorAll("#worldMap [data-cluster]")].findIndex((g) => /National Taiwan University/.test(g.getAttribute("aria-label")) && /惇陽/.test(g.getAttribute("aria-label"))));
@@ -467,6 +498,7 @@ try {
     await page.click(`#worldMap [data-cluster="${await twGroup()}"] circle.hit`);
     await page.waitForFunction(() => document.querySelectorAll("#mapVisits [data-place]").length === 2);
     check(/National Taiwan University/.test(await page.textContent("#mapVisits")) && /惇陽工程顧問有限公司/.test(await page.textContent("#mapVisits")), "…and when they are still on top of each other, clicking again lists both institutions");
+    check(await page.evaluate(() => [...document.querySelectorAll("#mapVisits [data-place]")].some((d) => /惇陽/.test(d.textContent) && d.querySelectorAll("[data-visit]").length === 2)), "…and the same company spelled two ways in English is one institution with both its visits");
     await page.click("#mapReset");
     for (const id of ids) await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: auth });
     await page.click('[data-tab="pre"]');
@@ -490,11 +522,74 @@ try {
   check(wide.r < narrow.r && Math.abs(wide.px - narrow.px) < 1, `dots shrink on the map as the map grows, staying the same size on screen (${narrow.px.toFixed(1)}px → ${wide.px.toFixed(1)}px)`);
   await page.setViewportSize({ width: 1100, height: 900 });
 
+  // 匯入以前的參訪（系統上線之前的紀錄；明確要求：「把所有參訪者加入中心首頁地圖，以及主辦端網頁資料地圖中」）：
+  // 選檔 → AI 讀（AI_MOCK 照欄名讀）→ 先列出來給人看 → 勾好才寫進去；匯入之後清單與地圖跟著更新
+  {
+    const { pastVisitsXlsx } = await import("../fixtures/past-visits.mjs");
+    await page.setInputFiles("#importFile", { name: "GHRC-參訪名單.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: await pastVisitsXlsx() });
+    await page.waitForSelector("#importBox:not([hidden]) #importTable tbody tr", { timeout: 60000 });
+    check((await page.locator("#importTable tbody tr").count()) === 4 && (await page.locator("#importTable [data-import]").count()) === 3, "importing an old visitor list shows every row first; the one without a date cannot be ticked");
+    check(/原表同一列拆出來的，算同一場/.test(await page.textContent("#importTable")) && /2024-01-08/.test(await page.textContent("#importTable")), "…the row with two universities is split in two (counted as one visit), with the Excel date read as a date");
+    check((await page.textContent("#importGo")) === "匯入 3 筆" && !/佐臻/.test(await page.textContent("#visitsTable")), "…and nothing is written until “import” is pressed");
+    // 明確指示：「每一次有增加再自動加入」——匯入時順便存成 Google 試算表，預設勾著
+    check((await page.isVisible("#importLinkRow")) && (await page.isChecked("#importLink")), "…with “also save it as a Google Sheet” ticked, so rows added there later come in by themselves");
+    await page.click("#importTable tbody tr:nth-child(3) [data-import]");
+    check((await page.textContent("#importGo")) === "匯入 2 筆", "…unticking a row takes it out");
+    await page.click("#importTable tbody tr:nth-child(3) [data-import]");
+    // 這一次先不存成 Google 試算表（正式站第一次就是這樣：匯入成功、Google 那一步因為授權過期沒做成）
+    await page.uncheck("#importLink");
+    await page.click("#importGo");
+    await page.waitForFunction(() => /匯入了 3 筆/.test(document.getElementById("importInfo").textContent), null, { timeout: 30000 });
+    check(await page.isHidden("#importBox"), "…after importing, the preview goes away");
+    await page.waitForFunction(() => /佐臻/.test(document.getElementById("visitsTable").textContent));
+    await page.waitForFunction(() => /4 個國家 · 4 個單位 · 3 場/.test(document.getElementById("mapSummary").textContent), null, { timeout: 30000 });
+    check(true, `the imported visits are on the map; the two universities from one row count as one visit (${await page.textContent("#mapSummary")})`);
+    check(await page.isHidden("#listBox"), "…not linked to a Google Sheet yet when that box was unticked");
+    // 同一份再選一次：都已經有了，沒有東西可以匯入，但還是可以「只存成 Google 試算表」
+    await page.setInputFiles("#importFile", { name: "GHRC-參訪名單.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: await pastVisitsXlsx() });
+    await page.waitForFunction(() => document.getElementById("importGo").textContent === "只存成 Google 試算表", null, { timeout: 60000 });
+    check((await page.locator("#importTable [data-import]").count()) === 0 && !(await page.isDisabled("#importGo")), "picking the same list again: nothing left to import, but it can still be saved as a Google Sheet");
+    await page.click("#importGo");
+    await page.waitForSelector("#listBox:not([hidden])", { timeout: 30000 });
+    check(/GHRC 參訪名單/.test(await page.textContent("#listInfo")) && /每十五分鐘/.test(await page.textContent("#listInfo")), `…and the list is now a Google Sheet the system keeps watching (${await page.textContent("#listInfo")})`);
+    // 有人在那份試算表裡加了一列：「現在就看一次」（平常是每十五分鐘自己看、打開這一頁也看一次）
+    {
+      const { mockSheetWrite } = await import("../../netlify/lib/drive.mts");
+      const list = await (await fetch(`${base}/api/visit-list`, { headers: { authorization: "Bearer e2e-token" } })).json();
+      await mockSheetWrite(list.file_id, new Uint8Array(await pastVisitsXlsx({ extra: [[4, 45930, "國際", "日本", "日本千葉大學園藝學院", "山田太郎教授", "", "園藝療法交流"]] })));
+      await page.click("#listSync");
+      await page.waitForFunction(() => /從名單加了 1 筆/.test(document.getElementById("listNote").textContent), null, { timeout: 60000 });
+      await page.waitForFunction(() => /日本千葉大學園藝學院/.test(document.getElementById("visitsTable").textContent), null, { timeout: 30000 });
+      // 名單那一行是清單畫完之後才去重讀的（loadDataTab 不等它），CI 上慢一點就會比清單晚一拍——等它，不要當場比
+      await page.waitForFunction(() => /上一次加了 1 筆/.test(document.getElementById("listInfo").textContent), null, { timeout: 30000 });
+      check(true, "a row added to the Google Sheet comes in on its own, and the list line says so");
+    }
+    await page.click("#visitsTable tr:has-text('佐臻')");
+    await page.waitForFunction(() => /匯入/.test(document.getElementById("summary").textContent));
+    check(/王大明副總經理/.test(await page.textContent("#summary")), "an imported visit shows what the original row said");
+    // 公開頁上的說明：匯入時帶原表的，後台可以補英文、打完自己存
+    check((await page.inputValue("#pubNoteZh")) === "參訪 303 與 304" && (await page.inputValue("#pubPeopleZh")) === "王大明副總經理", "…and what the public Visits page will say about it, taken from the original row");
+    await page.fill("#pubNoteEn", "Visited laboratories 303 and 304.");
+    await page.waitForFunction(() => /已存/.test(document.getElementById("pubInfo").textContent), null, { timeout: 15000 });
+    const pubLog = await (await fetch(`${base}/api/visit-log`)).json();
+    check(pubLog.visits.some((e) => e.note.en === "Visited laboratories 303 and 304."), "the English text typed in the admin is on the public visit log");
+    const auth = { authorization: "Bearer e2e-token" };
+    const imported = (await (await fetch(`${base}/api/visits`, { headers: auth })).json()).visits.filter((v) => v.imported);
+    for (const v of imported) await fetch(`${base}/api/visits?id=${encodeURIComponent(v.visit_id)}`, { method: "DELETE", headers: auth });
+    const { getStore } = await import("../../netlify/lib/store.mts");
+    await getStore().deleteMedia("sync/visit-list.json"); // 後面的測試從還沒連上名單的樣子開始
+    await page.click('[data-tab="pre"]');
+    await page.click('[data-tab="data"]');
+    await page.waitForFunction(() => /1 個國家 · 1 個單位/.test(document.getElementById("mapSummary").textContent), null, { timeout: 30000 });
+  }
+
   // 一次性設定都收在「設定」分頁
   await page.click('[data-tab="settings"]');
   await page.waitForFunction(() => document.querySelectorAll("#statusList li").length > 0, null, { timeout: 30000 });
   check((await page.locator("#statusList li").count()) >= 6, "the settings tab says which external services are wired up");
   check(/後續提醒/.test(await page.textContent("#statusList")), "…including whether the wrap-up reminder can be sent");
+  // Google（備份、名單、寄信共用那一組）：連上了沒寫在上面那一行；這裡沒有 OAuth 用戶端，所以是「未設定」、沒有那顆按鈕，也沒有「授權過期」那一條
+  check(/Google（Drive 備份、參訪名單、寄信）/.test(await page.textContent("#googleInfo")) && /未設定/.test(await page.textContent("#googleInfo")) && (await page.isHidden("#googleConnect")) && (await page.isHidden("#googleWarn")), "…and whether Google (backups, the visitor list, mail) is connected, with no reconnect button when there is no OAuth client");
   check(/不會寄|現在寄到/.test(await page.textContent("#reminderInfo")), "the settings tab says where the wrap-up reminder would go");
   await page.fill("#reminderTo", "wrapup@ntu.edu.tw");
   await page.locator("#senderDefault").focus(); // blur → change
@@ -709,13 +804,43 @@ try {
   }
 
   // ── 中心首頁（/）：介紹中心，五間研究室各連到自己的介紹頁 ──
+  // 首頁的世界地圖只標**已經來過**的單位：建一場過去的（只填了國家、還沒查位置——放在國家的位置）
+  const pastVisit = await (await fetch(`${base}/api/visits`, { method: "POST", headers: { authorization: "Bearer e2e-token", "content-type": "application/json" }, body: JSON.stringify({ org: { name: "Konkuk University", name_local: "건국대학교", country: "South Korea" }, date: "2025-04-21", code: "konkuk", start_time: "10:00", end_time: "11:30" }) })).json();
+  // 同一所學校早一點的另一場，英文名稱拼法不一樣：還是同一個單位、同一個點
+  const pastVisit2 = await (await fetch(`${base}/api/visits`, { method: "POST", headers: { authorization: "Bearer e2e-token", "content-type": "application/json" }, body: JSON.stringify({ org: { name: "Konkuk Univ.", name_local: "건국대학교", country: "Korea" }, date: "2024-06-03", code: "konkukb", start_time: "10:00", end_time: "11:30" }) })).json();
   await page.goto(`${base}/`);
   await page.waitForFunction(() => document.querySelectorAll("#labs .lab-card").length === 5, null, { timeout: 15000 });
   check((await page.textContent("h1")) === "Green Health Research Center", "/ is the centre's homepage, not an empty visit page");
   const homeLinks = await page.$$eval("#labs .lab-card", (els) => els.map((a) => a.getAttribute("href")));
   check(homeLinks.join(" ") === "/lab/301 /lab/302 /lab/303 /lab/304 /lab/305", `…with the five laboratories, each linking to its own page (${homeLinks.join(" ")})`);
   check((await page.textContent("#lab-303")).includes("陳惠美") && !(await page.textContent("#lab-303")).includes("鄭佳昆") && (await page.textContent("#lab-305")).includes("IVR Research Lab"), "…303 lists only 陳惠美 and 305 is the IVR Research Lab");
-  check((await page.$$eval('#loop [data-stage="Validate"] a', (els) => els.map((a) => a.textContent))).join() === "303,305", "…the evidence loop puts both 303 and 305 under Validate");
+  // 明確指示：「五間研究室的卡片上，還留著『Lab 301 · 量測』這類小標籤一起拿掉」——房號留著，寫在名稱前面
+  check(await page.evaluate(() => !document.querySelector("#labs .pill") && [...document.querySelectorAll("#labs .lab-card .room-no")].map((e) => e.textContent).join(" ") === "301 302 303 304 305"), "…with no “Lab 301 · Measure” label on the cards, just the room number in front of the name");
+  // 明確指示：「構成一條閉環證據鏈」那一段不要；五間研究室的卡片放在「組織架構」與「參訪與聯絡」之間
+  check(await page.evaluate(() => {
+    const ids = [...document.querySelectorAll("main > section:not([hidden])")].map((s) => s.id);
+    return !document.getElementById("loop") && ids.indexOf("orgSec") + 1 === ids.indexOf("labsSec") && ids.indexOf("labsSec") + 1 === ids.indexOf("contactSec");
+  }), "…no evidence-loop block, and the five laboratory cards sit between the organisation and the contact section");
+  check((await page.textContent("#labsTitle")) === "The five laboratories", "…under a plain heading");
+  check(!/Cornell/.test(await page.textContent("#members")) && (await page.locator("#members li").count()) === 7, "…and the international platform does not list Cornell");
+  // 來訪單位：跟後台「資料」分頁同一張世界地圖（明確要求），只標已經來過的
+  await page.waitForSelector("#visitorsSec:not([hidden]) #visitorMap [data-cluster]", { timeout: 15000 });
+  const visitorLabels = await page.$$eval("#visitorMap [data-cluster]", (els) => els.map((g) => g.getAttribute("aria-label")));
+  check(visitorLabels.some((l) => /Konkuk University/.test(l)) && !visitorLabels.some((l) => /Western Australia/.test(l)), `the homepage marks the institutions that have visited on the world map, not the ones still to come (${visitorLabels.join(" | ")})`);
+  await page.click("#visitorMap [data-cluster] circle.hit");
+  await page.waitForFunction(() => document.querySelectorAll("#visitorPick [data-place]").length === 1);
+  check(/Konkuk University/.test(await page.textContent("#visitorPick")) && /South Korea · 2 visits/.test(await page.textContent("#visitorPick")) && !/2025-04-21/.test(await page.textContent("#visitorsSec")), `…tapping a dot says who it is, where, and how many times — no dates; the same university spelled two ways is one dot (${await page.textContent("#visitorPick")})`);
+  // 每一場的詳細說明在另一頁（明確要求：「參訪者多，把這些參訪另外作一頁連過去詳細說明」）
+  check((await page.getAttribute("#visitorPick a", "href")) === "/visits?org=Konkuk%20University", "…and the dot's card links to that institution's visits");
+  check((await page.getAttribute("#visitsLink", "href")) === "/visits", "the homepage links to the page with every visit in detail");
+  await page.click("#visitsLink");
+  await page.waitForSelector("#list .visit", { timeout: 15000 });
+  check((await page.textContent("#heading")) === "Visits to the centre" && /Konkuk University/.test(await page.textContent("#list")) && /Mon 21 April 2025/.test(await page.textContent("#list")), "the Visits page lists each past visit with its date and institution");
+  check(!/2099|Western Australia/.test(await page.textContent("#list")), "…and not the ones still to come");
+  check((await page.textContent("#summary")) === "2 visits · 1 institution · 1 country", `…and counts the same university spelled two ways as one institution (${await page.textContent("#summary")})`);
+  await page.goBack();
+  await page.waitForSelector("#visitorsSec:not([hidden])", { timeout: 15000 });
+  for (const v of [pastVisit, pastVisit2]) await fetch(`${base}/api/visits?id=${encodeURIComponent(v.visit.visit_id)}`, { method: "DELETE", headers: { authorization: "Bearer e2e-token" } });
   check(!/301\s*[-–]\s*304|four lab/i.test(await page.textContent("main")), "…and nowhere says four laboratories or 301–304");
   await page.click("#langToggle");
   await page.waitForFunction(() => document.querySelector("h1")?.textContent === "綠色健康研究中心" && document.querySelectorAll("#labs .lab-card").length === 5, null, { timeout: 15000 });
@@ -751,6 +876,7 @@ try {
   await page.click('#lab-303 a[href^="/lab/"]');
   await page.waitForFunction(() => document.getElementById("labName")?.textContent?.length > 0, null, { timeout: 15000 });
   check((await page.textContent("#labName")) === "Landscape Simulation Lab", "the card links to that laboratory's own page");
+  check((await page.textContent("#roomNo")) === "303" && (await page.locator(".hero .pill").count()) === 0, "…which shows its room number before the name, with no stage label");
   check((await page.textContent("#leadName")).includes("陳惠美"), "…with its lead");
   check((await page.locator("#others a").count()) === 4, "…and the other four labs to jump to");
   check(!(await page.isHidden("#draftNote")), "…and it admits the text is still a draft until the lead confirms it");
@@ -790,11 +916,19 @@ try {
     check(dropped.labs.find((l) => l.room === "302").photos.length === 6, "…and take it off again");
     await fetch(`${base}/api/labs`, { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer e2e-token" }, body: JSON.stringify({ room: "302", reset: true }) });
   }
+  // 流程區塊的英文標題空白時，來賓專頁用 i18n 的 kind_* 補、不印中文那一行。以前這個情形是「AI 排行程」
+  // 留下來的；那顆鍵拿掉之後今日流程照預設排（標題都有），所以這裡自己把第一段的英文標題清掉再看
+  {
+    const cur = (await (await fetch(`${base}/api/visits?id=2026-10-07-uwa`, { headers: { authorization: "Bearer e2e-token" } })).json()).visit;
+    cur.programme[0] = { ...cur.programme[0], title_en: "" };
+    await fetch(`${base}/api/visits`, { method: "POST", headers: { authorization: "Bearer e2e-token", "content-type": "application/json" }, body: JSON.stringify(cur) });
+  }
   // 回到來賓專頁（上面跑過幾個 /lab/… 的分頁，所以直接指定網址，不靠上一頁）
   await page.goto(`${base}/2026-10-07-uwa#email`);
   await page.waitForSelector("#emailSec:not([hidden])");
   await page.waitForFunction(() => document.getElementById("labsTitle")?.textContent?.length > 0, null, { timeout: 15000 });
   check((await page.locator("#labs article").count()) === 6, "guest page shows the briefing step plus five lab cards");
+  check(await page.evaluate(() => !document.querySelector("#labs .pill") && document.querySelectorAll("#labs .lab-card .room-no").length === 5), "…and the cards carry the room number, not a “Lab 301 · Measure” label");
   check((await page.locator("#labs img.avatar").count()) === 5, "all five leads have a photo now, so no card falls back to initials");
   check((await page.textContent("#labs article:first-child")).includes("Center overview"), "briefing card comes first");
   check((await page.textContent("#lab-303")).includes("陳惠美") && !(await page.textContent("#lab-303")).includes("鄭佳昆"), "303 lists only 陳惠美");
@@ -803,7 +937,7 @@ try {
   check((await page.textContent("#briefing-card")).includes("302"), "guest page shows the briefing in 302");
   check((await page.textContent("#lab-303")).includes("Landscape Simulation Lab") && (await page.textContent("#lab-303")).includes("景觀環境模擬室"), "the lab NAME keeps both scripts (a name is an identifier, not a translation)");
   check(!/[一-鿿]/.test(await page.textContent("#lab-303 p")), "…but the prose on the English page is English only: 中英文不在同一頁印兩份");
-  check((await page.textContent("#programme li:first-child")).includes("Center overview") && !(await page.textContent("#programme li:first-child")).includes("總體介紹"), "programme block falls back to the English label when the plan left title_en empty, and does not print the Chinese one");
+  check((await page.textContent("#programme li:first-child")).includes("Center overview") && !(await page.textContent("#programme li:first-child")).includes("總體介紹"), "programme block falls back to the English label when its English title is empty, and does not print the Chinese one");
   check((await page.locator("#programme li").count()) > 0, "programme rendered");
   await page.waitForSelector("#materialsSec:not([hidden])");
   check((await page.locator("#photoGrid img").count()) === 1 && (await page.textContent("#linkList")).includes("Lab 303 papers"), "visit page shows the uploaded photo and the link");
@@ -868,6 +1002,7 @@ try {
     for (let n = w.nextNode(); n; n = w.nextNode()) {
       if (["SCRIPT", "STYLE", "TEXTAREA", "CODE", "PRE"].includes(n.parentNode?.nodeName)) continue;
       if (!n.parentElement?.offsetParent) continue;
+      if (n.parentElement.closest("[data-ai-text]")) continue; // AI 寫的內容是資料，不是介面：不翻（AI 挑頁旁邊那一句為什麼）
       const t = n.nodeValue.trim();
       if (t && /[一-鿿]/.test(t) && !["中", "中文", "日本語"].includes(t)) out.push(t);
     }

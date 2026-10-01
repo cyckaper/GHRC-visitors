@@ -43,6 +43,23 @@ export function checkAdminToken(given: string): boolean {
 }
 
 /**
+ * 用 ADMIN_TOKEN 簽一段字（`<內容>.<HMAC>`），之後驗得出是不是我們簽的、有沒有被改過。
+ * 給「從別的網站導回來、不帶登入 cookie」的地方認人用（Google 授權完導回來的那一次）。
+ */
+export function signValue(payload: string): string | null {
+  const token = env("ADMIN_TOKEN");
+  if (!token) return null;
+  return `${payload}.${createHmac("sha256", token).update(`sig.${payload}`).digest("hex")}`;
+}
+export function checkSigned(value: string): string | null {
+  const token = env("ADMIN_TOKEN");
+  const i = String(value || "").lastIndexOf(".");
+  if (!token || i <= 0) return null;
+  const payload = value.slice(0, i);
+  return safeEqual(value.slice(i + 1), createHmac("sha256", token).update(`sig.${payload}`).digest("hex")) ? payload : null;
+}
+
+/**
  * 主辦端登入 session（functions/session.mts）：工作人員貼一次 ADMIN_TOKEN，這台瀏覽器就記住半年。
  * cookie 值是 `v1.<到期毫秒>.<HMAC>`，用 ADMIN_TOKEN 當金鑰簽的，**本身不是 ADMIN_TOKEN**；
  * HttpOnly 讓網頁的 JS 讀不到。改用 cookie 是因為 iPad Safari 會把 localStorage 當追蹤資料清掉

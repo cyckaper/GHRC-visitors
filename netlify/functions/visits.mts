@@ -1,8 +1,9 @@
 import { fail, json, nowISO, readJSON, requireAdmin, siteUrl } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
-import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes, needsGeo, sanitizeGeo } from "../../lib/visit.mjs";
+import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes, needsGeo, sanitizeGeo, sanitizePublic, institutionKeys, visitEndAt } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
+import { purgePublicVisits } from "../lib/cdn.mts";
 import { dropDraft, moveDraft } from "./draft.mts";
 
 /**
@@ -44,7 +45,11 @@ export default async (req: Request) => {
       return json({ ok: true, visit: v, responses, stale: staleOutputs(v) });
     }
     // geo：訪客地圖上這個單位在哪裡（/api/geo 查的）；geo_stale：還沒查、或單位改過名字，資料分頁會自己去查
-    const list = (await store.listVisits()).map((v) => ({ visit_id: v.visit_id, date: v.date, org: v.org?.name, org_local: v.org?.name_local || "", type: v.org?.type, country: v.org?.country, headcount: v.headcount, status: v.status, language: v.language, guests: (v.guests || []).length, slides: (v.slides || []).length, summary: !!v.summary, updated_at: v.updated_at, geo: (v as any).geo ? { lat: (v as any).geo.lat, lon: (v as any).geo.lon, place: (v as any).geo.place, precision: (v as any).geo.precision } : null, geo_stale: needsGeo(v) }));
+    // group：匯入的舊紀錄裡，原表同一列拆出來的那幾筆（算同一場）；imported：這一場是從以前的名單匯入的
+    const all = await store.listVisits();
+    // inst：同一個單位的每一場都一樣（中文名稱一樣、或英文名稱去掉空白與標點後一樣），資料分頁的地圖照這個合成一個點
+    const inst = institutionKeys(all);
+    const list = all.map((v) => ({ visit_id: v.visit_id, date: v.date, org: v.org?.name, org_local: v.org?.name_local || "", type: v.org?.type, country: v.org?.country, headcount: v.headcount, status: v.status, language: v.language, guests: (v.guests || []).length, slides: (v.slides || []).length, summary: !!v.summary, updated_at: v.updated_at, geo: (v as any).geo ? { lat: (v as any).geo.lat, lon: (v as any).geo.lon, place: (v as any).geo.place, precision: (v as any).geo.precision } : null, geo_stale: needsGeo(v), group: (v as any).imported?.group || "", imported: !!(v as any).imported, inst: inst.get(v.visit_id) || "" }));
     return json({ ok: true, visits: list, backend: store.backend });
   }
 
@@ -98,6 +103,8 @@ export default async (req: Request) => {
       if (existing) for (const k of ROTA_FIELDS) if ((existing as any)[k] !== undefined) (merged as any)[k] = (existing as any)[k];
       // 訪客地圖上的位置只有 geo-background 在寫：後台送回來的那一份一律不算（單位改了名字，key 對不上就會重查）
       if (existing) (merged as any).geo = (existing as any).geo;
+      // 公開頁上的說明只有 /api/visit-log 在寫（「資料」分頁那一塊）：「訪前」開著的那一份是舊的，存檔時帶回來也不算
+      if (existing) (merged as any).public = (existing as any).public;
       // 研究室填的分鐘已經自動排進行程（/api/rota）。**後台手上那一份還沒看過**（它的 updated_at 比那一間
       // 填的時間早）就不能把它蓋回去：那幾間照伺服器上的分鐘、今日流程重推一次。看過之後主辦端要改就照他的。
       const base = String((body as any).updated_at || "");
@@ -131,6 +138,9 @@ export default async (req: Request) => {
       }
     }
     await triggerDriveSync(merged.visit_id);
+    // 已經來過的那一場改了（單位名稱、國家、去了哪幾間……）：首頁的地圖與來訪紀錄頁跟著換，不必等 CDN 那一份過期。
+    // 還沒來的不在公開頁上，存再多次也不必清
+    if (hasHappened(merged) || (current && hasHappened(current))) await purgePublicVisits();
     // rota_applied：這一次存檔時，哪幾間研究室剛填的分鐘被保留下來（後台照這個說一聲「行程已照研究室填的更新」）
     return json({ ok: true, visit: merged, renamed_from: renamedFrom, url_fixed: renameBlocked, stale: staleOutputs(merged), rota_applied: unseen });
   }
@@ -147,23 +157,31 @@ export default async (req: Request) => {
     for (const key of mediaKeys(visit)) await store.deleteMedia(key).catch(() => {});
     await dropDraft(id);
     await store.deleteVisit(id);
+    if (hasHappened(visit)) await purgePublicVisits(); // 公開頁上也拿掉
     return json({ ok: true, deleted: id });
   }
 
   return fail(405, "method not allowed");
 };
 
+/** 這一場已經結束了（公開頁只列這種的；`visitEndAt` 跟後續提醒同一個算法）。 */
+function hasHappened(v: Visit): boolean {
+  const end = visitEndAt(v).getTime();
+  return Number.isFinite(end) && end <= Date.now();
+}
+
 /**
  * 後台表單管不到的欄位——別的端點或背景工作在寫：摘要（summary）、後續提醒（reminder-cron）、Drive 備份、
  * 名片、簽名簿、口述、當天資料（materials）、信件與寄出紀錄（letter）、寄信時跟著改的狀態（status）、
- * 後續那四件事的「本次沒有」（wrapup，走 `action: "wrapup"`）。一般存檔**帶了也不算**，一律沿用伺服器上那一份。
+ * 後續那四件事的「本次沒有」（wrapup，走 `action: "wrapup"`）、從以前的名單匯入的來源（imported，匯入時寫的）。
+ * 一般存檔**帶了也不算**，一律沿用伺服器上那一份。
  *
  * 以前是「body 沒帶才沿用」，可是後台的 readForm() 一直是把手上那一份**整個**送回來的，這幾格幾乎每次都帶著，
  * 而且常常是舊的：確認信剛寄出，訪前分頁改一個字自動存檔，`letters.confirmation.sent_at` 就被洗掉——
  * isUnused() 又把網址當成還沒用出去，下一次改日期或代碼就搬家，寄出去的那個連結跟著失效。
  * 提醒紀錄被洗掉則會害後續提醒重寄一次。要改這幾格，走寫它的那一支端點。
  */
-const KEPT = ["summary", "summary_at", "reminders", "drive", "cards", "signbook", "dictation", "letters", "materials", "status", "wrapup"] as const;
+const KEPT = ["summary", "summary_at", "reminders", "drive", "cards", "signbook", "dictation", "letters", "materials", "status", "wrapup", "imported"] as const;
 
 /**
  * 訪前功課（background）要保留哪一份。research-background 會把結果寫回存過檔的那一場；
@@ -247,6 +265,8 @@ export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   v.materials = sanitizeMaterials((input as any).materials);
   // 訪客地圖上的位置（geo-background 寫的）：只留認得的欄位；存檔時一律沿用伺服器上那一份
   (v as any).geo = sanitizeGeo((input as any).geo);
+  // 公開頁上的說明（/api/visit-log 寫的；匯入時帶原表的）：只留認得的欄位
+  (v as any).public = sanitizePublic((input as any).public);
   v.language = (["en", "zh", "ko", "ja"] as const).includes(v.language) ? v.language : "en";
   v.status = (["draft", "confirmed", "done"] as const).includes(v.status) ? v.status : "draft";
   v.deck = input.deck || {};

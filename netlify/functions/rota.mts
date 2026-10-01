@@ -77,7 +77,8 @@ export default async (req: Request) => {
   if (req.method === "GET") {
     const now = new Date();
     const labs = await loadLabs();
-    const visits = (await store.listVisits()).filter((v) => v.visit_id && v.date);
+    // 從以前的名單匯入的那幾場（系統上線之前的）沒有走過通告與這張表，列出來只會讓「已結束」那一疊變長
+    const visits = (await store.listVisits()).filter((v) => v.visit_id && v.date && !(v as any).imported);
     const rows = visits.map((v) => rotaVisit(v, labs, now));
     // 還沒到的照日期由近到遠（那才是現在要填的），過去的由新到舊接在後面
     const upcoming = rows.filter((r) => !r.past).sort((a, b) => `${a.date}${a.start_time}`.localeCompare(`${b.date}${b.start_time}`));
