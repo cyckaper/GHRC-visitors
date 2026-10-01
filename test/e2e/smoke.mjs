@@ -456,6 +456,41 @@ try {
   check(wide.r < narrow.r && Math.abs(wide.px - narrow.px) < 1, `dots shrink on the map as the map grows, staying the same size on screen (${narrow.px.toFixed(1)}px → ${wide.px.toFixed(1)}px)`);
   await page.setViewportSize({ width: 1100, height: 900 });
 
+  // 匯入以前的參訪（系統上線之前的紀錄；明確要求：「把所有參訪者加入中心首頁地圖，以及主辦端網頁資料地圖中」）：
+  // 選檔 → AI 讀（AI_MOCK 照欄名讀）→ 先列出來給人看 → 勾好才寫進去；匯入之後清單與地圖跟著更新
+  {
+    const { pastVisitsXlsx } = await import("../fixtures/past-visits.mjs");
+    await page.setInputFiles("#importFile", { name: "GHRC-參訪名單.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: await pastVisitsXlsx() });
+    await page.waitForSelector("#importBox:not([hidden]) #importTable tbody tr", { timeout: 60000 });
+    check((await page.locator("#importTable tbody tr").count()) === 4 && (await page.locator("#importTable [data-import]").count()) === 3, "importing an old visitor list shows every row first; the one without a date cannot be ticked");
+    check(/原表同一列拆出來的，算同一場/.test(await page.textContent("#importTable")) && /2024-01-08/.test(await page.textContent("#importTable")), "…the row with two universities is split in two (counted as one visit), with the Excel date read as a date");
+    check((await page.textContent("#importGo")) === "匯入 3 筆" && !/佐臻/.test(await page.textContent("#visitsTable")), "…and nothing is written until “import” is pressed");
+    await page.click("#importTable tbody tr:nth-child(3) [data-import]");
+    check((await page.textContent("#importGo")) === "匯入 2 筆", "…unticking a row takes it out");
+    await page.click("#importTable tbody tr:nth-child(3) [data-import]");
+    await page.click("#importGo");
+    await page.waitForFunction(() => /匯入了 3 筆/.test(document.getElementById("importInfo").textContent), null, { timeout: 30000 });
+    check(await page.isHidden("#importBox"), "…after importing, the preview goes away");
+    await page.waitForFunction(() => /佐臻/.test(document.getElementById("visitsTable").textContent));
+    await page.waitForFunction(() => /4 個國家 · 4 個單位 · 3 場/.test(document.getElementById("mapSummary").textContent), null, { timeout: 30000 });
+    check(true, `the imported visits are on the map; the two universities from one row count as one visit (${await page.textContent("#mapSummary")})`);
+    await page.click("#visitsTable tr:has-text('佐臻')");
+    await page.waitForFunction(() => /匯入/.test(document.getElementById("summary").textContent));
+    check(/王大明副總經理/.test(await page.textContent("#summary")), "an imported visit shows what the original row said");
+    // 公開頁上的說明：匯入時帶原表的，後台可以補英文、打完自己存
+    check((await page.inputValue("#pubNoteZh")) === "參訪 303 與 304" && (await page.inputValue("#pubPeopleZh")) === "王大明副總經理", "…and what the public Visits page will say about it, taken from the original row");
+    await page.fill("#pubNoteEn", "Visited laboratories 303 and 304.");
+    await page.waitForFunction(() => /已存/.test(document.getElementById("pubInfo").textContent), null, { timeout: 15000 });
+    const pubLog = await (await fetch(`${base}/api/visit-log`)).json();
+    check(pubLog.visits.some((e) => e.note.en === "Visited laboratories 303 and 304."), "the English text typed in the admin is on the public visit log");
+    const auth = { authorization: "Bearer e2e-token" };
+    const imported = (await (await fetch(`${base}/api/visits`, { headers: auth })).json()).visits.filter((v) => v.imported);
+    for (const v of imported) await fetch(`${base}/api/visits?id=${encodeURIComponent(v.visit_id)}`, { method: "DELETE", headers: auth });
+    await page.click('[data-tab="pre"]');
+    await page.click('[data-tab="data"]');
+    await page.waitForFunction(() => /1 個國家 · 1 個單位/.test(document.getElementById("mapSummary").textContent), null, { timeout: 30000 });
+  }
+
   // 一次性設定都收在「設定」分頁
   await page.click('[data-tab="settings"]');
   await page.waitForFunction(() => document.querySelectorAll("#statusList li").length > 0, null, { timeout: 30000 });
@@ -683,6 +718,8 @@ try {
   const homeLinks = await page.$$eval("#labs .lab-card", (els) => els.map((a) => a.getAttribute("href")));
   check(homeLinks.join(" ") === "/lab/301 /lab/302 /lab/303 /lab/304 /lab/305", `…with the five laboratories, each linking to its own page (${homeLinks.join(" ")})`);
   check((await page.textContent("#lab-303")).includes("陳惠美") && !(await page.textContent("#lab-303")).includes("鄭佳昆") && (await page.textContent("#lab-305")).includes("IVR Research Lab"), "…303 lists only 陳惠美 and 305 is the IVR Research Lab");
+  // 明確指示：「五間研究室的卡片上，還留著『Lab 301 · 量測』這類小標籤一起拿掉」——房號留著，寫在名稱前面
+  check(await page.evaluate(() => !document.querySelector("#labs .pill") && [...document.querySelectorAll("#labs .lab-card .room-no")].map((e) => e.textContent).join(" ") === "301 302 303 304 305"), "…with no “Lab 301 · Measure” label on the cards, just the room number in front of the name");
   // 明確指示：「構成一條閉環證據鏈」那一段不要；五間研究室的卡片放在「組織架構」與「參訪與聯絡」之間
   check(await page.evaluate(() => {
     const ids = [...document.querySelectorAll("main > section:not([hidden])")].map((s) => s.id);
@@ -697,6 +734,15 @@ try {
   await page.click("#visitorMap [data-cluster] circle.hit");
   await page.waitForFunction(() => document.querySelectorAll("#visitorPick [data-place]").length === 1);
   check(/South Korea · 1 visit/.test(await page.textContent("#visitorPick")) && !/2025-04-21/.test(await page.textContent("#visitorsSec")), "…tapping a dot says who it is, where, and how many times — no dates");
+  // 每一場的詳細說明在另一頁（明確要求：「參訪者多，把這些參訪另外作一頁連過去詳細說明」）
+  check((await page.getAttribute("#visitorPick a", "href")) === "/visits?org=Konkuk%20University", "…and the dot's card links to that institution's visits");
+  check((await page.getAttribute("#visitsLink", "href")) === "/visits", "the homepage links to the page with every visit in detail");
+  await page.click("#visitsLink");
+  await page.waitForSelector("#list .visit", { timeout: 15000 });
+  check((await page.textContent("#heading")) === "Visits to the centre" && /Konkuk University/.test(await page.textContent("#list")) && /Mon 21 April 2025/.test(await page.textContent("#list")), "the Visits page lists each past visit with its date and institution");
+  check(!/2099|Western Australia/.test(await page.textContent("#list")), "…and not the ones still to come");
+  await page.goBack();
+  await page.waitForSelector("#visitorsSec:not([hidden])", { timeout: 15000 });
   await fetch(`${base}/api/visits?id=${encodeURIComponent(pastVisit.visit.visit_id)}`, { method: "DELETE", headers: { authorization: "Bearer e2e-token" } });
   check(!/301\s*[-–]\s*304|four lab/i.test(await page.textContent("main")), "…and nowhere says four laboratories or 301–304");
   await page.click("#langToggle");
@@ -733,6 +779,7 @@ try {
   await page.click('#lab-303 a[href^="/lab/"]');
   await page.waitForFunction(() => document.getElementById("labName")?.textContent?.length > 0, null, { timeout: 15000 });
   check((await page.textContent("#labName")) === "Landscape Simulation Lab", "the card links to that laboratory's own page");
+  check((await page.textContent("#roomNo")) === "303" && (await page.locator(".hero .pill").count()) === 0, "…which shows its room number before the name, with no stage label");
   check((await page.textContent("#leadName")).includes("陳惠美"), "…with its lead");
   check((await page.locator("#others a").count()) === 4, "…and the other four labs to jump to");
   check(!(await page.isHidden("#draftNote")), "…and it admits the text is still a draft until the lead confirms it");
@@ -784,6 +831,7 @@ try {
   await page.waitForSelector("#emailSec:not([hidden])");
   await page.waitForFunction(() => document.getElementById("labsTitle")?.textContent?.length > 0, null, { timeout: 15000 });
   check((await page.locator("#labs article").count()) === 6, "guest page shows the briefing step plus five lab cards");
+  check(await page.evaluate(() => !document.querySelector("#labs .pill") && document.querySelectorAll("#labs .lab-card .room-no").length === 5), "…and the cards carry the room number, not a “Lab 301 · Measure” label");
   check((await page.locator("#labs img.avatar").count()) === 5, "all five leads have a photo now, so no card falls back to initials");
   check((await page.textContent("#labs article:first-child")).includes("Center overview"), "briefing card comes first");
   check((await page.textContent("#lab-303")).includes("陳惠美") && !(await page.textContent("#lab-303")).includes("鄭佳昆"), "303 lists only 陳惠美");

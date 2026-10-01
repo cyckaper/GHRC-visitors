@@ -6,6 +6,7 @@ import { isMock } from "./data.mts";
 import type { DictationExtract, ResponseRow, SignbookEntry, Visit } from "./types.mts";
 import type { Extracted } from "./files.mts";
 import { allocateProgramme, briefingBlockMinutes, endTimeOf, labStops, pageContents } from "../../lib/visit.mjs";
+import { parseVisitTable } from "../../lib/import.mjs";
 
 /**
  * 所有 AI 呼叫集中在這裡（工作包第 5 章）。
@@ -571,6 +572,96 @@ export async function locateOrgs(items: GeoQuery[]): Promise<GeoPlace[]> {
   if (isMock()) return items.map(mockPlace);
   const out = await structured(GeoSchema, GEO_SYSTEM, JSON.stringify(items), 4000);
   return out.places;
+}
+
+// ───────────────── 8. 匯入以前的參訪名單（系統上線之前的紀錄） ─────────────────
+
+const ImportSchema = z.object({
+  rows: z.array(
+    z.object({
+      source_row: z.string(),
+      date: z.string(),
+      code: z.string(),
+      org: z.object({ name: z.string(), name_local: z.string(), type: z.enum(ORG_TYPES), country: z.string() }),
+      people: z.array(z.object({ name: z.string(), title: z.string() })),
+      people_text: z.string(),
+      people_en: z.string(),
+      headcount: z.number().int(),
+      companions: z.string(),
+      purpose: z.string(),
+      purpose_en: z.string(),
+    }),
+  ),
+  skipped: z.array(z.string()),
+});
+export type ImportedRows = z.infer<typeof ImportSchema>;
+
+const IMPORT_SYSTEM = `你替臺大生農學院綠色健康研究中心（GHRC）把**系統上線以前的參訪紀錄**（試算表、Word 或簡報轉出的文字）整理成一筆一筆的來訪紀錄，匯入參訪系統。只整理，不補資料，不要編造；整理好的結果會先給主辦端看過才存。
+
+一筆＝一個來訪單位在某一天來中心：
+- 原表一列通常就是一筆。**一列裡有好幾個各自來訪的單位**（例如研討會的幾位講者分別來自不同學校、不同國家）就拆成幾筆，source_row 都寫同一列。
+- 陪同或同行的單位（臺大自己的單位、國科會、外國駐臺機構陪同自己國家的官員這類）不另成一筆，寫進 companions。
+- 不是來訪紀錄的不要列：表頭、統計表、說明文字、中心自己出去拜會或出訪的紀錄。有疑慮、沒有列進來的，在 skipped 用中文寫一句（哪一列、為什麼）；統計表與說明文字不必寫進 skipped。
+
+欄位：
+- source_row：原表那一列的編號（有「編號」欄就照抄，沒有就寫它是第幾列）。
+- date：YYYY-MM-DD（原表「2024/1/8」寫成 2024-01-08）；看不出是哪一天就留空。
+- org.name：單位的英文正式名稱。原表有英文就照用；只有中文就照字面翻成英文，**不要加原表沒寫的東西**（例如原表只寫「美國德州大學」，就不要自己決定是哪一個校區）。系所、學院、中心寫進名稱（例如 University of Illinois Urbana-Champaign, Department of Landscape Architecture）。
+- org.name_local：原表的中文名稱照抄，去掉括號裡的英文與「（AR眼鏡公司）」這類說明；原表只有英文就留空。
+- org.type：government／university／enterprise／school／ngo／other。org.country：英文國名（臺灣寫 Taiwan，韓國寫 South Korea）。
+- code：網址代碼，小寫英文與數字（2–16 字），用這個單位常見的縮寫（例如 uiuc、ntou、konkuk）；想不出來就用名稱裡最有辨識度的一個英文字。
+- people：原表寫了名字的人（name 照原表的寫法，title 是職稱，例如「教授」「場長」）。只寫職稱、或「師生」「同仁」「成員」的不列。拆成幾筆時，每個人放到他所屬的那一筆。
+- people_text：原表「來訪人員」那一格照抄（拆成幾筆時只抄屬於這一筆的部分）。
+- headcount：原表寫了人數（例如「共 38 位」）就照填；people 就是這一筆全部的來訪者（沒有「與同仁」「等」「師生」）就填 people 的人數；其他一律 0（＝不知道）。
+- companions：原表「同行單位」那一格照抄，加上上面說的陪同單位。
+- purpose：原表「交流重點／成果」那一格照抄；空白就留空。
+- people_en、purpose_en：people_text 與 purpose 的英文（會放在中心首頁連過去的公開「來訪紀錄」英文版）。照原意翻，不加不減、不美化；人名照原文拼法，單位用你給 org.name 的同一個英文名稱；原文空白就留空。`;
+
+/**
+ * 名單長就分段讀（一段 15 列，每一段都帶著那一張工作表的名稱與表頭）：每一列要回中英兩份說明，
+ * 整份一次丟進去 AI 的輸出會被截斷，後面幾十列就不見了。各段同時讀（`readVisitList`），總時間跟一段差不多。
+ */
+export function importChunks(text: string, per = 15): string[] {
+  const lines = String(text || "").split("\n");
+  if (lines.length <= per + 20) return [String(text || "")];
+  // 一張工作表一段（沒有「## 工作表」的文字檔就是一整段）；表頭＝那一段的第一個非空行
+  let cur = { name: "", header: "", body: [] as string[] };
+  const sections = [cur];
+  for (const line of lines) {
+    if (/^## /.test(line)) {
+      cur = { name: line, header: "", body: [] };
+      sections.push(cur);
+    } else if (line.trim()) {
+      if (cur.header) cur.body.push(line);
+      else cur.header = line;
+    }
+  }
+  // 好幾張工作表、其中有表頭寫著「日期」的：只讀那幾張（另外那幾張是統計與說明，不是參訪紀錄，送去只是白等）
+  const dated = sections.filter((sec) => /日期|date/i.test(sec.header));
+  const chunks: string[] = [];
+  for (const sec of dated.length ? dated : sections) {
+    const head = [sec.name, sec.header].filter(Boolean);
+    for (let i = 0; i < sec.body.length; i += per) chunks.push([...head, ...sec.body.slice(i, i + per)].join("\n"));
+  }
+  return chunks.length ? chunks : [String(text || "")];
+}
+
+/** 讀以前的參訪名單（`import-background` 呼叫）。AI_MOCK 時照欄名讀（`lib/import.mjs parseVisitTable`）。 */
+export async function readVisitList(text: string, today: string): Promise<ImportedRows> {
+  if (isMock()) return parseVisitTable(text) as ImportedRows;
+  const out: ImportedRows = { rows: [], skipped: [] };
+  const chunks = importChunks(text);
+  // 一次最多四段同時讀；照原本的順序接回去
+  const results: ImportedRows[] = new Array(chunks.length);
+  for (let i = 0; i < chunks.length; i += 4) {
+    const batch = chunks.slice(i, i + 4).map((chunk) => structured(ImportSchema, `${IMPORT_SYSTEM}\n\n${CENTER_FACTS}\n今天是 ${today}。`, `<file>\n${chunk}\n</file>`, 16000));
+    (await Promise.all(batch)).forEach((r, j) => (results[i + j] = r));
+  }
+  for (const r of results) {
+    out.rows.push(...r.rows);
+    out.skipped.push(...r.skipped);
+  }
+  return out;
 }
 
 // ───────────────────────── mock ─────────────────────────

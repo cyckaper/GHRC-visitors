@@ -117,6 +117,16 @@ export interface Visit {
   reminders?: { wrapup_sent_at?: string; wrapup_to?: string };
   /** Google Drive 備份（/api/drive）：這場參訪在 Drive 上的資料夾。 */
   drive?: { folder_id?: string; url?: string; backed_up_at?: string; items?: number };
+  /**
+   * 從以前的參訪名單匯入的（/api/import）：哪一個檔、第幾列；原表同一列拆成好幾個單位時 group 相同＝同一場。
+   * people／companions 是原表「來訪人員」「同行單位」那兩格照抄（沒有名字的職稱、師生、同仁）。
+   */
+  imported?: { from: string; row: string; group: string; at: string; people: string; companions: string };
+  /**
+   * 公開頁上的說明（中心首頁的地圖與 /visits 來訪紀錄頁；/api/visit-log 寫的，匯入時帶原表的）。
+   * hidden＝這一場整個不公開。名單、email、來訪目的、背景研判不在這裡。
+   */
+  public?: { people_zh: string; people_en: string; note_zh: string; note_en: string; hidden: boolean };
   status: "draft" | "confirmed" | "done";
   created_at: string;
   updated_at: string;

@@ -22,6 +22,7 @@ export default async (req: Request) => {
     const name = String(v.org?.name || "").trim();
     const end = visitEndAt(v).getTime();
     if (!name || !Number.isFinite(end) || end > now) continue;
+    if ((v as any).public?.hidden) continue; // 主辦端標了「不公開」的那一場，地圖上也不畫
     const country = String(v.org?.country || "").trim();
     const key = `${name.toLowerCase()}|${country.toLowerCase()}`;
     const g = (v as any).geo;

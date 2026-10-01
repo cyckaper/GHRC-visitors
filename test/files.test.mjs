@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import JSZip from "jszip";
-import { extractFile, decodeText, docxText, xlsxText } from "../netlify/lib/files.mts";
+import { extractFile, decodeText, docxText, xlsxText, excelSerial } from "../netlify/lib/files.mts";
 
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
 async function makeDocx() {
@@ -53,6 +53,28 @@ test("xlsx: shared strings, inline strings, numbers, booleans, sheet names, colu
   assert.ok(text.includes("Kim Lee\tkim.lee@uwa.edu.au"));
   assert.ok(text.includes("Ann Wu\t\tTRUE"));
   assert.ok(text.includes("## 備註\n陳惠美"));
+});
+
+test("xlsx: 日期格子照格式轉回日期；空白格子（<c …/>）不會吃掉右邊那一格", async () => {
+  // 以前的參訪名單就是這樣：日期存成 45299（從 1899-12-30 算第幾天），同一列的空白格寫成 <c r="G2" s="6"/>（LibreOffice）
+  const zip = new JSZip();
+  zip.file("xl/workbook.xml", `<workbook xmlns:r="r"><sheets><sheet name="參訪名單" sheetId="1" r:id="rId1"/></sheets></workbook>`);
+  zip.file("xl/_rels/workbook.xml.rels", `<Relationships><Relationship Id="rId1" Type="x" Target="worksheets/sheet1.xml"/></Relationships>`);
+  zip.file("xl/styles.xml", `<styleSheet><numFmts count="2"><numFmt numFmtId="164" formatCode="General"/><numFmt numFmtId="165" formatCode="yyyy/mm/dd"/></numFmts>
+    <cellXfs count="5"><xf numFmtId="164"/><xf numFmtId="165"/><xf numFmtId="14"/><xf numFmtId="20"/><xf numFmtId="0"/></cellXfs></styleSheet>`);
+  zip.file("xl/sharedStrings.xml", `<sst><si><t>日期</t></si><si><t>來訪單位</t></si><si><t>同行單位</t></si><si><t>交流重點</t></si><si><t>美國伊利諾大學</t></si><si><t>研討會講者</t></si></sst>`);
+  zip.file("xl/worksheets/sheet1.xml", `<worksheet><sheetData>
+    <row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="s"><v>2</v></c><c r="D1" t="s"><v>3</v></c></row>
+    <row r="2"/>
+    <row r="3"><c r="A3" s="1" t="n"><v>45299</v></c><c r="B3" t="s"><v>4</v></c><c r="C3" s="0"/><c r="D3" t="s"><v>5</v></c><c r="E3" s="3"><v>0.5833333333</v></c><c r="F3" s="4"><v>45299</v></c></row>
+    <row r="4"><c r="A4" s="2"><v>46062</v></c></row>
+  </sheetData></worksheet>`);
+  const text = await xlsxText(new Uint8Array(await zip.generateAsync({ type: "uint8array" })));
+  assert.ok(text.includes("2024-01-08\t美國伊利諾大學\t\t研討會講者\t14:00\t45299"), text);
+  assert.ok(text.includes("\n2026-02-09"), "內建的日期格式（14）也轉");
+  assert.equal(excelSerial(45299), "2024-01-08");
+  assert.equal(excelSerial(45299.75, "datetime"), "2024-01-08 18:00");
+  assert.equal(excelSerial(43831, "date", true), "2024-01-02", "1904 年制的檔案多 1462 天");
 });
 
 test("extractFile dispatches by extension and passes PDF/images through to the model", async () => {

@@ -667,7 +667,38 @@
   "挑了 # 頁、約 # 分鐘；參考了過去 # 場（同類單位 # 場）哪幾頁被提問、被提到": "Picked # slides, about # min; looked at # past visits (# of the same type) for which slides were asked about or mentioned",
   "挑了 # 頁、約 # 分鐘（尚無母簡報文字：第 #–# 頁的替換文字要在產檔時處理）": "Picked # slides, about # min (no master-deck text yet: the replacements for slides #–# happen when the deck is generated)",
   "挑了 # 頁、約 # 分鐘；參考了過去 # 場（同類單位 # 場）哪幾頁被提問、被提到（尚無母簡報文字：第 #–# 頁的替換文字要在產檔時處理）": "Picked # slides, about # min; looked at # past visits (# of the same type) for which slides were asked about or mentioned (no master-deck text yet: the replacements for slides #–# happen when the deck is generated)",
-  "接待": "hosted by"
+  "接待": "hosted by",
+  "匯入以前的參訪": "Import past visits",
+  "系統上線之前的參訪（試算表、Word 或簡報檔）：AI 讀完先列出來給你看，勾好才匯入；匯入之後兩張地圖上就有": "Visits from before this system (a spreadsheet, Word or PowerPoint file): the AI reads it and lists everything for you first; only what you tick is imported, and it then appears on both maps",
+  "來訪人員": "Visitors",
+  "交流重點／成果": "Focus / outcome",
+  "匯入": "Import",
+  "不匯入": "Don't import",
+  "全選／全不選": "Select all / none",
+  "AI 讀名單中……大約一兩分鐘。": "The AI is reading the list… about a minute or two.",
+  "讀到 # 個單位（原表 # 列）。勾好要匯入的，按下面的「匯入」；匯入之後地圖上就有，位置會自己去查。": "Found # institutions (# rows in the file). Tick the ones to import and press \"Import\" below; they appear on the map straight away and their locations are looked up automatically.",
+  "讀到 # 個單位（原表 # 列）。勾好要匯入的，按下面的「匯入」；匯入之後地圖上就有，位置會自己去查。（Claude 還沒接好：照欄名讀，單位名稱照原表的寫法。）": "Found # institutions (# rows in the file). Tick the ones to import and press \"Import\" below; they appear on the map straight away and their locations are looked up automatically. (Claude is not connected yet: the columns were read by their headings, and names are kept as written in the file.)",
+  "這個檔裡讀不到參訪紀錄。": "No visit records were found in this file.",
+  "原表同一列拆出來的，算同一場": "Split from one row of the file; counted as one visit",
+  "已經有了": "Already in the system",
+  "名單裡重複": "Listed twice",
+  "沒有日期": "No date",
+  "沒有單位名稱": "No institution name",
+  "匯入 # 筆": "Import #",
+  "# 個國家 · # 個單位 · # 場 · 共 # 人次（# 場不知道人數）": "# countries · # institutions · # visits · # people in all (# visits without a headcount)",
+  "沒有勾任何一筆": "Nothing is ticked",
+  "沒有匯入": "Nothing was imported",
+  "請選一個檔案": "Please choose a file",
+  "匯入了 # 筆": "Imported #",
+  "匯入了 # 筆。地圖上的位置正在查，查好會自己更新。": "Imported #. Their locations are being looked up; the map updates itself when done.",
+  "公開頁上的說明": "On the public pages",
+  "中心首頁的地圖與「來訪紀錄」頁，參訪過後才出現；改了十分鐘內更新": "the map on the centre's homepage and the Visits page; shown once the visit is over, and changes appear within ten minutes",
+  "看公開頁": "View public page",
+  "這一場不公開（地圖與來訪紀錄都不放）": "Keep this visit private (leave it off the map and the Visits page)",
+  "來訪人員（中文）": "Visitors (Chinese)",
+  "來訪人員（英文）": "Visitors (English)",
+  "交流重點／成果（中文）": "Focus / outcome (Chinese)",
+  "交流重點／成果（英文）": "Focus / outcome (English)"
  },
  "patterns": [
   [
@@ -993,6 +1024,34 @@
   [
    "^單位的位置這次沒查到（(.+)），先放在國家的位置；下次打開這一頁會再查。$",
    "Could not look up the institutions this time ($1); they sit on their country for now and will be tried again next time this tab opens."
+  ],
+  [
+   "^沒有列進來的：(.+)$",
+   "Not listed: $1"
+  ],
+  [
+   "^匯入了 (\\d+) 筆（沒有匯入：(.+)）。地圖上的位置正在查，查好會自己更新。$",
+   "Imported $1 (not imported: $2). Their locations are being looked up; the map updates itself when done."
+  ],
+  [
+   "^(.+) 超過 4\\.5 MB$",
+   "$1 is larger than 4.5 MB"
+  ],
+  [
+   "^讀不到這個檔案：(.+)$",
+   "Could not read this file: $1"
+  ],
+  [
+   "^讀名單失敗：(.+)$",
+   "Reading the list failed: $1"
+  ],
+  [
+   "^(.+)：請用試算表（\\.xlsx／\\.csv）、Word 或簡報檔；PDF 與照片請先另存成試算表$",
+   "$1: please use a spreadsheet (.xlsx/.csv), Word or PowerPoint file; save a PDF or a photo as a spreadsheet first"
+  ],
+  [
+   "^(.+)：檔案裡讀不到文字$",
+   "$1: no text could be read from the file"
   ]
  ]
 }

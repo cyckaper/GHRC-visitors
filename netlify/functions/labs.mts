@@ -19,7 +19,7 @@ import { getStore } from "../lib/store.mts";
  */
 const KEY = "labs.json";
 
-/** 可以在後台改的欄位。其他（房號、顏色、stage、四語名稱）留在 repo 裡，不從網頁改。 */
+/** 可以在後台改的欄位。其他（房號、顏色、四語名稱）留在 repo 裡，不從網頁改。 */
 const FIELDS = [
   "one_line_zh",
   "one_line_en",

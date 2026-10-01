@@ -856,7 +856,7 @@ test("背景工作的規矩：每一支跑得久的 AI 都一樣", async () => {
   assert.equal(pending.body.input, undefined, "輪詢不會把輸入（信件全文、名片原圖的位置）再送回前端");
 
   // 六支新改的＋原本兩支，查進度與背景函式的規矩一致
-  for (const name of ["extract", "plan", "letter", "summary", "signbook", "transcribe", "cards", "translate"]) {
+  for (const name of ["extract", "plan", "letter", "summary", "signbook", "transcribe", "cards", "translate", "import"]) {
     assert.equal((await api(`/api/${name}?job=${id}`)).status, 401, `${name}：查進度要 token`);
     assert.equal((await api(`/api/${name}?job=zzzzzzzz`, { headers: admin })).status, 404, `${name}：過期或不存在的工作回 404`);
     assert.equal((await api(`/api/${name}-background`, { method: "POST", body: "{}" })).status, 401, `${name}-background：要 token`);
@@ -1148,5 +1148,115 @@ test("中心首頁的世界地圖（公開）：只列已經來過的單位、�
   assert.ok(!rows.some((x) => x.name === "Ministry of Something"), "還沒來的不先公告（部長級的行程不該先出現在首頁上）");
   assert.doesNotMatch(JSON.stringify(r.body), /private|@|confidential|2025-04-21|2025-11-25|visit_id|headcount|guests|purpose/i, "名單、email、日期、目的一律不給");
   assert.match(r.headers.get("cache-control") || "", /public/, "公開的，可以讓 CDN 幫忙擋");
+  for (const id of ids) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
+});
+
+test("匯入以前的參訪名單：讀完只給預覽，勾好才寫進去；一列有好幾個單位就拆開、算同一場；兩張地圖都看得到；重複匯入不會多出東西", async () => {
+  const { pastVisitsXlsx } = await import("./fixtures/past-visits.mjs");
+  const file = { name: "GHRC-參訪名單.xlsx", data: (await pastVisitsXlsx()).toString("base64") };
+  assert.equal((await api("/api/import", { method: "POST", body: JSON.stringify({ file }) })).status, 401, "要 token");
+  const read = await runJob("import", { file });
+  assert.equal(read.status, 200, JSON.stringify(read.body));
+  const rows = read.body.rows;
+  assert.equal(read.body.file, "GHRC-參訪名單.xlsx");
+  assert.equal(rows.length, 4, `第 1 列拆成兩個單位，第二張工作表（統計）不算：${JSON.stringify(rows.map((r) => r.org.name_local))}`);
+  const [uiuc, helsinki, jorjin, nodate] = rows;
+  assert.ok(uiuc.split && helsinki.split && uiuc.source_row === helsinki.source_row, "同一列拆出來的，source_row 一樣");
+  assert.equal(uiuc.date, "2024-01-08", "日期格子存的是 45299，要照格式轉回日期");
+  assert.equal(helsinki.org.country, "芬蘭", "照單位名稱開頭的國名分");
+  assert.deepEqual(uiuc.people, [{ name: "John A. Smith", title: "教授" }], "來訪人員照括號裡的單位分");
+  assert.equal(jorjin.org.type, "enterprise");
+  assert.equal(jorjin.org.name_local, "佐臻股份有限公司", "括號裡的說明拿掉");
+  assert.deepEqual(nodate.problems, ["沒有日期"]);
+  assert.equal(nodate.visit_id, "", "沒有日期的不能匯入");
+  assert.ok(uiuc.visit_id && helsinki.visit_id && uiuc.visit_id !== helsinki.visit_id, "同一天的兩筆網址不能撞在一起");
+  assert.equal((await api("/api/visits", { headers: admin })).body.visits.filter((v) => v.imported).length, 0, "讀完只是預覽，還沒有寫進去");
+
+  const done = await api("/api/import", { method: "POST", headers: admin, body: JSON.stringify({ action: "commit", file: file.name, rows }) });
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.equal(done.body.created.length, 3);
+  assert.deepEqual(done.body.skipped.map((x) => x.reason), ["沒有日期"], "沒有日期的那一筆送上來也不建");
+
+  const list = (await api("/api/visits", { headers: admin })).body.visits.filter((v) => v.imported);
+  assert.equal(list.length, 3);
+  const g = list.filter((v) => v.date === "2024-01-08");
+  assert.ok(g.length === 2 && g[0].group && g[0].group === g[1].group, "同一列拆出來的那兩筆 group 相同（資料分頁算一場）");
+  assert.ok(list.every((v) => v.geo_stale), "匯入之後位置照舊由 /api/geo 去查");
+  const one = (await api(`/api/visits?id=${list.find((v) => v.org === "佐臻股份有限公司").visit_id}`, { headers: admin })).body.visit;
+  assert.equal(one.status, "done");
+  assert.equal(one.headcount, 1, "只有一個有名字的人、沒有其他人");
+  assert.equal(one.contact_teacher, "", "原表沒寫對口老師就不補");
+  assert.equal(one.purpose, "參訪 303 與 304");
+  assert.equal(one.imported.from, "GHRC-參訪名單.xlsx");
+  assert.equal(one.imported.people, "王大明副總經理");
+  assert.deepEqual(one.guests.map((x) => x.name), ["王大明"]);
+
+  // 一般存檔沒帶 imported 也不會把它清掉
+  const { imported, ...rest } = one;
+  await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ ...rest, purpose: "參訪 303 與 304（改過）" }) });
+  assert.equal((await api(`/api/visits?id=${one.visit_id}`, { headers: admin })).body.visit.imported?.row, "2");
+
+  // 中心首頁的地圖：都是過去的參訪，所以都列；支援人力表：系統上線之前的，不列
+  const pub = (await api("/api/visitor-map")).body.institutions.map((x) => x.name);
+  assert.ok(["美國伊利諾大學", "芬蘭赫爾辛基大學", "佐臻股份有限公司"].every((n) => pub.includes(n)), JSON.stringify(pub));
+  const rota = (await api("/api/rota", { headers: admin })).body.visits;
+  assert.ok(!rota.some((v) => list.some((x) => x.visit_id === v.visit_id)), "支援人力表不列匯入的舊紀錄");
+
+  // 同一份再匯入一次：同一天、同一個單位的已經有了，不重複建立
+  const again = await runJob("import", { file });
+  assert.equal(again.body.rows.filter((r) => r.exists).length, 3, JSON.stringify(again.body.rows.map((r) => [r.org.name_local, r.exists])));
+  const twice = await api("/api/import", { method: "POST", headers: admin, body: JSON.stringify({ action: "commit", file: file.name, rows: again.body.rows }) });
+  assert.equal(twice.body.created.length, 0);
+
+  // 不是試算表／文字的檔：直接說，不開工作
+  const pdf = await api("/api/import", { method: "POST", headers: admin, body: JSON.stringify({ file: { name: "list.pdf", data: Buffer.from("%PDF-1.4").toString("base64") } }) });
+  assert.equal(pdf.status, 400);
+  assert.match(pdf.body.error, /試算表/);
+
+  for (const v of list) await api(`/api/visits?id=${v.visit_id}`, { method: "DELETE", headers: admin });
+});
+
+test("來訪紀錄（公開）：匯入的帶原表的說明，同一列拆出來的算一場；後台可以改說明、整場不公開；名單與 email 不出去", async () => {
+  const { pastVisitsXlsx } = await import("./fixtures/past-visits.mjs");
+  const file = { name: "GHRC-參訪名單.xlsx", data: (await pastVisitsXlsx()).toString("base64") };
+  const read = await runJob("import", { file });
+  const done = await api("/api/import", { method: "POST", headers: admin, body: JSON.stringify({ action: "commit", file: file.name, rows: read.body.rows }) });
+  assert.equal(done.body.created.length, 3, JSON.stringify(done.body));
+  const ids = done.body.created;
+
+  const log = await api("/api/visit-log"); // 不帶任何授權：公開頁誰都打得開
+  assert.equal(log.status, 200);
+  assert.match(log.headers.get("cache-control") || "", /public/);
+  const ws = log.body.visits.find((e) => e.date === "2024-01-08");
+  assert.ok(ws && ws.orgs.length === 2, `研討會那一列拆成兩個單位，但是同一場：${JSON.stringify(log.body.visits)}`);
+  assert.equal(ws.note.zh, "研討會講者", "交流重點照原表");
+  assert.match(ws.people.zh, /John A\. Smith 教授/);
+  const jorjin = log.body.visits.find((e) => e.orgs.some((o) => o.local === "佐臻股份有限公司"));
+  assert.equal(jorjin.people.zh, "王大明副總經理");
+  assert.doesNotMatch(JSON.stringify(log.body), /visit_id|@|purpose|guests|headcount|background|summary/, "名單、email、來訪目的、背景研判、摘要、visit_id 一律不給");
+
+  assert.equal((await api("/api/visit-log", { method: "POST", body: JSON.stringify({ visit_id: ids[0], public: { hidden: true } }) })).status, 401, "改要 token");
+  const jid = ids.find((id) => id.startsWith("2025-02-26"));
+  const hide = await api("/api/visit-log", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: jid, public: { people_zh: "王大明副總經理", note_zh: "參訪 303 與 304", hidden: true } }) });
+  assert.equal(hide.status, 200, JSON.stringify(hide.body));
+  assert.ok(!(await api("/api/visit-log")).body.visits.some((e) => e.orgs.some((o) => o.local === "佐臻股份有限公司")), "標了不公開就不列");
+  assert.ok(!(await api("/api/visitor-map")).body.institutions.some((x) => x.local === "佐臻股份有限公司"), "首頁的地圖也不畫");
+
+  // 同一場（原表同一列拆出來的）：交流重點一起改，來訪人員各自留著
+  const [a, b] = ids.filter((id) => id.startsWith("2024-01-08"));
+  await api("/api/visit-log", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: a, public: { people_zh: "改過的講者", note_zh: "改過的重點", note_en: "Edited focus" } }) });
+  const other = (await api(`/api/visits?id=${b}`, { headers: admin })).body.visit.public;
+  assert.equal(other.note_zh, "改過的重點");
+  assert.equal(other.note_en, "Edited focus");
+  assert.notEqual(other.people_zh, "改過的講者");
+  // 一般存檔不會把公開說明清掉，也不會用手上那一份舊的蓋回去（「訪前」開著的那一份是改之前讀的）
+  const va = (await api(`/api/visits?id=${a}`, { headers: admin })).body.visit;
+  const { public: _p, ...rest } = va;
+  await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(rest) });
+  assert.equal((await api(`/api/visits?id=${a}`, { headers: admin })).body.visit.public?.note_zh, "改過的重點");
+  await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ ...rest, public: { note_zh: "舊的那一份", hidden: true } }) });
+  const kept = (await api(`/api/visits?id=${a}`, { headers: admin })).body.visit.public;
+  assert.ok(kept.note_zh === "改過的重點" && !kept.hidden, "公開說明只有 /api/visit-log 在寫");
+
   for (const id of ids) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
 });
