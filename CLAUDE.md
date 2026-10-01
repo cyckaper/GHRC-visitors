@@ -462,6 +462,9 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
   約 370 KB，壓縮後 120 KB，**第一次放大才載**）——1:110m 的臺灣只有 9 個點，放大就是一個多邊形。
   國名對不到、位置也還沒查到的**不會消失**，列在圖下面（來信裡的國名寫法千百種；常見的中英寫法在產生器的 `ALIASES`，
   1:110m 放不下的新加坡、香港、澳門在 `EXTRA`）。要改地圖資料就改 `scripts/make-world.mjs` 重跑，不要手改 JSON。
+  - **畫法在 `public/lib/worldmap.mjs`，中心首頁的「來訪單位」用同一份**（明確要求：「GHRC 介紹首頁加入設定中的世界地圖，
+    標出來訪單位」）：投影、放大、拖曳、群集、名稱、細海岸線都在模組裡（`mountWorldMap()`，樣式自帶、在 `.wm` 底下）；
+    後台只管自己的事——哪幾場算同一個單位、點下去列出那幾場、還沒查位置的去查、上面那一行數字。兩邊不會各長各的。
 
 ### 5. 部署
 
@@ -535,13 +538,13 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 - `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → **通告研究室（各室在支援人力表上填的分鐘自動排進行程）** → 排行程 → 自動存 → QR／.ics → **確認信（草擬、寄出或 mailto）**，**最底下列出「以前做過的參訪」**）、**簡報（獨立分頁：選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、後續（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁、**動作五 感謝信**）、資料（歷次參訪、回覆、摘要、跨場次彙整、CSV、Drive）、**設定（母簡報、預設值、支援人力表、外部服務狀態、老師卡片）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
 - `public/index.html`：專屬網址 `/<visit_id>`；整頁一種語言（預設英文，`?ui=zh` 換中文；ko／ja 來賓才另外附他們的語言）；流程（參訪當天標出「現在」；研究室參訪底下一間一行、各自的時段）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
-- `public/center.html`：**中心首頁 `/`**——中心簡介、三大任務、沿革、國際平台、外部肯定、組織架構、五間研究室（卡片，各連到 `/lab/<房號>`）、聯絡；字在 `public/data/center.json`（見「約定」的「中心首頁」）。
+- `public/center.html`：**中心首頁 `/`**——中心簡介、三大任務、沿革、國際平台、來訪單位（世界地圖）、外部肯定、組織架構、五間研究室（卡片，各連到 `/lab/<房號>`）、聯絡；字在 `public/data/center.json`（見「約定」的「中心首頁」）。
 - `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`／`geo-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`；`geo` 查訪客地圖上各單位在哪裡）`drive` `drive-sync-background`（自動備份）；**三支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
-  `rota`（支援人力表，各研究室自己填）；
+  `rota`（支援人力表，各研究室自己填）； `visitor-map`（**公開**：中心首頁的來訪單位地圖，只有單位、位置與來過幾次）；
   `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，後續提醒）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
 - `public/lib/pptx.mjs`：母簡報子集化核心（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證），零 Node 相依，瀏覽器與 CLI 共用；`cli/lib/pptx.mjs` 只是注入 jszip／xmldom 的 Node 入口；`cli/deck.mjs` 加上 QR（qrcode 套件）與 PDF（LibreOffice）。`--inspect`、`--dump`、`--validate`。
-- `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-world.mjs`：訪客地圖的陸地輪廓與國家落點（`public/data/world.json`），加第三個參數（1:50m）另外產放大用的細海岸線（`world-detail.json`）。
+- `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-world.mjs`：訪客地圖的陸地輪廓與國家落點（`public/data/world.json`），加第三個參數（1:50m）另外產放大用的細海岸線（`world-detail.json`）。畫地圖的是 `public/lib/worldmap.mjs`（後台「資料」分頁與中心首頁共用）。
 - 介面語言：`public/data/i18n-admin.json`（後台英文；鍵＝畫面上那句中文）、`scripts/i18n-scan.mjs`（掃出沒翻的，`npm test` 會跑）、
   `public/data/i18n.json`（來賓端四語）、`slides.json` 的 `title_en`。
 - 測試：`npm test`（單元、API 走本機 dev server、產檔與瘦身走合成簡報）、`npm run test:e2e`（Chromium）。`AI_MOCK=1` 讓所有 AI 呼叫回固定範例，`MAIL_MOCK=1` 讓寄信不真的打 Gmail（信寫進媒體庫 `mail/last.json`，測試再讀出來對內容）。CI：`.github/workflows/ci.yml` 在每個 PR 與 main 的 push 跑同一套（typecheck → npm test → e2e）。
@@ -586,12 +589,20 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - **中心首頁 `/`**（明確要求：「把老師們介紹的那些網頁，乾脆做成一個介紹綠色健康研究中心的首頁，在首頁裡面再去連結接到老師們的介紹」）：
   `public/center.html`。`netlify.toml` 一條 **force** 的 `/ → /center.html`（根目錄本來就有 index.html，不 force 的話 Netlify 直接給它），
   `/<visit_id>` 仍然落到來賓專頁；`/index.html` 與打錯的網址還是那個沒有參訪代碼的來賓頁。
-  - 由上而下：中心簡介 → 設置辦法三大任務 → 沿革 → 國際平台（Landscape and Human Health 平台成員、已簽署與已成形的合作）→ 外部肯定 → 組織架構
+  - 由上而下：中心簡介 → 設置辦法三大任務 → 沿革 → 國際平台（Landscape and Human Health 平台成員、已簽署與已成形的合作）
+    → **來訪單位**（世界地圖）→ 外部肯定 → 組織架構
     → **五間研究室**（五張卡片，整張就是連結，點下去是那一間的介紹頁）→ 參訪與聯絡。
     **研究室排在「組織架構」與「參訪與聯絡」之間**（明確指示）；以前排在最上面，前面還有一條「五間研究室構成一條閉環證據鏈」
     （量測 → 設計 → 驗證 → 處方四格），**明確指示拿掉了**（「構成一條閉環證據鏈這些不要」），`npm test` 擋它回來。
   - **國際平台不列康乃爾大學**（明確指示：「研究平台，康乃爾大學不要列入」）。名單因此是七所，標題與說明也就**不寫校數**
     （以前寫「八校」，少了一所就對不上）；`npm test` 擋康乃爾與「八校」回到首頁。
+  - **來訪單位：後台「資料」分頁那一張世界地圖**（明確要求：「GHRC 介紹首頁加入設定中的世界地圖，標出來訪單位」；
+    同一個 `public/lib/worldmap.mjs`），一個單位一個點，點一下底下寫是哪個單位、在哪裡、來過幾次。
+    資料走**公開**的 `/api/visitor-map`，所以**只給地圖用得到的**：單位名稱、在地名稱、國家、查到的位置、來過幾次——
+    **不給日期、人數、名單、email、來訪目的、背景研判**（`npm test` 擋）。**只列已經來過的**（`visitEndAt` 已過）：
+    還沒來的不先公告，部長級的行程不該先出現在首頁上。單位改名之後還沒重查位置的，先放在國家的位置。
+    國名對不到、也沒有位置的不畫（後台那張會列在圖下面，改好就歸位）；一個點都沒有時整段不出現。
+    站台的 CDN 擋十分鐘（`netlify-cdn-cache-control`），剛結束的那一場晚一點才出現。城市是 AI 用中文查的，英文頁只寫國家。
   - 字在 `public/data/center.json`（中英兩份，出自母簡報與設置辦法；簡介那一段是照簡報整理的）。**研究室的名稱、負責人、照片、
     一句話不在這裡**——一律從 `/api/labs` 來（後台「設定」改的那一份），首頁與介紹頁永遠一致。
     `npm test` 擋：少一種語言、「四間／301–304」、HEALS（那是 Lab 301 的方法論）、預算數字、閉環證據鏈、研究室不在組織架構與聯絡之間。
