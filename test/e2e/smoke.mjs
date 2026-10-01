@@ -282,8 +282,14 @@ try {
 
   // 暫存：手改過還沒寄出的信、貼進來的那封 email，關掉網頁再打開都還在（以前一關就沒了）
   const draftSaved = page.waitForResponse((r) => r.url().includes("/api/draft") && r.request().method() === "POST", { timeout: 20000 });
+  const visitSaved = page.waitForResponse((r) => r.url().endsWith("/api/visits") && r.request().method() === "POST", { timeout: 20000 });
   await page.fill("#confirmBody", (await page.inputValue("#confirmBody")) + "\n\nP.S. 停車請走側門。");
   await draftSaved;
+  // 確認信那一格在訪前分頁裡：打字也會觸發這一場的自動存檔。那一次存檔不能把伺服器上剛草擬好的信洗掉
+  // （以前會：送回去的是草擬之前的那一份，重新整理之後只有手改過的內文從暫存回來，主旨不見了）
+  await visitSaved;
+  const drafted = (await (await fetch(`${base}/api/visits?id=2026-10-07-uwa`, { headers: { authorization: "Bearer e2e-token" } })).json()).visit.letters?.confirmation;
+  check(!!drafted?.subject && !!drafted?.body, "typing into the letter autosaves the visit, and that save leaves the drafted letter on the server");
   await page.reload();
   await page.waitForFunction(() => document.getElementById("emailText").value.includes("Simon Kilbane"), null, { timeout: 30000 });
   check(true, "the pasted email is still there after closing the page — and it followed the visit when the url was renamed");
@@ -292,6 +298,51 @@ try {
   await page.waitForFunction(() => /停車請走側門/.test(document.getElementById("confirmBody").value), null, { timeout: 30000 });
   check(true, "a hand-edited letter that was never sent comes back instead of being lost");
   check(await page.isVisible("#confirmDraftNote"), "…and it says so next to the letter");
+
+  // 確認信寄出去之後，**開著舊資料的後台（另一個分頁、另一台電腦）改一個字自動存檔，不能把寄出紀錄洗掉**。
+  // 以前會：readForm() 把手上那一份整個送回去，那一份是寄出之前的樣子——寄出紀錄一洗掉，網址又能改名，
+  // 寄出去的那個連結就失效。（MAIL_MOCK：不真的打 Gmail，信寫進媒體庫）
+  {
+    const auth = { authorization: "Bearer e2e-token" };
+    const visitOf = async () => (await (await fetch(`${base}/api/visits?id=2026-10-07-uwa`, { headers: auth })).json()).visit;
+    const until = async (fn, what) => {
+      for (let i = 0; i < 100; i++) { if (await fn()) return; await new Promise((r) => setTimeout(r, 300)); }
+      throw new Error(`FAIL: timed out waiting for ${what}`);
+    };
+    const staleCtx = await browser.newContext({ viewport: { width: 1100, height: 900 } });
+    await staleCtx.addCookies(await page.context().cookies()); // 同一個登入
+    const stale = await staleCtx.newPage();
+    stale.on("pageerror", (e) => errors.push(`pageerror (stale tab): ${e.message}`));
+    await stale.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+    await stale.goto(`${base}/admin.html`);
+    await stale.waitForSelector("#authOk:not([hidden])");
+    await stale.selectOption("#visitSelect", "2026-10-07-uwa");
+    await stale.waitForFunction(() => document.getElementById("preStatus").textContent === "2026-10-07-uwa", null, { timeout: 30000 });
+
+    process.env.MAIL_MOCK = "1";
+    try {
+      page.once("dialog", (d) => d.accept());
+      await page.click("#confirmSendBtn");
+      // 「已寄給 N 人」一下子就會被重新載入的「已於 … 寄給 N 人」換掉，兩種都算
+      await page.waitForFunction(() => /寄給 \d+ 人/.test(document.getElementById("confirmSendInfo").textContent), null, { timeout: 60000 });
+    } finally {
+      delete process.env.MAIL_MOCK;
+    }
+    const sent = await visitOf();
+    check(!!sent.letters.confirmation?.sent_at && sent.status === "confirmed", "the confirmation letter goes out and the visit records it");
+    await page.waitForFunction(() => /✓ 確認信 已寄/.test(document.getElementById("progress").textContent), null, { timeout: 15000 });
+    check(true, "…and the progress line ticks it off straight away, not at the next save");
+
+    await stale.focus("#purpose");
+    await stale.keyboard.press("End");
+    await stale.keyboard.type(" ");
+    await until(async () => (await visitOf()).updated_at !== sent.updated_at, "the stale admin tab to autosave");
+    const after = await visitOf();
+    check(after.letters.confirmation?.sent_at === sent.letters.confirmation.sent_at && after.status === "confirmed", "an autosave from an admin tab opened before the letter went out does not erase the send record");
+    await stale.waitForFunction(() => /✓ 確認信 已寄/.test(document.getElementById("progress").textContent), null, { timeout: 15000 });
+    check(await stale.isDisabled("#code"), "…and once that tab has saved it shows the letter as sent and the guest-page url as fixed");
+    await staleCtx.close();
+  }
 
   // 後續分頁：用打字的逐字稿
   await page.click('[data-tab="wrapup"]');

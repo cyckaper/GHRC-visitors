@@ -64,6 +64,13 @@ async function runJob(name, body, init = {}) {
 const extract = (body) => runJob("extract", body);
 const plan = (visit) => runJob("plan", { visit });
 
+/**
+ * 別的端點或背景工作寫的東西（簽名簿、摘要、提醒紀錄、寄出紀錄……）：一般存檔帶了也不算（visits.mts 的 KEPT），
+ * 測試要先擺好這些就直接寫進資料層——跟那些端點一樣走 updateVisit（dev server 跟這裡是同一個程序、同一份 store）。
+ */
+const { getStore } = await import("../netlify/lib/store.mts");
+const seed = (id, change) => getStore().updateVisit(id, (v) => { change(v); });
+
 test("admin endpoints reject a missing or wrong token", async () => {
   assert.equal((await api("/api/visits")).status, 401);
   assert.equal((await api("/api/visits", { headers: { authorization: "Bearer nope" } })).status, 401);
@@ -668,10 +675,10 @@ test("一頁摘要不必人記得按：每晚掃一次，過完又有回覆的�
   // 摘要產出來之後（模擬背景函式跑完）就不再重複產，除非又有新的回覆。
   // 不具名那一筆只有日期（真匿名的代價），系統一律當成那一天的最後一刻——寧可多寫一次，也不要漏掉
   // 匿名建議。所以這裡用「隔天凌晨那一次排程」的時間對照（真正的 cron 就是那個時候跑的）。
-  const done = (await api(`/api/visits?id=${v.visit_id}`, { headers: admin })).body.visit;
-  done.summary = "（測試用摘要）";
-  done.summary_at = new Date(Date.now() + 24 * 3600e3).toISOString();
-  await put(done);
+  await seed(v.visit_id, (x) => {
+    x.summary = "（測試用摘要）";
+    x.summary_at = new Date(Date.now() + 24 * 3600e3).toISOString();
+  });
   const again = await api("/api/summary-cron", { method: "POST", headers: admin, body: "{}" });
   assert.ok(!String(again.body).includes(v.visit_id), "摘要比回覆新就不必重寫");
 });
@@ -704,23 +711,21 @@ test("後續提醒：依結束時間寄信給自己，一場只寄一次；沒�
 
     assert.ok(!String((await cron()).body).includes(v.visit_id), "一場只寄一次");
 
-    // 四件事都做完的那一場，本來就不該吵
-    const done = (await api(`/api/visits?id=${v.visit_id}`, { headers: admin })).body.visit;
-    done.reminders = {};
-    done.signbook = { photo_key: "signbook/x/1.jpg" };
-    done.cards = [{ key: "cards/x/1.jpg", names: ["A"], read_at: new Date().toISOString() }];
-    done.dictation = { transcript: "今天校長來" };
-    done.materials = { deck_pdf: "", photos: [], links: [{ title: "t", url: "https://x.example" }] };
-    await put(done);
+    // 四件事都做完的那一場，本來就不該吵（提醒紀錄清掉＝還沒提醒過，四件事是各自的端點寫的）
+    await seed(v.visit_id, (x) => {
+      x.reminders = {};
+      x.signbook = { photo_key: "signbook/x/1.jpg" };
+      x.cards = [{ key: "cards/x/1.jpg", names: ["A"], read_at: new Date().toISOString() }];
+      x.dictation = { transcript: "今天校長來" };
+      x.materials = { deck_pdf: "", photos: [], links: [{ title: "t", url: "https://x.example" }] };
+    });
     assert.ok(!String((await cron()).body).includes(v.visit_id), "後續做完了就不必提醒");
 
     // 什麼都沒有、但四件事都標了「本次沒有」的那一場，也不該吵——沒有簽名簿、沒交換名片很正常
     const na = (await put({ org: { name: "Nothing To Collect University" }, date, code: "nna", start_time: hhmm, duration_minutes: 60 })).body.visit;
     assert.ok(String((await cron()).body).includes(na.visit_id), "先確認它本來會被提醒");
-    const marked = (await api(`/api/visits?id=${na.visit_id}`, { headers: admin })).body.visit;
-    marked.reminders = {};
-    marked.wrapup = { na: ["signbook", "cards", "dictation", "materials"] };
-    const saved = await put(marked);
+    await seed(na.visit_id, (x) => { x.reminders = {}; });
+    const saved = await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: na.visit_id, action: "wrapup", na: ["signbook", "cards", "dictation", "materials"] }) });
     assert.deepEqual(saved.body.visit.wrapup.na, ["signbook", "cards", "dictation", "materials"], "標記存得住");
     assert.ok(!String((await cron()).body).includes(na.visit_id), "標了本次沒有就不再提醒");
     await api(`/api/visits?id=${na.visit_id}`, { method: "DELETE", headers: admin });
@@ -729,21 +734,145 @@ test("後續提醒：依結束時間寄信給自己，一場只寄一次；沒�
   }
 });
 
-test("一般存檔不會清掉別的端點寫的東西（摘要、提醒紀錄、簽名簿、當天資料）", async () => {
+test("開著舊資料的後台分頁自動存檔，不會洗掉確認信的寄出紀錄；網址也不會因此又能改", async () => {
+  const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const v = (await put({ org: { name: "Stale Tab University" }, date: "2099-09-01", code: "staletab", guests: [{ name: "A", email: "a@example.edu", contact: true }] })).body.visit;
+  // 後台開著的那一份：確認信寄出之前載入的。後台的 readForm() 以前就是把手上這一份**整個**送回來
+  const stale = (await api(`/api/visits?id=${v.visit_id}`, { headers: admin })).body.visit;
+
+  process.env.MAIL_MOCK = "1"; // 不真的打 Gmail：信寫進媒體庫
+  let sent;
+  try {
+    const draft = await runJob("letter", { visit_id: v.visit_id, kind: "confirmation", sender: "contact" });
+    assert.equal(draft.status, 200, JSON.stringify(draft.body));
+    const send = await runJob("letter", { visit_id: v.visit_id, action: "send", kind: "confirmation", subject: draft.body.draft.subject, body: draft.body.draft.body, recipients: [{ name: "A", email: "a@example.edu" }] });
+    assert.equal(send.body.sent, true, JSON.stringify(send.body));
+    sent = (await api(`/api/visits?id=${v.visit_id}`, { headers: admin })).body.visit;
+  } finally {
+    delete process.env.MAIL_MOCK;
+  }
+  assert.ok(sent.letters.confirmation.sent_at, "寄出紀錄記在這一場");
+  assert.equal(sent.status, "confirmed", "確認信寄出，狀態跟著改");
+
+  // 訪前分頁改一個字 → 自動存檔送回來的是寄出之前那一份
+  const resaved = await put({ ...stale, purpose: "改一個字觸發存檔" });
+  assert.equal(resaved.status, 200, JSON.stringify(resaved.body));
+  const after = resaved.body.visit;
+  assert.equal(after.purpose, "改一個字觸發存檔", "存檔本身照常");
+  assert.equal(after.letters.confirmation?.sent_at, sent.letters.confirmation.sent_at, "寄出紀錄還在");
+  assert.deepEqual(after.letters.confirmation?.sent_to, sent.letters.confirmation.sent_to);
+  assert.equal(after.letters.confirmation?.fingerprint, sent.letters.confirmation.fingerprint, "寄出那一刻的行程指紋也在（行程改了才說得出對方手上是舊的）");
+  assert.equal(after.status, "confirmed", "狀態沒有被改回 draft");
+  assert.equal((await api(`/api/visits?id=${v.visit_id}`, { headers: admin })).body.visit.letters.confirmation?.sent_at, sent.letters.confirmation.sent_at, "存進去的也是");
+
+  // 以前寄出紀錄一洗掉，isUnused() 就把網址當成還沒用出去：舊的那一份再存一次、代碼一改就搬家，寄出去的連結失效
+  const again = await put({ ...stale, code: "staletab2" });
+  assert.equal(again.body.visit.visit_id, v.visit_id, "網址還是固定的");
+  assert.equal(again.body.url_fixed, true);
+  assert.equal((await api(`/api/visits?id=${v.visit_id}&public=1`)).status, 200, "對方手上那個連結還打得開");
+  assert.equal((await api(`/api/visits?id=2099-09-01-staletab2`, { headers: admin })).status, 404, "沒有搬到新網址");
+  await getStore().deleteVisit(v.visit_id); // 寄過信的那一場照規矩是固定的，測試自己收掉
+});
+
+test("一般存檔不會清掉別的端點寫的東西：帶了舊的、帶了亂填的、沒帶，一律沿用伺服器上那一份", async () => {
   const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
   const v = (await put({ org: { name: "Keep Fields College" }, date: "2026-08-21", code: "keep" })).body.visit;
-  const full = (await api(`/api/visits?id=${v.visit_id}`, { headers: admin })).body.visit;
-  full.summary = "摘要";
-  full.summary_at = "2026-08-22T00:00:00.000Z";
-  full.reminders = { wrapup_sent_at: "2026-08-21T05:00:00.000Z", wrapup_to: "wrapup@ntu.edu.tw" };
-  full.signbook = { photo_key: "signbook/x/1.jpg" };
-  await put(full);
+  // 後台開著的那一份：下面這些東西寫進去之前載入的
+  const stale = (await api(`/api/visits?id=${v.visit_id}`, { headers: admin })).body.visit;
+  // 別的端點與背景工作寫的（摘要、後續提醒、Drive、名片、簽名簿、口述、信件、當天資料、寄信時改的狀態、本次沒有）
+  const written = {
+    summary: "摘要",
+    summary_at: "2026-08-22T00:00:00.000Z",
+    reminders: { wrapup_sent_at: "2026-08-21T05:00:00.000Z", wrapup_to: "wrapup@ntu.edu.tw" },
+    drive: { folder_id: "f1", backed_up_at: "2026-08-22T01:00:00.000Z", items: 3 },
+    cards: [{ key: `cards/${v.visit_id}/1.jpg`, names: ["A"], read_at: "2026-08-21T04:00:00.000Z" }],
+    signbook: { photo_key: `signbook/${v.visit_id}/1.jpg`, entries: [{ text: "好", signed_by: "S", language: "zh" }] },
+    dictation: { transcript: "今天校長來" },
+    letters: { thanks: { subject: "s", body: "b", sender: "director", drafted_at: "2026-08-21T06:00:00.000Z", sent_at: "2026-08-21T07:00:00.000Z", sent_to: [{ name: "A", email: "a@example.edu" }] } },
+    materials: { deck_pdf: "", photos: [], links: [{ title: "t", url: "https://x.example" }] },
+    status: "done",
+    wrapup: { na: ["cards"] },
+  };
+  await seed(v.visit_id, (x) => Object.assign(x, structuredClone(written)));
 
-  // 後台在別的分頁開著舊資料按一下存檔（body 裡沒有這些欄位）→ 不能被清掉
-  const stale = await put({ visit_id: v.visit_id, org: { name: "Keep Fields College" }, date: "2026-08-21", code: "keep" });
-  assert.equal(stale.body.visit.summary, "摘要");
-  assert.equal(stale.body.visit.reminders.wrapup_sent_at, "2026-08-21T05:00:00.000Z", "提醒紀錄留著，不然後續提醒會重寄一次");
-  assert.equal(stale.body.visit.signbook.photo_key, "signbook/x/1.jpg");
+  const old = (await put({ ...stale, purpose: "改一個字" })).body.visit; // 舊的那一份整個送回來
+  const forged = (await put({ ...stale, summary: "偷塞的摘要", summary_at: "", letters: {}, status: "draft", materials: { deck_pdf: "https://elsewhere.example/x.pdf", photos: [], links: [] }, wrapup: { na: [] }, reminders: {}, drive: {}, signbook: {}, dictation: {}, cards: [] })).body.visit;
+  const bare = (await put({ visit_id: v.visit_id, org: { name: "Keep Fields College" }, date: "2026-08-21", code: "keep" })).body.visit; // 只送表單那幾格
+  for (const [label, got] of [["舊的那一份", old], ["帶了亂填的", forged], ["沒帶", bare]]) {
+    for (const k of Object.keys(written)) assert.deepEqual(got[k], written[k], `${label}：${k} 沿用伺服器上那一份`);
+  }
+  assert.equal(old.purpose, "改一個字", "表單那幾格照常存");
+  assert.equal((await api(`/api/visits?id=${v.visit_id}`, { method: "DELETE", headers: admin })).status, 409, "感謝信寄出去了就不給刪——這一道也靠寄出紀錄，洗掉了就擋不住");
+
+  // 新的一場從空的開始：拿別場的整份當底建一場，不會把那一場的信件與檔案一起帶過來
+  // （檔案的 key 是那一場的——刪掉這一場時會連那一場的照片、簽名簿一起刪）
+  const copy = (await put({ ...bare, visit_id: "", code: "keepcopy" })).body.visit;
+  assert.equal(copy.visit_id, "2026-08-21-keepcopy");
+  assert.deepEqual([copy.summary, copy.letters, copy.signbook, copy.dictation, copy.status, copy.wrapup], ["", {}, {}, {}, "draft", { na: [] }]);
+  assert.deepEqual(copy.materials, { deck_pdf: "", photos: [], links: [] });
+  assert.ok(!("cards" in copy) && !("reminders" in copy) && !("drive" in copy) && !("summary_at" in copy), "名片、提醒、Drive 都不跟著過來");
+  assert.equal((await api(`/api/visits?id=${copy.visit_id}`, { method: "DELETE", headers: admin })).status, 200);
+  await getStore().deleteVisit(v.visit_id);
+});
+
+test("「本次沒有」走自己的那一支：只動 wrapup；一般存檔帶什麼都不算", async () => {
+  const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const mark = (body, headers = admin) => api("/api/visits", { method: "POST", headers, body: JSON.stringify({ action: "wrapup", ...body }) });
+  const v = (await put({ org: { name: "Not This Time College" }, date: "2099-08-02", code: "natime", purpose: "原本的目的" })).body.visit;
+  const stale = (await api(`/api/visits?id=${v.visit_id}`, { headers: admin })).body.visit;
+  assert.equal((await mark({ visit_id: v.visit_id, na: ["cards"] }, { "content-type": "application/json" })).status, 401, "要 token");
+  assert.equal((await mark({ visit_id: "2099-01-01-nope", na: ["cards"] })).status, 404);
+  assert.equal((await mark({ visit_id: "../x", na: ["cards"] })).status, 400);
+
+  const r = await mark({ visit_id: v.visit_id, na: ["signbook", "cards", "nonsense"] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.visit.wrapup.na, ["signbook", "cards"], "只收認得的那四件事");
+  assert.equal(r.body.visit.purpose, "原本的目的", "其他欄位不動");
+  // 後續分頁以前是把手上那一份整筆送回一般存檔：那一份是舊的，帶著的 wrapup 也不算
+  const resaved = (await put({ ...stale, wrapup: { na: [] }, purpose: "改一個字" })).body.visit;
+  assert.deepEqual(resaved.wrapup.na, ["signbook", "cards"], "舊的那一份蓋不掉剛標的");
+  assert.deepEqual((await mark({ visit_id: v.visit_id, na: [] })).body.visit.wrapup.na, [], "改回「還要做」也走這一支");
+  await api(`/api/visits?id=${v.visit_id}`, { method: "DELETE", headers: admin });
+});
+
+test("訪前功課：還沒存檔就查好的跟著存檔進去（查完之前自動存檔先建好這一場也一樣）；舊分頁的那一份蓋不掉新的", async () => {
+  const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  // 查的時候還沒存檔（畫面上連單位名稱都還沒打）：結果只在畫面上，存檔時跟著進去
+  const { ok, ...early } = (await runJob("research", { visit: { org: { name: "Early Research Institute" }, guests: [{ name: "X" }] } })).body;
+  assert.equal(early.status, "done");
+  const first = (await put({ org: { name: "Early Research Institute" }, date: "2099-08-03", code: "early", background: early })).body.visit;
+  assert.equal(first.background.researched_at, early.researched_at, "新的一場：第一次存檔帶進去");
+  // 單位名稱一打完就自動存檔（伺服器上還沒有研判），查完之後那一次存檔才帶著結果來
+  const raced = (await put({ org: { name: "Raced Research Institute" }, date: "2099-08-04", code: "raced" })).body.visit;
+  assert.ok(!raced.background);
+  const filled = (await put({ ...raced, background: early })).body.visit;
+  assert.equal(filled.background.researched_at, early.researched_at, "伺服器上還沒有研判：收");
+
+  // 存過檔的那一場再查一次（research-background 直接寫回這一場）；開著舊資料的分頁送回來的是比較舊的那一份
+  const rerun = await runJob("research", { visit_id: raced.visit_id });
+  assert.equal(rerun.status, 200, JSON.stringify(rerun.body));
+  const fresh = (await api(`/api/research?id=${raced.visit_id}`, { headers: admin })).body.background;
+  assert.ok(fresh.researched_at > early.researched_at);
+  assert.equal((await put({ ...filled, purpose: "改一個字" })).body.visit.background.researched_at, fresh.researched_at, "舊的那一份蓋不掉新的");
+  // 還在查（「查資料中」記在這一場上）的時候也一樣
+  assert.equal((await api("/api/research", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: raced.visit_id }) })).status, 202);
+  assert.equal((await put({ ...filled, purpose: "再改一個字" })).body.visit.background.status, "running", "蓋不掉「查資料中」");
+  for (const id of [first.visit_id, raced.visit_id]) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
+});
+
+test("簡報（deck）只有簡報分頁在寫：訪前分頁的存檔不送也洗不掉；勾「不用簡報」只改那一格；指紋只由伺服器蓋", async () => {
+  const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const v = (await put({ org: { name: "Deck Keep College" }, date: "2099-08-05", code: "deckkeep" })).body.visit;
+  const stale = (await api(`/api/visits?id=${v.visit_id}`, { headers: admin })).body.visit; // 還沒產檔時載入的（deck 是空的）
+  const made = (await put({ ...stale, deck: { generated_at: "2099-08-01T00:00:00.000Z", slides: 12 } })).body.visit;
+  assert.ok(made.deck.fingerprint, "產檔：伺服器蓋指紋");
+  const { deck: _deck, ...form } = made;
+  assert.deepEqual((await put({ ...form, purpose: "改一個字" })).body.visit.deck, made.deck, "沒帶 deck（訪前分頁的存檔）：產檔紀錄與指紋都還在");
+  assert.deepEqual((await put({ ...stale, purpose: "再改一個字" })).body.visit.deck, made.deck, "舊的那一份帶著空的 deck：也洗不掉");
+  const skipped = (await put({ ...form, deck: { skip: true } })).body.visit;
+  assert.deepEqual(skipped.deck, { ...made.deck, skip: true }, "勾「不用簡報」只改 skip");
+  assert.equal((await put({ ...form, deck: { fingerprint: "forged" } })).body.visit.deck.fingerprint, made.deck.fingerprint, "送來的指紋不算");
+  await api(`/api/visits?id=${v.visit_id}`, { method: "DELETE", headers: admin });
 });
 
 test("兩封信同一套：確認信也寄得出去，寄了之後網址就固定", async () => {
@@ -760,10 +889,15 @@ test("兩封信同一套：確認信也寄得出去，寄了之後網址就固�
   assert.equal(send.body.reason, "gmail_not_configured");
   assert.equal((await put({ ...v, code: "ltr2" })).body.visit.visit_id, "2026-11-20-ltr2", "還沒寄出去，網址還能改");
 
-  // 背景函式真的跑完（模擬 Gmail 寄出）之後，網址就固定了
+  // 真的寄出去之後（MAIL_MOCK：背景函式照常跑完，只是不打 Gmail），網址就固定了
+  process.env.MAIL_MOCK = "1";
+  try {
+    const sent = await runJob("letter", { visit_id: "2026-11-20-ltr2", action: "send", kind: "confirmation", subject: draft.body.draft.subject, body: draft.body.draft.body, recipients: [{ name: "A", email: "a@example.edu" }] });
+    assert.equal(sent.body.sent, true, JSON.stringify(sent.body));
+  } finally {
+    delete process.env.MAIL_MOCK;
+  }
   const after = (await api(`/api/visits?id=2026-11-20-ltr2`, { headers: admin })).body.visit;
-  after.letters.confirmation = { ...(after.letters.confirmation || { subject: "s", body: "b", drafted_at: new Date().toISOString() }), sent_at: new Date().toISOString(), sent_to: [{ name: "A", email: "a@example.edu" }] };
-  await put(after);
   const fixed = await put({ ...after, code: "ltr3" });
   assert.equal(fixed.body.visit.visit_id, "2026-11-20-ltr2", "確認信寄出去之後網址不再改（對方手上的連結不能失效）");
   assert.equal(fixed.body.url_fixed, true);
