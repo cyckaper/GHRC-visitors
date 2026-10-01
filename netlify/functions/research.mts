@@ -32,13 +32,13 @@ export default async (req: Request) => {
   let draft: Partial<Visit> | null = body?.visit || null;
 
   if (id) {
-    const visit = await store.getVisit(id);
+    // 存過檔的順便把「查資料中」記在那一筆上：重新整理、換台機器都看得到進度（只動 background 這一格）
+    const visit = await store.updateVisit(id, (v) => {
+      (v as any).background = { ...((v as any).background || {}), status: "running", started_at: nowISO() };
+    });
     if (!visit) return fail(404, "找不到這次參訪");
     // 後台送上來的那一份優先：名單剛改過（例如刪掉一個人）而存檔還沒回來時，要查的是畫面上這一份
     draft = draft || visit;
-    // 存過檔的順便把「查資料中」記在那一筆上：重新整理、換台機器都看得到進度
-    (visit as any).background = { ...((visit as any).background || {}), status: "running", started_at: nowISO() };
-    await store.putVisit(visit);
   }
   if (!draft?.org?.name && !(draft?.guests || []).length) return fail(400, "至少要有單位名稱或一個名單上的人，才查得到東西");
   return startBackground("research", { visit_id: id, visit: draft }, req);

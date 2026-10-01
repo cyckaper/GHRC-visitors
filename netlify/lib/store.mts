@@ -15,7 +15,20 @@ export interface Store {
   backend: string;
   listVisits(): Promise<Visit[]>;
   getVisit(id: string): Promise<Visit | null>;
+  /** 新的一場，或整筆換掉（改網址代碼搬家）。**改一場裡的某幾個欄位一律用 updateVisit**。 */
   putVisit(v: Visit): Promise<void>;
+  /**
+   * 讀出**最新**的那一筆 → 交給 `change` 改 → 寫回去；寫的時候發現中間有人改過，就重讀、重改、再寫。
+   *
+   * 為什麼不能「getVisit → 改 → putVisit」：putVisit 是整筆覆寫。兩台電腦同時存同一場
+   * （支援人力表上五間一起填、主辦端開著行程表自動存、背景在備份 Drive）時，後寫的那一個
+   * 會把先寫的那一格蓋回舊的——實際測過：五間同時存，五格只剩一格。
+   *
+   * `change` 可能被呼叫好幾次（每次拿到的都是最新那一份的複本），所以裡面**只改資料**：
+   * 寄信、上傳、觸發背景工作一律放在 updateVisit 外面。回傳 `false`＝這一次不必寫（照舊回傳現在那一份）。
+   * 找不到這一場回 `null`。
+   */
+  updateVisit(id: string, change: VisitChange): Promise<Visit | null>;
   deleteVisit(id: string): Promise<void>;
   listResponses(visitId?: string): Promise<ResponseRow[]>;
   appendResponse(r: ResponseRow): Promise<void>;
@@ -26,7 +39,38 @@ export interface Store {
   deleteMedia(key: string): Promise<void>;
 }
 
+export type VisitChange = (v: Visit) => Visit | void | false | Promise<Visit | void | false>;
+
 let cached: Store | null = null;
+
+const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
+
+/**
+ * 同一個程序裡排隊：同一把鑰匙的工作一個做完才做下一個。本機的檔案後端靠它——
+ * 所有場次都在同一個 visits.json，兩個寫入交錯就會把檔案寫壞（實際測過）。
+ * Netlify 上每個函式各跑各的，這把鎖管不到別台機器，那裡靠的是 Blobs 的條件寫入。
+ */
+const queues = new Map<string, Promise<unknown>>();
+function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const run = (queues.get(key) || Promise.resolve()).then(fn, fn);
+  const tail = run.then(
+    () => {},
+    () => {},
+  );
+  queues.set(key, tail);
+  void tail.then(() => {
+    if (queues.get(key) === tail) queues.delete(key);
+  });
+  return run;
+}
+
+/** change 的共同收尾：可以就地改、也可以回傳一份新的；false＝不必寫。 */
+async function applyChange(current: Visit, change: VisitChange): Promise<Visit | false> {
+  const draft = structuredClone(current);
+  const out = await change(draft);
+  if (out === false) return false;
+  return (out || draft) as Visit;
+}
 
 export function getStore(): Store {
   if (cached) return cached;
@@ -57,21 +101,30 @@ async function readJsonFile<T>(file: string, fallback: T): Promise<T> {
   }
 }
 
-async function writeJsonFile(file: string, data: unknown): Promise<void> {
+/**
+ * 先寫一個暫存檔再改名（改名是一次完成的，讀的人不會讀到寫一半的檔）。暫存檔名要每一次都不一樣：
+ * 以前只用「程序＋毫秒」，同一毫秒的兩個寫入寫進同一個暫存檔，內容交錯，整個 visits.json 就壞了（實際測過）。
+ */
+async function writeFileAtomic(file: string, data: string | Uint8Array): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
-  await writeFile(tmp, JSON.stringify(data, null, 2));
+  const tmp = `${file}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 10)}.tmp`;
+  await writeFile(tmp, data);
   const { rename } = await import("node:fs/promises");
   await rename(tmp, file);
+}
+
+async function writeJsonFile(file: string, data: unknown): Promise<void> {
+  await writeFileAtomic(file, JSON.stringify(data, null, 2));
 }
 
 function fileMedia() {
   return {
     async putMedia(key: string, bytes: Uint8Array, contentType: string) {
       const file = path.join(storeDir(), "media", key);
-      await mkdir(path.dirname(file), { recursive: true });
-      await writeFile(file, bytes);
-      await writeFile(`${file}.meta.json`, JSON.stringify({ contentType }));
+      await withLock(file, async () => {
+        await writeFileAtomic(file, bytes);
+        await writeFileAtomic(`${file}.meta.json`, JSON.stringify({ contentType }));
+      });
     },
     async getMedia(key: string) {
       const file = path.join(storeDir(), "media", key);
@@ -101,40 +154,95 @@ function fileStore(): Store {
     async getVisit(id) {
       return (await readJsonFile<Visit[]>(f("visits"), [])).find((v) => v.visit_id === id) || null;
     },
+    // 所有場次在同一個檔：每一個寫入都排隊（讀—改—寫整段在鎖裡），不然兩個寫入會互相蓋掉
     async putVisit(v) {
-      const all = await readJsonFile<Visit[]>(f("visits"), []);
-      const i = all.findIndex((x) => x.visit_id === v.visit_id);
-      if (i >= 0) all[i] = v;
-      else all.push(v);
-      await writeJsonFile(f("visits"), all);
+      await withLock(f("visits"), async () => {
+        const all = await readJsonFile<Visit[]>(f("visits"), []);
+        const i = all.findIndex((x) => x.visit_id === v.visit_id);
+        if (i >= 0) all[i] = v;
+        else all.push(v);
+        await writeJsonFile(f("visits"), all);
+      });
+    },
+    async updateVisit(id, change) {
+      return withLock(f("visits"), async () => {
+        const all = await readJsonFile<Visit[]>(f("visits"), []);
+        const i = all.findIndex((x) => x.visit_id === id);
+        if (i < 0) return null;
+        const next = await applyChange(all[i], change);
+        if (next === false) return all[i];
+        all[i] = next;
+        await writeJsonFile(f("visits"), all);
+        return next;
+      });
     },
     async deleteVisit(id) {
-      const all = await readJsonFile<Visit[]>(f("visits"), []);
-      await writeJsonFile(f("visits"), all.filter((x) => x.visit_id !== id));
+      await withLock(f("visits"), async () => {
+        const all = await readJsonFile<Visit[]>(f("visits"), []);
+        await writeJsonFile(f("visits"), all.filter((x) => x.visit_id !== id));
+      });
     },
     async listResponses(visitId) {
       const all = await readJsonFile<ResponseRow[]>(f("responses"), []);
       return visitId ? all.filter((r) => r.visit_id === visitId) : all;
     },
     async appendResponse(r) {
-      const all = await readJsonFile<ResponseRow[]>(f("responses"), []);
-      all.push(r);
-      await writeJsonFile(f("responses"), all);
+      await withLock(f("responses"), async () => {
+        const all = await readJsonFile<ResponseRow[]>(f("responses"), []);
+        all.push(r);
+        await writeJsonFile(f("responses"), all);
+      });
     },
     async listSlidePerformance(visitId) {
       const all = await readJsonFile<SlidePerf[]>(f("slide_performance"), []);
       return visitId ? all.filter((r) => r.visit_id === visitId) : all;
     },
     async appendSlidePerformance(rows) {
-      const all = await readJsonFile<SlidePerf[]>(f("slide_performance"), []);
-      all.push(...rows);
-      await writeJsonFile(f("slide_performance"), all);
+      await withLock(f("slide_performance"), async () => {
+        const all = await readJsonFile<SlidePerf[]>(f("slide_performance"), []);
+        all.push(...rows);
+        await writeJsonFile(f("slide_performance"), all);
+      });
     },
     ...media,
   };
 }
 
 // ───────────────────────── blobs ─────────────────────────
+
+/**
+ * **讀一律要最新的**（strong）。Netlify Blobs 預設的讀取走邊緣快取，官方說更新要最多 60 秒才傳到每一個節點——
+ * 一台電腦剛存的，另一台在一分鐘內可能還讀到舊的；更糟的是「讀—改—寫」讀到舊的那一份，
+ * 寫回去就把別人剛存的蓋掉（老師填完接待人員、幾秒後再填分鐘，人名就可能不見）。
+ * 環境裡沒有 uncachedEdgeURL 時 strong 會丟 BlobsConsistencyError：那就退回預設的讀法，至少整站不會壞。
+ */
+let strongReads = true;
+async function readLatest<T>(read: (consistency: "strong" | "eventual") => Promise<T>): Promise<T> {
+  if (strongReads) {
+    try {
+      return await read("strong");
+    } catch (e: any) {
+      if (e?.name !== "BlobsConsistencyError") throw e;
+      strongReads = false;
+      console.warn("Netlify Blobs：這個環境不支援 strong consistency，改用預設的讀法");
+    }
+  }
+  return read("eventual");
+}
+
+/** 同時讀好幾個，但一次最多 limit 個（場次一多，一個一個讀太慢；全部一起送又太兇）。 */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (x: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
 
 async function blobStore() {
   const mod = await import("@netlify/blobs");
@@ -151,7 +259,8 @@ function blobsMedia() {
     },
     async getMedia(key: string) {
       const s = await blobStore();
-      const r = await s.getWithMetadata(`media/${key}`, { type: "arrayBuffer" });
+      // 設定、老師卡片、暫存、工作進度都存在這裡——一樣要讀最新的
+      const r = await readLatest((consistency) => s.getWithMetadata(`media/${key}`, { type: "arrayBuffer", consistency }));
       if (!r || !r.data) return null;
       return { bytes: new Uint8Array(r.data as ArrayBuffer), contentType: String((r.metadata as any)?.contentType || "application/octet-stream") };
     },
@@ -166,12 +275,8 @@ function blobsStore(): Store {
   const listJson = async <T,>(prefix: string): Promise<T[]> => {
     const s = await blobStore();
     const { blobs } = await s.list({ prefix });
-    const out: T[] = [];
-    for (const b of blobs) {
-      const v = await s.get(b.key, { type: "json" });
-      if (v) out.push(v as T);
-    }
-    return out;
+    const rows = await mapLimit(blobs, 8, (b) => readLatest((consistency) => s.get(b.key, { type: "json", consistency })));
+    return rows.filter(Boolean) as T[];
   };
   const appendJson = async (prefix: string, row: unknown) => {
     const s = await blobStore();
@@ -185,11 +290,52 @@ function blobsStore(): Store {
     },
     async getVisit(id) {
       const s = await blobStore();
-      return ((await s.get(`visits/${id}`, { type: "json" })) as Visit | null) || null;
+      return ((await readLatest((consistency) => s.get(`visits/${id}`, { type: "json", consistency }))) as Visit | null) || null;
     },
     async putVisit(v) {
       const s = await blobStore();
       await s.setJSON(`visits/${v.visit_id}`, v);
+    },
+    /**
+     * 條件寫入：讀的時候記下版本（etag），寫的時候只在版本沒變的情況下寫（onlyIfMatch）；
+     * 變了＝中間有人存過，重讀最新的那一份再套一次 change。
+     */
+    async updateVisit(id, change) {
+      const s = await blobStore();
+      const key = `visits/${id}`;
+      const get = () => readLatest((consistency) => s.getWithMetadata(key, { type: "json", consistency }));
+      let shaky = !strongReads; // 版本號可能不準（讀的不是最新的、或版本號是從列表拿的）
+      // 版本號跟著資料一起拿（正式站讀的時候就會給）。拿不到的話先從列表拿版本號、**再**讀一次資料——
+      // 順序不能反：先讀資料再拿版本號，中間有人存過，舊資料配上新版本號，條件寫入就會成功、把那一次蓋掉
+      const read = async (): Promise<{ data: Visit; etag?: string } | null> => {
+        const cur = await get();
+        if (!cur || cur.data == null) return null;
+        if (cur.etag) return { data: cur.data as Visit, etag: cur.etag };
+        shaky = true;
+        const listed = (await s.list({ prefix: key })).blobs.find((b) => b.key === key)?.etag;
+        const again = await get();
+        if (!again || again.data == null) return null;
+        return { data: again.data as Visit, etag: again.etag || listed };
+      };
+      let last: Visit | null = null;
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const cur = await read();
+        if (!cur) return null;
+        const next = await applyChange(cur.data, change);
+        if (next === false) return cur.data;
+        last = next;
+        if (!cur.etag) break; // 一個版本號都拿不到：沒得比，只能照以前的方式直接寫（見迴圈後面）
+        const res = await s.setJSON(key, next, { onlyIfMatch: cur.etag });
+        if (res.modified) return next;
+        // 有人剛好也在存：等一下下（每一次等久一點、錯開），再讀最新的重來
+        await sleep(15 + Math.random() * 40 * (attempt + 1));
+      }
+      if (!last) return null;
+      // 版本號準的時候還是一直對不上＝真的有好幾個人同時在存：說一聲，請他再按一次
+      if (!shaky) throw new Error("這一場剛好有好幾個人同時在存，這一次沒存進去，請再試一次");
+      // 版本號可能不準的時候，對不上不一定是有人在存——那就照以前的方式直接寫，不要整個存不進去
+      await s.setJSON(key, last);
+      return last;
     },
     async deleteVisit(id) {
       const s = await blobStore();
@@ -355,6 +501,19 @@ function sheetsStore(media: { putMedia: Store["putMedia"]; getMedia: Store["getM
       const { rows } = await readTable("visits");
       const o = rows.find((r) => r.visit_id === id);
       return o ? parseJSON<Visit | null>(o._json, null) : null;
+    },
+    // Google Sheet 沒有條件寫入：只能在同一個程序裡排隊，盡力而為（正式站預設用 Blobs）
+    async updateVisit(id, change) {
+      return withLock("sheets:visits", async () => {
+        const { rows } = await readTable("visits");
+        const o = rows.find((r) => r.visit_id === id);
+        const cur = o ? parseJSON<Visit | null>(o._json, null) : null;
+        if (!cur) return null;
+        const next = await applyChange(cur, change);
+        if (next === false) return cur;
+        await this.putVisit(next);
+        return next;
+      });
     },
     async putVisit(v) {
       const { rows } = await readTable("visits");

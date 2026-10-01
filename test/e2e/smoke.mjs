@@ -538,6 +538,20 @@ try {
     check((await row.locator(`input[data-room="${room}"][data-field="minutes"]`).inputValue()) === "25", "typing 「２５分」 leaves just the number");
     await until(async () => { const v = await visitOf(id); return v.presenters?.[room] === "王小明" && v.lab_minutes?.[room] === 25; }, "the rota to save the name and the minutes");
     check(true, "…and what a lab types is kept on that visit, the name and the minutes");
+    {
+      // **別台電腦剛填的，回到這個視窗就看得到**：另一台（這裡用 API 代替）在同一場填了另一間，
+      // 這一頁不必重新整理——視窗重新拿到焦點時自己重讀。資料本來就只有一份，存在站台上
+      const other = target.stops.map((s) => s.room).find((r) => r !== room) || room;
+      const r = await fetch(`${base}/api/rota?key=${key}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visit_id: id, room: other, name: "另一台電腦" }) });
+      check(r.ok, "another computer saves a cell on the same visit");
+      // 游標還停在剛剛填的那一格（老師常常這樣切去 LINE 再切回來）：照樣更新，游標放回那一格
+      await row.locator(`input[data-room="${room}"][data-field="name"]`).focus();
+      await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+      await page.waitForFunction(([vid, rm]) => document.querySelector(`input[data-visit="${vid}"][data-room="${rm}"][data-field="name"]`)?.value === "另一台電腦", [id, other], { timeout: 15000 });
+      check((await row.locator(`input[data-room="${room}"][data-field="name"]`).inputValue()) === "王小明", "…and coming back to this window shows it, next to what was typed here — no reload needed");
+      check(await page.evaluate(([vid, rm]) => { const a = document.activeElement; return a?.dataset.visit === vid && a?.dataset.room === rm && a?.dataset.field === "name"; }, [id, room]), "…with the cursor back in the cell it was in");
+      if (other !== room) await fetch(`${base}/api/rota?key=${key}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visit_id: id, room: other, name: "" }) });
+    }
 
     // **後台開著舊資料改一個字自動存檔，不會蓋掉老師剛填的**（後台是把手上那一份整個送回去的）
     const before = (await visitOf(id)).updated_at;

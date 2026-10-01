@@ -16,9 +16,11 @@ export default backgroundHandler<{ visit_id: string; photo_key: string; media_ty
   if (!media) throw new Error(`找不到剛存的照片（${input.photo_key}）`);
   const b64 = Buffer.from(media.bytes).toString("base64");
   const read = await readSignbook(b64, input.media_type || media.contentType || "image/jpeg");
-  visit.signbook = { photo_key: input.photo_key, transcript: read.transcript, entries: read.entries, read_at: nowISO() };
-  visit.updated_at = nowISO();
-  await store.putVisit(visit);
+  // AI 讀字要一兩分鐘：寫回去的時候只動 signbook 這一格，而且寫進最新的那一份
+  await store.updateVisit(visit.visit_id, (v) => {
+    v.signbook = { photo_key: input.photo_key, transcript: read.transcript, entries: read.entries, read_at: nowISO() };
+    v.updated_at = nowISO();
+  });
   await triggerDriveSync(visit.visit_id);
   return { photo_key: input.photo_key, ...read };
 });

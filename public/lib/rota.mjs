@@ -211,16 +211,20 @@ export function focusVisit(root, id) {
  */
 export async function mountRota(root, { load, save, onStatus = () => {}, focus = "", layout = "cards" } = {}) {
   injectStyle();
+  const draw = (r) => {
+    const labs = r.labs || [];
+    for (const l of labs) if (l.color) document.documentElement.style.setProperty(`--c${l.room}`, l.color);
+    const visits = r.visits || [];
+    root.innerHTML = !visits.length ? `<p class="rota-muted">還沒有任何參訪。</p>` : layout === "table" ? table(visits, labs) : visits.map((v) => card(v, labs)).join("");
+    return visits;
+  };
   const r = await load();
   if (!r || !r.ok) {
     root.innerHTML = "";
     onStatus((r && r.error) || "打不開", true);
     return null;
   }
-  const labs = r.labs || [];
-  for (const l of labs) if (l.color) document.documentElement.style.setProperty(`--c${l.room}`, l.color);
-  const visits = r.visits || [];
-  root.innerHTML = !visits.length ? `<p class="rota-muted">還沒有任何參訪。</p>` : layout === "table" ? table(visits, labs) : visits.map((v) => card(v, labs)).join("");
+  const visits = draw(r);
   // 說明越少越好（明確指示）：灰的、寫著「已結束」的那幾場自己看得懂，不必再講一次
   onStatus(visits.some((v) => !v.past) ? "" : "目前沒有將來的參訪。", false);
 
@@ -228,6 +232,7 @@ export async function mountRota(root, { load, save, onStatus = () => {}, focus =
   // 不同的格子，不該互相蓋掉。用賦值不用 addEventListener：後台每次切到設定分頁都會重畫一次，
   // 疊上好幾個 listener 就會同一格存好幾次。
   const timers = new Map();
+  const pending = new Set(); // 打了字、還沒存完的格子
   root.oninput = (e) => {
     const el = e.target.closest && e.target.closest(".rota-in");
     if (!el || el.disabled) return;
@@ -240,11 +245,13 @@ export async function mountRota(root, { load, save, onStatus = () => {}, focus =
     // 總表：人名一填上，那一格就不再是「未填」（清空又變回來）
     if (el.dataset.field === "name") el.closest(".rota-td")?.classList.toggle("rota-todo", !el.value.trim());
     clearTimeout(timers.get(el));
+    pending.add(el);
     timers.set(
       el,
       setTimeout(async () => {
         const field = el.dataset.field === "minutes" ? "minutes" : "name";
         const res = await save({ visit_id: el.dataset.visit, room: el.dataset.room, [field]: el.value });
+        pending.delete(el);
         if (res && res.ok) {
           el.classList.add("rota-saved");
           onStatus(`已存 ${new Date().toTimeString().slice(0, 5)}`, false);
@@ -253,5 +260,38 @@ export async function mountRota(root, { load, save, onStatus = () => {}, focus =
     );
   };
   if (focus) focusVisit(root, focus);
+
+  // **別台電腦剛填的，回到這個視窗就看得到**（明確問過：不同電腦填的會不會彙整到同一個網頁）。
+  // 資料本來就只有一份（存在站台上），但開著的這一頁不會自己知道別人填了什麼——視窗重新拿到焦點時重讀一次。
+  // 還有打了字、還沒存完的格子就不動（重畫會把那些字洗掉）；游標停在哪一格，重畫完放回那一格。
+  // 後台在別的分頁時（表沒顯示）也不讀。
+  let lastRefresh = 0;
+  root._rotaRefresh = async () => {
+    if (!root.isConnected || root.offsetParent === null || pending.size || Date.now() - lastRefresh < 3000) return;
+    lastRefresh = Date.now();
+    const again = await load();
+    if (!again || !again.ok || pending.size) return;
+    const a = document.activeElement;
+    const at = a && root.contains(a) && a.matches(".rota-in") ? { ...a.dataset, start: a.selectionStart, end: a.selectionEnd } : null;
+    draw(again);
+    if (focus) [...root.querySelectorAll("[data-rota-visit]")].find((x) => x.dataset.rotaVisit === focus)?.classList.add("rota-focus");
+    if (at) {
+      const el = [...root.querySelectorAll(".rota-in")].find((x) => x.dataset.visit === at.visit && x.dataset.room === at.room && x.dataset.field === at.field);
+      if (el) {
+        el.focus({ preventScroll: true });
+        try {
+          el.setSelectionRange(at.start, at.end);
+        } catch (e) {}
+      }
+    }
+  };
+  if (!root._rotaWatching) {
+    root._rotaWatching = true;
+    const refresh = () => root._rotaRefresh && root._rotaRefresh();
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") refresh();
+    });
+  }
   return r;
 }
