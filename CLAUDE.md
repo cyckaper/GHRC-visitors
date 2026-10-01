@@ -510,7 +510,10 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 ## 背景
 
 - GHRC＝綠色健康研究中心，臺大生農學院，造園館三樓 301–304 室，ntughrc@gmail.com
-- 張俊彥（Chun-Yen Chang）2026/8/1 接任中心主任；前任陳惠美（現任系主任兼梅峰農場場長）續任 Co-PI
+- 張俊彥（Chun-Yen Chang）2026/8/1 接任中心主任；陳惠美是開創中心的**首任主任**（現任系主任兼梅峰農場場長）。
+  **對外一律稱「首任主任 Inaugural Director」，不寫 Co-PI**（明確指示：她是開創中心的主任，叫 Co-PI 不妥）——
+  首頁的組織架構、303 的卡片與介紹頁都是這樣寫，`npm test` 擋 Co-PI 回到對外的資料裡。
+  母簡報第 5 頁（組織架構）自己還寫著「續任共同主持人」，那是投影片原文，本系統不改寫，要在母簡報裡改。
 - 中心參訪制度仍在非正式試辦，本系統同時補上這個治理缺口
 - 國際夥伴：UIUC（William Sullivan、Brian Deal）、韓國建國大學、UT Arlington、UWA（洽談中）；
   Landscape and Human Health 八校平台

@@ -72,7 +72,7 @@
       "stage": "Validate",
       "stage_zh": "驗證",
       "color": "#6d28d9",
-      "lead": { "name_zh": "陳惠美", "name_en": "Hui-Mei Chen", "title_en": "Distinguished Professor · Department Chair · Co-PI, GHRC", "title_zh": "特聘教授 · 系主任 · 中心 Co-PI", "email": "" },
+      "lead": { "name_zh": "陳惠美", "name_en": "Hui-Mei Chen", "title_en": "Distinguished Professor · Department Chair · Inaugural Director, GHRC", "title_zh": "特聘教授 · 系主任 · 中心首任主任", "email": "" },
       "one_line_source": "lead",
       "one_line_en": "Grounded in evidence-based design, the lab integrates scientific theory and landscape aesthetics to develop virtual nature-based healing environments and experiential products that address diverse health needs.",
       "one_line_zh": "以實證設計為基礎，融合科學理論與景觀美學，開發回應不同健康需求的虛擬自然療癒環境與體驗產品。",
@@ -82,8 +82,8 @@
       "expertise_zh": ["景觀遊憩規劃設計", "景觀政策與土地變遷", "園藝治療與療癒景觀設計", "景觀遊憩心理與行為", "休閒遊憩經營管理"],
       "equipment_en": ["Immersive virtual reality systems", "Eye tracking and EEG measurement", "360-degree VR teaching library"],
       "equipment_zh": ["沉浸式虛擬實境設備", "眼動與腦波量測", "360 度環景 VR 教材庫"],
-      "background_en": "Ph.D., Department of Horticulture, National Taiwan University. Distinguished Professor and Chair of NTU's Department of Horticulture and Landscape Architecture; Director of the NTU Meifeng Highland Experimental Farm. Co-PI of the Green Health Research Center, and its Director before August 2026.",
-      "background_zh": "國立臺灣大學園藝學系博士。現任臺大園藝暨景觀學系特聘教授兼系主任，並兼臺大山地實驗農場（梅峰）場長。綠色健康研究中心 Co-PI，2026 年 8 月前為中心主任。",
+      "background_en": "Ph.D., Department of Horticulture, National Taiwan University. Distinguished Professor and Chair of NTU's Department of Horticulture and Landscape Architecture; Director of the NTU Meifeng Highland Experimental Farm. Inaugural Director of the Green Health Research Center (until July 2026).",
+      "background_zh": "國立臺灣大學園藝學系博士。現任臺大園藝暨景觀學系特聘教授兼系主任，並兼臺大山地實驗農場（梅峰）場長。綠色健康研究中心首任主任（任期至 2026 年 7 月）。",
       "papers": [
         { "title": "Feasibility assessment and implementation strategies of green care in rural Taiwan", "venue": "Landscape and Ecological Engineering, 2021", "url": "https://doi.org/10.1007/s11355-020-00426-7" }
       ],

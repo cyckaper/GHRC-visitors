@@ -327,6 +327,19 @@ test("中心首頁的內容（center.json）：中英兩份都在、只有五間
   for (const st of center.loop.stages) assert.ok(labs.some((l) => l.stage === st), `閉環的「${st}」那一段沒有研究室`);
 });
 
+test("陳惠美老師對外稱「首任主任 Inaugural Director」，不寫 Co-PI", () => {
+  // 明確指示：她是開創中心的主任，叫 Co-PI 不妥。來賓看得到的資料（首頁、老師卡片與介紹頁）都不准再出現
+  const center = JSON.parse(readFileSync("public/data/center.json", "utf8"));
+  const labs = JSON.parse(readFileSync("public/data/labs.json", "utf8")).labs;
+  for (const [f, data] of [["center.json", { ...center, _comment: "" }], ["labs.json", labs]]) {
+    assert.doesNotMatch(JSON.stringify(data), /co-?pi\b|co-principal|共同主持人/i, `${f} 不寫 Co-PI`);
+  }
+  const chen = labs.find((l) => l.room === "303").lead;
+  assert.ok(chen.title_zh.includes("首任主任") && chen.title_en.includes("Inaugural Director"), "303 的卡片寫首任主任");
+  const row = center.organisation.people.find((p) => p.name_zh === "陳惠美");
+  assert.deepEqual([row.role_zh, row.role_en], ["首任主任", "Inaugural Director"], "首頁的組織架構寫首任主任");
+});
+
 test("/ 是中心首頁（center.html），/<visit_id> 仍然落到來賓專頁", () => {
   const toml = readFileSync("netlify.toml", "utf8");
   const rules = toml.split("[[redirects]]").slice(1).map((b) => ({ from: (/from\s*=\s*"([^"]+)"/.exec(b) || [])[1], to: (/to\s*=\s*"([^"]+)"/.exec(b) || [])[1], force: /force\s*=\s*true/.test(b) }));
