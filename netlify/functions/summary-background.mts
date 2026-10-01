@@ -24,10 +24,12 @@ export default backgroundHandler<{ visit_id?: string; digest?: boolean }>("摘�
   if (!visit) throw new Error("找不到這次參訪");
   const [responses, slidesIndex] = await Promise.all([store.listResponses(visit.visit_id), loadPublicData("slides")]);
   const summary = await summarizeVisit(visit, responses);
-  visit.summary = summary;
-  visit.summary_at = nowISO(); // summary-cron 靠這個判斷「回覆比摘要新」→ 自己重寫一份
-  visit.updated_at = nowISO();
-  await store.putVisit(visit);
+  // AI 寫摘要要一兩分鐘：寫回去的時候只動摘要那兩格，而且寫進最新的那一份
+  await store.updateVisit(visit.visit_id, (v) => {
+    v.summary = summary;
+    v.summary_at = nowISO(); // summary-cron 靠這個判斷「回覆比摘要新」→ 自己重寫一份
+    v.updated_at = nowISO();
+  });
 
   // slide_performance：這次選了哪幾頁、哪幾頁的實驗室被提問／在回饋中被提到
   const askedText = (visit.dictation?.extracted?.questions || []).join(" ");

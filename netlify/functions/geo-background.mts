@@ -34,11 +34,12 @@ export default backgroundHandler("查位置", async () => {
   for (const [i, key] of keys.entries()) {
     const geo = sanitizeGeo({ ...(found.get(String(i)) || { lat: null, lon: null, place: "", precision: "country" }), key, at });
     for (const v of byKey.get(key)!) {
-      const fresh = await store.getVisit(v.visit_id);
-      if (!fresh || geoKey(fresh) !== key) continue;
-      (fresh as any).geo = geo;
-      await store.putVisit(fresh);
-      updated++;
+      // 只寫 geo，而且寫進最新的那一份；查的時候單位改了名字就不寫（下一輪照新名字查）
+      const saved = await store.updateVisit(v.visit_id, (fresh) => {
+        if (geoKey(fresh) !== key) return false;
+        (fresh as any).geo = geo;
+      });
+      if (saved && (saved as any).geo === geo) updated++;
     }
   }
   return { updated, remaining: Math.max(0, byKey.size - keys.length) };

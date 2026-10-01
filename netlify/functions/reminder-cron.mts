@@ -40,8 +40,9 @@ export default async (req: Request) => {
     const todo = wrapupTodo(v).filter((t: { na: boolean }) => !t.na); // 本次沒有的那幾件不必列出來
     try {
       await gmailSend(to, subject(v), body(v, todo, site));
-      (v as any).reminders = { ...((v as any).reminders || {}), wrapup_sent_at: nowISO(), wrapup_to: to };
-      await store.putVisit(v);
+      await store.updateVisit(v.visit_id, (fresh) => {
+        (fresh as any).reminders = { ...((fresh as any).reminders || {}), wrapup_sent_at: nowISO(), wrapup_to: to };
+      });
       sent.push(v.visit_id);
     } catch (e: any) {
       failed.push(`${v.visit_id}（${e?.message || e}）`); // 沒記 sent_at，下一輪會再試

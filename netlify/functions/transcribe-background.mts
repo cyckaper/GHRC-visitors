@@ -26,15 +26,18 @@ export default backgroundHandler<{ visit_id: string; audio_key?: string; mime?: 
 
   try {
     const extracted = await extractDictation(transcript, visit);
-    visit.dictation = { audio_key: audioKey, transcript, extracted, recorded_at: visit.dictation?.recorded_at || nowISO() };
-    visit.updated_at = nowISO();
-    await store.putVisit(visit);
+    // 轉文字＋抽取要一兩分鐘：寫回去的時候只動 dictation 這一格，而且寫進最新的那一份
+    await store.updateVisit(visit.visit_id, (v) => {
+      v.dictation = { audio_key: audioKey, transcript, extracted, recorded_at: v.dictation?.recorded_at || nowISO() };
+      v.updated_at = nowISO();
+    });
     await triggerDriveSync(visit.visit_id);
     return { audio_key: audioKey, transcript, extracted };
   } catch (e: any) {
-    visit.dictation = { ...visit.dictation, audio_key: audioKey, transcript, recorded_at: visit.dictation?.recorded_at || nowISO() };
-    visit.updated_at = nowISO();
-    await store.putVisit(visit);
+    await store.updateVisit(visit.visit_id, (v) => {
+      v.dictation = { ...v.dictation, audio_key: audioKey, transcript, recorded_at: v.dictation?.recorded_at || nowISO() };
+      v.updated_at = nowISO();
+    });
     await triggerDriveSync(visit.visit_id);
     return { audio_key: audioKey, transcript, extracted: null, warning: `逐字稿已存，但抽取失敗：${e?.message || e}` };
   }

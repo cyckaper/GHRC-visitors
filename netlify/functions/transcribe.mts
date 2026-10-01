@@ -46,9 +46,10 @@ export default async (req: Request) => {
   if (body?.action === "save") {
     const ex = body.extracted || visit.dictation?.extracted;
     if (!ex) return fail(400, "沒有可儲存的抽取結果");
-    visit.dictation = { ...visit.dictation, extracted: ex };
-    visit.updated_at = nowISO();
-    await store.putVisit(visit);
+    await store.updateVisit(visit.visit_id, (v) => {
+      v.dictation = { ...v.dictation, extracted: ex };
+      v.updated_at = nowISO();
+    });
     await store.appendResponse(
       sanitizeResponse({
         visit_id: visit.visit_id,
@@ -70,9 +71,11 @@ export default async (req: Request) => {
     audioKey = `dictation/${visit.visit_id}/${Date.now()}.${ext}`;
     await store.putMedia(audioKey, audio.bytes, audio.mime);
     // 音檔先掛到這一場：後面轉文字失敗也不會弄丟它
-    visit.dictation = { ...visit.dictation, audio_key: audioKey, recorded_at: visit.dictation?.recorded_at || nowISO() };
-    visit.updated_at = nowISO();
-    await store.putVisit(visit);
+    const k = audioKey;
+    await store.updateVisit(visit.visit_id, (v) => {
+      v.dictation = { ...v.dictation, audio_key: k, recorded_at: v.dictation?.recorded_at || nowISO() };
+      v.updated_at = nowISO();
+    });
   }
   if (!audio && !transcript.trim()) return fail(400, "需要音檔或逐字稿");
   const started = await startBackground("transcribe", { visit_id: visit.visit_id, audio_key: audio ? audioKey : "", mime: audio?.mime || "", transcript }, req);

@@ -206,10 +206,11 @@ export async function syncVisit(visitId: string, { force = false } = {}): Promis
       failed.push(`${item.name}：${e?.message || e}`);
     }
   }
-  // 重讀一次，避免蓋掉上傳期間別處寫進去的變更
-  const fresh = (await store.getVisit(visitId)) || visit;
-  (fresh as any).drive = { folder_id: folder, url: folderUrl(folder), backed_up_at: nowISO(), items: uploaded.length, ...(failed.length ? { failed } : {}) };
-  await store.putVisit(fresh);
+  // 只寫 drive 這一格，而且寫進最新的那一份：上傳要好幾秒，這段時間裡別人存的（研究室剛填的接待人員）不能被蓋掉
+  const drive = { folder_id: folder, url: folderUrl(folder), backed_up_at: nowISO(), items: uploaded.length, ...(failed.length ? { failed } : {}) };
+  await store.updateVisit(visitId, (fresh) => {
+    (fresh as any).drive = drive;
+  });
   return { skipped: false, uploaded, failed, folder_id: folder, url: folderUrl(folder) };
 }
 

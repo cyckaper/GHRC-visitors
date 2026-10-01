@@ -90,9 +90,7 @@ export default async (req: Request) => {
   const body = await readJSON<{ visit_id?: string; room?: string; name?: string; minutes?: string | number }>(req);
   const room = String(body?.room || "");
   if (!/^30[1-5]$/.test(room)) return fail(400, "房號只有 301–305");
-  const v = await store.getVisit(String(body?.visit_id || ""));
-  if (!v) return fail(404, "找不到這一場");
-  if (visitEndAt(v) < new Date()) return fail(409, "這一場已經結束了，不能再改");
+  const visitId = String(body?.visit_id || "");
 
   // 共需幾分鐘：填一個數字就好（「20」「20 分」「２０」都收）；清空＝把這一格拿掉
   let minutes: number | null | undefined;
@@ -103,42 +101,51 @@ export default async (req: Request) => {
     if (minutes === 0) minutes = null;
   }
 
-  // 只改送上來的那一格：兩個人同時在填不同的格子，不該互相蓋掉
-  const put = (field: "presenters" | "lab_minutes", val: string | number | null | undefined) => {
-    if (val === undefined) return;
-    const map: Record<string, string | number> = { ...((v as any)[field] || {}) };
-    if (val === null || val === "") delete map[room];
-    else map[room] = val;
-    (v as any)[field] = map;
-  };
-  put("presenters", body?.name === undefined ? undefined : String(body.name ?? "").trim().slice(0, 60));
-  put("lab_minutes", minutes);
-  const now = nowISO();
-  if (minutes !== undefined) {
-    const at: Record<string, string> = { ...((v as any).lab_minutes_at || {}) };
-    // 哪幾間是研究室自己填進動線的（主辦端沒排）：支援人力表判斷「這一場排了沒」要把它們排除（rotaRooms）
-    const added = new Set<string>((((v as any).lab_added || []) as unknown[]).map(String));
-    if (minutes) {
-      // **填的分鐘自動排進行程**（明確指示）：動線上那一間改成這個分鐘數（沒有就插進去），
-      // 今日流程從開始時間往後重推——訪前的行程表、來賓專頁的參訪流程、回報那一則都照這一份。
-      // 記下是什麼時候填的：後台手上那一份如果比這個舊，存檔時不會把它蓋回去（visits.mts）
-      if (!(v.itinerary || []).some((s) => String(s.room) === room && Number(s.minutes) > 0)) added.add(room);
-      v.itinerary = withLabMinutes(v.itinerary, room, minutes) as Visit["itinerary"];
-      v.programme = retimeProgramme(v) as Visit["programme"];
-      at[room] = now;
-    } else {
-      // 清空＝「還沒回」。主辦端排的那一間不動（說不定本來就要去）；只因為研究室填了才排進去的，跟著拿掉
-      delete at[room];
-      if (added.delete(room)) {
-        v.itinerary = (v.itinerary || []).filter((s) => String(s.room) !== room);
-        v.programme = retimeProgramme(v) as Visit["programme"];
-      }
+  // 只改送上來的那一格，而且**在 updateVisit 裡改**：讀到的一定是最新那一份，寫的時候中間有人存過就重讀重改。
+  // 五間同時在填、主辦端開著行程表自動存、背景在備份 Drive——誰都不會把別人剛存的那一格蓋回去
+  let ended = false;
+  const saved = await store.updateVisit(visitId, (v) => {
+    if (visitEndAt(v) < new Date()) {
+      ended = true;
+      return false;
     }
-    (v as any).lab_minutes_at = at;
-    (v as any).lab_added = [...added];
-  }
-  (v as any).updated_at = now;
-  await store.putVisit(v);
-  await triggerDriveSync(v.visit_id);
-  return json({ ok: true, presenters: (v as any).presenters || {}, lab_minutes: (v as any).lab_minutes || {} });
+    const put = (field: "presenters" | "lab_minutes", val: string | number | null | undefined) => {
+      if (val === undefined) return;
+      const map: Record<string, string | number> = { ...((v as any)[field] || {}) };
+      if (val === null || val === "") delete map[room];
+      else map[room] = val;
+      (v as any)[field] = map;
+    };
+    put("presenters", body?.name === undefined ? undefined : String(body.name ?? "").trim().slice(0, 60));
+    put("lab_minutes", minutes);
+    const now = nowISO();
+    if (minutes !== undefined) {
+      const at: Record<string, string> = { ...((v as any).lab_minutes_at || {}) };
+      // 哪幾間是研究室自己填進動線的（主辦端沒排）：支援人力表判斷「這一場排了沒」要把它們排除（rotaRooms）
+      const added = new Set<string>((((v as any).lab_added || []) as unknown[]).map(String));
+      if (minutes) {
+        // **填的分鐘自動排進行程**（明確指示）：動線上那一間改成這個分鐘數（沒有就插進去），
+        // 今日流程從開始時間往後重推——訪前的行程表、來賓專頁的參訪流程、回報那一則都照這一份。
+        // 記下是什麼時候填的：後台手上那一份如果比這個舊，存檔時不會把它蓋回去（visits.mts）
+        if (!(v.itinerary || []).some((s) => String(s.room) === room && Number(s.minutes) > 0)) added.add(room);
+        v.itinerary = withLabMinutes(v.itinerary, room, minutes) as Visit["itinerary"];
+        v.programme = retimeProgramme(v) as Visit["programme"];
+        at[room] = now;
+      } else {
+        // 清空＝「還沒回」。主辦端排的那一間不動（說不定本來就要去）；只因為研究室填了才排進去的，跟著拿掉
+        delete at[room];
+        if (added.delete(room)) {
+          v.itinerary = (v.itinerary || []).filter((s) => String(s.room) !== room);
+          v.programme = retimeProgramme(v) as Visit["programme"];
+        }
+      }
+      (v as any).lab_minutes_at = at;
+      (v as any).lab_added = [...added];
+    }
+    (v as any).updated_at = now;
+  });
+  if (!saved) return fail(404, "找不到這一場");
+  if (ended) return fail(409, "這一場已經結束了，不能再改");
+  await triggerDriveSync(saved.visit_id);
+  return json({ ok: true, presenters: (saved as any).presenters || {}, lab_minutes: (saved as any).lab_minutes || {} });
 };

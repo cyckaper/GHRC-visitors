@@ -38,9 +38,10 @@ export default async (req: Request) => {
 
   try {
     if (body.done) {
-      (visit as any).drive = { ...((visit as any).drive || {}), backed_up_at: nowISO(), items: Number(body.items) || 0 };
-      await store.putVisit(visit);
-      return json({ ok: true, drive: (visit as any).drive });
+      const saved = await store.updateVisit(visit.visit_id, (v) => {
+        (v as any).drive = { ...((v as any).drive || {}), backed_up_at: nowISO(), items: Number(body.items) || 0 };
+      });
+      return json({ ok: true, drive: (saved as any)?.drive || null });
     }
 
     const key = String(body.key || "");
@@ -51,10 +52,10 @@ export default async (req: Request) => {
     if (!payload) return fail(404, `媒體庫裡找不到 ${key}`);
     const folder = await ensureVisitFolder(visit);
     const file = await uploadItem(folder, item.name, payload.mime, payload.bytes);
-    const drive = { ...((visit as any).drive || {}), folder_id: folder, url: folderUrl(folder) };
-    (visit as any).drive = drive;
-    await store.putVisit(visit);
-    return json({ ok: true, file: { name: item.name, id: file.id, url: file.webViewLink, bytes: payload.bytes.length }, drive });
+    const saved = await store.updateVisit(visit.visit_id, (v) => {
+      (v as any).drive = { ...((v as any).drive || {}), folder_id: folder, url: folderUrl(folder) };
+    });
+    return json({ ok: true, file: { name: item.name, id: file.id, url: file.webViewLink, bytes: payload.bytes.length }, drive: (saved as any)?.drive || null });
   } catch (e: any) {
     return fail(502, `Drive 備份失敗：${e?.message || e}`);
   }

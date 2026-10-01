@@ -63,39 +63,55 @@ export default async (req: Request) => {
         renameBlocked = true;
       }
     }
-    const merged = normalizeVisit(body, siteUrl(req));
-    if (!merged.org?.name) return fail(400, "單位名稱必填");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(merged.date)) return fail(400, "日期格式需為 YYYY-MM-DD");
-    const renamedFrom = current && merged.visit_id !== previousId ? previousId : "";
-    if (renamedFrom && (await store.getVisit(merged.visit_id))) return fail(409, `已經有一場叫 ${merged.visit_id} 了，請換一個網址代碼`);
-    const existing = renamedFrom ? current : await store.getVisit(merged.visit_id);
-    // 後台表單不管這幾件事（簽名簿、口述、名片、當天資料、信件、摘要、Drive、自動提醒都是別的端點或
-    // 背景工作寫的）。body 沒帶就沿用現有的：不然在別的分頁開著舊資料按一下存檔，就會把它們清掉——
-    // 提醒紀錄被清掉還會害後續提醒重寄一次。
-    if (existing) for (const k of KEPT) if ((body as any)[k] === undefined) (merged as any)[k] = (existing as any)[k];
-    // 各研究室自己填的那幾格：帶了也不算，一律沿用伺服器上的（見 ROTA_FIELDS）
-    if (existing) for (const k of ROTA_FIELDS) if ((existing as any)[k] !== undefined) (merged as any)[k] = (existing as any)[k];
-    // 訪客地圖上的位置只有 geo-background 在寫：後台送回來的那一份一律不算（單位改了名字，key 對不上就會重查）
-    if (existing) (merged as any).geo = (existing as any).geo;
-    // 研究室填的分鐘已經自動排進行程（/api/rota）。**後台手上那一份還沒看過**（它的 updated_at 比那一間
-    // 填的時間早）就不能把它蓋回去：那幾間照伺服器上的分鐘、今日流程重推一次。看過之後主辦端要改就照他的。
-    const base = String((body as any).updated_at || "");
-    const filledAt: Record<string, string> = (existing as any)?.lab_minutes_at || {};
-    const unseen = existing ? Object.keys(filledAt).filter((room) => !base || filledAt[room] > base) : [];
-    for (const room of unseen) {
-      const step = (existing!.itinerary || []).find((s) => String(s.room) === room);
-      if (step && Number(step.minutes) > 0) merged.itinerary = withLabMinutes(merged.itinerary, room, Number(step.minutes)) as Visit["itinerary"];
-    }
-    if (unseen.length) merged.programme = retimeProgramme(merged) as Visit["programme"];
-    merged.created_at = existing?.created_at || nowISO();
-    merged.updated_at = nowISO();
-    // 剛產出來的那一份簡報：把**這一刻的行程指紋**記下來，之後行程改了才知道手上那個 .pptx 是舊的。
-    // 指紋由伺服器蓋（前端只送 generated_at），算法就不會有兩份。
-    if (merged.deck?.generated_at && merged.deck.generated_at !== existing?.deck?.generated_at) merged.deck = { ...merged.deck, fingerprint: deckFingerprint(merged) };
-    await store.putVisit(merged);
+    const fromForm = normalizeVisit(body, siteUrl(req));
+    if (!fromForm.org?.name) return fail(400, "單位名稱必填");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fromForm.date)) return fail(400, "日期格式需為 YYYY-MM-DD");
+    const renamedFrom = current && fromForm.visit_id !== previousId ? previousId : "";
+    if (renamedFrom && (await store.getVisit(fromForm.visit_id))) return fail(409, `已經有一場叫 ${fromForm.visit_id} 了，請換一個網址代碼`);
+    // 後台表單那一份 ＋ 伺服器上現有的那一份。**一定要拿最新的那一份來合**：這一段在 updateVisit 裡跑，
+    // 中間有人存過（研究室剛在支援人力表上填、背景剛備份完 Drive）就重讀重合，不會把人家剛存的蓋回去
+    let unseen: string[] = [];
+    const mergeWith = (existing: Visit | null): Visit => {
+      const merged = structuredClone(fromForm);
+      // 後台表單不管這幾件事（簽名簿、口述、名片、當天資料、信件、摘要、Drive、自動提醒都是別的端點或
+      // 背景工作寫的）。body 沒帶就沿用現有的：不然在別的分頁開著舊資料按一下存檔，就會把它們清掉——
+      // 提醒紀錄被清掉還會害後續提醒重寄一次。
+      if (existing) for (const k of KEPT) if ((body as any)[k] === undefined) (merged as any)[k] = (existing as any)[k];
+      // 各研究室自己填的那幾格：帶了也不算，一律沿用伺服器上的（見 ROTA_FIELDS）
+      if (existing) for (const k of ROTA_FIELDS) if ((existing as any)[k] !== undefined) (merged as any)[k] = (existing as any)[k];
+      // 訪客地圖上的位置只有 geo-background 在寫：後台送回來的那一份一律不算（單位改了名字，key 對不上就會重查）
+      if (existing) (merged as any).geo = (existing as any).geo;
+      // 研究室填的分鐘已經自動排進行程（/api/rota）。**後台手上那一份還沒看過**（它的 updated_at 比那一間
+      // 填的時間早）就不能把它蓋回去：那幾間照伺服器上的分鐘、今日流程重推一次。看過之後主辦端要改就照他的。
+      const base = String((body as any).updated_at || "");
+      const filledAt: Record<string, string> = (existing as any)?.lab_minutes_at || {};
+      unseen = existing ? Object.keys(filledAt).filter((room) => !base || filledAt[room] > base) : [];
+      for (const room of unseen) {
+        const step = (existing!.itinerary || []).find((s) => String(s.room) === room);
+        if (step && Number(step.minutes) > 0) merged.itinerary = withLabMinutes(merged.itinerary, room, Number(step.minutes)) as Visit["itinerary"];
+      }
+      if (unseen.length) merged.programme = retimeProgramme(merged) as Visit["programme"];
+      merged.created_at = existing?.created_at || nowISO();
+      merged.updated_at = nowISO();
+      // 剛產出來的那一份簡報：把**這一刻的行程指紋**記下來，之後行程改了才知道手上那個 .pptx 是舊的。
+      // 指紋由伺服器蓋（前端只送 generated_at），算法就不會有兩份。
+      if (merged.deck?.generated_at && merged.deck.generated_at !== existing?.deck?.generated_at) merged.deck = { ...merged.deck, fingerprint: deckFingerprint(merged) };
+      return merged;
+    };
+    let merged: Visit;
     if (renamedFrom) {
+      // 改網址代碼＝搬家：新的那一筆照舊那一筆（剛剛重讀的）合起來寫，再刪掉舊的
+      merged = mergeWith((await store.getVisit(renamedFrom)) || current);
+      await store.putVisit(merged);
       await store.deleteVisit(renamedFrom);
       await moveDraft(renamedFrom, merged.visit_id); // 手上還沒交出去的東西不該跟著舊網址消失
+    } else {
+      const updated = await store.updateVisit(fromForm.visit_id, (existing) => mergeWith(existing));
+      if (updated) merged = updated;
+      else {
+        merged = mergeWith(null); // 新的一場
+        await store.putVisit(merged);
+      }
     }
     await triggerDriveSync(merged.visit_id);
     // rota_applied：這一次存檔時，哪幾間研究室剛填的分鐘被保留下來（後台照這個說一聲「行程已照研究室填的更新」）

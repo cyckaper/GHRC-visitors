@@ -7,6 +7,7 @@ import { labRecipients, recipientList, scheduleFingerprint } from "../../lib/vis
 import { ensureRotaKey } from "./settings.mts";
 import { triggerDriveSync } from "../lib/drive.mts";
 import { gmailSend } from "../lib/mail.mts";
+import type { Visit } from "../lib/types.mts";
 
 type Input = {
   mode: "draft" | "send";
@@ -44,21 +45,24 @@ export default backgroundHandler<Input>("信件", async (input, req) => {
         failed.push({ email: r.email, error: String(e?.message || e) });
       }
     }
-    if (kind === "notice" || kind === "rundown") {
-      // 內部通告：寄 email 只是備援（多半是複製到 LINE 群組），一樣記下寄給誰、什麼時候寄的
-      const prev = visit.letters[kind];
-      visit.letters[kind] = { subject, body: text, sender: input.sender || prev?.sender || "director", drafted_at: prev?.drafted_at || nowISO(), sent_to: [...(prev?.sent_to || []), ...sent], sent_at: nowISO() };
-    } else if (kind === "thanks") {
-      visit.letters.thanks = { subject, body: text, sender: input.sender || visit.letters.thanks?.sender || "director", drafted_at: visit.letters.thanks?.drafted_at || nowISO(), sent_to: [...(visit.letters.thanks?.sent_to || []), ...sent], sent_at: nowISO() };
-      if (!failed.length) visit.status = "done";
-    } else {
-      // 確認信也記下寄給誰、什麼時候寄的：信裡有來賓專頁的網址，寄出去之後那個網址就不能再改了。
-      // 一併記下**寄出那一刻的行程指紋**：之後行程再改，畫面才有辦法說「對方手上的時間是舊的」。
-      visit.letters.confirmation = { subject, body: text, sender: input.sender || visit.letters.confirmation?.sender || "contact", drafted_at: visit.letters.confirmation?.drafted_at || nowISO(), sent_to: [...(visit.letters.confirmation?.sent_to || []), ...sent], sent_at: nowISO(), fingerprint: scheduleFingerprint(visit) };
-      if (visit.status === "draft") visit.status = "confirmed";
-    }
-    visit.updated_at = nowISO();
-    await store.putVisit(visit);
+    // 信寄完才記（寄信不能重來，所以放在 updateVisit 外面）；記的時候只動 letters／status，寫進最新的那一份
+    await store.updateVisit(visit.visit_id, (v) => {
+      v.letters = v.letters || ({} as Visit["letters"]);
+      if (kind === "notice" || kind === "rundown") {
+        // 內部通告：寄 email 只是備援（多半是複製到 LINE 群組），一樣記下寄給誰、什麼時候寄的
+        const prev = v.letters[kind];
+        v.letters[kind] = { subject, body: text, sender: input.sender || prev?.sender || "director", drafted_at: prev?.drafted_at || nowISO(), sent_to: [...(prev?.sent_to || []), ...sent], sent_at: nowISO() };
+      } else if (kind === "thanks") {
+        v.letters.thanks = { subject, body: text, sender: input.sender || v.letters.thanks?.sender || "director", drafted_at: v.letters.thanks?.drafted_at || nowISO(), sent_to: [...(v.letters.thanks?.sent_to || []), ...sent], sent_at: nowISO() };
+        if (!failed.length) v.status = "done";
+      } else {
+        // 確認信也記下寄給誰、什麼時候寄的：信裡有來賓專頁的網址，寄出去之後那個網址就不能再改了。
+        // 一併記下**寄出那一刻的行程指紋**：之後行程再改，畫面才有辦法說「對方手上的時間是舊的」。
+        v.letters.confirmation = { subject, body: text, sender: input.sender || v.letters.confirmation?.sender || "contact", drafted_at: v.letters.confirmation?.drafted_at || nowISO(), sent_to: [...(v.letters.confirmation?.sent_to || []), ...sent], sent_at: nowISO(), fingerprint: scheduleFingerprint(v) };
+        if (v.status === "draft") v.status = "confirmed";
+      }
+      v.updated_at = nowISO();
+    });
     await triggerDriveSync(visit.visit_id);
     return { ok: failed.length === 0, sent: sent.length > 0, sent_to: sent, failed };
   }
@@ -70,13 +74,16 @@ export default backgroundHandler<Input>("信件", async (input, req) => {
   // 只有通告要，回報與來賓信用不到——不為了它們去產一個連結
   const rotaUrl = kind === "notice" ? `${siteUrl(req)}/rota?key=${await ensureRotaKey()}` : "";
   const draft = await draftLetter({ kind, visit, labs, i18n, sender, siteUrl: siteUrl(req), rotaUrl, mostWantedRooms: mostWanted });
-  if (kind === "notice" || kind === "rundown") {
-    const prev = visit.letters[kind];
-    visit.letters[kind] = { ...draft, sender, drafted_at: nowISO(), sent_to: prev?.sent_to, sent_at: prev?.sent_at };
-  } else if (kind === "thanks") visit.letters.thanks = { ...draft, sender, drafted_at: nowISO(), sent_to: visit.letters.thanks?.sent_to, sent_at: visit.letters.thanks?.sent_at };
-  else visit.letters.confirmation = { ...draft, drafted_at: nowISO() };
-  visit.updated_at = nowISO();
-  await store.putVisit(visit);
+  // AI 草擬要一兩分鐘：寫回去的時候只動 letters 這一格，而且寫進最新的那一份
+  await store.updateVisit(visit.visit_id, (v) => {
+    v.letters = v.letters || ({} as Visit["letters"]);
+    if (kind === "notice" || kind === "rundown") {
+      const prev = v.letters[kind];
+      v.letters[kind] = { ...draft, sender, drafted_at: nowISO(), sent_to: prev?.sent_to, sent_at: prev?.sent_at };
+    } else if (kind === "thanks") v.letters.thanks = { ...draft, sender, drafted_at: nowISO(), sent_to: v.letters.thanks?.sent_to, sent_at: v.letters.thanks?.sent_at };
+    else v.letters.confirmation = { ...draft, drafted_at: nowISO() };
+    v.updated_at = nowISO();
+  });
   const recipients = kind === "notice" || kind === "rundown" ? labRecipients(visit, labs) : recipientList(visit, responses);
   return { kind, sender, draft, recipients };
 });

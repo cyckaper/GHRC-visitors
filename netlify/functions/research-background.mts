@@ -18,13 +18,13 @@ export default backgroundHandler<{ visit_id?: string; visit?: Partial<Visit> }>(
   const visit = (input.visit || saved) as Visit;
   if (!visit) throw new Error("沒有可以查的參訪資料");
 
+  // 查網路要一兩分鐘：寫回去的時候只動 background 這一格，而且寫進最新的那一份
   const write = async (background: any) => {
     if (!id) return;
-    const fresh = (await store.getVisit(id)) || saved;
-    if (!fresh) return;
-    (fresh as any).background = background;
-    fresh.updated_at = nowISO();
-    await store.putVisit(fresh);
+    await store.updateVisit(id, (fresh) => {
+      (fresh as any).background = background;
+      fresh.updated_at = nowISO();
+    });
   };
 
   try {

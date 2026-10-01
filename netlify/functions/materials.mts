@@ -23,27 +23,32 @@ export default async (req: Request) => {
   const current = sanitizeMaterials(visit.materials);
   const isKey = (x: string) => /^materials\/[\w-]+\/[\w.-]+$/.test(x);
 
+  // 改 materials 這一格一律在 updateVisit 裡做（只動這一格、寫進最新的那一份）；刪檔、上傳這種事放在外面
   if (body.action === "save") {
     const next = sanitizeMaterials(body.materials);
+    let before = current;
+    await store.updateVisit(visit.visit_id, (v) => {
+      before = sanitizeMaterials(v.materials);
+      v.materials = next;
+      v.updated_at = nowISO();
+    });
     // 被拿掉的媒體檔一起刪
     const keep = new Set([next.deck_pdf, ...next.photos]);
-    for (const k of [current.deck_pdf, ...current.photos]) if (k && isKey(k) && !keep.has(k)) await store.deleteMedia(k).catch(() => {});
-    visit.materials = next;
-    visit.updated_at = nowISO();
-    await store.putVisit(visit);
+    for (const k of [before.deck_pdf, ...before.photos]) if (k && isKey(k) && !keep.has(k)) await store.deleteMedia(k).catch(() => {});
     await triggerDriveSync(visit.visit_id);
     return json({ ok: true, materials: next });
   }
 
   if (body.action === "remove") {
     const key = String(body.key || "");
-    const next = sanitizeMaterials({ ...current, deck_pdf: current.deck_pdf === key ? "" : current.deck_pdf, photos: current.photos.filter((p: string) => p !== key) });
+    const saved = await store.updateVisit(visit.visit_id, (v) => {
+      const cur = sanitizeMaterials(v.materials);
+      v.materials = sanitizeMaterials({ ...cur, deck_pdf: cur.deck_pdf === key ? "" : cur.deck_pdf, photos: cur.photos.filter((p: string) => p !== key) });
+      v.updated_at = nowISO();
+    });
     if (isKey(key)) await store.deleteMedia(key).catch(() => {});
-    visit.materials = next;
-    visit.updated_at = nowISO();
-    await store.putVisit(visit);
     await triggerDriveSync(visit.visit_id);
-    return json({ ok: true, materials: next });
+    return json({ ok: true, materials: saved?.materials || current });
   }
 
   if (body.action === "upload") {
@@ -59,21 +64,33 @@ export default async (req: Request) => {
     if (kind === "photo" && !mediaType.startsWith("image/")) return fail(400, "合照請上傳圖片檔");
     const ext = kind === "pdf" ? "pdf" : mediaType.includes("png") ? "png" : mediaType.includes("webp") ? "webp" : "jpg";
     const base = String(body.name || "").replace(/\.[^.]+$/, "").normalize("NFKD").replace(/[^\w-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || (kind === "pdf" ? "slides" : "photo");
+    if (kind === "photo" && current.photos.length >= 30) return fail(400, "合照最多 30 張");
     const key = `materials/${visit.visit_id}/${Date.now()}-${base}.${ext}`;
     await store.putMedia(key, new Uint8Array(bytes), kind === "pdf" ? "application/pdf" : mediaType);
-    const next = { ...current };
-    if (kind === "pdf") {
-      if (current.deck_pdf && isKey(current.deck_pdf)) await store.deleteMedia(current.deck_pdf).catch(() => {});
-      next.deck_pdf = key;
-    } else {
-      if (current.photos.length >= 30) return fail(400, "合照最多 30 張");
-      next.photos = [...current.photos, key];
+    let replaced = "";
+    let full = false;
+    const saved = await store.updateVisit(visit.visit_id, (v) => {
+      const cur = sanitizeMaterials(v.materials);
+      const next = { ...cur };
+      replaced = "";
+      if (kind === "pdf") {
+        replaced = cur.deck_pdf;
+        next.deck_pdf = key;
+      } else {
+        full = cur.photos.length >= 30;
+        if (full) return false;
+        next.photos = [...cur.photos, key];
+      }
+      v.materials = sanitizeMaterials(next);
+      v.updated_at = nowISO();
+    });
+    if (full) {
+      await store.deleteMedia(key).catch(() => {});
+      return fail(400, "合照最多 30 張");
     }
-    visit.materials = sanitizeMaterials(next);
-    visit.updated_at = nowISO();
-    await store.putVisit(visit);
+    if (replaced && replaced !== key && isKey(replaced)) await store.deleteMedia(replaced).catch(() => {});
     await triggerDriveSync(visit.visit_id);
-    return json({ ok: true, key, url: `/api/media?key=${encodeURIComponent(key)}`, materials: visit.materials });
+    return json({ ok: true, key, url: `/api/media?key=${encodeURIComponent(key)}`, materials: saved?.materials || current });
   }
 
   return fail(400, "action 需要是 upload、save 或 remove");

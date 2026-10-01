@@ -32,28 +32,36 @@ export default async (req: Request) => {
     // 只有「整批都沒東西可讀」才算錯；同一張名片再存一次是沒事的 no-op（added=merged=0）
     const incoming = (Array.isArray(body.guests) ? body.guests : []).filter((g: any) => String(g?.name || "").trim() || String(g?.email || "").trim());
     if (!incoming.length) return fail(400, "沒有可以加進名單的資料（姓名與 email 至少要有一個）");
-    const { guests, added, merged } = mergeGuests(visit.guests, incoming);
-    visit.guests = guests;
-    visit.headcount = Math.max(Number(visit.headcount) || 0, guests.length);
+    // 併進名單要拿最新的名單來併（主辦端可能剛在訪前分頁改過），在 updateVisit 裡做
     const key = String(body.photo_key || "");
-    if (isCardKey(key) && !cards.some((c) => c.key === key)) {
-      cards.push({ key, names: (body.guests || []).map((g: any) => String(g?.name || "").trim()).filter(Boolean), read_at: nowISO() });
-      (visit as any).cards = cards;
-    }
-    visit.updated_at = nowISO();
-    await store.putVisit(visit);
+    let added = 0;
+    let merged = 0;
+    const saved = await store.updateVisit(visit.visit_id, (v) => {
+      const r = mergeGuests(v.guests, incoming);
+      added = r.added;
+      merged = r.merged;
+      v.guests = r.guests;
+      v.headcount = Math.max(Number(v.headcount) || 0, r.guests.length);
+      const list: { key: string; names: string[]; read_at: string }[] = Array.isArray((v as any).cards) ? (v as any).cards : [];
+      if (isCardKey(key) && !list.some((c) => c.key === key)) {
+        list.push({ key, names: (body.guests || []).map((g: any) => String(g?.name || "").trim()).filter(Boolean), read_at: nowISO() });
+        (v as any).cards = list;
+      }
+      v.updated_at = nowISO();
+    });
     await triggerDriveSync(visit.visit_id);
-    return json({ ok: true, added, merged, guests: visit.guests, cards });
+    return json({ ok: true, added, merged, guests: saved?.guests || [], cards: (saved as any)?.cards || cards });
   }
 
   if (body.action === "remove") {
     const key = String(body.key || "");
     if (isCardKey(key)) await store.deleteMedia(key).catch(() => {});
-    (visit as any).cards = cards.filter((c) => c.key !== key);
-    visit.updated_at = nowISO();
-    await store.putVisit(visit);
+    const saved = await store.updateVisit(visit.visit_id, (v) => {
+      (v as any).cards = (Array.isArray((v as any).cards) ? (v as any).cards : []).filter((c: { key: string }) => c.key !== key);
+      v.updated_at = nowISO();
+    });
     await triggerDriveSync(visit.visit_id);
-    return json({ ok: true, cards: (visit as any).cards });
+    return json({ ok: true, cards: (saved as any)?.cards || [] });
   }
 
   const raw = String(body.image || "");

@@ -32,9 +32,10 @@ export default async (req: Request) => {
       await store.appendResponse(sanitizeResponse({ visit_id: visit.visit_id, source: "signbook", anonymous: false, name: e.signed_by || "", signbook_text: text }));
       n++;
     }
-    visit.signbook = { ...visit.signbook, entries, read_at: visit.signbook?.read_at || nowISO() };
-    visit.updated_at = nowISO();
-    await store.putVisit(visit);
+    await store.updateVisit(visit.visit_id, (v) => {
+      v.signbook = { ...v.signbook, entries, read_at: v.signbook?.read_at || nowISO() };
+      v.updated_at = nowISO();
+    });
     await triggerDriveSync(visit.visit_id);
     return json({ ok: true, saved: n });
   }
@@ -50,9 +51,10 @@ export default async (req: Request) => {
   const key = `signbook/${visit.visit_id}/${Date.now()}.${ext}`;
   await store.putMedia(key, new Uint8Array(bytes), mediaType);
   // 照片先掛到這一場：後面讀字失敗也不會弄丟它
-  visit.signbook = { ...visit.signbook, photo_key: key };
-  visit.updated_at = nowISO();
-  await store.putVisit(visit);
+  await store.updateVisit(visit.visit_id, (v) => {
+    v.signbook = { ...v.signbook, photo_key: key };
+    v.updated_at = nowISO();
+  });
   const started = await startBackground("signbook", { visit_id: visit.visit_id, photo_key: key, media_type: mediaType }, req);
   const out = await started.json();
   return json({ ...out, photo_key: key }, { status: started.status });
