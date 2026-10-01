@@ -1134,3 +1134,19 @@ test("訪客地圖：每個單位查一次位置（背景工作），單位改�
 
   for (const id of [a, b, c]) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
 });
+
+test("中心首頁的世界地圖（公開）：只列已經來過的單位、所在地與來過幾次；日期、名單、email、目的一律不給", async () => {
+  const mk = async (org, date, code) => (await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ org, date, code, start_time: "10:00", end_time: "11:30", guests: [{ name: "Private Person", email: "private.person@example.org", role: "lead" }], purpose: "a confidential purpose" }) })).body.visit.visit_id;
+  const konkuk = { name: "Konkuk University", name_local: "건국대학교", country: "South Korea" };
+  const ids = [await mk(konkuk, "2025-04-21", "pubmapa"), await mk(konkuk, "2025-11-25", "pubmapb"), await mk({ name: "Ministry of Something", country: "Japan" }, "2099-12-01", "pubmapc")];
+  const r = await api("/api/visitor-map"); // 不帶任何授權：首頁誰都打得開
+  assert.equal(r.status, 200);
+  const rows = r.body.institutions;
+  const row = rows.find((x) => x.name === "Konkuk University");
+  assert.ok(row && row.visits === 2 && row.country === "South Korea" && row.local === "건국대학교", `同一個單位來過兩次合成一筆：${JSON.stringify(rows)}`);
+  assert.deepEqual(Object.keys(row).sort(), ["country", "geo", "local", "name", "visits"], "只給地圖用得到的欄位");
+  assert.ok(!rows.some((x) => x.name === "Ministry of Something"), "還沒來的不先公告（部長級的行程不該先出現在首頁上）");
+  assert.doesNotMatch(JSON.stringify(r.body), /private|@|confidential|2025-04-21|2025-11-25|visit_id|headcount|guests|purpose/i, "名單、email、日期、目的一律不給");
+  assert.match(r.headers.get("cache-control") || "", /public/, "公開的，可以讓 CDN 幫忙擋");
+  for (const id of ids) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
+});

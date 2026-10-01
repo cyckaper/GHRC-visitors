@@ -372,8 +372,8 @@ try {
   await page.click("#mapIn");
   await page.waitForFunction(() => Number(document.querySelector("#worldMap svg").getAttribute("viewBox").split(" ")[2]) === 180);
   check(true, "＋ zooms in");
-  await page.waitForFunction(() => (document.getElementById("mapLandDetail").getAttribute("d") || "").length > 100000 && document.getElementById("mapLandDetail").getAttribute("display") === "inline", null, { timeout: 30000 });
-  check((await page.getAttribute("#mapLand", "display")) === "none", "…and once zoomed in, the finer coastline takes over");
+  await page.waitForFunction(() => (document.querySelector("#worldMap .wm-land-detail").getAttribute("d") || "").length > 100000 && document.querySelector("#worldMap .wm-land-detail").getAttribute("display") === "inline", null, { timeout: 30000 });
+  check((await page.getAttribute("#worldMap .wm-land:not(.wm-land-detail)", "display")) === "none", "…and once zoomed in, the finer coastline takes over");
   const viewBox = () => page.evaluate(() => document.querySelector("#worldMap svg").getAttribute("viewBox").split(" ").map(Number));
   const mapBox = await page.locator("#worldMap svg").boundingBox();
   const beforeDrag = await viewBox();
@@ -390,7 +390,7 @@ try {
   check(true, "…and a trackpad pinch zooms further in");
   await page.click("#mapReset");
   await page.waitForFunction(() => Number(document.querySelector("#worldMap svg").getAttribute("viewBox").split(" ")[2]) === 720);
-  check((await page.getAttribute("#mapLand", "display")) === "inline", "全圖 goes back to the whole world");
+  check((await page.getAttribute("#worldMap .wm-land:not(.wm-land-detail)", "display")) === "inline", "全圖 goes back to the whole world");
   // 還在整張世界地圖時，一般滾輪是捲頁面，不會被地圖吃掉
   const scrolled = await page.evaluate(() => window.scrollY);
   await page.mouse.move(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2);
@@ -658,6 +658,8 @@ try {
   }
 
   // ── 中心首頁（/）：介紹中心，五間研究室各連到自己的介紹頁 ──
+  // 首頁的世界地圖只標**已經來過**的單位：建一場過去的（只填了國家、還沒查位置——放在國家的位置）
+  const pastVisit = await (await fetch(`${base}/api/visits`, { method: "POST", headers: { authorization: "Bearer e2e-token", "content-type": "application/json" }, body: JSON.stringify({ org: { name: "Konkuk University", name_local: "건국대학교", country: "South Korea" }, date: "2025-04-21", code: "konkuk", start_time: "10:00", end_time: "11:30" }) })).json();
   await page.goto(`${base}/`);
   await page.waitForFunction(() => document.querySelectorAll("#labs .lab-card").length === 5, null, { timeout: 15000 });
   check((await page.textContent("h1")) === "Green Health Research Center", "/ is the centre's homepage, not an empty visit page");
@@ -671,6 +673,14 @@ try {
   }), "…no evidence-loop block, and the five laboratory cards sit between the organisation and the contact section");
   check((await page.textContent("#labsTitle")) === "The five laboratories", "…under a plain heading");
   check(!/Cornell/.test(await page.textContent("#members")) && (await page.locator("#members li").count()) === 7, "…and the international platform does not list Cornell");
+  // 來訪單位：跟後台「資料」分頁同一張世界地圖（明確要求），只標已經來過的
+  await page.waitForSelector("#visitorsSec:not([hidden]) #visitorMap [data-cluster]", { timeout: 15000 });
+  const visitorLabels = await page.$$eval("#visitorMap [data-cluster]", (els) => els.map((g) => g.getAttribute("aria-label")));
+  check(visitorLabels.some((l) => /Konkuk University/.test(l)) && !visitorLabels.some((l) => /Western Australia/.test(l)), `the homepage marks the institutions that have visited on the world map, not the ones still to come (${visitorLabels.join(" | ")})`);
+  await page.click("#visitorMap [data-cluster] circle.hit");
+  await page.waitForFunction(() => document.querySelectorAll("#visitorPick [data-place]").length === 1);
+  check(/South Korea · 1 visit/.test(await page.textContent("#visitorPick")) && !/2025-04-21/.test(await page.textContent("#visitorsSec")), "…tapping a dot says who it is, where, and how many times — no dates");
+  await fetch(`${base}/api/visits?id=${encodeURIComponent(pastVisit.visit.visit_id)}`, { method: "DELETE", headers: { authorization: "Bearer e2e-token" } });
   check(!/301\s*[-–]\s*304|four lab/i.test(await page.textContent("main")), "…and nowhere says four laboratories or 301–304");
   await page.click("#langToggle");
   await page.waitForFunction(() => document.querySelector("h1")?.textContent === "綠色健康研究中心" && document.querySelectorAll("#labs .lab-card").length === 5, null, { timeout: 15000 });
