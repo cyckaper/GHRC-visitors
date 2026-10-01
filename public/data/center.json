@@ -84,7 +84,7 @@
  "organisation": {
   "people": [
    { "role_en": "Director", "role_zh": "中心主任", "name_en": "Chun-Yen Chang", "name_zh": "張俊彥", "dept_en": "Horticulture and Landscape Architecture", "dept_zh": "園藝暨景觀學系" },
-   { "role_en": "Co-principal investigator (former director)", "role_zh": "共同主持人（前任主任）", "name_en": "Hui-Mei Chen", "name_zh": "陳惠美", "dept_en": "Horticulture and Landscape Architecture", "dept_zh": "園藝暨景觀學系" }
+   { "role_en": "Inaugural Director", "role_zh": "首任主任", "name_en": "Hui-Mei Chen", "name_zh": "陳惠美", "dept_en": "Horticulture and Landscape Architecture", "dept_zh": "園藝暨景觀學系" }
   ],
   "divisions": [
    { "role_en": "Horticultural Therapy", "role_zh": "園藝療癒組", "name_en": "Po-Ju Chang", "name_zh": "張伯茹", "dept_en": "Horticulture and Landscape Architecture", "dept_zh": "園藝暨景觀學系" },
