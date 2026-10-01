@@ -2,6 +2,7 @@ import { fail, json, nowISO, readJSON, requireAdmin, siteUrl } from "../lib/http
 import { extractFile } from "../lib/files.mts";
 import { pollJob, startBackground } from "../lib/jobs.mts";
 import { getStore } from "../lib/store.mts";
+import { purgePublicVisits } from "../lib/cdn.mts";
 import { aiConfigured } from "../lib/ai.mts";
 import type { Visit } from "../lib/types.mts";
 import { importedVisit, parseVisitTable, planImport } from "../../lib/import.mjs";
@@ -77,5 +78,7 @@ async function commit(body: any, req: Request): Promise<Response> {
     await Promise.all(batch.map((v) => store.putVisit(v)));
     created.push(...batch.map((v) => v.visit_id));
   }
+  // 首頁的地圖與來訪紀錄頁：匯入完重新整理就看得到，不必等 CDN 那一份過期
+  if (created.length) await purgePublicVisits();
   return json({ ok: true, created, skipped });
 }

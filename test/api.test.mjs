@@ -1151,6 +1151,71 @@ test("中心首頁的世界地圖（公開）：只列已經來過的單位、�
   for (const id of ids) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
 });
 
+test("同一個單位英文拼法不一樣（實際發生過：惇陽工程兩場）：首頁地圖、來訪紀錄、資料分頁都算一個單位", async () => {
+  const mk = async (name, date, code) => (await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ org: { name, name_local: "測試工程顧問有限公司", country: "Taiwan", type: "enterprise" }, date, code, start_time: "10:00", end_time: "11:30" }) })).body.visit.visit_id;
+  const ids = [await mk("Ce Shi Engineering Consultants Co., Ltd.", "2025-09-23", "sameorga"), await mk("Ceshi Engineering Consultants Co., Ltd.", "2025-09-30", "sameorgb")];
+  const rows = (await api("/api/visitor-map")).body.institutions.filter((x) => x.local === "測試工程顧問有限公司");
+  assert.equal(rows.length, 1, `首頁地圖上一個點：${JSON.stringify(rows)}`);
+  assert.equal(rows[0].visits, 2);
+  assert.equal(rows[0].name, "Ceshi Engineering Consultants Co., Ltd.", "名稱照最近那一場的寫法");
+  const orgs = (await api("/api/visit-log")).body.visits.flatMap((e) => e.orgs).filter((o) => o.local === "測試工程顧問有限公司");
+  assert.ok(orgs.length === 2 && orgs[0].inst && orgs[0].inst === orgs[1].inst, `來訪紀錄上兩場帶同一個單位代碼：${JSON.stringify(orgs)}`);
+  const listed = (await api("/api/visits", { headers: admin })).body.visits.filter((v) => ids.includes(v.visit_id));
+  assert.ok(listed.length === 2 && listed[0].inst && listed[0].inst === listed[1].inst, "資料分頁的地圖照同一個代碼合成一個點");
+  for (const id of ids) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
+});
+
+test("資料一改就清掉公開頁的快取：匯入、改公開說明、改或刪來過的那一場才清；還沒來的存再多次也不清；瀏覽器不留", async () => {
+  const realFetch = globalThis.fetch;
+  const purges = [];
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).startsWith("https://api.netlify.com/api/v1/purge")) {
+      purges.push({ auth: new Headers(init.headers).get("authorization"), body: JSON.parse(String(init.body)) });
+      return new Response("", { status: 202 });
+    }
+    return realFetch(url, init);
+  };
+  process.env.NETLIFY_PURGE_API_TOKEN = "purge-token"; // Netlify 在函式執行環境裡給的；本機沒有就什麼都不做
+  process.env.SITE_ID = "site-123";
+  try {
+    for (const p of ["/api/visit-log", "/api/visitor-map"]) {
+      const r = await api(p);
+      assert.equal(r.headers.get("netlify-cache-tag"), "public-visits", `${p} 要帶得清的標籤`);
+      assert.match(r.headers.get("cache-control") || "", /max-age=0/, `${p}：瀏覽器不留，CDN 清掉之後重新整理就是新的`);
+      assert.match(r.headers.get("netlify-cdn-cache-control") || "", /s-maxage/, `${p}：CDN 照樣擋`);
+    }
+    const mk = async (date, code) => (await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ org: { name: "Purge Test University", country: "Japan" }, date, code, start_time: "10:00", end_time: "11:30" }) })).body.visit;
+    const future = await mk("2099-03-01", "purgefuture");
+    await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ ...future, purpose: "改一個字" }) });
+    assert.equal(purges.length, 0, "還沒來的那一場不在公開頁上，存再多次也不清");
+    const past = await mk("2025-03-01", "purgepast");
+    assert.equal(purges.length, 1, "已經來過的那一場一存就清");
+    assert.deepEqual(purges[0], { auth: "Bearer purge-token", body: { site_id: "site-123", cache_tags: ["public-visits"] } });
+    await api("/api/visit-log", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: past.visit_id, public: { note_zh: "說明" } }) });
+    assert.equal(purges.length, 2, "改公開頁上的說明就清");
+    const geo = await runJob("geo", {});
+    assert.ok(geo.body.updated >= 1, JSON.stringify(geo.body));
+    assert.equal(purges.length, 3, "查到位置就清：地圖上的點換到查到的地方");
+    await api(`/api/visits?id=${past.visit_id}`, { method: "DELETE", headers: admin });
+    assert.equal(purges.length, 4, "刪掉來過的那一場也清");
+    await api(`/api/visits?id=${future.visit_id}`, { method: "DELETE", headers: admin });
+    assert.equal(purges.length, 4, "刪掉還沒來的不清");
+
+    const { pastVisitsXlsx } = await import("./fixtures/past-visits.mjs");
+    const file = { name: "GHRC-參訪名單.xlsx", data: (await pastVisitsXlsx()).toString("base64") };
+    const read = await runJob("import", { file });
+    assert.equal(purges.length, 4, "讀完只是預覽，還沒寫進去，不清");
+    const done = await api("/api/import", { method: "POST", headers: admin, body: JSON.stringify({ action: "commit", file: file.name, rows: read.body.rows }) });
+    assert.equal(done.body.created.length, 3);
+    assert.equal(purges.length, 5, "匯入完就清：首頁的地圖與來訪紀錄頁重新整理就看得到");
+    for (const id of done.body.created) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
+  } finally {
+    globalThis.fetch = realFetch;
+    delete process.env.NETLIFY_PURGE_API_TOKEN;
+    delete process.env.SITE_ID;
+  }
+});
+
 test("匯入以前的參訪名單：讀完只給預覽，勾好才寫進去；一列有好幾個單位就拆開、算同一場；兩張地圖都看得到；重複匯入不會多出東西", async () => {
   const { pastVisitsXlsx } = await import("./fixtures/past-visits.mjs");
   const file = { name: "GHRC-參訪名單.xlsx", data: (await pastVisitsXlsx()).toString("base64") };
@@ -1233,7 +1298,9 @@ test("來訪紀錄（公開）：匯入的帶原表的說明，同一列拆出�
   assert.match(ws.people.zh, /John A\. Smith 教授/);
   const jorjin = log.body.visits.find((e) => e.orgs.some((o) => o.local === "佐臻股份有限公司"));
   assert.equal(jorjin.people.zh, "王大明副總經理");
-  assert.doesNotMatch(JSON.stringify(log.body), /visit_id|@|purpose|guests|headcount|background|summary/, "名單、email、來訪目的、背景研判、摘要、visit_id 一律不給");
+  // 比的是欄位名稱（單位代碼是小寫的名稱，「Summary Cron University」那種測試用的名字不算）
+  assert.doesNotMatch(JSON.stringify(log.body), /"(visit_id|purpose|guests|headcount|background|summary)"|@/, "名單、email、來訪目的、背景研判、摘要、visit_id 一律不給");
+  assert.ok(!log.body.visits.some((e) => e.orgs.some((o) => ids.includes(o.inst))), "單位代碼不是 visit_id");
 
   assert.equal((await api("/api/visit-log", { method: "POST", body: JSON.stringify({ visit_id: ids[0], public: { hidden: true } }) })).status, 401, "改要 token");
   const jid = ids.find((id) => id.startsWith("2025-02-26"));

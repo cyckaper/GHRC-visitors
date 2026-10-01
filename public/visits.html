@@ -152,7 +152,8 @@
   const countryOf = (o) => { const at = W && world ? W.placeOf(world, { country: o.country, geo: null }) : null; return at && W ? W.countryName(world, at.country, primary) : o.country; };
   const nameOf = (o) => (primary === "zh" && /[一-鿿]/.test(o.local) ? o.local : o.name);
   const otherName = (o) => { const x = primary === "zh" ? o.name : o.local; return x && x !== nameOf(o) ? x : ""; };
-  const orgKey = (o) => `${String(o.name).trim().toLowerCase()}|${String(o.country).trim().toLowerCase()}`;
+  // 同一個單位：伺服器給的 inst（中文名稱一樣、或英文名稱去掉空白與標點後一樣）；拼法不同的同一家公司不要算成兩個
+  const orgKey = (o) => o.inst || `${String(o.name).trim().toLowerCase()}|${String(o.country).trim().toLowerCase()}`;
   const WEEK = { zh: ["日", "一", "二", "三", "四", "五", "六"], en: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] };
   const MONTH = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   // 日期本身沒有時區：照字串的年月日算星期幾（支援人力表踩過：拿台北的午夜問 UTC 會早一天）
@@ -193,8 +194,16 @@
     </section>`).join("");
 
   // 上面那一行數字：幾場、幾個單位、幾個國家
+  // 名稱照最近那一場的寫法（visits 是新的在前）；這個單位用過的每一種寫法都留著，?org= 用哪一種帶進來都對得到
   const orgs = new Map();
-  for (const v of visits) for (const o of v.orgs) orgs.set(orgKey(o), o);
+  const spellings = new Map();
+  for (const v of visits) for (const o of v.orgs) {
+    const k = orgKey(o);
+    if (!orgs.has(k)) orgs.set(k, o);
+    const set = spellings.get(k) || new Set();
+    for (const s of [o.name, o.local]) if (s) set.add(String(s).trim().toLowerCase());
+    spellings.set(k, set);
+  }
   const countries = new Set([...orgs.values()].map(countryOf).filter(Boolean)).size;
   $("summary").textContent = primary === "zh"
     ? `共 ${visits.length} 場 · ${orgs.size} 個單位 · 來自 ${countries} 個國家`
@@ -225,7 +234,9 @@
       const at = W.placeOf(world, { country: o.country, geo: o.geo });
       if (!at) continue;
       const key = orgKey(o);
-      const p = points.get(key) || { key, o, x: at.x, y: at.y, approx: at.approx, n: 0 };
+      const p = points.get(key) || { key, o: orgs.get(key) || o, x: at.x, y: at.y, approx: at.approx, n: 0 };
+      // 位置：查到城市的優先（同一個單位另一場只查到國家的不要把它蓋掉）
+      if (p.approx && !at.approx) Object.assign(p, { x: at.x, y: at.y, approx: false });
       p.n += 1;
       points.set(key, p);
     }
@@ -251,7 +262,7 @@
   // 從首頁的地圖帶進來的（?org=單位名稱）：只看那個單位；#<id>：跳到那一場
   const askedOrg = String(qs.get("org") || "").trim().toLowerCase();
   if (askedOrg) {
-    const keys = [...orgs.entries()].filter(([, o]) => o.name.trim().toLowerCase() === askedOrg || o.local.trim().toLowerCase() === askedOrg).map(([k]) => k);
+    const keys = [...spellings.entries()].filter(([, set]) => set.has(askedOrg)).map(([k]) => k);
     if (keys.length) { const first = showOnly(keys, nameOf(orgs.get(keys[0]))); if (first) first.scrollIntoView({ block: "start" }); }
   }
   if (location.hash.length > 1) {

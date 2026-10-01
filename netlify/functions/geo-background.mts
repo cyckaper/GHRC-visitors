@@ -1,6 +1,7 @@
 import { nowISO } from "../lib/http.mts";
 import { backgroundHandler } from "../lib/jobs.mts";
 import { getStore } from "../lib/store.mts";
+import { purgePublicVisits } from "../lib/cdn.mts";
 import { locateOrgs } from "../lib/ai.mts";
 import type { Visit } from "../lib/types.mts";
 import { geoKey, needsGeo, sanitizeGeo } from "../../lib/visit.mjs";
@@ -42,5 +43,6 @@ export default backgroundHandler("查位置", async () => {
       if (saved && (saved as any).geo === geo) updated++;
     }
   }
+  if (updated) await purgePublicVisits(); // 首頁的地圖與來訪紀錄頁換成查到的位置
   return { updated, remaining: Math.max(0, byKey.size - keys.length) };
 });

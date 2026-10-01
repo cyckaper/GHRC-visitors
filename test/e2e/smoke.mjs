@@ -420,6 +420,8 @@ try {
     const auth = { authorization: "Bearer e2e-token", "content-type": "application/json" };
     const mk = async (name, date, code) => (await (await fetch(`${base}/api/visits`, { method: "POST", headers: auth, body: JSON.stringify({ org: { name, country: "Taiwan", type: "university" }, date, code, start_time: "10:00", end_time: "11:30" }) })).json()).visit.visit_id;
     const ids = [await mk("National Taiwan University", "2025-03-01", "ntu"), await mk("惇陽工程顧問有限公司", "2025-04-01", "dunyang")];
+    // 同一家公司早一點的另一場：這次英文名稱寫英文、中文寫在在地名稱（實際發生過：拼法不一樣就被算成兩個單位）
+    ids.push((await (await fetch(`${base}/api/visits`, { method: "POST", headers: auth, body: JSON.stringify({ org: { name: "Dun Yang Engineering Consultants Co., Ltd.", name_local: "惇陽工程顧問有限公司", country: "Taiwan", type: "enterprise" }, date: "2024-12-01", code: "dunyangen", start_time: "10:00", end_time: "11:30" }) })).json()).visit.visit_id);
     await page.click('[data-tab="pre"]');
     await page.click('[data-tab="data"]');
     const twGroup = () => page.evaluate(() => [...document.querySelectorAll("#worldMap [data-cluster]")].findIndex((g) => /National Taiwan University/.test(g.getAttribute("aria-label")) && /惇陽/.test(g.getAttribute("aria-label"))));
@@ -433,6 +435,7 @@ try {
     await page.click(`#worldMap [data-cluster="${await twGroup()}"] circle.hit`);
     await page.waitForFunction(() => document.querySelectorAll("#mapVisits [data-place]").length === 2);
     check(/National Taiwan University/.test(await page.textContent("#mapVisits")) && /惇陽工程顧問有限公司/.test(await page.textContent("#mapVisits")), "…and when they are still on top of each other, clicking again lists both institutions");
+    check(await page.evaluate(() => [...document.querySelectorAll("#mapVisits [data-place]")].some((d) => /惇陽/.test(d.textContent) && d.querySelectorAll("[data-visit]").length === 2)), "…and the same company spelled two ways in English is one institution with both its visits");
     await page.click("#mapReset");
     for (const id of ids) await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: auth });
     await page.click('[data-tab="pre"]');
@@ -712,6 +715,8 @@ try {
   // ── 中心首頁（/）：介紹中心，五間研究室各連到自己的介紹頁 ──
   // 首頁的世界地圖只標**已經來過**的單位：建一場過去的（只填了國家、還沒查位置——放在國家的位置）
   const pastVisit = await (await fetch(`${base}/api/visits`, { method: "POST", headers: { authorization: "Bearer e2e-token", "content-type": "application/json" }, body: JSON.stringify({ org: { name: "Konkuk University", name_local: "건국대학교", country: "South Korea" }, date: "2025-04-21", code: "konkuk", start_time: "10:00", end_time: "11:30" }) })).json();
+  // 同一所學校早一點的另一場，英文名稱拼法不一樣：還是同一個單位、同一個點
+  const pastVisit2 = await (await fetch(`${base}/api/visits`, { method: "POST", headers: { authorization: "Bearer e2e-token", "content-type": "application/json" }, body: JSON.stringify({ org: { name: "Konkuk Univ.", name_local: "건국대학교", country: "Korea" }, date: "2024-06-03", code: "konkukb", start_time: "10:00", end_time: "11:30" }) })).json();
   await page.goto(`${base}/`);
   await page.waitForFunction(() => document.querySelectorAll("#labs .lab-card").length === 5, null, { timeout: 15000 });
   check((await page.textContent("h1")) === "Green Health Research Center", "/ is the centre's homepage, not an empty visit page");
@@ -733,7 +738,7 @@ try {
   check(visitorLabels.some((l) => /Konkuk University/.test(l)) && !visitorLabels.some((l) => /Western Australia/.test(l)), `the homepage marks the institutions that have visited on the world map, not the ones still to come (${visitorLabels.join(" | ")})`);
   await page.click("#visitorMap [data-cluster] circle.hit");
   await page.waitForFunction(() => document.querySelectorAll("#visitorPick [data-place]").length === 1);
-  check(/South Korea · 1 visit/.test(await page.textContent("#visitorPick")) && !/2025-04-21/.test(await page.textContent("#visitorsSec")), "…tapping a dot says who it is, where, and how many times — no dates");
+  check(/Konkuk University/.test(await page.textContent("#visitorPick")) && /South Korea · 2 visits/.test(await page.textContent("#visitorPick")) && !/2025-04-21/.test(await page.textContent("#visitorsSec")), `…tapping a dot says who it is, where, and how many times — no dates; the same university spelled two ways is one dot (${await page.textContent("#visitorPick")})`);
   // 每一場的詳細說明在另一頁（明確要求：「參訪者多，把這些參訪另外作一頁連過去詳細說明」）
   check((await page.getAttribute("#visitorPick a", "href")) === "/visits?org=Konkuk%20University", "…and the dot's card links to that institution's visits");
   check((await page.getAttribute("#visitsLink", "href")) === "/visits", "the homepage links to the page with every visit in detail");
@@ -741,9 +746,10 @@ try {
   await page.waitForSelector("#list .visit", { timeout: 15000 });
   check((await page.textContent("#heading")) === "Visits to the centre" && /Konkuk University/.test(await page.textContent("#list")) && /Mon 21 April 2025/.test(await page.textContent("#list")), "the Visits page lists each past visit with its date and institution");
   check(!/2099|Western Australia/.test(await page.textContent("#list")), "…and not the ones still to come");
+  check((await page.textContent("#summary")) === "2 visits · 1 institution · 1 country", `…and counts the same university spelled two ways as one institution (${await page.textContent("#summary")})`);
   await page.goBack();
   await page.waitForSelector("#visitorsSec:not([hidden])", { timeout: 15000 });
-  await fetch(`${base}/api/visits?id=${encodeURIComponent(pastVisit.visit.visit_id)}`, { method: "DELETE", headers: { authorization: "Bearer e2e-token" } });
+  for (const v of [pastVisit, pastVisit2]) await fetch(`${base}/api/visits?id=${encodeURIComponent(v.visit.visit_id)}`, { method: "DELETE", headers: { authorization: "Bearer e2e-token" } });
   check(!/301\s*[-–]\s*304|four lab/i.test(await page.textContent("main")), "…and nowhere says four laboratories or 301–304");
   await page.click("#langToggle");
   await page.waitForFunction(() => document.querySelector("h1")?.textContent === "綠色健康研究中心" && document.querySelectorAll("#labs .lab-card").length === 5, null, { timeout: 15000 });

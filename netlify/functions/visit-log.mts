@@ -1,5 +1,6 @@
 import { fail, json, readJSON, requireAdmin } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
+import { publicVisitsHeaders, purgePublicVisits } from "../lib/cdn.mts";
 import { sanitizePublic, visitLogEntries } from "../../lib/visit.mjs";
 
 /**
@@ -16,14 +17,8 @@ export default async (req: Request) => {
   const store = getStore();
   if (req.method === "GET") {
     const visits = visitLogEntries(await store.listVisits());
-    return new Response(JSON.stringify({ ok: true, visits }), {
-      headers: {
-        "content-type": "application/json; charset=utf-8",
-        "cache-control": "public, max-age=300",
-        // 跟首頁的地圖一樣讓站台的 CDN 擋：誰都打得開，不必每看一次就把所有參訪讀一遍
-        "netlify-cdn-cache-control": "public, durable, s-maxage=600, stale-while-revalidate=86400",
-      },
-    });
+    // 跟首頁的地圖一樣讓站台的 CDN 擋；資料一改就清掉（見 lib/cdn.mts）
+    return new Response(JSON.stringify({ ok: true, visits }), { headers: publicVisitsHeaders() });
   }
   if (req.method !== "POST") return fail(405, "method not allowed");
   const denied = requireAdmin(req);
@@ -45,5 +40,6 @@ export default async (req: Request) => {
       (v as any).public = sanitizePublic({ ...cur, note_zh: next.note_zh, note_en: next.note_en, hidden: next.hidden === true });
     });
   }
+  await purgePublicVisits(); // 改完重新整理就看得到
   return json({ ok: true, public: (saved as any)?.public || null, also: others });
 };

@@ -481,7 +481,7 @@
       <div class="flex flex-wrap gap-2 items-center"><h2 class="font-semibold mr-auto" id="detailTitle"></h2><button class="btn" id="summaryBtn" title="現在就產一份：把這一場的回覆、動線、口述整理成一頁摘要，並記下哪幾頁被提問、被提到。平常不必按——有回覆之後每天凌晨會自己產，回覆變多也會自己重寫">AI 產一頁摘要</button><button class="btn btn-soft" id="driveBtn" title="手動補救用：把這一場的資料與檔案另存到中心的 Google Drive（平常會自動備份）">立即備份到 Drive</button></div>
       <p class="text-sm" id="driveInfo"></p>
       <div class="border rounded-xl p-3 space-y-2" id="publicBox">
-        <div class="flex flex-wrap items-baseline gap-2"><h3 class="font-medium mr-auto">公開頁上的說明 <span class="muted font-normal">中心首頁的地圖與「來訪紀錄」頁，參訪過後才出現；改了十分鐘內更新</span></h3><a class="underline text-sm" id="publicView" target="_blank" rel="noopener" href="/visits">看公開頁</a></div>
+        <div class="flex flex-wrap items-baseline gap-2"><h3 class="font-medium mr-auto">公開頁上的說明 <span class="muted font-normal">中心首頁的地圖與「來訪紀錄」頁，參訪過後才出現；改了重新整理就看得到</span></h3><a class="underline text-sm" id="publicView" target="_blank" rel="noopener" href="/visits">看公開頁</a></div>
         <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="pubHidden"> 這一場不公開（地圖與來訪紀錄都不放）</label>
         <div class="grid sm:grid-cols-2 gap-2 text-sm">
           <label class="space-y-1"><span class="muted block">來訪人員（中文）</span><input type="text" id="pubPeopleZh" class="w-full"></label>
@@ -2521,15 +2521,22 @@
    * 這裡只管後台自己的事：哪幾場算同一個單位、點下去列出那幾場、還沒查過位置的去查、上面那一行數字。
    * 國名對不到、位置也還沒查到的**不會消失**，會列在圖下面（來信裡的國名寫法千百種，寧可講出來也不要靜靜地漏掉）。
    */
-  /** 一個單位一個點：同一個單位來過好幾次合成一個（名稱＋國家相同就算同一個）。 */
+  /**
+   * 一個單位一個點：同一個單位來過好幾次合成一個。「同一個單位」是伺服器算好的 `inst`
+   * （中文名稱一樣、或英文名稱去掉空白與標點後一樣；`lib/visit.mjs institutionKeys`）——
+   * 英文名稱拼法不同的同一家公司不要變成兩個點（惇陽工程就是）。名稱照最近那一場的寫法。
+   */
   function mapPoints(W, world) {
     const byOrg = new Map();
     const unmatched = new Map();
     for (const v of state.visits || []) {
       const at = W.placeOf(world, { country: v.country, geo: v.geo });
       if (!at) { const k = v.country?.trim() || "（沒填國家）"; unmatched.set(k, (unmatched.get(k) || 0) + 1); continue; }
-      const key = `${W.normCountry(v.org || v.visit_id)}|${W.normCountry(at.country)}`;
-      const p = byOrg.get(key) || { key, name: v.org || v.visit_id, local: v.org_local || "", country: at.country, place: at.place, approx: at.approx, x: at.x, y: at.y, visits: [] };
+      const key = v.inst || `${W.normCountry(v.org || v.visit_id)}|${W.normCountry(at.country)}`;
+      const p = byOrg.get(key) || { key, name: v.org || v.visit_id, local: v.org_local || "", country: at.country, place: at.place, approx: at.approx, x: at.x, y: at.y, visits: [], latest: String(v.date || "") };
+      if (String(v.date || "") > p.latest) Object.assign(p, { name: v.org || p.name, local: v.org_local || p.local, latest: String(v.date) });
+      // 位置：查到城市的優先（同一個單位另一場只查到國家的不要把它蓋掉）
+      if (p.approx && !at.approx) Object.assign(p, { x: at.x, y: at.y, approx: false, place: at.place, country: at.country });
       p.visits.push(v);
       byOrg.set(key, p);
     }

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
 import { weekdayOf } from "../public/lib/rota.mjs";
-import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
+import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -585,4 +585,53 @@ test("公開的來訪紀錄：只列來過的、標了不公開的不列，原�
   assert.equal(sanitizePublic({ note_zh: "  a\r\nb  ", hidden: "yes", junk: 1 }).note_zh, "a\nb");
   assert.equal(sanitizePublic({ hidden: "yes" }), undefined, "只有 true 才算不公開；什麼都沒有就是 undefined");
   assert.deepEqual(Object.keys(sanitizePublic({ hidden: true })).sort(), ["hidden", "note_en", "note_zh", "people_en", "people_zh"]);
+});
+
+test("同一個單位：中文名稱一樣、或英文名稱去掉空白與標點後一樣（國家也一樣）；一路串下去；代碼跟順序無關", () => {
+  const v = (id, name, local, country) => ({ visit_id: id, org: { name, name_local: local, country } });
+  const list = [
+    // 實際發生過：同一家公司兩場，英文拼法不一樣
+    v("a", "Dun Yang Engineering Consultants Co., Ltd.", "惇陽工程顧問有限公司", "Taiwan"),
+    v("b", "Dunyang Engineering Consultants Co., Ltd.", "惇陽工程顧問有限公司", "臺灣"),
+    v("c", "DUN-YANG Engineering Consultants Co Ltd", "", "Taiwan"),
+    v("d", "Dunyang Engineering Consultants Co., Ltd.", "", "South Korea"),
+    v("e", "Konkuk University", "건국대학교", "South Korea"),
+    v("f", "Konkuk Univ.", "건국대학교", "Korea"),
+    v("g", "", "", "Japan"),
+  ];
+  const k = institutionKeys(list);
+  assert.equal(k.get("a"), k.get("b"), "中文名稱一樣：英文拼法不同、國名寫法不同都算同一個");
+  assert.equal(k.get("a"), k.get("c"), "英文名稱只差空白、標點、大小寫，國家也一樣");
+  assert.notEqual(k.get("b"), k.get("d"), "只有英文名稱一樣、國家不一樣的不算");
+  assert.equal(k.get("e"), k.get("f"), "韓文名稱一樣");
+  assert.notEqual(k.get("a"), k.get("e"));
+  assert.equal(k.get("g"), "", "沒有名稱的不給代碼（呼叫的地方自己退回原本的寫法）");
+  const r = institutionKeys([...list].reverse());
+  assert.ok(list.every((x) => r.get(x.visit_id) === k.get(x.visit_id)), "資料的先後順序不影響代碼");
+  assert.ok([...k.values()].every((x) => !/^[a-g]$/.test(x)), "代碼不是 visit_id");
+  // 串起來：A、B 中文一樣，B、C 英文一樣
+  const chain = institutionKeys([v("x", "Alpha Co", "甲公司", "Taiwan"), v("y", "Beta Co", "甲公司", "Taiwan"), v("z", "beta co.", "", "Taiwan")]);
+  assert.ok(chain.get("x") === chain.get("y") && chain.get("y") === chain.get("z"));
+  const more = institutionKeys([
+    v("p", "國立臺灣大學", "", "Taiwan"), // 英文名稱那一格寫的是中文（讀信時常見）
+    v("q", "National Taiwan University", "國立台灣大學", "臺灣"),
+    v("r", "The University of Western Australia", "", "Australia"),
+    v("s", "University of Western Australia", "西澳大學", "Australia"),
+  ]);
+  assert.equal(more.get("p"), more.get("q"), "英文那一格寫中文也照中文比；臺／台當同一個字");
+  assert.equal(more.get("r"), more.get("s"), "英文開頭的 The 不算");
+});
+
+test("公開的來訪紀錄：同一個單位的每一場帶同一個代碼；代碼只拿列出來的那幾場算，還沒來的那一場的名稱不會透出來", () => {
+  const now = new Date("2026-10-01T00:00:00+08:00");
+  const v = (id, date, name, local) => ({ visit_id: id, date, start_time: "10:00", duration_minutes: 90, org: { name, name_local: local, country: "Taiwan", type: "enterprise" }, itinerary: [] });
+  const entries = visitLogEntries([
+    v("2026-09-23-dunyang", "2026-09-23", "Dunyang Engineering Consultants Co., Ltd.", "惇陽工程顧問有限公司"),
+    v("2026-09-30-dunyang", "2026-09-30", "Dun Yang Engineering Consultants Co., Ltd.", "惇陽工程顧問有限公司"),
+    v("2026-05-01-secret", "2026-05-01", "Secret Org", ""),
+    v("2099-01-01-secret", "2099-01-01", "Secret Org", "還沒公開的中文名稱"),
+  ], now);
+  const inst = (date) => entries.find((e) => e.date === date).orgs[0].inst;
+  assert.ok(inst("2026-09-23") && inst("2026-09-23") === inst("2026-09-30"), "惇陽兩場是同一個單位");
+  assert.doesNotMatch(JSON.stringify(entries), /還沒公開的中文名稱|2099/, "還沒來的那一場不列，也不能從代碼裡透出來");
 });
