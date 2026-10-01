@@ -4,9 +4,8 @@ import { pollJob, startBackground } from "../lib/jobs.mts";
 import { getStore } from "../lib/store.mts";
 import { purgePublicVisits } from "../lib/cdn.mts";
 import { aiConfigured } from "../lib/ai.mts";
-import type { Visit } from "../lib/types.mts";
-import { importedVisit, parseVisitTable, planImport } from "../../lib/import.mjs";
-import { normalizeVisit } from "./visits.mts";
+import { parseVisitTable, planImport } from "../../lib/import.mjs";
+import { createImported } from "../lib/visitlist.mts";
 
 const MAX_FILE_BYTES = 4.5 * 1024 * 1024;
 const MAX_ROWS = 300;
@@ -53,31 +52,9 @@ async function commit(body: any, req: Request): Promise<Response> {
   const file = String(body?.file || "").slice(0, 200);
   const rows = Array.isArray(body?.rows) ? body.rows.slice(0, MAX_ROWS) : [];
   if (!rows.length) return fail(400, "沒有勾任何一筆");
-  const store = getStore();
   // 預覽之後可能有人新增過：照最新的資料再對一次（同一天同一個單位、網址代碼撞到）
-  const plan = planImport(rows, await store.listVisits());
-  const at = nowISO();
-  const skipped: { row: string; org: string; reason: string }[] = [];
-  const todo: Visit[] = [];
-  for (const r of plan) {
-    const reason = r.problems.join("、") || (r.exists ? `已經有了（${r.exists}）` : r.duplicate ? "名單裡重複" : "");
-    if (reason) {
-      skipped.push({ row: r.source_row, org: r.org.name_local || r.org.name, reason });
-      continue;
-    }
-    const v = normalizeVisit(importedVisit(r, { file, at }) as any, siteUrl(req));
-    v.headcount = r.headcount; // 原表沒寫人數就是 0（不知道），不拿名單上有名字的人數充數
-    v.created_at = at;
-    v.updated_at = at;
-    todo.push(v);
-  }
-  // 一場一個 key，彼此不衝突：幾筆一起寫，二十幾場也在一般函式的 10 秒內寫完
-  const created: string[] = [];
-  for (let i = 0; i < todo.length; i += 6) {
-    const batch = todo.slice(i, i + 6);
-    await Promise.all(batch.map((v) => store.putVisit(v)));
-    created.push(...batch.map((v) => v.visit_id));
-  }
+  const plan = planImport(rows, await getStore().listVisits());
+  const { created, skipped } = await createImported(plan, { file, at: nowISO(), site: siteUrl(req) });
   // 首頁的地圖與來訪紀錄頁：匯入完重新整理就看得到，不必等 CDN 那一份過期
   if (created.length) await purgePublicVisits();
   return json({ ok: true, created, skipped });

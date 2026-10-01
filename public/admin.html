@@ -469,10 +469,13 @@
         <a class="btn btn-soft" id="csvResponses" download>responses.csv</a>
         <a class="btn btn-soft" id="csvPerf" download>slide_performance.csv</a>
       </div>
+      <div class="text-sm flex flex-wrap items-baseline gap-x-2 gap-y-1" id="listBox" hidden><span id="listInfo"></span><button class="btn btn-soft" id="listSync" title="不必等：現在就去看名單裡有沒有新加的列">現在就看一次</button></div>
+      <p class="text-sm" id="listNote"></p>
       <p class="text-sm" id="importInfo"></p>
       <div id="importBox" class="space-y-2 border rounded-xl p-3" hidden>
         <div class="overflow-x-auto"><table id="importTable"><thead><tr><th><input type="checkbox" id="importAll" checked title="全選／全不選"></th><th>日期</th><th>單位</th><th class="whitespace-nowrap">國家</th><th class="whitespace-nowrap">類型</th><th>來訪人員</th><th>交流重點／成果</th></tr></thead><tbody></tbody></table></div>
         <p class="text-sm muted" id="importSkipped"></p>
+        <label class="flex items-start gap-2 text-sm" id="importLinkRow" hidden><input type="checkbox" id="importLink" checked class="mt-1"><span>同時存成 Google 試算表（放在 Drive 的「GHRC 參訪」資料夾）：以後在那份試算表加一列，系統會自動加進來</span></label>
         <div class="flex flex-wrap gap-2"><button class="btn" id="importGo">匯入</button><button class="btn btn-soft" id="importCancel">不匯入</button></div>
       </div>
       <table id="visitsTable"><thead><tr><th>日期</th><th>單位</th><th>類型</th><th>國家</th><th>人數</th><th>狀態</th></tr></thead><tbody></tbody></table>
@@ -2638,6 +2641,7 @@
     $("csvVisits").href = `/api/visits?export=csv&table=visits&token=${t}`; $("csvResponses").href = `/api/visits?export=csv&table=responses&token=${t}`; $("csvPerf").href = `/api/visits?export=csv&table=slide_performance&token=${t}`;
     await loadVisits();
     renderWorldMap();
+    loadVisitList().then(() => checkVisitList()); // 名單有人加了列就自己讀進來（不必等，清單先畫）
     $("visitsTable").tBodies[0].innerHTML = state.visits.map((v) => `<tr class="cursor-pointer hover:bg-stone-50" data-id="${esc(v.visit_id)}"><td>${esc(v.date)}</td><td>${esc(v.org)}</td><td>${typeTag(v.type) || esc(v.type)}</td><td>${esc(v.country)}</td><td>${Number(v.headcount) > 0 ? esc(v.headcount) : ""}</td><td>${esc(v.status)}</td></tr>`).join("");
   }
   $("visitsTable").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-id]"); if (tr) showDetail(tr.dataset.id); });
@@ -2695,6 +2699,7 @@
     if (f.size > 4.5 * 1024 * 1024) return note(`${f.name} 超過 4.5 MB`);
     let data;
     try { data = await readFileB64(f); } catch (e) { return note(`讀不到這個檔案：${e?.message || e}`); }
+    state.importFile = { name: f.name, type: f.type, data }; // 勾了「同時存成 Google 試算表」的話，匯入之後拿這一份去建
     const r = await runJob("/api/import", { file: { name: f.name, type: f.type, data } }, note, "AI 讀名單中……大約一兩分鐘。", { anyVisit: true });
     if (!r || !Array.isArray(r.rows)) return;
     state.importPlan = { file: r.file || f.name, rows: r.rows, skipped: r.skipped || [], by: r.by || "" };
@@ -2719,6 +2724,9 @@
       : "這個檔裡讀不到參訪紀錄。";
     $("importSkipped").textContent = p.skipped.length ? `沒有列進來的：${p.skipped.join("；")}` : "";
     $("importAll").checked = true;
+    // 還沒有連上名單、Drive 也接好了，而且這是一份試算表：預設勾著（明確指示：「每一次有增加再自動加入」）
+    $("importLinkRow").hidden = !(state.list?.configured && !state.list?.linked && /\.(xlsx|xlsm|csv)$/i.test(state.importFile?.name || ""));
+    $("importLink").checked = true;
     updateImportGo();
     $("importBox").hidden = !p.rows.length;
   }
@@ -2743,9 +2751,74 @@
     $("importBox").hidden = true;
     const skipped = (r.skipped || []).map((x) => `${x.org}：${x.reason}`).join("；");
     flash(`匯入了 ${r.created.length} 筆`);
+    const link = !$("importLinkRow").hidden && $("importLink").checked && state.importFile;
     await loadDataTab(); // 清單與地圖跟著更新；還沒查過位置的，地圖自己會去查
     $("importInfo").textContent = `匯入了 ${r.created.length} 筆${skipped ? `（沒有匯入：${skipped}）` : ""}。地圖上的位置正在查，查好會自己更新。`;
+    if (link) {
+      const done = await runJob("/api/visit-list", { action: "link", file: state.importFile }, noteInto("listNote"), "正在把名單存成 Google 試算表……", { anyVisit: true });
+      if (done?.linked) $("listNote").textContent = "名單已經存成 Google 試算表：以後在那份試算表加一列，系統每十五分鐘看一次，自動加進來。";
+      await loadVisitList();
+    }
+    state.importFile = null;
   });
+
+  /**
+   * 參訪名單（Google 試算表）自動同步（明確指示：「每一次有增加再自動加入」「地圖應該是自動去 check 這個 Google Drive」）。
+   * 名單是系統自己的那一份 Google 試算表（匯入時勾「同時存成 Google 試算表」建的）：有人在裡面加一列，
+   * 系統每十五分鐘看一次、打開這一頁也看一次，新的那幾列自己加進參訪紀錄（規則在 `netlify/lib/visitlist.mts`）。
+   * 這裡只顯示連到哪一份、上次看的時間與結果，留一顆「現在就看一次」。自己看的那一次不跳紅色錯誤，只寫在這一行。
+   */
+  async function loadVisitList() {
+    const r = await api("/api/visit-list");
+    state.list = r.ok ? r : null;
+    renderListInfo();
+    return state.list;
+  }
+  function renderListInfo() {
+    const l = state.list;
+    $("listBox").hidden = !(l && l.linked);
+    if (!l || !l.linked) return;
+    // 台北時間的「月/日 時:分」（日期也照台北算：UTC 的日期在半夜會差一天）
+    const when = (iso) => {
+      const d = new Date(iso || "");
+      if (isNaN(d)) return "";
+      const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(d).map((x) => [x.type, x.value]));
+      return `${p.month}/${p.day} ${p.hour}:${p.minute}`;
+    };
+    const last = l.last?.added?.length ? `<span>上一次加了 ${l.last.added.length} 筆</span>` : "";
+    $("listInfo").innerHTML = `<span>名單：</span><a class="underline" target="_blank" rel="noopener" href="${esc(l.url || "")}" translate="no">${esc(l.name || "GHRC 參訪名單")}</a><span>（Google 試算表）——在這份試算表加一列，系統每十五分鐘看一次，自動加進來。</span>${l.checked_at ? `<span class="muted"><span>上次看</span> <span class="tabular-nums">${esc(when(l.checked_at))}</span></span>` : ""}${last ? ` <span class="muted">${last}</span>` : ""}${l.error ? `<span class="err block">${esc(l.error)}</span>` : ""}`;
+  }
+  /** 打開「資料」分頁時看一次（名單沒改過就當場回，不必等）；改過了就等它讀完、清單與地圖跟著更新。 */
+  async function checkVisitList(force = false) {
+    if (!state.list?.linked || checkVisitList.running) return;
+    checkVisitList.running = true;
+    const note = noteInto("listNote");
+    try {
+      const r = await api("/api/visit-list", { method: "POST", body: { action: force ? "sync" : "check" } });
+      if (!r.ok) return note(force ? r.error || "" : "");
+      if (!r.job_id) { await loadVisitList(); if (force) note("名單裡沒有新的列。"); return; }
+      note("正在讀名單裡新加的列……大約一兩分鐘。");
+      let misses = 0;
+      const until = Date.now() + 15 * 60000; // 背景函式的上限
+      for (let i = 0; Date.now() < until; i++) {
+        await new Promise((res) => setTimeout(res, i < 20 ? 3000 : 10000));
+        const j = await api(`/api/visit-list?job=${encodeURIComponent(r.job_id)}`);
+        if (!j.ok) { if (++misses < 3) continue; return note(""); }
+        if (j.status === "running") continue;
+        if (j.status !== "done") { await loadVisitList(); return note(""); } // 原因寫在名單那一行
+        if (j.result?.busy) { note("名單正在讀，讀完這一行會更新。"); return; } // 排程那一輪剛好在讀
+        const added = j.result?.added || [];
+        note(added.length ? `從名單加了 ${added.length} 筆，地圖跟著更新。` : "名單裡沒有新的列。");
+        if (added.length) await loadDataTab();
+        else await loadVisitList();
+        return;
+      }
+      note("");
+    } finally {
+      checkVisitList.running = false;
+    }
+  }
+  $("listSync").onclick = () => busy($("listSync"), () => checkVisitList(true));
   async function showDetail(id) {
     const v = await api(`/api/visits?id=${encodeURIComponent(id)}`);
     if (!v.ok) return flash(v.error, "err");

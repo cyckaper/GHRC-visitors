@@ -229,7 +229,7 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
 >
 > 目前走這一套的：`extract`（讀信）、`plan`（AI 挑頁）、`research`（訪前功課，狀態另外記在
 > `visit.background`）、`letter`（草擬**與寄出**）、`summary`（一頁摘要與跨場次彙整）、`signbook`（讀手寫字）、
-> `transcribe`（Whisper ＋抽取）、`cards`（讀名片）、`translate`（第二語言）、`geo`（訪客地圖上各單位在哪裡）、`import`（讀以前的參訪名單）。（`settings` 不是 AI，當場回。）再有跑得久的 AI 就照這個模式加，
+> `transcribe`（Whisper ＋抽取）、`cards`（讀名片）、`translate`（第二語言）、`geo`（訪客地圖上各單位在哪裡）、`import`（讀以前的參訪名單）、`visit-list`（讀名單裡新加的列）。（`settings` 不是 AI，當場回。）再有跑得久的 AI 就照這個模式加，
 > 不要直接在一般函式裡等。
 >
 > **兩條給畫面的規矩**（主辦端是老師，不是工程師）：
@@ -488,6 +488,24 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
     - Claude 還沒接好時照欄名讀（`parseVisitTable`：第一列要有「日期」與「來訪單位」），單位名稱就照原表的中文、沒有英文；測試（AI_MOCK）也走這一條。
     - **Excel 的日期格子存的是數字**（2024/1/8 存成 45299）：`files.mts xlsxText` 照 `styles.xml` 的格式轉回日期——以前讀出來是一串數字，
       讀信時上傳的名單檔也一樣。空白格寫成 `<c r="G2" s="6"/>`（LibreOffice 存的檔）時，以前會把右邊那一格的值吃進來，一起修了。
+    - **之後在名單加一列就自動加進來**（明確指示：「每一次有增加再自動加入」「地圖應該是自動去 check 這個 Google Drive」）：
+      匯入的預覽底下有一個預設勾著的「同時存成 Google 試算表」——匯入完把那一份轉成**系統自己的 Google 試算表**
+      （Drive 的「GHRC 參訪」資料夾，叫「GHRC 參訪名單」），之後就看這一份（`netlify/lib/visitlist.mts`）。
+      **為什麼不直接看使用者放在 Drive 上的那一份 xlsx**：Drive 的授權只有 `drive.file`，只看得到系統自己建的檔案；
+      要看別人的檔就得重新授權更大的範圍（要改 Google 的同意畫面、重拿 refresh token），或把檔案開成「知道連結的人都能看」——都不划算。
+      - `visit-list-cron` **每十五分鐘**問一次 Drive「改過了沒」（只問修改時間，`listDue()`）；後台打開「資料」分頁也問一次，
+        還有一顆「現在就看一次」。改過了才開背景工作（`visit-list-background`）去讀。
+      - **哪幾列是新的**：一列的身分是「日期＋來訪單位」（`lib/import.mjs listRows`／`rowKey`，大小寫、空白、標點、臺／台不算）；
+        讀過的記在 `sync/visit-list.json` 的 `seen`。列的先後、其他欄改了**不算新的一列**（改錯字、補交流重點不會再建一場）。
+        連上的那一刻，檔裡現在有的每一列都算讀過（包括預覽裡勾掉的——勾掉就是不要，之後也不會被偷偷加回來）；
+        原檔與 Google 轉過之後匯出的那一份各算一次，轉換時寫法變了也對得上。
+      - 新的那幾列做成一張小表（`rowsText`：最前面加一欄自己的「編號」，讀回來對得回是哪一列）照匯入的同一套讀（AI）→ `planImport`
+        （系統裡已經有的——同一天、同一個單位，名稱比對也是寬鬆的——不再建）→ 建立（`createImported`，匯入也用這一支）→ 清 CDN、開一個查位置的工作。
+        **這裡不再給人看過才寫**：名單本身就是主辦端自己維護的那一份，加一列就是要它出現（明確指示；「抽取結果給人確認」那一條的例外）。
+        加進來的跟匯入的一樣帶原表的「來訪人員」「交流重點」，所以公開的 `/visits` 上就看得到；不想公開的在「資料」分頁勾掉。
+      - **刪掉一列、改已經加進來的那一列，系統裡那一場不會跟著刪或改**（要改在「資料」分頁改）——自動刪東西太危險。
+      - 一次最多讀 60 列，還有剩下一輪接著讀；讀失敗了記在名單那一行，名單沒再改的話六小時後才再試（不要每十五分鐘打一次 AI）。
+      - 測試：`DRIVE_MOCK=1` 讓「Drive 上的試算表」存在媒體庫（`drive.mts mockSheetWrite` 模擬有人加了一列）；備份照舊看真的 Google 設定。
   - **畫法在 `public/lib/worldmap.mjs`，中心首頁的「來訪單位」用同一份**（明確要求：「GHRC 介紹首頁加入設定中的世界地圖，
     標出來訪單位」）：投影、放大、拖曳、群集、名稱、細海岸線都在模組裡（`mountWorldMap()`，樣式自帶、在 `.wm` 底下）；
     後台只管自己的事——哪幾場算同一個單位、點下去列出那幾場、還沒查位置的去查、上面那一行數字。兩邊不會各長各的。
@@ -566,15 +584,15 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - `public/index.html`：專屬網址 `/<visit_id>`；整頁一種語言（預設英文，`?ui=zh` 換中文；ko／ja 來賓才另外附他們的語言）；流程（參訪當天標出「現在」；研究室參訪底下一間一行、各自的時段）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
 - `public/visits.html`：**來訪紀錄 `/visits`**——已經來過的每一場（日期、單位、來訪人員、交流重點、去了哪幾間）＋同一張世界地圖，首頁的「來訪單位」連過來（見「約定」的「中心首頁」）。
 - `public/center.html`：**中心首頁 `/`**——中心簡介、三大任務、沿革、國際平台、來訪單位（世界地圖）、外部肯定、組織架構、五間研究室（卡片，各連到 `/lab/<房號>`）、聯絡；字在 `public/data/center.json`（見「約定」的「中心首頁」）。
-- `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`／`geo-background`／`import-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`；`geo` 查訪客地圖上各單位在哪裡；`import` 讀以前的參訪名單）`drive` `drive-sync-background`（自動備份）；**三支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
+- `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`／`geo-background`／`import-background`／`visit-list-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`；`geo` 查訪客地圖上各單位在哪裡；`import` 讀以前的參訪名單；`visit-list` 讀 Google 試算表名單裡新加的列）`drive` `drive-sync-background`（自動備份）；**四支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
   `rota`（支援人力表，各研究室自己填）； `visitor-map`（**公開**：中心首頁的來訪單位地圖，只有單位、位置與來過幾次）； `import`（匯入以前的參訪名單：預覽與寫入，規則在 `lib/import.mjs`）； `visit-log`（**公開**：`/visits` 來訪紀錄頁；admin 用 POST 改公開說明與「不公開」）；
-  `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，後續提醒）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive／cdn）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
+  `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，後續提醒）／`visit-list-cron`（每十五分鐘，名單有人加了列就讀進來）； `visit-list`（參訪名單的 Google 試算表：連上、看一次、現在就讀）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive／cdn／visitlist）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
 - `public/lib/pptx.mjs`：母簡報子集化核心（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證），零 Node 相依，瀏覽器與 CLI 共用；`cli/lib/pptx.mjs` 只是注入 jszip／xmldom 的 Node 入口；`cli/deck.mjs` 加上 QR（qrcode 套件）與 PDF（LibreOffice）。`--inspect`、`--dump`、`--validate`。
 - `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-world.mjs`：訪客地圖的陸地輪廓與國家落點（`public/data/world.json`），加第三個參數（1:50m）另外產放大用的細海岸線（`world-detail.json`）。畫地圖的是 `public/lib/worldmap.mjs`（後台「資料」分頁與中心首頁共用）。
 - 介面語言：`public/data/i18n-admin.json`（後台英文；鍵＝畫面上那句中文）、`scripts/i18n-scan.mjs`（掃出沒翻的，`npm test` 會跑）、
   `public/data/i18n.json`（來賓端四語）、`slides.json` 的 `title_en`。
-- 測試：`npm test`（單元、API 走本機 dev server、產檔與瘦身走合成簡報）、`npm run test:e2e`（Chromium）。`AI_MOCK=1` 讓所有 AI 呼叫回固定範例，`MAIL_MOCK=1` 讓寄信不真的打 Gmail（信寫進媒體庫 `mail/last.json`，測試再讀出來對內容）。CI：`.github/workflows/ci.yml` 在每個 PR 與 main 的 push 跑同一套（typecheck → npm test → e2e）。
+- 測試：`npm test`（單元、API 走本機 dev server、產檔與瘦身走合成簡報）、`npm run test:e2e`（Chromium）。`AI_MOCK=1` 讓所有 AI 呼叫回固定範例，`MAIL_MOCK=1` 讓寄信不真的打 Gmail（信寫進媒體庫 `mail/last.json`，測試再讀出來對內容），`DRIVE_MOCK=1` 讓參訪名單的 Google 試算表存在媒體庫。CI：`.github/workflows/ci.yml` 在每個 PR 與 main 的 push 跑同一套（typecheck → npm test → e2e）。
 
 **尚未在真實環境驗證（首次建置時沒有金鑰與母簡報）**
 

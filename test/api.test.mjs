@@ -1281,6 +1281,89 @@ test("匯入以前的參訪名單：讀完只給預覽，勾好才寫進去；�
   for (const v of list) await api(`/api/visits?id=${v.visit_id}`, { method: "DELETE", headers: admin });
 });
 
+test("參訪名單（Google 試算表）：匯入時存成一份，之後有人加一列就自己加進來；沒改就不讀；改舊的那一列、勾掉的那一筆不會被加回來", async () => {
+  const { pastVisitsXlsx } = await import("./fixtures/past-visits.mjs");
+  const { mockSheetWrite } = await import("../netlify/lib/drive.mts");
+  const { getStore } = await import("../netlify/lib/store.mts");
+  const post = (body) => api("/api/visit-list", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  assert.equal((await api("/api/visit-list")).status, 401, "要 token");
+  assert.equal((await api("/api/visit-list", { headers: admin })).body.configured, false, "Google Drive 還沒接好");
+  process.env.DRIVE_MOCK = "1"; // 不真的打 Google：「Drive 上的試算表」存在媒體庫
+  const ids = [];
+  try {
+    const st0 = (await api("/api/visit-list", { headers: admin })).body;
+    assert.ok(st0.configured && !st0.linked);
+    assert.equal((await post({ action: "check" })).status, 409, "還沒連上名單");
+
+    // 匯入照舊：先預覽、勾好才寫——主辦端把赫爾辛基那一筆勾掉了
+    const file = { name: "GHRC-參訪名單.xlsx", data: (await pastVisitsXlsx()).toString("base64") };
+    const read = await runJob("import", { file });
+    const rows = read.body.rows.filter((r) => r.org.name_local !== "芬蘭赫爾辛基大學");
+    const done = await api("/api/import", { method: "POST", headers: admin, body: JSON.stringify({ action: "commit", file: file.name, rows }) });
+    assert.equal(done.body.created.length, 2, JSON.stringify(done.body));
+    ids.push(...done.body.created);
+
+    // 同時存成 Google 試算表
+    const link = await runJob("visit-list", { action: "link", file });
+    assert.equal(link.status, 200, JSON.stringify(link.body));
+    const st = (await api("/api/visit-list", { headers: admin })).body;
+    assert.ok(st.linked && st.file_id && /docs\.google\.com\/spreadsheets/.test(st.url), JSON.stringify(st));
+    assert.equal(st.name, "GHRC 參訪名單");
+    assert.equal(st.from, "GHRC-參訪名單.xlsx");
+    assert.equal(st.rows, 3, "這份檔裡現在有的列都算讀過了（含勾掉的那一筆與沒寫日期的那一列）");
+    assert.ok(!("seen" in st), "讀過哪幾列那一長串不必送給後台");
+    assert.equal((await post({ action: "link", file })).body.file_id, st.file_id, "已經連上了就不另外再建一份");
+    assert.equal((await post({ action: "link", file: { name: "list.docx", data: file.data } })).body.file_id, st.file_id);
+
+    // 沒人改過：當場回，不開工作
+    const same = await post({ action: "check" });
+    assert.equal(same.status, 200);
+    assert.equal(same.body.unchanged, true);
+
+    // 有人在試算表裡加了一列，也順手改了佐臻那一列的交流重點
+    const edited = await pastVisitsXlsx({ extra: [[4, 45930, "國際", "日本", "日本千葉大學園藝學院", "山田太郎教授", "", "園藝療法交流"]], jorjinPurpose: "參訪 303、304（改過）" });
+    await mockSheetWrite(st.file_id, new Uint8Array(edited));
+    const synced = await runJob("visit-list", { action: "check" });
+    assert.equal(synced.status, 200, JSON.stringify(synced.body));
+    ids.push(...synced.body.added);
+    assert.equal(synced.body.added.length, 1, `只有新加的那一列；改了交流重點的不是新的一列，勾掉的赫爾辛基也不會被偷偷加回來：${JSON.stringify(synced.body)}`);
+    const v = (await api(`/api/visits?id=${synced.body.added[0]}`, { headers: admin })).body.visit;
+    assert.equal(v.org.name_local, "日本千葉大學園藝學院");
+    assert.equal(v.date, "2025-09-30");
+    assert.equal(v.imported.from, "GHRC 參訪名單");
+    assert.equal(v.public?.note_zh, "園藝療法交流", "交流重點跟匯入的一樣帶過來（公開頁要用）");
+    assert.ok((await api("/api/visit-log")).body.visits.some((e) => e.orgs.some((o) => o.local === "日本千葉大學園藝學院")), "公開的來訪紀錄上看得到");
+    const after = (await api("/api/visit-list", { headers: admin })).body;
+    assert.equal(after.rows, 4);
+    assert.deepEqual(after.last.added, synced.body.added, "後台那一行寫得出上一次加了幾筆");
+    assert.ok(!after.error && !after.running_since);
+
+    // 再看一次：讀過了；「現在就看一次」不管修改時間，但沒有新的列就什麼都不加
+    assert.equal((await post({ action: "check" })).body.unchanged, true);
+    const forced = await runJob("visit-list", { action: "sync" });
+    assert.equal(forced.body.added.length, 0);
+
+    // 排程與「打開資料分頁」剛好同時讀：只讓一輪讀，同一列不會建兩次
+    const twoRows = await pastVisitsXlsx({ extra: [[4, 45930, "國際", "日本", "日本千葉大學園藝學院", "山田太郎教授", "", "園藝療法交流"], [5, 45931, "國內", "臺灣", "某某科技大學", "", "", ""]] });
+    await mockSheetWrite(st.file_id, new Uint8Array(twoRows));
+    const jobs = [await post({ action: "sync" }), await post({ action: "sync" })];
+    await Promise.all(jobs.map((j) => api("/api/visit-list-background", { method: "POST", headers: admin, body: JSON.stringify({ job_id: j.body.job_id }) })));
+    const results = await Promise.all(jobs.map(async (j) => (await api(`/api/visit-list?job=${j.body.job_id}`, { headers: admin })).body.result));
+    const both = results.flatMap((r) => r.added || []);
+    ids.push(...both);
+    assert.equal(both.length, 1, `兩輪同時讀，新的那一列只建一次：${JSON.stringify(results)}`);
+    assert.ok(results.some((r) => r.busy), "另一輪讓給正在讀的那一輪");
+
+    // 排程那一支：要授權；名單沒改過就不開工作
+    assert.equal((await api("/api/visit-list-cron")).status, 401);
+    assert.match(String((await api("/api/visit-list-cron", { method: "POST", headers: admin, body: "{}" })).body), /沒有改過/);
+  } finally {
+    delete process.env.DRIVE_MOCK;
+    await getStore().deleteMedia("sync/visit-list.json");
+    for (const id of ids) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
+  }
+});
+
 test("來訪紀錄（公開）：匯入的帶原表的說明，同一列拆出來的算一場；後台可以改說明、整場不公開；名單與 email 不出去", async () => {
   const { pastVisitsXlsx } = await import("./fixtures/past-visits.mjs");
   const file = { name: "GHRC-參訪名單.xlsx", data: (await pastVisitsXlsx()).toString("base64") };

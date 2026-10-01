@@ -698,7 +698,20 @@
   "來訪人員（中文）": "Visitors (Chinese)",
   "來訪人員（英文）": "Visitors (English)",
   "交流重點／成果（中文）": "Focus / outcome (Chinese)",
-  "交流重點／成果（英文）": "Focus / outcome (English)"
+  "交流重點／成果（英文）": "Focus / outcome (English)",
+  "現在就看一次": "Check now",
+  "同時存成 Google 試算表（放在 Drive 的「GHRC 參訪」資料夾）：以後在那份試算表加一列，系統會自動加進來": "Also save it as a Google Sheet (in the “GHRC 參訪” folder on Drive): add a row to that sheet later and the system adds it automatically",
+  "不必等：現在就去看名單裡有沒有新加的列": "No need to wait: look for new rows in the list right now",
+  "名單：": "List: ",
+  "（Google 試算表）——在這份試算表加一列，系統每十五分鐘看一次，自動加進來。": " (Google Sheet) — add a row to this sheet and the system picks it up within fifteen minutes.",
+  "上次看": "Last checked",
+  "上一次加了 # 筆": "added # last time",
+  "正在把名單存成 Google 試算表……": "Saving the list as a Google Sheet…",
+  "名單已經存成 Google 試算表：以後在那份試算表加一列，系統每十五分鐘看一次，自動加進來。": "The list is now a Google Sheet: add a row to it and the system picks it up within fifteen minutes.",
+  "正在讀名單裡新加的列……大約一兩分鐘。": "Reading the new rows in the list… about a minute or two.",
+  "從名單加了 # 筆，地圖跟著更新。": "Added # from the list; the map is updated.",
+  "名單裡沒有新的列。": "No new rows in the list.",
+  "名單正在讀，讀完這一行會更新。": "The list is being read; this line updates when it is done."
  },
  "patterns": [
   [

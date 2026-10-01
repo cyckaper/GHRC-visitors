@@ -1,7 +1,7 @@
 /** 匯入以前的參訪名單：照欄名讀、日期各種寫法、拆列、預覽時找出已經有的、做成要存的那一筆。 */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeDate, splitList, guessOrgType, parseVisitTable, planImport, importedVisit, cleanRow } from "../lib/import.mjs";
+import { normalizeDate, splitList, guessOrgType, parseVisitTable, planImport, importedVisit, cleanRow, listRows, rowKey, rowsText } from "../lib/import.mjs";
 
 test("日期：各種寫法都收成 YYYY-MM-DD，看不出來就留空", () => {
   assert.equal(normalizeDate("2024-01-08"), "2024-01-08");
@@ -96,4 +96,23 @@ test("要存的那一筆：原表沒有的不補；臺灣來的輔助語言用�
   assert.equal(v.status, "done");
   assert.deepEqual(v.guests, [{ name: "王大明", title: "副總經理", email: "", role: "lead" }]);
   assert.deepEqual(v.imported, { from: "GHRC-參訪名單.xlsx", row: "14", group: "GHRC-參訪名單.xlsx#14", at: "2026-10-01T00:00:00Z", people: "王大明副總經理", companions: "" });
+});
+
+test("名單自動同步：每一列的身分是「日期＋來訪單位」，列的先後與其他欄不算；新的那幾列做成小表，編號對得回是哪一列", () => {
+  const text = ["## 參訪名單", "編號\t日期\t來訪單位\t交流重點／成果", "1\t2024/1/8\t美國伊利諾大學\t講者", "\t2025-02-26\t佐臻股份有限公司（AR眼鏡公司）\t參訪", "", "## 統計", "類別\t場次"].join("\n");
+  const t = listRows(text);
+  assert.deepEqual(t.rows.map((r) => [r.key, r.n]), [["2024-01-08|美國伊利諾大學", 1], ["2025-02-26|佐臻股份有限公司ar眼鏡公司", 2]], "空行之後是統計，不算");
+  assert.equal(rowKey("2024-01-08", "美國 伊利諾大學。"), rowKey("2024/1/8", "美國伊利諾大學"), "日期的寫法、空白與標點不算");
+  assert.equal(rowKey("2024-01-08", "國立臺灣大學"), rowKey("2024-01-08", "國立台灣大學"), "臺／台不算");
+  assert.notEqual(rowKey("2024-01-08", "美國伊利諾大學"), rowKey("2024-01-09", "美國伊利諾大學"), "日期不一樣就是另一列");
+  const mini = rowsText(t, [t.rows[1]]);
+  assert.deepEqual(mini.split("\n").slice(0, 3), ["## 參訪名單", "編號\t原表編號\t日期\t來訪單位\t交流重點／成果", "2\t\t2025-02-26\t佐臻股份有限公司（AR眼鏡公司）\t參訪"], "原表的編號欄可能是空的：最前面加一欄自己的");
+  assert.equal(parseVisitTable(mini).rows[0].source_row, "2", "讀回來的 source_row 就是第幾列");
+  assert.equal(listRows("姓名\temail\nKim\tkim@x"), null, "沒有日期與來訪單位的表頭");
+});
+
+test("預覽：系統裡已經有的，英文拼法差一點（空白、標點、大小寫）也認得出來", () => {
+  const existing = [{ visit_id: "2026-09-23-dunyang", date: "2026-09-23", org: { name: "Dun Yang Engineering Consultants Co., Ltd.", name_local: "" } }];
+  const plan = planImport([{ source_row: "1", date: "2026-09-23", org: { name: "Dunyang Engineering Consultants Co Ltd", name_local: "", type: "enterprise", country: "Taiwan" } }], existing);
+  assert.equal(plan[0].exists, "2026-09-23-dunyang");
 });
