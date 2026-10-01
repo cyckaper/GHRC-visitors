@@ -647,11 +647,15 @@ export async function buildDeck(spec, masterBuf, opts = {}) {
   }
 
   // 5. 今日流程表（第 2 頁若是表格）：時間、英文、第二語言、頁碼
+  // 頁碼沒填就自己算（後台不再請人填這一欄）：總體簡報講的就是這一份從第 1 頁到最後一張選用頁，
+  // 其他區塊沒有投影片寫「—」。最後那兩頁（您最想看哪一部分、QR）是另外加的，不算在裡面——跟以前 AI 填的算法一樣。
+  const pad2 = (n) => String(n).padStart(2, "0");
+  const slidesRange = (b) => String(b.slides_range || "").trim() || (b.kind === "briefing" ? `${pad2(1)} – ${pad2(chosen.length)}` : "—");
   const progN = roleN(slidesIndex, "programme") ?? 2;
   const progPath = byN.get(progN);
   if (progPath && order.includes(progPath) && Array.isArray(spec.programme) && spec.programme.length) {
     const cols = spec.deck?.programme_columns || ["time", "title_en", "title_2nd", "slides_range"];
-    const rows = spec.programme.map((b) => cols.map((c) => (c === "time" ? `${b.start} – ${b.end}` : String(b[c] ?? ""))));
+    const rows = spec.programme.map((b) => cols.map((c) => (c === "time" ? `${b.start} – ${b.end}` : c === "slides_range" ? slidesRange(b) : String(b[c] ?? ""))));
     const ok = await deck.fillTable(progPath, rows);
     report.programme_table = ok ? "filled" : "no table on programme slide（用 text_edits）";
   }
