@@ -544,7 +544,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-world.mjs`：訪客地圖的陸地輪廓與國家落點（`public/data/world.json`），加第三個參數（1:50m）另外產放大用的細海岸線（`world-detail.json`）。
 - 介面語言：`public/data/i18n-admin.json`（後台英文；鍵＝畫面上那句中文）、`scripts/i18n-scan.mjs`（掃出沒翻的，`npm test` 會跑）、
   `public/data/i18n.json`（來賓端四語）、`slides.json` 的 `title_en`。
-- 測試：`npm test`（單元、API 走本機 dev server、產檔與瘦身走合成簡報）、`npm run test:e2e`（Chromium）。`AI_MOCK=1` 讓所有 AI 呼叫回固定範例，`MAIL_MOCK=1` 讓寄信不真的打 Gmail（信寫進媒體庫 `mail/last.json`，測試再讀出來對內容）。CI：`.github/workflows/ci.yml` 在每個 PR 與 main 的 push 跑同一套（typecheck → npm test → e2e）。
+- 測試：`npm test`（單元、API 走本機 dev server、產檔與瘦身走合成簡報）、`npm run test:e2e`（Chromium）。`AI_MOCK=1` 讓所有 AI 呼叫回固定範例，`MAIL_MOCK=1` 讓寄信不真的打 Gmail（信寫進媒體庫 `mail/last.json`，測試再讀出來對內容）。CI：`.github/workflows/ci.yml` 在每個 PR 與 main 的 push 跑同一套（typecheck → npm test → e2e）。**測試不寫死「現在還在將來」的日期**：主場次（西澳大學）的日期照台北時間今天往後推（`test/dates.mjs`）；要已經過去的用 2020 這種遠在過去的日期，要一直在將來的用 2099。寫死的日期一過，「打開後台停在接下來那一場」、來賓專頁的訪前措辭、支援人力表就全部對不上，每個 PR 都紅。
 
 **尚未在真實環境驗證（首次建置時沒有金鑰與母簡報）**
 

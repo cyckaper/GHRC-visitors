@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { taipei, taipeiDate } from "./dates.mjs";
 
 const tmp = await mkdtemp(path.join(os.tmpdir(), "ghrc-store-"));
 process.env.STORE_BACKEND = "file";
@@ -33,9 +34,12 @@ const api = async (p, init = {}) => {
   return { status: r.status, body, headers: r.headers };
 };
 
+// 主場次：西澳大學，兩週後來。日期照今天往後推，不寫死（見 dates.mjs）
+const VISIT_DATE = taipeiDate(14);
+const UWA_ID = `${VISIT_DATE}-uwa`;
 const EMAIL = `Dear Prof. Chang,
 
-Thank you for the invitation. I will visit the Green Health Research Center on 2026-10-07 at 10:00
+Thank you for the invitation. I will visit the Green Health Research Center on ${VISIT_DATE} at 10:00
 together with my colleague Jane Doe <jane.doe@uwa.edu.au>. My assistant Kim (kim.lee@uwa.edu.au) will also join.
 
 Simon Kilbane
@@ -74,11 +78,11 @@ test("extract → visit draft keeps every email on the list", async () => {
   const r = await extract({ email_text: EMAIL });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   const v = r.body.visit;
-  assert.equal(v.date, "2026-10-07");
+  assert.equal(v.date, VISIT_DATE);
   const emails = v.guests.map((g) => g.email).sort();
   assert.deepEqual(emails, ["jane.doe@uwa.edu.au", "kim.lee@uwa.edu.au", "simon.kilbane@uwa.edu.au"]);
   assert.equal(v.guests.filter((g) => g.role === "lead").length, 1);
-  assert.ok(v.visit_id.startsWith("2026-10-07-"));
+  assert.ok(v.visit_id.startsWith(`${VISIT_DATE}-`));
   assert.equal(v.language, "en");
 });
 
@@ -116,13 +120,13 @@ test("extract 跑在背景：一般函式 10 秒不夠，所以回 202 加工作
   const done = await api(`/api/extract?job=${started.body.job_id}`, { headers: admin });
   assert.equal(done.body.status, "done");
   assert.ok(done.body.result.visit.guests.length, "結果留在工作上，前端輪到就拿得到");
-  assert.equal(done.body.result.visit.date, "2026-10-07");
+  assert.equal(done.body.result.visit.date, VISIT_DATE);
 });
 
 test("plan 也跑在背景：提示詞帶整份頁次索引，10 秒同樣不夠", async () => {
   assert.equal((await api("/api/plan", { method: "POST", body: JSON.stringify({ visit: {} }) })).status, 401, "needs the admin token");
   assert.equal((await api("/api/plan", { method: "POST", headers: admin, body: "{}" })).status, 400, "需要 visit");
-  const started = await api("/api/plan", { method: "POST", headers: admin, body: JSON.stringify({ visit: { org: { name: "UWA" }, date: "2026-10-07", start_time: "10:00", end_time: "11:30" } }) });
+  const started = await api("/api/plan", { method: "POST", headers: admin, body: JSON.stringify({ visit: { org: { name: "UWA" }, date: VISIT_DATE, start_time: "10:00", end_time: "11:30" } }) });
   assert.equal(started.status, 202, JSON.stringify(started.body));
   assert.equal((await api(`/api/plan?job=${started.body.job_id}`, { headers: admin })).body.status, "running");
   assert.equal((await api("/api/plan-background", { method: "POST", headers: admin, body: "{}" })).status, 400, "background needs a job_id");
@@ -184,8 +188,8 @@ test("plan → programme, itinerary, slides (always-slides present), then save",
   const saved = await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(planned) });
   assert.equal(saved.status, 200, JSON.stringify(saved.body));
   visitId = saved.body.visit.visit_id;
-  assert.equal(visitId, "2026-10-07-uwa");
-  assert.equal(saved.body.visit.page_url, "https://visit.example.test/2026-10-07-uwa");
+  assert.equal(visitId, UWA_ID);
+  assert.equal(saved.body.visit.page_url, `https://visit.example.test/${UWA_ID}`);
 });
 
 test("public visit view exists without a token and leaks nothing personal", async () => {
@@ -194,7 +198,7 @@ test("public visit view exists without a token and leaks nothing personal", asyn
   const s = JSON.stringify(r.body);
   assert.ok(!s.includes("@uwa.edu.au"));
   assert.ok(r.body.visit.programme.length > 0);
-  assert.equal((await api(`/api/visits?id=2026-10-07-nope&public=1`)).status, 404);
+  assert.equal((await api(`/api/visits?id=${VISIT_DATE}-nope&public=1`)).status, 404);
 });
 
 test("產檔那一刻的行程指紋由伺服器蓋；行程一改就回報簡報過期", async () => {
@@ -218,7 +222,7 @@ test("產檔那一刻的行程指紋由伺服器蓋；行程一改就回報簡�
 test("confirmation letter draft is stored on the visit", async () => {
   const r = await runJob("letter", { visit_id: visitId, kind: "confirmation", sender: "director" });
   assert.equal(r.status, 200, JSON.stringify(r.body));
-  assert.ok(r.body.draft.body.includes("https://visit.example.test/2026-10-07-uwa"));
+  assert.ok(r.body.draft.body.includes(`https://visit.example.test/${UWA_ID}`));
   const v = await api(`/api/visits?id=${visitId}`, { headers: admin });
   assert.ok(v.body.visit.letters.confirmation.subject);
 });
@@ -300,7 +304,7 @@ test("老師卡片：公開讀得到，後台改過的疊在 repo 那一份上�
   assert.equal(after.one_line_en, before.one_line_en, "沒改的欄位不動");
 
   // 照片的 key 要長得對，/api/media 才給公開
-  const bad = await save({ room: "303", fields: { photo: "cards/2026-10-07-uwa/1.jpg" } });
+  const bad = await save({ room: "303", fields: { photo: `cards/${UWA_ID}/1.jpg` } });
   assert.equal(bad.body.labs.find((l) => l.room === "303").photo, "", "只收 labs/<房號>/<檔名> 或 https");
 
   assert.equal((await save({ room: "399", fields: {} })).status, 400, "只有 301–305");
@@ -477,7 +481,7 @@ test("thanks letter: recipients = list + onsite, wording is the 請益 question,
 test("summary writes visit.summary and slide_performance rows; digest lists suggestions; exports work", async () => {
   const s = await runJob("summary", { visit_id: visitId });
   assert.equal(s.status, 200, JSON.stringify(s.body));
-  assert.ok(s.body.summary.includes("2026-10-07"));
+  assert.ok(s.body.summary.includes(VISIT_DATE));
   const perf = JSON.parse(await readFile(path.join(tmp, "slide_performance.json"), "utf8"));
   assert.ok(perf.length > 0);
   assert.ok(perf.every((p) => p.visit_id === visitId && p.used));
@@ -683,12 +687,13 @@ test("後續提醒：依結束時間寄信給自己，一場只寄一次；沒�
   assert.ok(String(stood.body).includes("Gmail"), `沒接 Gmail 要說清楚：${stood.body}`);
 
   // 剛結束、什麼都還沒做的一場（結束時間＝開始 ＋ 總分鐘，這裡設在十分鐘前）
-  const start = new Date(Date.now() - 70 * 60000);
-  const hhmm = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false }).format(start);
-  const date = new Date(start.getTime() + 8 * 3600e3).toISOString().slice(0, 10);
+  const { date, time: hhmm } = taipei(Date.now() - 70 * 60000);
+  // 還沒結束的那一場：兩小時之後才開始。不寫死「同一天 23:30」——台北半夜十二點半到一點十分之間跑，
+  // 上面的 date 還是昨天，那一場就已經結束了
+  const ahead = taipei(Date.now() + 2 * 3600e3);
   const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
   const v = (await put({ org: { name: "Reminder Normal University" }, date, code: "rmd", start_time: hhmm, duration_minutes: 60 })).body.visit;
-  const later = (await put({ org: { name: "Tomorrow University" }, date, code: "tmr", start_time: "23:30", duration_minutes: 60 })).body.visit;
+  const later = (await put({ org: { name: "Tomorrow University" }, date: ahead.date, code: "tmr", start_time: ahead.time, duration_minutes: 60 })).body.visit;
 
   process.env.MAIL_MOCK = "1"; // 不真的打 Gmail：信會寫進媒體庫讓這裡讀
   try {
