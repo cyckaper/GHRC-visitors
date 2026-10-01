@@ -408,8 +408,20 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
   （Netlify 背景函式，15 分鐘上限，一次把整場搬完；一般函式 10 秒不夠）。`drive-cron` 每晚台北時間兩點掃一次補漏。
   `needsSync()` 比對 `visit.drive.backed_up_at` 與參訪／回覆的時間，沒有新東西就跳過；同步只寫 `visit.drive`，
   **不動 `updated_at`**，否則下一次會永遠認為有變動。後台「資料」分頁的「立即備份到 Drive」是手動補救用的（一次一個檔，顯示進度）。
-  授權沿用寄信那組 Google OAuth（`GOOGLE_*` 優先，沒有就用 `GMAIL_*`），refresh token 要含 `drive.file`；
-  用中心自己的帳號而不是服務帳戶（服務帳戶沒有 Drive 配額）。站台的 Blobs 仍是主要資料層，Drive 是另存的檔案庫。
+  **Google 的授權（Drive 備份、名單的 Google 試算表、Gmail 寄信共用一組，`netlify/lib/google.mts`）**：後台「設定」分頁按
+  **「連上 Google」**（`/api/google-auth`：導到 Google 的同意畫面，允許之後導回來、換到 refresh token 存進 Blobs 的 `secrets/google.json`）。
+  **這一份優先**，沒有才用環境變數（`GOOGLE_*`，沒有就 `GMAIL_*`）。**實際踩過**：環境變數那一份是同意畫面還在「測試」時拿的，
+  七天就失效（Google 回 `invalid_grant`）——Drive 備份從九月中默默停了兩週，匯入名單時才看到一行英文錯誤；
+  以前要重新授權得去 OAuth Playground 拿一組、貼進 Netlify、重新部署。所以：
+  - 同意畫面的發布狀態要是「正式版」，OAuth 用戶端要有重新導向 URI `https://<站台>/api/google-auth`（`docs/DEPLOY.md` 6.5）。
+  - 過期了**講人話**（`EXPIRED`：「到後台『設定』分頁按『重新連上 Google』」），不丟一串 JSON；專案沒啟用 Gmail／Drive API 也講人話（`apiDisabled`）。
+    設定分頁那一行**真的換一次 access token** 才寫「已連上」，過期了**每一頁上面都掛一條**（`#googleWarn`）——只看環境變數在不在的話，過期了也寫「已設定」。
+  - 「接好了沒」一律問 `driveReady()`／`gmailReady()`（後台連上的或環境變數的，有一組就算），**不要只看環境變數**——
+    只在後台連上的站台會被當成「沒設定」，備份、寄信整個略過。
+  - Google 導回來那一次**不帶登入的 cookie**（SameSite=Strict 從別的網站導回來不會帶），靠 `state` 認人：用 ADMIN_TOKEN 簽過、十分鐘內、一次性（`oauth/<nonce>.json`）。
+  - 存下來的那一份**不經過 `/api/media`**，設定分頁只回「連上了沒、哪個帳號、現在能不能用」。
+  用中心自己的帳號而不是服務帳戶（服務帳戶沒有 Drive 配額）；**帳號選定就不要換**（`drive.file` 只看得到自己建的檔案）。
+  站台的 Blobs 仍是主要資料層，Drive 是另存的檔案庫。
   **`GOOGLE_DRIVE_FOLDER_ID` 通常留空**：`drive.file` 只看得到程式自己建立的檔案，指定別人建的資料夾會存取不到，
   留空時 `ensureFolder("GHRC 參訪", "root")` 會自己在雲端硬碟根目錄建一個並沿用（設定步驟見 `docs/DEPLOY.md` 6.5）。
 - **每場產出一頁摘要——不必人記得按**（`summary-cron`，每晚台北時間凌晨一點）：參訪過完、有回饋可寫的
@@ -505,6 +517,8 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
         加進來的跟匯入的一樣帶原表的「來訪人員」「交流重點」，所以公開的 `/visits` 上就看得到；不想公開的在「資料」分頁勾掉。
       - **刪掉一列、改已經加進來的那一列，系統裡那一場不會跟著刪或改**（要改在「資料」分頁改）——自動刪東西太危險。
       - 一次最多讀 60 列，還有剩下一輪接著讀；讀失敗了記在名單那一行，名單沒再改的話六小時後才再試（不要每十五分鐘打一次 AI）。
+      - **全部都已經在系統裡了也能只存成 Google 試算表**：同一份名單再選一次，預覽裡沒有可以勾的列，按鍵就變成「只存成 Google 試算表」。
+        第一次匯入時 Google 授權過期、試算表沒存成（實際發生過：26 筆匯入了，名單那一行卻是 `invalid_grant`），重新連上 Google 之後就這樣補。
       - 測試：`DRIVE_MOCK=1` 讓「Drive 上的試算表」存在媒體庫（`drive.mts mockSheetWrite` 模擬有人加了一列）；備份照舊看真的 Google 設定。
   - **畫法在 `public/lib/worldmap.mjs`，中心首頁的「來訪單位」用同一份**（明確要求：「GHRC 介紹首頁加入設定中的世界地圖，
     標出來訪單位」）：投影、放大、拖曳、群集、名稱、細海岸線都在模組裡（`mountWorldMap()`，樣式自帶、在 `.wm` 底下）；
@@ -580,11 +594,11 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 **已完成（P1–P4 最小可用系統 ＋ P5 捷徑 ＋ P6 產檔 ＋ P7 摘要／彙整）**
 
-- `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → **通告研究室（各室在支援人力表上填的分鐘自動排進行程）** → **今日流程（自動排好，平常只看；要改再點開）** → 自動存 → QR／.ics → **確認信（草擬、寄出或 mailto）**，**最底下列出「以前做過的參訪」**）、**簡報（獨立分頁：**AI 挑頁**、選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、後續（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁、**動作五 感謝信**）、資料（歷次參訪、**匯入以前的參訪**、回覆、摘要、跨場次彙整、CSV、Drive）、**設定（母簡報、預設值、支援人力表、外部服務狀態、老師卡片）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
+- `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → **通告研究室（各室在支援人力表上填的分鐘自動排進行程）** → **今日流程（自動排好，平常只看；要改再點開）** → 自動存 → QR／.ics → **確認信（草擬、寄出或 mailto）**，**最底下列出「以前做過的參訪」**）、**簡報（獨立分頁：**AI 挑頁**、選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、後續（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁、**動作五 感謝信**）、資料（歷次參訪、**匯入以前的參訪**、回覆、摘要、跨場次彙整、CSV、Drive）、**設定（母簡報、預設值、支援人力表、外部服務狀態與「連上 Google」、老師卡片）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
 - `public/index.html`：專屬網址 `/<visit_id>`；整頁一種語言（預設英文，`?ui=zh` 換中文；ko／ja 來賓才另外附他們的語言）；流程（參訪當天標出「現在」；研究室參訪底下一間一行、各自的時段）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
 - `public/visits.html`：**來訪紀錄 `/visits`**——已經來過的每一場（日期、單位、來訪人員、交流重點、去了哪幾間）＋同一張世界地圖，首頁的「來訪單位」連過來（見「約定」的「中心首頁」）。
 - `public/center.html`：**中心首頁 `/`**——中心簡介、三大任務、沿革、國際平台、來訪單位（世界地圖）、外部肯定、組織架構、五間研究室（卡片，各連到 `/lab/<房號>`）、聯絡；字在 `public/data/center.json`（見「約定」的「中心首頁」）。
-- `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`／`geo-background`／`import-background`／`visit-list-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`；`geo` 查訪客地圖上各單位在哪裡；`import` 讀以前的參訪名單；`visit-list` 讀 Google 試算表名單裡新加的列）`drive` `drive-sync-background`（自動備份）；**四支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
+- `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `google-auth`（連上 Google：Drive、名單試算表、寄信共用的授權） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`／`geo-background`／`import-background`／`visit-list-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`；`geo` 查訪客地圖上各單位在哪裡；`import` 讀以前的參訪名單；`visit-list` 讀 Google 試算表名單裡新加的列）`drive` `drive-sync-background`（自動備份）；**四支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
   `rota`（支援人力表，各研究室自己填）； `visitor-map`（**公開**：中心首頁的來訪單位地圖，只有單位、位置與來過幾次）； `import`（匯入以前的參訪名單：預覽與寫入，規則在 `lib/import.mjs`）； `visit-log`（**公開**：`/visits` 來訪紀錄頁；admin 用 POST 改公開說明與「不公開」）；
   `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，後續提醒）／`visit-list-cron`（每十五分鐘，名單有人加了列就讀進來）； `visit-list`（參訪名單的 Google 試算表：連上、看一次、現在就讀）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive／cdn／visitlist）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
@@ -711,8 +725,8 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
   沒接 Gmail 時，兩封來賓信的**「複製信件」變成主鈕**（按「寄出」只會得到一句「沒接 Gmail」）——
   中心目前就是複製貼到自己的信箱寄。通告與回報本來就是複製優先（那兩則是貼進 LINE 群組的）。
 - **「設定」分頁放不屬於任何一場參訪的東西**：母簡報、預設值（訪後信寄件者、後續提醒寄到哪裡，存在
-  `settings.json`，`/api/settings`）、支援人力表（直接顯示那一張表）、外部服務狀態（Claude／Whisper／Gmail／Drive／母簡報，
-  **只回「接好了沒」，不回任何金鑰內容**）、老師卡片與介紹頁。混在每場的分頁裡會讓人以為每場都要做一次。
+  `settings.json`，`/api/settings`）、支援人力表（直接顯示那一張表）、外部服務狀態（Google 連上了沒與「連上 Google」那顆鍵、
+  Claude／Whisper／Gmail／Drive／母簡報，**只回「接好了沒」，不回任何金鑰內容**）、老師卡片與介紹頁。混在每場的分頁裡會讓人以為每場都要做一次。
   **「設定已經太亂了」**（明確回報）：「研究室老師的信箱」與「影片連結」兩張卡片拿掉了，開場白只剩一句。
   `loadSettings()` 只留認得的欄位，以前存過的 `lab_emails`／`video_links` 讀的時候就丟掉。
   **新增東西之前先想：它真的每場都用不到、又非放在這裡不可嗎？**
@@ -765,6 +779,8 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
   - **Blobs 的讀取一律 strong**（`readLatest`）：預設的讀法走邊緣快取，官方說更新最多 60 秒才傳到每一個節點——
     一台電腦剛存的，另一台一分鐘內可能還讀到舊的，「讀—改—寫」讀到舊的那一份就把別人剛存的蓋掉。
     環境沒有 `uncachedEdgeURL` 時 strong 會丟 `BlobsConsistencyError`：退回預設讀法，整站不會壞。
+  - **列表也是**（`listLatest`）：`list()` 沒有每一次的 consistency 參數，要在 `getStore` 那一層開 strong。
+    **實際踩過**：匯入 26 場之後，「資料」分頁的清單只看得到 5 場——新存的那幾筆還沒傳到邊緣節點的列表裡。
   - 版本號跟著資料一起拿；讀的時候拿不到版本號（官方的本機 Blobs 伺服器就是）就先從列表拿版本號、**再**讀資料——順序不能反，
     反了的話舊資料配新版本號，條件寫入會成功、把中間那一次蓋掉。版本號可能不準的時候對不上就照以前的方式直接寫（不要整個存不進去）。
   - 本機檔案後端：同一個程序裡排隊（`withLock`，所有場次在同一個檔），暫存檔名每一次都不一樣（以前同一毫秒的兩個寫入寫進同一個暫存檔）。
@@ -824,7 +840,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
   報告會說「更正母簡報內文：『四間研究室』→『五間研究室』N 處」。對不到不算錯——母簡報改好之後本來就對不到。
   **只放事實錯誤**，不放語氣或排版偏好；`find` 要夠長不會誤傷別句，長的排前面（`Four Research Laboratories`
   要比 `Four Laboratories` 早）。這是治標，真正的修正是把母簡報改好。
-- 產檔在瀏覽器：`admin.html` 先問 `/api/master`（後台上傳的母簡報，4 MB 分塊存在媒體庫 `master/<upload_id>/part-i` ＋ `master/manifest.json`），再 HEAD `/assets/master/slim-master.pptx`（站台對不存在的路徑會回 index.html，所以看 content-type 不看狀態碼）；兩者都沒有時，「產生簡報」在同一個點擊裡同步開檔案選擇視窗，選完立刻產，並提供「把這份母簡報存到站台」。選檔或上傳時若檔案含影片或超過 60 MB，先在瀏覽器裡瘦身（`public/lib/pptx.mjs slimDeck`：抽影片留海報＋「▶ Video」、超過 3 MB 的圖用 canvas 縮到 2000px、清孤兒；規則同 `scripts/slim-master.py`），所以可以直接選 396 MB 的原始母簡報。JSZip 由 cdnjs 載入、QR 用頁面已有的 qrcodejs 畫 canvas（沒有就只放網址文字）。存檔後區塊不放操作說明，只有一行進度與必要時的警告。
+- 產檔在瀏覽器：`admin.html` 先問 `/api/master`（後台上傳的母簡報，4 MB 分塊存在媒體庫 `master/<upload_id>/part-i` ＋ `master/manifest.json`），再 HEAD `/assets/master/slim-master.pptx`（站台對不存在的路徑會回 index.html，所以看 content-type 不看狀態碼）；兩者都沒有時，「產生簡報」在同一個點擊裡同步開檔案選擇視窗，選完立刻產，並提供「把這份母簡報存到站台」。**站台上有沒有母簡報是問完才換**（`checkMaster`／`setMaster`）：換一場、切到簡報分頁都會再問一次，以前一問就先清成「沒有」，這一兩百毫秒裡按「產生簡報」就跳出選檔視窗（站台上明明有一份；e2e 偶爾卡在這裡才找到）。選檔或上傳時若檔案含影片或超過 60 MB，先在瀏覽器裡瘦身（`public/lib/pptx.mjs slimDeck`：抽影片留海報＋「▶ Video」、超過 3 MB 的圖用 canvas 縮到 2000px、清孤兒；規則同 `scripts/slim-master.py`），所以可以直接選 396 MB 的原始母簡報。JSZip 由 cdnjs 載入、QR 用頁面已有的 qrcodejs 畫 canvas（沒有就只放網址文字）。存檔後區塊不放操作說明，只有一行進度與必要時的警告。
 - **來賓端雙語**：整頁一種語言（見上面「兩邊都可以切中英文」），只有 `visit.language` 是 ko／ja 時才附第二語言。流程區塊的標題空白時用 `i18n.json` 的 `kind_*` 補（兩種語言各補各的）。
 - **來賓端依階段換措辭**：訪前（日期在未來，或沒有參訪代碼——`/index.html`、打錯的網址；`/` 已經是中心首頁）用「將參訪」、不放感謝表單；
   **留信箱訪前就在**（原本只有當天才顯示——但專頁的網址是寫在訪前的確認信裡寄出去的，

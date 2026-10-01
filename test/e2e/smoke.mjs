@@ -245,7 +245,18 @@ try {
     await page.selectOption("#visitSelect", "2026-10-07-uwa");
     await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]").length > 0);
     await page.waitForFunction(() => /移除/.test(document.getElementById("masterRow").textContent));
+    // 換一場、切分頁都會再問一次站台上有沒有母簡報。以前一問就先清成「沒有」，這時候按「產生簡報」
+    // 就跳出選檔視窗（站台上明明有一份；這支測試偶爾就卡在這裡）。讓那一問慢一點，問的時候按下去
+    let picked = false;
+    page.on("filechooser", () => { picked = true; });
+    const masterCheck = (u) => u.pathname === "/api/master" && !u.search;
+    await page.route(masterCheck, async (route) => { await new Promise((r) => setTimeout(r, 1500)); await route.continue(); });
+    const asked = page.waitForRequest((q) => masterCheck(new URL(q.url())));
+    await page.selectOption("#visitSelect", "2026-10-07-uwa");
+    await asked;
     const [download2] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), page.click("#deckBtn")]);
+    check(!picked, "pressing 產生簡報 while the site is being asked about the master again builds from the stored one — no file picker");
+    await page.unroute(masterCheck);
     const pptxPath2 = path.join(tmp, "browser2.pptx");
     await download2.saveAs(pptxPath2);
     const v2 = await (await Deck.load(await readFile(pptxPath2))).validate();
@@ -474,12 +485,20 @@ try {
     await page.click("#importTable tbody tr:nth-child(3) [data-import]");
     check((await page.textContent("#importGo")) === "匯入 2 筆", "…unticking a row takes it out");
     await page.click("#importTable tbody tr:nth-child(3) [data-import]");
+    // 這一次先不存成 Google 試算表（正式站第一次就是這樣：匯入成功、Google 那一步因為授權過期沒做成）
+    await page.uncheck("#importLink");
     await page.click("#importGo");
     await page.waitForFunction(() => /匯入了 3 筆/.test(document.getElementById("importInfo").textContent), null, { timeout: 30000 });
     check(await page.isHidden("#importBox"), "…after importing, the preview goes away");
     await page.waitForFunction(() => /佐臻/.test(document.getElementById("visitsTable").textContent));
     await page.waitForFunction(() => /4 個國家 · 4 個單位 · 3 場/.test(document.getElementById("mapSummary").textContent), null, { timeout: 30000 });
     check(true, `the imported visits are on the map; the two universities from one row count as one visit (${await page.textContent("#mapSummary")})`);
+    check(await page.isHidden("#listBox"), "…not linked to a Google Sheet yet when that box was unticked");
+    // 同一份再選一次：都已經有了，沒有東西可以匯入，但還是可以「只存成 Google 試算表」
+    await page.setInputFiles("#importFile", { name: "GHRC-參訪名單.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer: await pastVisitsXlsx() });
+    await page.waitForFunction(() => document.getElementById("importGo").textContent === "只存成 Google 試算表", null, { timeout: 60000 });
+    check((await page.locator("#importTable [data-import]").count()) === 0 && !(await page.isDisabled("#importGo")), "picking the same list again: nothing left to import, but it can still be saved as a Google Sheet");
+    await page.click("#importGo");
     await page.waitForSelector("#listBox:not([hidden])", { timeout: 30000 });
     check(/GHRC 參訪名單/.test(await page.textContent("#listInfo")) && /每十五分鐘/.test(await page.textContent("#listInfo")), `…and the list is now a Google Sheet the system keeps watching (${await page.textContent("#listInfo")})`);
     // 有人在那份試算表裡加了一列：「現在就看一次」（平常是每十五分鐘自己看、打開這一頁也看一次）
@@ -490,7 +509,9 @@ try {
       await page.click("#listSync");
       await page.waitForFunction(() => /從名單加了 1 筆/.test(document.getElementById("listNote").textContent), null, { timeout: 60000 });
       await page.waitForFunction(() => /日本千葉大學園藝學院/.test(document.getElementById("visitsTable").textContent), null, { timeout: 30000 });
-      check(/上一次加了 1 筆/.test(await page.textContent("#listInfo")), "a row added to the Google Sheet comes in on its own, and the list line says so");
+      // 名單那一行是清單畫完之後才去重讀的（loadDataTab 不等它），CI 上慢一點就會比清單晚一拍——等它，不要當場比
+      await page.waitForFunction(() => /上一次加了 1 筆/.test(document.getElementById("listInfo").textContent), null, { timeout: 30000 });
+      check(true, "a row added to the Google Sheet comes in on its own, and the list line says so");
     }
     await page.click("#visitsTable tr:has-text('佐臻')");
     await page.waitForFunction(() => /匯入/.test(document.getElementById("summary").textContent));
@@ -516,6 +537,8 @@ try {
   await page.waitForFunction(() => document.querySelectorAll("#statusList li").length > 0, null, { timeout: 30000 });
   check((await page.locator("#statusList li").count()) >= 6, "the settings tab says which external services are wired up");
   check(/後續提醒/.test(await page.textContent("#statusList")), "…including whether the wrap-up reminder can be sent");
+  // Google（備份、名單、寄信共用那一組）：連上了沒寫在上面那一行；這裡沒有 OAuth 用戶端，所以是「未設定」、沒有那顆按鈕，也沒有「授權過期」那一條
+  check(/Google（Drive 備份、參訪名單、寄信）/.test(await page.textContent("#googleInfo")) && /未設定/.test(await page.textContent("#googleInfo")) && (await page.isHidden("#googleConnect")) && (await page.isHidden("#googleWarn")), "…and whether Google (backups, the visitor list, mail) is connected, with no reconnect button when there is no OAuth client");
   check(/不會寄|現在寄到/.test(await page.textContent("#reminderInfo")), "the settings tab says where the wrap-up reminder would go");
   await page.fill("#reminderTo", "wrapup@ntu.edu.tw");
   await page.locator("#senderDefault").focus(); // blur → change

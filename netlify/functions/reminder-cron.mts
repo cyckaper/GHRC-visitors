@@ -1,7 +1,7 @@
 import type { Config } from "@netlify/functions";
 import { nowISO, requireCron, siteUrl } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
-import { gmailConfigured, gmailSend } from "../lib/mail.mts";
+import { gmailReady, gmailSend } from "../lib/mail.mts";
 import { reminderTo } from "./settings.mts";
 import { visitEndAt, visitStartAt, wrapupSettled, wrapupTodo } from "../../lib/visit.mjs";
 import type { Visit } from "../lib/types.mts";
@@ -23,7 +23,7 @@ const WINDOW_HOURS = 6;
 export default async (req: Request) => {
   const denied = await requireCron(req);
   if (denied) return denied;
-  if (!gmailConfigured()) return new Response("Gmail 尚未設定，略過");
+  if (!(await gmailReady())) return new Response("Gmail 尚未設定，略過");
   const to = await reminderTo();
   if (!to) return new Response("還沒設定後續提醒的收件者，略過");
   const store = getStore();
