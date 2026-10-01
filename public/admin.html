@@ -107,6 +107,9 @@
     <button class="tab" role="tab" data-tab="settings">設定</button>
   </nav>
 
+  <!-- Google 的授權過期了：備份、名單同步、寄信都停了——要讓人看得到，不能只寫在設定分頁裡（以前默默停了兩週） -->
+  <p id="googleWarn" class="card !py-2 text-sm border-amber-300 bg-amber-50 text-amber-900" hidden><span>Google 的授權過期了：Drive 備份、參訪名單的自動同步、從後台寄信都停了。</span> <a class="underline font-medium" href="/api/google-auth?start=1">重新連上 Google</a></p>
+
   <!-- 全站一個「這一場」：每個分頁都在同一場上做事，不必一頁選一次 -->
   <div class="card !py-2 flex flex-wrap items-center gap-2">
     <label class="f mb-0" for="visitSelect">這一場</label>
@@ -545,7 +548,8 @@
 
     <div class="card space-y-3">
       <h2 class="font-semibold">外部服務</h2>
-      <p class="muted">金鑰一律放 Netlify 的環境變數，這裡只看得到「接好了沒」。改完要重新部署才會生效。</p>
+      <p class="muted">金鑰放在 Netlify 的環境變數，改完要重新部署才會生效；Google 的授權不必動環境變數，按下面的「連上 Google」就好。這裡只看得到「接好了沒」。</p>
+      <div class="flex flex-wrap items-center gap-2 text-sm"><span id="googleInfo"></span><a class="btn btn-soft" id="googleConnect" href="/api/google-auth?start=1" title="用中心的 Google 帳號允許一次：Drive 備份、參訪名單的 Google 試算表、從後台寄信都用這一組。授權過期了也按這裡">連上 Google</a></div>
       <ul class="text-sm space-y-1" id="statusList"></ul>
     </div>
 
@@ -815,6 +819,14 @@
     await loadVisits({ autoPick: true });
     // 預設值（例如訪後信寄件者）與「哪些外部服務接好了」一開場就拿，不必等人打開「設定」
     api("/api/settings").then((r) => { if (r.ok) { state.settings = r.settings; state.services = r.status; renderServiceNotes(); } });
+    // 從 Google 的同意畫面回來（/api/google-auth 導回 ?google=…）：說一聲結果，停在設定分頁
+    const g = new URLSearchParams(location.search).get("google");
+    if (g) {
+      history.replaceState(null, "", location.pathname + location.hash);
+      const msg = { ok: "已經連上 Google：Drive 備份、參訪名單、寄信都用這一組。", denied: "沒有允許，Google 沒有連上。", noscope: "要勾「Google 雲端硬碟」那一項，系統才看得到名單與備份；請再按一次「連上 Google」。", expired: "這一次連結逾時了，請再按一次「連上 Google」。" }[g] || "Google 沒有連上，請再按一次「連上 Google」。";
+      flash(msg, g === "ok" ? "ok" : "err");
+      setTimeout(() => showTab("settings"), 0);
+    }
     // 打開後台就停在今天（或最近）那一場——不必自己先去選
     const m = /wrapup=([\w-]+)/.exec(location.hash);
     if (m) $("visitSelect").value = m[1];
@@ -1645,17 +1657,30 @@
   const PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
   const PART = 4 * 1024 * 1024;
   const mb = (n) => `${(n / 1e6).toFixed(1)} MB`;
-  async function checkMaster() {
-    state.master = null; state.masterOnSite = false;
-    const r = await api("/api/master");
-    if (r.ok) state.master = r.master || null;
-    if (!state.master) {
-      try {
-        const h = await fetch(MASTER_URL, { method: "HEAD", cache: "no-store" });
-        // 站台對不存在的路徑會回 index.html（200），所以看型別不看狀態碼
-        state.masterOnSite = h.ok && !/text\/html/i.test(h.headers.get("content-type") || "");
-      } catch (e) { state.masterOnSite = false; }
-    }
+  /**
+   * 站台上有沒有母簡報。**問完才換**：以前一開始就先清成「沒有」再去問，這一兩百毫秒裡按「產生簡報」
+   * 就跳出選檔視窗——站台上明明有一份（換一場、切到簡報分頁都會再問一次，所以不是只有剛打開才會遇到）。
+   * 後面又問了一次（或剛上傳、剛移除）就以那一次為準，舊的答案後回來不蓋掉新的。
+   */
+  function checkMaster() {
+    const seq = (checkMaster.seq = (checkMaster.seq || 0) + 1);
+    return (state.masterChecking = (async () => {
+      let master = null, onSite = false;
+      const r = await api("/api/master");
+      if (r.ok) master = r.master || null;
+      if (!master) {
+        try {
+          const h = await fetch(MASTER_URL, { method: "HEAD", cache: "no-store" });
+          // 站台對不存在的路徑會回 index.html（200），所以看型別不看狀態碼
+          onSite = h.ok && !/text\/html/i.test(h.headers.get("content-type") || "");
+        } catch (e) { onSite = false; }
+      }
+      if (seq === checkMaster.seq) setMaster(master, onSite);
+    })());
+  }
+  function setMaster(master, onSite = false) {
+    checkMaster.seq = (checkMaster.seq || 0) + 1; // 還在路上的那一次作廢
+    state.master = master; state.masterOnSite = onSite; state.masterKnown = true;
     renderMasterRow();
   }
   function renderMasterRow() {
@@ -1669,7 +1694,7 @@
     else if (state.masterOnSite) row.innerHTML = `<span class="muted">母簡報：站台上的 slim-master.pptx</span>`;
     else row.innerHTML = `<span class="muted">母簡報還沒放上站台（只要做一次；可直接選原始母簡報，會先在瀏覽器裡瘦身）</span><label class="btn btn-soft cursor-pointer">上傳母簡報 .pptx<input type="file" id="masterUpload" accept=".pptx" hidden></label>`;
     const up = $("masterUpload"); if (up) up.onchange = () => { const f = up.files[0]; if (f) uploadMaster(f); };
-    const rm = $("masterRemove"); if (rm) rm.onclick = async () => { if (!confirm(t("移除站台上的母簡報？"))) return; const r = await api("/api/master", { method: "DELETE" }); if (!r.ok) return flash(r.error, "err"); state.masterBytes = null; await checkMaster(); };
+    const rm = $("masterRemove"); if (rm) rm.onclick = async () => { if (!confirm(t("移除站台上的母簡報？"))) return; const r = await api("/api/master", { method: "DELETE" }); if (!r.ok) return flash(r.error, "err"); state.masterBytes = null; setMaster(null); await checkMaster(); };
   }
   async function uploadMaster(file) {
     const info = $("deckInfo"); info.hidden = false;
@@ -1721,7 +1746,7 @@
     }
     const c = await api(`/api/master?upload=${id}&commit=1&total=${total}&name=${encodeURIComponent(name)}`, { method: "POST" });
     if (!c.ok) throw new Error(c.error || "上傳沒有完成");
-    state.master = c.master; state.masterOnSite = false; state.masterBytes = bytes; renderMasterRow();
+    state.masterBytes = bytes; setMaster(c.master);
   }
   function loadScript(src) { return new Promise((resolve, reject) => { const el = document.createElement("script"); el.src = src; el.onload = resolve; el.onerror = () => reject(new Error("載入失敗：" + src)); document.head.appendChild(el); }); }
   async function deckCore() {
@@ -1781,8 +1806,11 @@
     return out;
   }
   // 按「產生簡報」：站台有母簡報就直接產；沒有就先跳選檔視窗（要在同一個點擊裡同步呼叫），選完立刻產
-  $("deckBtn").onclick = () => {
+  $("deckBtn").onclick = async () => {
     if (!state.deckVisit) return flash("請先選一場參訪", "err");
+    // 剛打開、還不知道站台上有沒有母簡報：等第一次問完再決定（不然站台上明明有，卻跳出選檔視窗）。
+    // 問過一次之後就不等——選檔視窗要在同一個點擊裡同步打開（iPad 的 Safari 等久了就不給開）
+    if (!state.masterKnown) await state.masterChecking;
     if (!state.masterBytes && !state.master && !state.masterOnSite) { state.buildAfterPick = true; $("masterFile").value = ""; $("masterFile").click(); return; }
     buildDeck();
   };
@@ -2210,7 +2238,7 @@
       const r = await runJob("/api/letter", { visit_id: $("visitSelect").value, action: "send", kind, sender: $(ids.sender).value, subject: $(ids.subject).value, body: $(ids.body).value, recipients }, note, `寄送中……一封一封寄，${recipients.length} 人大約要一分鐘。`);
       if (!r) return;
       if (r.sent) { $(ids.info).innerHTML = `<span class="ok">已寄給 ${r.sent_to.length} 人${r.failed?.length ? `，${r.failed.length} 人失敗：${esc(r.failed.map((f) => f.email).join("、"))}` : ""}</span>`; $(ids.mailto).hidden = true; flash(`${label}已寄出`); rebase([ids.subject, ids.body]); queueDraft(); applyDraft(); loadVisits(); loadRecipients(); }
-      else if (r.reason === "gmail_not_configured") { $(ids.info).innerHTML = `<span class="err">尚未寄出：Netlify 沒有設定 Gmail（GMAIL_CLIENT_ID／SECRET／REFRESH_TOKEN）。用右邊那顆自己寄，或按「複製信件」貼到你的信箱。</span>`; const m = $(ids.mailto); m.dataset.mailto = r.mailto; m.hidden = false; m.onclick = () => openMailto(m, $(ids.body).value, $(ids.info)); }
+      else if (r.reason === "gmail_not_configured") { $(ids.info).innerHTML = `<span class="err">尚未寄出：Gmail 還沒接好（到「設定」分頁按「連上 Google」）。用右邊那顆自己寄，或按「複製信件」貼到你的信箱。</span>`; const m = $(ids.mailto); m.dataset.mailto = r.mailto; m.hidden = false; m.onclick = () => openMailto(m, $(ids.body).value, $(ids.info)); }
       else { $(ids.info).innerHTML = `<span class="err">一封都沒寄成功：${esc((r.failed || []).map((f) => `${f.email}（${f.error}）`).join("；")) || "未知原因"}</span>`; flash("寄送失敗", "err"); }
     });
   }
@@ -2256,8 +2284,8 @@
   const STATUS_ROWS = [
     ["ai", "Claude（抽取、排程、信件、讀字、摘要）", "ANTHROPIC_API_KEY"],
     ["whisper", "Whisper（口述轉文字）", "OPENAI_API_KEY；沒有也能用打字的逐字稿"],
-    ["gmail", "Gmail（從後台寄信）", "GMAIL_CLIENT_ID／SECRET／REFRESH_TOKEN；沒有就用 mailto 自己寄"],
-    ["drive", "Google Drive（每場自動備份）", "GOOGLE_*（沒有就用 GMAIL_* 那一組），refresh token 要含 drive.file"],
+    ["gmail", "Gmail（從後台寄信）", "上面那一行的「連上 Google」（要允許寄信）；沒有就用 mailto 自己寄"],
+    ["drive", "Google Drive（每場自動備份）", "上面那一行的「連上 Google」"],
     ["reminder", "後續提醒（參訪結束時寄信給自己）", "需要 Gmail ＋上面那個收件信箱"],
     ["master", "母簡報", "在上面放一份，或 commit 到 public/assets/master/"],
   ];
@@ -2273,6 +2301,7 @@
     loadLabsTab();
     $("reminderInfo").textContent = r.settings.reminder_to ? "" : r.effective?.reminder_to ? `留空：現在寄到 ${r.effective.reminder_to}` : "還沒有收件信箱，現在不會寄提醒";
     loadRotaTable(); // 不等它：表慢一點出來，設定分頁其他東西先能用
+    renderGoogle();
     $("statusList").innerHTML = STATUS_ROWS.map(([k, label, where]) => {
       const on = !!r.status[k];
       const note = k === "ai" && r.status.ai_mock ? "（AI_MOCK：回固定範例，不會真的問 Claude）" : "";
@@ -2285,8 +2314,30 @@
    * 「不必記得」那一句仍然寫著——等於答應了一件不會發生的事（「留 email」那個洞就是這樣來的）。
    * 寄信與通告按下去當場就會說沒接 Gmail，所以不必再多一句。
    */
+  /**
+   * Google（Drive 備份、參訪名單、寄信共用那一組授權）連上了沒、哪個帳號、現在能不能用。
+   * 過期了：設定分頁那一行寫出來，**每一頁上面也掛一條**——以前只看環境變數在不在，過期了照樣寫「已設定」，
+   * Drive 備份從九月中默默停了兩週。按「重新連上 Google」走 /api/google-auth，用中心的帳號允許一次就好。
+   */
+  function renderGoogle() {
+    const g = state.services?.google;
+    if (!g) return;
+    $("googleWarn").hidden = !(g.connected && !g.ok && g.expired);
+    const info = $("googleInfo");
+    if (!info) return;
+    $("googleConnect").textContent = g.connected ? "重新連上 Google" : "連上 Google";
+    $("googleConnect").hidden = !g.client;
+    info.innerHTML = !g.client
+      ? `<span class="err">未設定</span> <span>Google（Drive 備份、參訪名單、寄信）</span> <span class="muted">· Netlify 環境變數要有 GOOGLE_CLIENT_ID／SECRET（或 GMAIL_ 那一組）</span>`
+      : !g.connected
+        ? `<span class="err">還沒連上</span> <span>Google（Drive 備份、參訪名單、寄信）</span>`
+        : g.ok
+          ? `<span class="ok">已連上</span> <span>Google（Drive 備份、參訪名單、寄信）</span>${g.email ? ` <span class="muted" translate="no">${esc(g.email)}</span>` : ""}`
+          : `<span class="err">${g.expired ? "授權過期了" : "連不上"}</span> <span>Google（Drive 備份、參訪名單、寄信）</span>${g.email ? ` <span class="muted" translate="no">${esc(g.email)}</span>` : ""}${g.expired ? "" : ` <span class="muted">${esc(g.error || "")}</span>`}`;
+  }
   function renderServiceNotes() {
     if (!state.services) return;
+    renderGoogle();
     const gmail = !!state.services.gmail;
     const el = $("reminderOff");
     if (el) el.hidden = gmail;
@@ -2733,9 +2784,12 @@
   const importPicked = () => [...$("importTable").querySelectorAll("tr[data-i]")].filter((tr) => tr.querySelector("[data-import]")?.checked).map((tr) => state.importPlan.rows[Number(tr.dataset.i)]);
   function updateImportGo() {
     const n = state.importPlan ? importPicked().length : 0;
-    $("importGo").textContent = `匯入 ${n} 筆`;
-    $("importGo").disabled = !n;
+    // 都已經匯入過了（上一次存成 Google 試算表那一步沒做成）：還是可以只把這份存成 Google 試算表
+    const onlyLink = !n && !$("importLinkRow").hidden && $("importLink").checked;
+    $("importGo").textContent = onlyLink ? "只存成 Google 試算表" : `匯入 ${n} 筆`;
+    $("importGo").disabled = !n && !onlyLink;
   }
+  $("importLink").onchange = updateImportGo;
   $("importTable").addEventListener("change", (e) => {
     if (e.target.id === "importAll") $("importTable").querySelectorAll("[data-import]").forEach((c) => (c.checked = e.target.checked));
     updateImportGo();
@@ -2744,23 +2798,33 @@
   $("importGo").onclick = () => busy($("importGo"), async () => {
     const p = state.importPlan;
     const rows = p ? importPicked() : [];
-    if (!rows.length) return;
+    const link = !$("importLinkRow").hidden && $("importLink").checked && state.importFile;
+    if (!rows.length) {
+      if (!link) return;
+      state.importPlan = null;
+      $("importBox").hidden = true;
+      $("importInfo").textContent = "";
+      await linkList();
+      return;
+    }
     const r = await api("/api/import", { method: "POST", body: { action: "commit", file: p.file, rows } });
     if (!r.ok) { $("importInfo").textContent = r.error || ""; return flash(r.error || "沒有匯入", "err"); }
     state.importPlan = null;
     $("importBox").hidden = true;
     const skipped = (r.skipped || []).map((x) => `${x.org}：${x.reason}`).join("；");
     flash(`匯入了 ${r.created.length} 筆`);
-    const link = !$("importLinkRow").hidden && $("importLink").checked && state.importFile;
     await loadDataTab(); // 清單與地圖跟著更新；還沒查過位置的，地圖自己會去查
     $("importInfo").textContent = `匯入了 ${r.created.length} 筆${skipped ? `（沒有匯入：${skipped}）` : ""}。地圖上的位置正在查，查好會自己更新。`;
-    if (link) {
-      const done = await runJob("/api/visit-list", { action: "link", file: state.importFile }, noteInto("listNote"), "正在把名單存成 Google 試算表……", { anyVisit: true });
-      if (done?.linked) $("listNote").textContent = "名單已經存成 Google 試算表：以後在那份試算表加一列，系統每十五分鐘看一次，自動加進來。";
-      await loadVisitList();
-    }
+    if (link) await linkList();
     state.importFile = null;
   });
+  /** 把剛剛選的那一份存成系統自己的 Google 試算表，之後就看那一份。 */
+  async function linkList() {
+    const done = await runJob("/api/visit-list", { action: "link", file: state.importFile }, noteInto("listNote"), "正在把名單存成 Google 試算表……", { anyVisit: true });
+    if (done?.linked) $("listNote").textContent = "名單已經存成 Google 試算表：以後在那份試算表加一列，系統每十五分鐘看一次，自動加進來。";
+    await loadVisitList();
+    if (!done) api("/api/settings").then((r) => { if (r.ok) { state.services = r.status; renderServiceNotes(); } }); // 授權過期的話，上面那一條要掛出來
+  }
 
   /**
    * 參訪名單（Google 試算表）自動同步（明確指示：「每一次有增加再自動加入」「地圖應該是自動去 check 這個 Google Drive」）。
@@ -2786,7 +2850,7 @@
       return `${p.month}/${p.day} ${p.hour}:${p.minute}`;
     };
     const last = l.last?.added?.length ? `<span>上一次加了 ${l.last.added.length} 筆</span>` : "";
-    $("listInfo").innerHTML = `<span>名單：</span><a class="underline" target="_blank" rel="noopener" href="${esc(l.url || "")}" translate="no">${esc(l.name || "GHRC 參訪名單")}</a><span>（Google 試算表）——在這份試算表加一列，系統每十五分鐘看一次，自動加進來。</span>${l.checked_at ? `<span class="muted"><span>上次看</span> <span class="tabular-nums">${esc(when(l.checked_at))}</span></span>` : ""}${last ? ` <span class="muted">${last}</span>` : ""}${l.error ? `<span class="err block">${esc(l.error)}</span>` : ""}`;
+    $("listInfo").innerHTML = `<span>名單：</span><a class="underline" target="_blank" rel="noopener" href="${esc(l.url || "")}" translate="no">${esc(l.name || "GHRC 參訪名單")}</a><span>（Google 試算表）——在這份試算表加一列，系統每十五分鐘看一次，自動加進來。</span>${l.checked_at ? `<span class="muted"><span>上次看</span> <span class="tabular-nums">${esc(when(l.checked_at))}</span></span>` : ""}${last ? ` <span class="muted">${last}</span>` : ""}${l.error ? `<span class="err block">${esc(l.error)}${/授權過期/.test(l.error) ? ` <a class="underline" href="/api/google-auth?start=1">重新連上 Google</a>` : ""}</span>` : ""}`;
   }
   /** 打開「資料」分頁時看一次（名單沒改過就當場回，不必等）；改過了就等它讀完、清單與地圖跟著更新。 */
   async function checkVisitList(force = false) {

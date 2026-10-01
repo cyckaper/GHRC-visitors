@@ -1,7 +1,8 @@
 import { env, fail, json, randomId, readJSON, requireAdmin } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
-import { driveConfigured } from "../lib/drive.mts";
-import { gmailConfigured } from "../lib/mail.mts";
+import { driveReady } from "../lib/drive.mts";
+import { googleStatus } from "../lib/google.mts";
+import { gmailReady } from "../lib/mail.mts";
 import { aiConfigured } from "../lib/ai.mts";
 
 /**
@@ -94,6 +95,7 @@ export default async (req: Request) => {
 
   const master = await getStore().getMedia("master/manifest.json");
   const to = await reminderTo();
+  const gmail = await gmailReady();
   await ensureRotaKey(); // 打開設定就看得到連結，不必先按「產生」
   return json({
     ok: true,
@@ -104,11 +106,13 @@ export default async (req: Request) => {
       ai: aiConfigured(),
       ai_mock: !!env("AI_MOCK"),
       whisper: !!env("OPENAI_API_KEY"),
-      gmail: gmailConfigured(),
-      drive: driveConfigured(),
-      reminder: !!(gmailConfigured() && to),
+      gmail,
+      drive: await driveReady(),
+      reminder: !!(gmail && to),
       store: getStore().backend,
       master: !!master,
+      // Google 連上了沒、哪個帳號、**現在能不能用**（過期了也要看得出來——以前寫「已設定」，備份停了兩週沒人知道）
+      google: await googleStatus(),
     },
   });
 };

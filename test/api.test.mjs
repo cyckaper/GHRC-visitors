@@ -495,7 +495,7 @@ test("drive backup: lists everything the archive folder should get; refuses to u
   const r = await api(`/api/drive?id=${visitId}`, { headers: admin });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.equal(r.body.configured, false, "no Google credentials in the test environment");
-  assert.ok(r.body.hint.includes("GOOGLE_DRIVE_FOLDER_ID"));
+  assert.ok(r.body.hint.includes("連上 Google"), "the hint points at the settings button, not at env vars");
   const names = r.body.items.map((i) => i.name);
   assert.ok(names.includes("參訪資料.json") && names.includes("回覆.csv"));
   assert.ok(names.includes("一頁摘要.md"), "the summary written earlier is archived too");
@@ -513,7 +513,7 @@ test("drive auto-backup: the background sync endpoint needs the token and stands
   assert.equal((await api("/api/drive-sync-background", { method: "POST", body: JSON.stringify({ visit_id: visitId }) })).status, 401);
   const r = await api("/api/drive-sync-background", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId }) });
   assert.equal(r.status, 503, "no Google credentials in the test environment");
-  assert.ok(r.body.error.includes("GOOGLE_CLIENT_ID"));
+  assert.ok(r.body.error.includes("連上 Google"), "says where to fix it: the button on the settings tab, not an env var list");
   assert.equal((await api("/api/drive-sync-background", { method: "POST", headers: admin, body: "{}" })).status, 400);
   // 沒設定 Drive 時，寫入端點照常運作（triggerDriveSync 直接跳過）
   const v = await api(`/api/visits?id=${visitId}`, { headers: admin });
@@ -1361,6 +1361,96 @@ test("參訪名單（Google 試算表）：匯入時存成一份，之後有人�
     delete process.env.DRIVE_MOCK;
     await getStore().deleteMedia("sync/visit-list.json");
     for (const id of ids) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
+  }
+});
+
+test("連上 Google：後台按一下走 Google 的同意畫面，refresh token 存在站台；過期了講人話、設定分頁看得出來；金鑰不外流", async () => {
+  const { getStore } = await import("../netlify/lib/store.mts");
+  const realFetch = globalThis.fetch;
+  let refresh = "ok"; // 換 access token 時 Google 怎麼回：ok／expired
+  const exchanged = [];
+  const jwt = (o) => ["e30", Buffer.from(JSON.stringify(o)).toString("base64url"), "sig"].join(".");
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url) === "https://oauth2.googleapis.com/token") {
+      const body = new URLSearchParams(String(init.body));
+      if (body.get("grant_type") === "authorization_code") {
+        exchanged.push(Object.fromEntries(body));
+        return new Response(JSON.stringify({ access_token: "at-1", expires_in: 3600, refresh_token: "rt-secret-1", scope: "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/gmail.send", id_token: jwt({ email: "center@example.test" }) }), { status: 200 });
+      }
+      if (refresh === "expired") return new Response(JSON.stringify({ error: "invalid_grant", error_description: "Bad Request" }), { status: 400 });
+      return new Response(JSON.stringify({ access_token: `at-${body.get("refresh_token")}`, expires_in: 3600 }), { status: 200 });
+    }
+    if (String(url).startsWith("https://gmail.googleapis.com/")) {
+      // 這個用戶端的專案沒有啟用 Gmail API（Google 實際回的樣子）
+      return new Response(JSON.stringify({ error: { code: 403, message: "Gmail API has not been used in project 123 before or it is disabled.", status: "PERMISSION_DENIED", details: [{ reason: "SERVICE_DISABLED" }] } }), { status: 403 });
+    }
+    return realFetch(url, init);
+  };
+  const manual = (p, headers = {}) => api(p, { redirect: "manual", headers });
+  try {
+    assert.equal((await manual("/api/google-auth?start=1")).status, 401, "要登入");
+    assert.equal((await manual("/api/google-auth?start=1", admin)).status, 409, "Netlify 環境變數裡沒有 OAuth 用戶端");
+    process.env.GOOGLE_CLIENT_ID = "client-1.apps.googleusercontent.com";
+    process.env.GOOGLE_CLIENT_SECRET = "client-secret-1";
+    const st0 = (await api("/api/settings", { headers: admin })).body.status;
+    assert.deepEqual({ drive: st0.drive, gmail: st0.gmail, connected: st0.google.connected, client: st0.google.client }, { drive: false, gmail: false, connected: false, client: true }, "只有用戶端、還沒連上");
+    const start = await manual("/api/google-auth?start=1", admin);
+    assert.equal(start.status, 302);
+    const to = new URL(start.headers.get("location"));
+    assert.equal(to.origin + to.pathname, "https://accounts.google.com/o/oauth2/v2/auth");
+    assert.equal(to.searchParams.get("client_id"), "client-1.apps.googleusercontent.com");
+    assert.equal(to.searchParams.get("redirect_uri"), "https://visit.example.test/api/google-auth");
+    assert.match(to.searchParams.get("scope"), /drive\.file/);
+    assert.match(to.searchParams.get("scope"), /gmail\.send/);
+    assert.equal(to.searchParams.get("access_type"), "offline");
+    assert.equal(to.searchParams.get("prompt"), "consent", "每次都要給 refresh token");
+    const state = to.searchParams.get("state");
+
+    // 導回來：state 不對、被改過、或沒有允許
+    const back = async (q) => new URL((await manual(`/api/google-auth?${q}`)).headers.get("location"));
+    assert.equal((await back(`code=x&state=${encodeURIComponent(state.replace(/.$/, "0"))}`)).searchParams.get("google"), "expired", "簽章對不上");
+    assert.equal((await back("error=access_denied")).searchParams.get("google"), "denied");
+    assert.equal(exchanged.length, 0, "state 不對就不去換");
+
+    // 正常導回來：換到 refresh token、存起來；同一個 state 用第二次就不算
+    const ok = await back(`code=auth-code-1&state=${encodeURIComponent(state)}`);
+    assert.equal(ok.pathname, "/admin.html");
+    assert.equal(ok.searchParams.get("google"), "ok");
+    assert.equal(exchanged.length, 1);
+    assert.equal(exchanged[0].redirect_uri, "https://visit.example.test/api/google-auth");
+    assert.equal((await back(`code=auth-code-1&state=${encodeURIComponent(state)}`)).searchParams.get("google"), "expired", "一次性");
+
+    // 設定分頁：連上了、哪個帳號、能用；不回任何金鑰
+    const st = await api("/api/settings", { headers: admin });
+    assert.deepEqual({ connected: st.body.status.google.connected, ok: st.body.status.google.ok, email: st.body.status.google.email, via: st.body.status.google.via }, { connected: true, ok: true, email: "center@example.test", via: "stored" });
+    assert.doesNotMatch(JSON.stringify(st.body), /rt-secret-1|client-secret-1|at-rt/, "refresh token、密鑰、access token 都不出去");
+    assert.equal((await api("/api/media?key=secrets/google.json", { headers: admin })).status, 400, "存下來的那一份不經過 /api/media");
+    // 環境變數裡沒有 refresh token、只在後台連上，也算接好——Drive 備份與寄信不會被當成「沒設定」略過
+    assert.deepEqual({ drive: st.body.status.drive, gmail: st.body.status.gmail }, { drive: true, gmail: true });
+    // 授權是哪一個用戶端給的，就要在那一個專案裡啟用 Gmail API——沒啟用時講人話，不是一串 JSON
+    const { gmailSend } = await import("../netlify/lib/mail.mts");
+    await assert.rejects(gmailSend("someone@example.test", "主旨", "內文"), (e) => /還沒啟用 Gmail API/.test(e.message) && !/PERMISSION_DENIED/.test(e.message));
+
+    // 過期了：設定分頁寫「授權過期」；Drive 那邊的錯誤講人話，不是一串 invalid_grant
+    refresh = "expired";
+    await getStore().deleteMedia("secrets/google.json");
+    process.env.GOOGLE_REFRESH_TOKEN = "rt-env-expired"; // 環境變數那一份過期了（九月就是這樣）
+    const st2 = (await api("/api/settings", { headers: admin })).body.status.google;
+    assert.ok(st2.connected && !st2.ok && st2.expired && st2.via === "env", JSON.stringify(st2));
+    const file = { name: "list.csv", data: Buffer.from("日期,來訪單位\n2024-01-08,美國伊利諾大學\n").toString("base64") };
+    const started = await api("/api/visit-list", { method: "POST", headers: admin, body: JSON.stringify({ action: "link", file }) });
+    assert.equal(started.status, 202, JSON.stringify(started.body));
+    await api("/api/visit-list-background", { method: "POST", headers: admin, body: JSON.stringify({ job_id: started.body.job_id }) });
+    const job = (await api(`/api/visit-list?job=${started.body.job_id}`, { headers: admin })).body;
+    assert.equal(job.status, "error");
+    assert.match(job.error, /Google 的授權過期了/);
+    assert.match(job.error, /重新連上 Google/);
+    assert.doesNotMatch(job.error, /invalid_grant/);
+  } finally {
+    globalThis.fetch = realFetch;
+    for (const k of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN"]) delete process.env[k];
+    await getStore().deleteMedia("secrets/google.json");
+    await getStore().deleteMedia("sync/visit-list.json");
   }
 });
 

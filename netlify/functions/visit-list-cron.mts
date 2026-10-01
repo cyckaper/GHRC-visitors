@@ -11,7 +11,7 @@ import { listDue, loadList, touchList } from "../lib/visitlist.mts";
 export default async (req: Request) => {
   const denied = await requireCron(req);
   if (denied) return denied;
-  if (!sheetsReady()) return new Response("Google Drive 尚未設定，略過");
+  if (!(await sheetsReady())) return new Response("Google Drive 尚未設定，略過");
   const s = await loadList();
   if (!s) return new Response("還沒有連到名單");
   const info = await sheetInfo(s.file_id).catch(() => null);

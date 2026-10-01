@@ -20,10 +20,10 @@ export default async (req: Request) => {
   const url = new URL(req.url);
   if (req.method === "GET") {
     if (url.searchParams.get("job")) return pollJob(req, "看名單");
-    return json({ ok: true, configured: sheetsReady(), ...listSummary(await loadList()) });
+    return json({ ok: true, configured: await sheetsReady(), ...listSummary(await loadList()) });
   }
   if (req.method !== "POST") return fail(405, "method not allowed");
-  if (!sheetsReady()) return fail(409, "Google Drive 還沒接好（設定分頁看得到），名單沒辦法自動同步");
+  if (!(await sheetsReady())) return fail(409, "Google Drive 還沒接好（設定分頁看得到），名單沒辦法自動同步");
   const body = await readJSON<any>(req);
   const action = String(body?.action || "check");
   const s = await loadList();

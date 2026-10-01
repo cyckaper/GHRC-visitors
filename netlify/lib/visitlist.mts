@@ -138,7 +138,7 @@ async function fileText(name: string, mime: string, bytes: Uint8Array): Promise<
  * 讀過的列用兩份文字各算一次（原檔，與 Google 轉過之後匯出的那一份）：轉換時日期、空白的寫法變了也對得上。
  */
 export async function linkList(file: { name: string; mime: string; bytes: Uint8Array }): Promise<ListState> {
-  if (!sheetsReady()) throw new Error("Google Drive 還沒接好（設定分頁看得到）");
+  if (!(await sheetsReady())) throw new Error("Google Drive 還沒接好（設定分頁看得到）");
   const already = await loadList();
   if (already) return already;
   const text = await fileText(file.name, file.mime, file.bytes);

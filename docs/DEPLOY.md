@@ -15,7 +15,9 @@
 | `CLAUDE_MODEL` | 選 | 預設 `claude-opus-5` |
 | `STORE_BACKEND` | 選 | `blobs`（預設，零設定）或 `sheets`（見 §2） |
 | `GOOGLE_SHEET_ID`、`GOOGLE_SERVICE_ACCOUNT_JSON` | sheets 時必要 | 見 §2 |
-| `GMAIL_CLIENT_ID`、`GMAIL_CLIENT_SECRET`、`GMAIL_REFRESH_TOKEN`、`GMAIL_SENDER` | 選 | 訪後信一鍵寄出（§3）。沒設定時後台會給 mailto 與複製 |
+| `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET` | 選 | Google 的 OAuth 用戶端（§6.5）：Drive 備份、參訪名單的 Google 試算表、從後台寄信共用。**授權本身不放環境變數**：後台「設定」按「連上 Google」 |
+| `GMAIL_SENDER` | 選 | 寄出的信上「寄件人」那一行（§3）；要跟連上 Google 的那個帳號一樣 |
+| `GMAIL_CLIENT_ID`、`GMAIL_CLIENT_SECRET`、`GMAIL_REFRESH_TOKEN`、`GOOGLE_REFRESH_TOKEN` | 舊的 | 以前用 OAuth Playground 拿 refresh token 的設定方式，仍然認得；後台連上的那一份優先，**新站台不必設** |
 | `DICTATION_LANGUAGE` | 選 | Whisper 的語言提示，預設 `zh` |
 | `REMINDER_TO` | 選 | 後續提醒寄到哪個信箱（參訪結束時自動寄）。**通常不必設**：後台「設定」分頁可以直接填，都沒填就寄給 `GMAIL_SENDER` |
 
@@ -25,8 +27,9 @@
 **資料在哪**：預設在 Netlify Blobs（store `ghrc-visit`：`visits/`、`responses/`、`slideperf/`、`media/`）。後台「資料」分頁可匯出三張表的 CSV。Deploy Preview 與分支部署用 deploy-scoped store，不會混進正式資料。
 
 **排程（Netlify Scheduled Functions，`export const config = { schedule }`）**：`summary-cron`（台北一點：過完又有回饋的參訪自己產一頁摘要）、
-`drive-cron`（兩點：備份補漏）、`reminder-cron`（台北 08:00–21:59 每十五分鐘：參訪結束時寄後續提醒）。
-三支都只接受 Netlify 排程器送來的 `POST {next_run}`，或帶 `ADMIN_TOKEN` 的手動觸發；被擋下來時函式紀錄會寫明原因。
+`drive-cron`（兩點：備份補漏）、`reminder-cron`（台北 08:00–21:59 每十五分鐘：參訪結束時寄後續提醒）、
+`visit-list-cron`（每十五分鐘：參訪名單的 Google 試算表有人加了列就讀進來）。
+四支都只接受 Netlify 排程器送來的 `POST {next_run}`，或帶 `ADMIN_TOKEN` 的手動觸發；被擋下來時函式紀錄會寫明原因。
 
 **金鑰安全**：所有金鑰只在 Netlify Functions 裡使用，前端只拿 `ADMIN_TOKEN`（登入後換成 HttpOnly cookie）。
 
@@ -42,10 +45,12 @@
 
 ## 3. 訪後信一鍵寄出（Gmail API，選用）
 
-1. Google Cloud Console → 啟用 **Gmail API** → OAuth 同意畫面（內部或測試使用者加入 ntughrc@gmail.com）→ 憑證 → OAuth 用戶端 ID（桌面應用程式）。
-2. 用 OAuth Playground（https://developers.google.com/oauthplayground，設定裡填自己的 client id／secret）授權 `https://www.googleapis.com/auth/gmail.send`，換得 **refresh token**。
-3. Netlify 環境變數：`GMAIL_CLIENT_ID`、`GMAIL_CLIENT_SECRET`、`GMAIL_REFRESH_TOKEN`、`GMAIL_SENDER=ntughrc@gmail.com`。
-4. 後台「訪後信」→ 勾收件人 → 寄出。每人一封（不是 BCC）。寄件帳號固定是授權的那一個；「寄件者」下拉只決定署名（中心主任或對口老師）。
+寄信與 Drive 備份**共用一組 Google 授權**，設定一次就好——照 §6.5 的「連上 Google」做，同一個專案也啟用 **Gmail API**，
+允許時「寄信」那一格要勾。另外在 Netlify 環境變數設 `GMAIL_SENDER`（寄件人那一行，填連上的那個帳號）。
+
+寄出時每人一封（不是 BCC）。寄件帳號固定是授權的那一個；「寄件者」下拉只決定署名（中心主任或對口老師）。
+以前的設定方式（OAuth Playground 拿 refresh token，填 `GMAIL_CLIENT_ID`／`GMAIL_CLIENT_SECRET`／`GMAIL_REFRESH_TOKEN`）仍然認得，
+但**後台連上的那一份優先**；那一組是在同意畫面「測試」狀態拿的話，七天就失效（2026 年 9 月就是這樣停的）。
 
 沒設定時，後台會明確顯示「尚未寄出」，並提供 mailto（BCC 全員）與複製信件。
 
@@ -87,21 +92,28 @@ python3 scripts/slim-master.py "GHRC 介紹簡報2026-9.pptx" --out public/asset
 一頁摘要.md、簽名簿照片、主持人口述音檔、當天簡報.pdf、現場合照。同名覆蓋，不會愈備份愈多份。
 即時同步若因為網路或部署漏掉，每晚台北時間兩點的 `drive-cron` 會補上。後台「資料」分頁的「立即備份到 Drive」只是手動補救。
 
-Netlify 環境變數（沿用寄信那組 Google OAuth 也可以，但 refresh token 必須含 `drive.file` 權限）：
+**連上 Google（只做一次；授權過期了再按一次）**——Drive 備份、參訪名單的 Google 試算表、從後台寄信共用這一組：
+
+1. [Google Cloud Console](https://console.cloud.google.com/) 建一個專案 → 「API 和服務」→ 啟用 **Google Drive API** 與 **Gmail API**
+2. 「OAuth 同意畫面」→ External → 填名稱與聯絡信箱 → **發布狀態設為「正式版」**。
+   **測試模式的 refresh token 七天就失效**（2026 年 9 月就是這樣：Drive 備份默默停了兩週）。
+   寄信的 `gmail.send` 屬於敏感範圍：不送審也能用，只是允許時 Google 會先說「這個應用程式未經 Google 驗證」，按「進階」→「前往…（不安全）」繼續——只有中心自己的帳號會用到
+3. 「憑證」→ 建立 OAuth 用戶端 ID → **網頁應用程式** → 已授權的重新導向 URI 加上
+   `https://visit.healsdesign.org/api/google-auth` → 用戶端 ID 與密鑰填進 Netlify 環境變數 `GOOGLE_CLIENT_ID`／`GOOGLE_CLIENT_SECRET`，重新部署。
+   已經有一個用戶端的（以前用 OAuth Playground 拿 token 的那一個）不必再建：在那一個加上這條重新導向 URI 就好。
+   系統用的是 `GOOGLE_CLIENT_ID`，沒有才用 `GMAIL_CLIENT_ID`——重新導向 URI 要加在用的那一個上
+4. 後台「設定」分頁 →「連上 Google」→ 選中心要用的那個 Google 帳號 → 「Drive」「寄信」兩格都勾 → 允許。
+   回到後台會寫「已連上 xxx@gmail.com」。授權存在站台上（Blobs），不在環境變數裡，**之後不必再動 Netlify**
+
+- **過期了**：每一頁上面會掛一條「Google 的授權過期了」，按「重新連上 Google」再允許一次就好。
+- **Google 說 `redirect_uri_mismatch`**：第 3 步的重新導向 URI 沒加，或加在另一個用戶端上。
+- **說「還沒啟用 Gmail API」（或 Drive API）**：第 1 步那個專案少啟用一支，啟用後過幾分鐘再試。
 
 | 變數 | 說明 |
 |---|---|
 | `GOOGLE_CLIENT_ID`／`GOOGLE_CLIENT_SECRET` | OAuth 用戶端；沒設就用 `GMAIL_CLIENT_ID`／`GMAIL_CLIENT_SECRET` |
-| `GOOGLE_REFRESH_TOKEN` | 中心 Google 帳號授權的 refresh token（scope `https://www.googleapis.com/auth/drive.file`，要寄信再加 `gmail.send`）；沒設就用 `GMAIL_REFRESH_TOKEN` |
+| `GOOGLE_REFRESH_TOKEN` | 舊的設定方式（OAuth Playground 拿的），仍然認得；**後台連上的那一份優先**，新站台不必設 |
 | `GOOGLE_DRIVE_FOLDER_ID` | **通常不要設**。不設時系統會在你的雲端硬碟自己建一個「GHRC 參訪」資料夾 |
-
-拿 refresh token（只做一次）：
-
-1. [Google Cloud Console](https://console.cloud.google.com/) 建一個專案 → 「API 和服務」→ 啟用 **Google Drive API**
-2. 「OAuth 同意畫面」→ External → 填名稱與聯絡信箱 → **發布狀態設為「正式版」**（測試模式的 refresh token 七天就失效；`drive.file` 屬於非敏感範圍，按發布即可，不必送審）
-3. 「憑證」→ 建立 OAuth 用戶端 ID → **網頁應用程式** → 已授權的重新導向 URI 填 `https://developers.google.com/oauthplayground` → 記下用戶端 ID 與密鑰
-4. 開 [OAuth Playground](https://developers.google.com/oauthplayground/) → 右上齒輪勾「Use your own OAuth credentials」填入剛才兩個值 → 左欄輸入 scope `https://www.googleapis.com/auth/drive.file` → Authorize（選中心要用的那個 Google 帳號）→ Exchange authorization code for tokens → 複製 **Refresh token**
-5. 三個值填進 Netlify 環境變數（Site configuration → Environment variables）
 
 **為什麼不要設 `GOOGLE_DRIVE_FOLDER_ID`**：`drive.file` 只讓程式看得到「它自己建立的檔案」，指定一個別人建的資料夾會存取不到。
 真的要指定既有資料夾，refresh token 得改用全權限的 `https://www.googleapis.com/auth/drive`——那是受限範圍，發布前要送 Google 審查，不建議。

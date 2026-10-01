@@ -1,5 +1,5 @@
 import { fail, json, readJSON, requireAdmin } from "../lib/http.mts";
-import { DRIVE_HINT, driveConfigured, syncVisit } from "../lib/drive.mts";
+import { DRIVE_HINT, driveReady, syncVisit } from "../lib/drive.mts";
 
 /**
  * 自動備份到 Google Drive。Netlify 背景函式（檔名結尾 -background）：呼叫端立刻拿到 202，
@@ -14,7 +14,7 @@ export default async (req: Request) => {
   if (denied) return denied;
   const body = await readJSON<{ visit_id?: string; force?: boolean }>(req);
   if (!body?.visit_id) return fail(400, "需要 visit_id");
-  if (!driveConfigured()) return fail(503, DRIVE_HINT);
+  if (!(await driveReady())) return fail(503, DRIVE_HINT);
   try {
     const r = await syncVisit(String(body.visit_id), { force: !!body.force });
     return json({ ok: true, ...r });
