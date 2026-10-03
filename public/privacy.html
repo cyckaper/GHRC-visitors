@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy · Green Health Research Center</title>
+<meta name="description" content="How the GHRC Visit System of the Green Health Research Center, National Taiwan University, handles personal information. 綠色健康研究中心 參訪系統 隱私權政策。">
+<!--
+  隱私權政策 /privacy（netlify.toml 轉到這一頁）。
+  為什麼有這一頁：Google 的 OAuth 同意畫面要發布成「正式版」，Branding 頁一定要填「應用程式首頁」與「隱私權政策」兩個連結
+  （而且要在已授權的網域上）；沒填的話「Publish app」是灰的，refresh token 七天就失效（2026 年 9 月就是這樣停的）。
+  這一頁同時是寫給來賓看的：系統拿了哪些資料、做什麼用、誰看得到。
+
+  **寫的每一句都要是真的**：系統多處理一種資料、多接一個外部服務（AI、寄信、儲存），這一頁就要跟著改
+  （`npm test` 擋：每一個外部服務都要點名、Google 的兩個範圍與 Limited Use 那一句要在、兩種語言都要有）。
+  不寫還沒決定的事（例如口述音檔的保存期限，見 CLAUDE.md「待確認」6）。
+
+  刻意不載入任何外部的東西（沒有 Tailwind CDN）：隱私權政策這一頁本身不必讓別的伺服器看到誰來看。
+  語言跟中心首頁同一套：英文為預設，右上角切中文（記在這台裝置的 ghrc-ui-lang，也可以用 ?ui=zh 帶）；
+  沒有 JavaScript 時看到的是英文（Google 的審查看的是這一份）。
+-->
+<style>
+  :root { --ink: #1c1917; --muted: #57534e; --faint: #a8a29e; --line: #e7e5e4; --accent: #0f766e;
+          --c301: #047857; --c302: #0369a1; --c303: #6d28d9; --c304: #b45309; --c305: #a21caf; }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Apple SD Gothic Neo", "Hiragino Sans", sans-serif; background: #fafaf9; color: var(--ink); line-height: 1.65; }
+  body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 5px; z-index: 60; background: linear-gradient(90deg, var(--c301), var(--c302) 25%, var(--c303) 50%, var(--c304) 75%, var(--c305)); }
+  main { max-width: 48rem; margin: 0 auto; padding: 2rem 1rem 3rem; }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+  .back { font-size: .875rem; color: #78716c; }
+  a { color: inherit; text-decoration: underline; text-decoration-color: #d6d3d1; overflow-wrap: anywhere; }
+  a:hover { text-decoration-color: var(--ink); }
+  .lang-btn { flex: none; font: inherit; font-size: .8rem; font-weight: 600; line-height: 1.5; padding: .25rem .3rem; border-radius: 9999px; background: rgba(255, 255, 255, .8); color: #6b7280; border: 1px solid #6ee7b7; display: inline-flex; gap: .15rem; cursor: pointer; }
+  .lang-btn span { padding: .05rem .6rem; border-radius: 9999px; }
+  .lang-btn .on { background: #065f46; color: #fff; }
+  .hero { margin-top: 1.5rem; border-radius: 1.5rem; padding: 1.75rem 1.5rem 1.5rem; background: linear-gradient(135deg, #d1fae5 0%, #cffafe 48%, #fef3c7 100%); border: 1px solid #6ee7b7; }
+  .eyebrow { margin: 0; font-size: .8rem; font-weight: 600; letter-spacing: .03em; color: #065f46; }
+  h1 { margin: .5rem 0 0; font-size: 1.875rem; line-height: 1.25; font-weight: 600; color: #065f46; }
+  .updated { margin: .5rem 0 0; font-size: .875rem; color: var(--muted); }
+  .lead { margin: 1rem 0 0; color: #44403c; }
+  section { margin-top: 2rem; }
+  h2 { margin: 0; border-left: 4px solid var(--accent); padding-left: .6rem; font-size: 1.125rem; line-height: 1.4; font-weight: 600; }
+  section p, section ul { margin: .75rem 0 0; }
+  ul { padding-left: 1.25rem; }
+  li + li { margin-top: .5rem; }
+  b { font-weight: 600; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em; background: #f5f5f4; border: 1px solid var(--line); border-radius: .35rem; padding: 0 .3rem; overflow-wrap: anywhere; }
+  .note { background: #fff; border: 1px solid var(--line); border-radius: 1rem; padding: 1rem 1.25rem; }
+  footer { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--line); font-size: .75rem; color: var(--faint); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <a class="back" href="/" id="homeLink">← Green Health Research Center</a>
+    <button type="button" class="lang-btn" id="langToggle" title="English / 中文" hidden></button>
+  </div>
+
+  <!-- ── English（預設；沒有 JavaScript 時也是這一份） ── -->
+  <article id="en" lang="en">
+    <header class="hero">
+      <p class="eyebrow">GHRC Visit System · Green Health Research Center, National Taiwan University</p>
+      <h1>Privacy Policy</h1>
+      <p class="updated">Last updated: 3 October 2026</p>
+      <p class="lead">This website, <b>visit.healsdesign.org</b>, is run by the Green Health Research Center (GHRC), College of Bioresources and Agriculture, National Taiwan University. Besides the public pages about the center and its five laboratories, it hosts the center’s visit system, <b>GHRC Visit System</b> (GHRC 參訪系統): the tools the center’s staff use to prepare for a visit, the page each visiting group receives, and the center’s records of past visits. This page explains what personal information the system handles, why, and who can see it.</p>
+    </header>
+
+    <section>
+      <h2>1. What we collect</h2>
+      <ul>
+        <li><b>From the correspondence that arranges a visit:</b> the visiting institution, the names, positions and email addresses of the people coming, and the date and purpose of the visit. Staff paste the email or upload its attachments; what the system reads out is checked by a person before it is saved.</li>
+        <li><b>Public professional information:</b> before a visit, the system may look up publicly available professional information about the visiting institution and the listed guests (for example their positions, fields and published projects) so that the center can prepare. It does not look into anyone’s private life. The result is seen only by the center’s staff and its five laboratories.</li>
+        <li><b>On the day:</b> business cards you give us (photographed so that your name, position, institution, email address and phone number can be added to the visit’s list), the visitors’ book (photographed), and photos taken during the visit. Group photos may be posted on your visit’s page. After the visit, the host records a short spoken note about it, which the system turns into text. We do not record our visitors.</li>
+        <li><b>On your visit’s page:</b> the email address you leave and the replies you send after the visit. You can reply without giving your name: the name and email fields are then left empty, only the date (not the time) is kept, and we do not try to work out who wrote it. The system does not record your IP address or browser with a reply.</li>
+        <li><b>The center’s own staff:</b> the names of the people who host each visit, and a sign-in cookie that keeps staff signed in to the system’s admin pages.</li>
+      </ul>
+      <p>The pages visitors see set no cookies. Your language choice, and whether you have already replied, are kept only in your own browser. The site uses no analytics, advertising or tracking scripts.</p>
+    </section>
+
+    <section>
+      <h2>2. How we use it</h2>
+      <ul>
+        <li>To prepare and run the visit: the programme, a presentation for your group, and the letters before and after the visit.</li>
+        <li>To follow up: to send you the day’s materials and a thank-you letter, and to read your replies.</li>
+        <li>To keep the center’s record of visits, which helps us prepare better for the next one, and for summary figures (visitors, countries, institutions) in the center’s reports.</li>
+        <li><b>Public pages:</b> after a visit has taken place, the center may list it on its public visit log (<a href="/visits">visit.healsdesign.org/visits</a>) and world map, with the date, the institution and where it is, the laboratories visited, and a short description written by the center, which may name the people who led the delegation. Guest lists, email addresses and everything else stay private. Upcoming visits are never shown, and the center can hide any visit. If you would like your visit removed or corrected, please write to us.</li>
+      </ul>
+      <p>We do not sell personal information, use it for advertising, or use it to train AI models.</p>
+    </section>
+
+    <section>
+      <h2>3. Services that process information for us</h2>
+      <ul>
+        <li><b>Netlify</b>: hosts the website and stores the system’s records.</li>
+        <li><b>Google</b>: the center’s own Google account is used to back up visit records to the center’s Google Drive, to keep the visit list as a Google Sheet, and to send letters from the center’s Gmail (see section 4).</li>
+        <li><b>Anthropic (Claude)</b>: the AI the system uses to read correspondence and attachments, business cards, the visitors’ book, the host’s notes and lists of past visits, to look up public professional information, to suggest slides, and to draft letters, notices and visit summaries. It also translates slide text and finds where institutions are on the map.</li>
+        <li><b>OpenAI (Whisper)</b>: turns the host’s spoken note into text.</li>
+      </ul>
+      <p>Each service receives only what it needs for that task. Some of our pages also load page styles and scripts from public content-delivery networks (cdn.tailwindcss.com and cdnjs.cloudflare.com); as with any website, those servers see your IP address when your browser fetches the files.</p>
+    </section>
+
+    <section>
+      <h2>4. Access to Google account data</h2>
+      <p>The system connects to one Google account only: the center’s own, connected by the center’s staff from the admin pages. It asks for:</p>
+      <ul>
+        <li><b>The account’s email address</b>, only to show staff which account is connected.</li>
+        <li><b>Google Drive, limited to files the system creates itself</b> (<code>drive.file</code>): to store backups of visit records in a “GHRC 參訪” folder and to keep the visit list as a Google Sheet (“GHRC 參訪名單”). The system cannot see any other file in the Drive. When staff add a row to that sheet, the system reads the new row and adds the visit to its records, with help from the AI service above.</li>
+        <li><b>Gmail, send only</b> (<code>gmail.send</code>): to send visit letters and reminders from the center’s account. The system cannot read, search or delete any email.</li>
+      </ul>
+      <p>The authorization is stored only on the server and is never shown on any page. It can be revoked at any time from the Google account’s third-party access settings (<a href="https://myaccount.google.com/permissions" rel="noopener">myaccount.google.com/permissions</a>).</p>
+      <p class="note">The GHRC Visit System’s use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+    </section>
+
+    <section>
+      <h2>5. Where it is kept, and for how long</h2>
+      <p>Records are stored with Netlify and backed up to the center’s Google Drive. The services in section 3 may process data outside Taiwan. Visit records form the center’s long-term archive of visits. You can ask us at any time to correct or delete your information, and we will remove it from the system and from the center’s backups.</p>
+    </section>
+
+    <section>
+      <h2>6. Your rights</h2>
+      <p>Under Taiwan’s Personal Data Protection Act, you may ask to see the personal information we hold about you, ask for a copy, ask us to supplement or correct it, ask us to stop collecting, processing or using it, or ask us to delete it. Please write to <a href="mailto:ntughrc@gmail.com">ntughrc@gmail.com</a>.</p>
+      <p>Leaving your email address and replying are entirely optional. If you do not, the visit goes ahead in exactly the same way; we just cannot send you the materials afterwards.</p>
+    </section>
+
+    <section>
+      <h2>7. Contact</h2>
+      <p>Green Health Research Center, Rooms 301–305, 3F Landscape Building, National Taiwan University · <a href="mailto:ntughrc@gmail.com">ntughrc@gmail.com</a></p>
+    </section>
+
+    <section>
+      <h2>8. Changes</h2>
+      <p>If this policy changes, we will update this page and the date at the top.</p>
+    </section>
+  </article>
+
+  <!-- ── 中文（?ui=zh 或右上角切換） ── -->
+  <article id="zh" lang="zh-Hant" hidden>
+    <header class="hero">
+      <p class="eyebrow">GHRC 參訪系統 · 國立臺灣大學 綠色健康研究中心</p>
+      <h1>隱私權政策</h1>
+      <p class="updated">最後更新：2026 年 10 月 3 日</p>
+      <p class="lead">本網站 <b>visit.healsdesign.org</b> 由國立臺灣大學生物資源暨農學院綠色健康研究中心（GHRC）經營。除了介紹中心與五間研究室的公開頁面，這裡也是中心的參訪系統 <b>GHRC 參訪系統</b>（GHRC Visit System）：中心同仁準備參訪用的後台、每一個參訪團的專頁，以及歷次參訪的紀錄。這一頁說明系統會處理哪些個人資料、做什麼用、誰看得到。</p>
+    </header>
+
+    <section>
+      <h2>一、我們蒐集哪些資料</h2>
+      <ul>
+        <li><b>安排參訪的往來信件：</b>來訪單位，來訪人員的姓名、職稱與 email，參訪的日期與目的。由中心同仁貼上信件或上傳附件；系統讀出來的內容經人確認後才存。</li>
+        <li><b>公開的專業資訊：</b>參訪前，系統可能查詢來訪單位與名單上來賓公開的專業資料（例如職稱、專業領域、公開發表的計畫），讓中心做好準備。不查任何人的私人生活。結果只有中心同仁與五間研究室看得到。</li>
+        <li><b>參訪當天：</b>您給我們的名片（拍照後把姓名、職稱、單位、email 與電話加進這一場的名單）、簽名簿（拍照），以及參訪中拍的照片；合照可能放在您這一場的專頁上。參訪結束後，主持人會口述一段簡短的紀錄，由系統轉成文字。我們不錄來賓的音。</li>
+        <li><b>您這一場的專頁：</b>您留下的 email，以及參訪後您送出的回覆。回覆可以不具名：不具名時姓名與 email 一律留空、時間只留日期，我們也不會設法找出是誰寫的。系統不隨回覆記錄 IP 位址或瀏覽器資訊。</li>
+        <li><b>中心自己的同仁：</b>每一場接待人員的姓名，以及同仁登入系統後台時用來維持登入的 cookie。</li>
+      </ul>
+      <p>來賓看的頁面不設 cookie。您選的語言、是否已經回覆過，只存在您自己的瀏覽器裡。網站沒有流量分析、廣告或追蹤程式。</p>
+    </section>
+
+    <section>
+      <h2>二、用途</h2>
+      <ul>
+        <li>準備與進行參訪：排行程、為您的團體準備簡報、訪前與訪後的信件。</li>
+        <li>訪後聯繫：寄送當天的資料與感謝信，閱讀您的回覆。</li>
+        <li>中心的參訪紀錄：讓下一次參訪準備得更好，以及中心報告裡的統計（人次、國家、單位）。</li>
+        <li><b>公開頁面：</b>參訪結束之後，中心可能把它列在公開的來訪紀錄（<a href="/visits?ui=zh">visit.healsdesign.org/visits</a>）與世界地圖上：日期、單位與所在地、參訪的研究室，以及中心寫的一段說明（可能寫出率團者的姓名）。名單、email 與其他資料一律不公開。還沒來的參訪不會出現，中心也可以把任何一場設為不公開。希望您的參訪不要列出或需要更正，請來信告訴我們。</li>
+      </ul>
+      <p>我們不販售個人資料、不用於廣告，也不拿來訓練 AI 模型。</p>
+    </section>
+
+    <section>
+      <h2>三、替我們處理資料的服務</h2>
+      <ul>
+        <li><b>Netlify</b>：網站主機與系統的資料儲存。</li>
+        <li><b>Google</b>：用中心自己的 Google 帳號，把參訪紀錄備份到中心的 Google 雲端硬碟、把參訪名單存成 Google 試算表、從中心的 Gmail 寄信（見第四點）。</li>
+        <li><b>Anthropic（Claude）</b>：系統用的 AI，讀往來信件與附件、名片、簽名簿、主持人的口述紀錄與以前的參訪名單，查詢公開的專業資訊，建議簡報頁面，草擬信件、通告與參訪摘要；也翻譯簡報文字、在地圖上找出各單位的位置。</li>
+        <li><b>OpenAI（Whisper）</b>：把主持人的口述轉成文字。</li>
+      </ul>
+      <p>每一個服務只拿到那一件工作需要的內容。部分頁面另外會從公開的內容傳遞網路（cdn.tailwindcss.com、cdnjs.cloudflare.com）載入版面與程式；和任何網站一樣，這些伺服器在您的瀏覽器下載檔案時會看到您的 IP 位址。</p>
+    </section>
+
+    <section>
+      <h2>四、Google 帳號資料的存取</h2>
+      <p>系統只連一個 Google 帳號：中心自己的帳號，由中心同仁在後台連上。它要的權限是：</p>
+      <ul>
+        <li><b>帳號的 email 地址</b>：只用來讓同仁看到連上的是哪一個帳號。</li>
+        <li><b>Google 雲端硬碟，限於系統自己建立的檔案</b>（<code>drive.file</code>）：把參訪紀錄備份到「GHRC 參訪」資料夾，並把參訪名單存成 Google 試算表（「GHRC 參訪名單」）。系統看不到雲端硬碟裡其他任何檔案。同仁在這份試算表加一列，系統會讀那一列、把那一場加進紀錄（由上面的 AI 服務協助讀）。</li>
+        <li><b>Gmail，只能寄信</b>（<code>gmail.send</code>）：從中心的帳號寄出參訪相關的信件與提醒。系統不能讀取、搜尋或刪除任何信件。</li>
+      </ul>
+      <p>授權只存在伺服器上，不會出現在任何頁面；隨時可以在 Google 帳戶的第三方存取設定收回（<a href="https://myaccount.google.com/permissions" rel="noopener">myaccount.google.com/permissions</a>）。</p>
+      <p class="note">GHRC 參訪系統使用與傳輸從 Google API 取得的資訊，遵守 <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener">Google API Services User Data Policy</a>，包括其中的 Limited Use（有限使用）規定。</p>
+    </section>
+
+    <section>
+      <h2>五、保存地點與期間</h2>
+      <p>資料存在 Netlify，並備份到中心的 Google 雲端硬碟；第三點列的服務可能在臺灣以外的地區處理資料。參訪紀錄是中心長期保存的檔案。您隨時可以請我們更正或刪除您的資料，我們會從系統與中心的備份中一併移除。</p>
+    </section>
+
+    <section>
+      <h2>六、您的權利</h2>
+      <p>依個人資料保護法，您可以向我們查詢或請求閱覽、請求製給複製本、請求補充或更正、請求停止蒐集處理或利用、請求刪除您的個人資料，請寫信到 <a href="mailto:ntughrc@gmail.com">ntughrc@gmail.com</a>。</p>
+      <p>留 email 與回覆都是自由的；不提供也完全不影響參訪，只是我們沒辦法在參訪後把資料寄給您。</p>
+    </section>
+
+    <section>
+      <h2>七、聯絡我們</h2>
+      <p>綠色健康研究中心（臺大造園館三樓 301–305 室）· <a href="mailto:ntughrc@gmail.com">ntughrc@gmail.com</a></p>
+    </section>
+
+    <section>
+      <h2>八、修訂</h2>
+      <p>本政策有修改時，會更新這一頁與上方的日期。</p>
+    </section>
+  </article>
+
+  <footer>
+    <p id="footerLine">Green Health Research Center · College of Bioresources and Agriculture, National Taiwan University</p>
+  </footer>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  // 語言跟中心首頁同一套：英文為預設，右上角切中文（記在這台裝置，也可以用 ?ui=zh 帶）
+  const UI_KEY = "ghrc-ui-lang";
+  const stored = () => { try { return localStorage.getItem(UI_KEY) || ""; } catch (e) { return ""; } };
+  const asked = new URLSearchParams(location.search).get("ui");
+  const primary = (asked === "zh" || asked === "en" ? asked : stored()) === "zh" ? "zh" : "en";
+  const other = primary === "zh" ? "en" : "zh";
+  document.documentElement.lang = primary === "zh" ? "zh-Hant" : "en";
+  $("en").hidden = primary !== "en";
+  $("zh").hidden = primary !== "zh";
+  if (primary === "zh") {
+    document.title = "隱私權政策 · 綠色健康研究中心";
+    $("homeLink").textContent = "← 綠色健康研究中心";
+    $("homeLink").href = "/?ui=zh";
+    $("footerLine").textContent = "綠色健康研究中心 · 國立臺灣大學生物資源暨農學院";
+  }
+  // 兩個都列出來、亮著的那一個是現在的語言
+  const t = $("langToggle");
+  t.innerHTML = `<span class="${primary === "en" ? "on" : ""}">EN</span><span class="${primary === "zh" ? "on" : ""}">中文</span>`;
+  t.hidden = false;
+  t.onclick = () => {
+    try { localStorage.setItem(UI_KEY, other); } catch (e) {}
+    const u = new URL(location.href);
+    u.searchParams.set("ui", other);
+    location.href = u.toString();
+  };
+})();
+</script>
+</body>
+</html>

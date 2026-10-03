@@ -143,6 +143,8 @@
 
   <footer class="text-xs text-stone-400 pt-4 border-t border-stone-200">
     <p id="footerLine"></p>
+    <!-- 隱私權政策：Google 的 OAuth 同意畫面要首頁連得到它（Branding 頁填的首頁就是這一頁）。寫在 HTML 裡，不靠 JS 也看得到 -->
+    <p class="mt-1"><a class="u" id="privacyLink" href="/privacy">Privacy policy</a></p>
   </footer>
 </main>
 
@@ -167,8 +169,8 @@
   const other = primary === "zh" ? "en" : "zh";
   document.documentElement.lang = primary === "zh" ? "zh-Hant" : "en";
   const L = {
-    en: { title: "Green Health Research Center · NTU", labs: "The five laboratories", lead: "Lead", more: "About the laboratory →", missions: "Three missions in the center's charter", milestones: "Milestones", intl: "International platform", partners: "Signed and established partnerships", recognition: "Recognition", org: "Organisation", divisions: "Divisions", contact: "Visits and enquiries", contactBody: "To arrange a visit or ask a question, please write to us.", visitors: "Visiting institutions", visitorsHint: "Tap a dot to see who it is; numbered dots zoom in.", visitsLink: "Every visit, in detail →", visitsOf: "Their visits →", mapIn: "Zoom in", mapOut: "Zoom out", mapReset: "Whole world", mapAria: "World map of the institutions that have visited the center", failed: "Could not load this page. Please try again later." },
-    zh: { title: "綠色健康研究中心 · 臺大生農學院", labs: "五間研究室", lead: "負責人", more: "研究室介紹 →", missions: "中心三大任務", milestones: "中心沿革", intl: "國際平台", partners: "已簽署與已成形的合作", recognition: "外部肯定", org: "組織架構", divisions: "分組", contact: "參訪與聯絡", contactBody: "安排參訪或任何問題，請來信。", visitors: "來訪單位", visitorsHint: "點一下看是哪個單位；有數字的點下去會放大。", visitsLink: "每一場的詳細說明 →", visitsOf: "看這個單位的參訪 →", mapIn: "放大", mapOut: "縮小", mapReset: "全圖", mapAria: "曾來訪單位的世界地圖", failed: "讀不到中心資料，請稍後再試。" },
+    en: { title: "Green Health Research Center · NTU", labs: "The five laboratories", lead: "Lead", more: "About the laboratory →", missions: "Three missions in the center's charter", milestones: "Milestones", intl: "International platform", partners: "Signed and established partnerships", recognition: "Recognition", org: "Organisation", divisions: "Divisions", contact: "Visits and enquiries", contactBody: "To arrange a visit or ask a question, please write to us.", privacy: "Privacy policy", visitors: "Visiting institutions", visitorsHint: "Tap a dot to see who it is; numbered dots zoom in.", visitsLink: "Every visit, in detail →", visitsOf: "Their visits →", mapIn: "Zoom in", mapOut: "Zoom out", mapReset: "Whole world", mapAria: "World map of the institutions that have visited the center", failed: "Could not load this page. Please try again later." },
+    zh: { title: "綠色健康研究中心 · 臺大生農學院", labs: "五間研究室", lead: "負責人", more: "研究室介紹 →", missions: "中心三大任務", milestones: "中心沿革", intl: "國際平台", partners: "已簽署與已成形的合作", recognition: "外部肯定", org: "組織架構", divisions: "分組", contact: "參訪與聯絡", contactBody: "安排參訪或任何問題，請來信。", privacy: "隱私權政策", visitors: "來訪單位", visitorsHint: "點一下看是哪個單位；有數字的點下去會放大。", visitsLink: "每一場的詳細說明 →", visitsOf: "看這個單位的參訪 →", mapIn: "放大", mapOut: "縮小", mapReset: "全圖", mapAria: "曾來訪單位的世界地圖", failed: "讀不到中心資料，請稍後再試。" },
   };
   const T = (k) => L[primary][k];
   const pick = (o, base) => (o && (o[`${base}_${primary}`] || o[`${base}_en`])) || "";
@@ -358,6 +360,8 @@
   $("contactBody").textContent = T("contactBody");
   $("contactWhere").textContent = pick(center, "where");
   $("footerLine").textContent = `${pick(center, "name")} · ${pick(center, "parent")}`;
+  $("privacyLink").textContent = T("privacy");
+  $("privacyLink").href = inLang("/privacy");
 
   revealNew();
   const labs = (await labsReady).slice().sort((a, b) => Number(a.room) - Number(b.room));

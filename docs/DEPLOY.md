@@ -95,7 +95,14 @@ python3 scripts/slim-master.py "GHRC 介紹簡報2026-9.pptx" --out public/asset
 **連上 Google（只做一次；授權過期了再按一次）**——Drive 備份、參訪名單的 Google 試算表、從後台寄信共用這一組：
 
 1. [Google Cloud Console](https://console.cloud.google.com/) 建一個專案 → 「API 和服務」→ 啟用 **Google Drive API** 與 **Gmail API**
-2. 「OAuth 同意畫面」→ External → 填名稱與聯絡信箱 → **發布狀態設為「正式版」**。
+2. 「OAuth 同意畫面」（新版主控台叫 Google Auth Platform）→ External → **Branding** 頁填：
+   - 應用程式名稱（例如「GHRC 參訪系統」）、使用者支援電子郵件、開發人員聯絡資訊
+   - **應用程式首頁** `https://visit.healsdesign.org`、**應用程式隱私權政策連結** `https://visit.healsdesign.org/privacy`（服務條款可以留空）
+   - 已授權的網域 `healsdesign.org`（只寫網域，不加 `https://`、不加子網域）
+   - **不要上傳標誌**：上傳了 Google 就會要求送審
+
+   存檔，再到 **Audience**（目標對象）頁按 **Publish app**，**發布狀態變成「正式版」**。
+   首頁與隱私權政策沒填的話「Publish app」是灰的，只寫「到 Branding 頁完成設定」——2026 年 10 月實際卡在這裡。
    **測試模式的 refresh token 七天就失效**（2026 年 9 月就是這樣：Drive 備份默默停了兩週）。
    寄信的 `gmail.send` 屬於敏感範圍：不送審也能用，只是允許時 Google 會先說「這個應用程式未經 Google 驗證」，按「進階」→「前往…（不安全）」繼續——只有中心自己的帳號會用到
 3. 「憑證」→ 建立 OAuth 用戶端 ID → **網頁應用程式** → 已授權的重新導向 URI 加上

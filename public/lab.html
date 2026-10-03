@@ -98,6 +98,7 @@
   <footer class="text-sm second pt-4 border-t border-stone-200">
     <p id="centerLine"></p>
     <p class="mt-1" id="contactLine"></p>
+    <p class="mt-1"><a class="underline decoration-stone-300 hover:decoration-stone-900" id="privacyLink" href="/privacy">Privacy policy</a></p>
   </footer>
 </main>
 
@@ -118,8 +119,8 @@
   const secondary = primary === "en" ? "zh" : "en";
   document.documentElement.lang = primary === "zh" ? "zh-Hant" : "en";
   const L = {
-    en: { home: "Green Health Research Center", lead: "Lead", intro: "About the laboratory", photos: "Photos", expertise: "Areas of expertise", equipment: "Facilities", background: "Background", papers: "Selected papers", others: "The other laboratories", contact: "Contact", centre: "Green Health Research Center, College of Bioresources and Agriculture, National Taiwan University", where: "3F, Landscape Building, NTU · ntughrc@gmail.com", draft: "This description is a draft and has not yet been confirmed by the lead." },
-    zh: { home: "綠色健康研究中心", lead: "負責人", intro: "研究室簡介", photos: "照片", expertise: "專長領域", equipment: "設備", background: "學經歷", papers: "代表論文", others: "其他研究室", contact: "聯絡方式", centre: "國立臺灣大學生物資源暨農學院　綠色健康研究中心", where: "臺大造園館三樓 · ntughrc@gmail.com", draft: "這一段介紹是草稿，尚未經老師本人確認。" },
+    en: { home: "Green Health Research Center", lead: "Lead", intro: "About the laboratory", photos: "Photos", expertise: "Areas of expertise", equipment: "Facilities", background: "Background", papers: "Selected papers", others: "The other laboratories", contact: "Contact", centre: "Green Health Research Center, College of Bioresources and Agriculture, National Taiwan University", where: "3F, Landscape Building, NTU · ntughrc@gmail.com", draft: "This description is a draft and has not yet been confirmed by the lead.", privacy: "Privacy policy" },
+    zh: { home: "綠色健康研究中心", lead: "負責人", intro: "研究室簡介", photos: "照片", expertise: "專長領域", equipment: "設備", background: "學經歷", papers: "代表論文", others: "其他研究室", contact: "聯絡方式", centre: "國立臺灣大學生物資源暨農學院　綠色健康研究中心", where: "臺大造園館三樓 · ntughrc@gmail.com", draft: "這一段介紹是草稿，尚未經老師本人確認。", privacy: "隱私權政策" },
   };
   const T = (k) => L[primary][k];
 
@@ -223,6 +224,8 @@
   $("draftNote").textContent = T("draft");
   $("centerLine").textContent = T("centre");
   $("contactLine").textContent = T("where");
+  $("privacyLink").textContent = T("privacy");
+  $("privacyLink").href = primary === "zh" ? "/privacy?ui=zh" : "/privacy";
 })();
 </script>
 </body>

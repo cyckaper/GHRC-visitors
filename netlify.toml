@@ -43,6 +43,13 @@
   to = "/visits.html"
   status = 200
 
+# 隱私權政策 /privacy → privacy.html。Google 的 OAuth 同意畫面要發布成「正式版」，Branding 頁一定要填
+# 首頁與隱私權政策的連結（在已授權的網域上），填的就是 https://visit.healsdesign.org/privacy
+[[redirects]]
+  from = "/privacy"
+  to = "/privacy.html"
+  status = 200
+
 # 專屬網址 visit.healsdesign.org/<visit_id> → 來賓端專頁（既有靜態檔優先）
 [[redirects]]
   from = "/*"

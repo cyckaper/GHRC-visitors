@@ -426,6 +426,8 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
   七天就失效（Google 回 `invalid_grant`）——Drive 備份從九月中默默停了兩週，匯入名單時才看到一行英文錯誤；
   以前要重新授權得去 OAuth Playground 拿一組、貼進 Netlify、重新部署。所以：
   - 同意畫面的發布狀態要是「正式版」，OAuth 用戶端要有重新導向 URI `https://<站台>/api/google-auth`（`docs/DEPLOY.md` 6.5）。
+    **發布前 Branding 頁一定要填「應用程式首頁」與「隱私權政策」兩個連結**（在已授權的網域上；沒填的話「Publish app」是灰的，
+    只寫「到 Branding 頁完成設定」，實際踩過）：首頁 `https://visit.healsdesign.org`、隱私權政策 `https://visit.healsdesign.org/privacy`（見「約定」的「隱私權政策」）。
   - 過期了**講人話**（`EXPIRED`：「到後台『設定』分頁按『重新連上 Google』」），不丟一串 JSON；專案沒啟用 Gmail／Drive API 也講人話（`apiDisabled`）。
     設定分頁那一行**真的換一次 access token** 才寫「已連上」，過期了**每一頁上面都掛一條**（`#googleWarn`）——只看環境變數在不在的話，過期了也寫「已設定」。
   - 「接好了沒」一律問 `driveReady()`／`gmailReady()`（後台連上的或環境變數的，有一組就算），**不要只看環境變數**——
@@ -609,6 +611,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → **通告研究室（各室在支援人力表上填的分鐘自動排進行程）** → **今日流程（自動排好，平常只看；要改再點開）** → 自動存 → QR／.ics → **確認信（草擬、寄出或 mailto）**，**最底下列出「以前做過的參訪」**）、**簡報（獨立分頁：**AI 挑頁**、選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、後續（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁、**動作五 感謝信**）、資料（歷次參訪、**匯入以前的參訪**、回覆、摘要、跨場次彙整、CSV、Drive）、**設定（母簡報、預設值、支援人力表、外部服務狀態與「連上 Google」、老師卡片）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
 - `public/index.html`：專屬網址 `/<visit_id>`；整頁一種語言（預設英文，`?ui=zh` 換中文；ko／ja 來賓才另外附他們的語言）；流程（參訪當天標出「現在」；研究室參訪底下一間一行、各自的時段）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
 - `public/visits.html`：**來訪紀錄 `/visits`**——已經來過的每一場（日期、單位、來訪人員、交流重點、去了哪幾間）＋同一張世界地圖，首頁的「來訪單位」連過來（見「約定」的「中心首頁」）。
+- `public/privacy.html`：**隱私權政策 `/privacy`**——Google 的同意畫面要發布成正式版時 Branding 頁要填的那一個連結，也是寫給來賓看的（見「約定」的「隱私權政策」）。
 - `public/center.html`：**中心首頁 `/`**——中心簡介、三大任務、沿革、國際平台、來訪單位（世界地圖）、外部肯定、組織架構、五間研究室（卡片，各連到 `/lab/<房號>`）、聯絡；字在 `public/data/center.json`（見「約定」的「中心首頁」）。
 - `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `google-auth`（連上 Google：Drive、名單試算表、寄信共用的授權） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`／`geo-background`／`import-background`／`visit-list-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`；`geo` 查訪客地圖上各單位在哪裡；`import` 讀以前的參訪名單；`visit-list` 讀 Google 試算表名單裡新加的列）`drive` `drive-sync-background`（自動備份）；**四支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
   `rota`（支援人力表，各研究室自己填）； `visitor-map`（**公開**：中心首頁的來訪單位地圖，只有單位、位置與來過幾次）； `import`（匯入以前的參訪名單：預覽與寫入，規則在 `lib/import.mjs`）； `visit-log`（**公開**：`/visits` 來訪紀錄頁；admin 用 POST 改公開說明與「不公開」）；
@@ -700,6 +703,18 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
     來賓專頁最底下也有一行「認識中心」連過來。
   - **刻意不放**：簡報裡對特定來賓講的東西——還沒定案的計畫（2027 聯合中心、收費標準）、得獎方案的累計數字
     （含中心成立前的成果）、參訪規則與名額。那些是那一場的簡報內容，不是中心的門面。
+- **隱私權政策 `/privacy`**（`public/privacy.html`，`netlify.toml` 一條轉址，排在 `/*` 前面）：Google 的 OAuth 同意畫面
+  要發布成「正式版」（不然 refresh token 七天就失效），Branding 頁一定要填首頁與隱私權政策的連結。它同時是寫給來賓看的：
+  系統拿了哪些資料（往來信件、公開的專業資訊、名片、簽名簿、照片、主持人口述、留的 email 與回覆、真匿名）、做什麼用、
+  公開頁上會出現什麼、交給哪些服務處理（Netlify、Google、Anthropic、OpenAI）、Google 的兩個權限（`drive.file`、`gmail.send`）
+  只做什麼，以及 Google 要的 Limited Use 那一句。中英兩份在同一個檔、一次只顯示一種（跟首頁同一套：預設英文、`?ui=zh`、
+  `ghrc-ui-lang`）；沒有 JavaScript 時是英文（Google 看的是那一份）。這一頁本身不從別的伺服器載東西（沒有 Tailwind CDN）。
+  首頁、來賓專頁、介紹頁、來訪紀錄的頁尾都連過去；首頁那一條寫在 HTML 裡（Google 要首頁連得到它）。
+  - **寫的每一句都要是真的**：多處理一種個人資料、多接一個外部服務，這一頁就要跟著改，最上面的日期也改。
+    `npm test` 擋：程式裡連到的每一個外部網域都要對到一個寫在兩種語言裡的服務（新的網域對不到就報錯）、
+    `google.mts` 的每一個範圍都要寫出來、Limited Use 那一句與聯絡信箱要在、`/privacy` 的轉址排在 `/*` 前面、首頁連得到。
+  - 不寫還沒決定的事（口述音檔的保存期限，見「待確認」6）；刪除與更正的請求寫信到 ntughrc@gmail.com，由中心同仁處理
+    （系統裡刪掉那一場，Drive 上的備份另外刪）。
 - **兩邊都可以切中英文**（明確要求）。做法不一樣，因為兩邊的性質不同：
   - **後台**：中文寫在頁面上，英文是**疊上去的一層**——`public/data/i18n-admin.json` 的**鍵就是畫面上那一句中文**，
     所以 render 出什麼就照那一句查，各處不必改寫成 `t("some.key")`；查不到就維持中文（不會變空白或 key）。

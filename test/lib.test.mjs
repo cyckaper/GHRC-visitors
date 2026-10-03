@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
 import { weekdayOf } from "../public/lib/rota.mjs";
 import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
@@ -388,6 +388,47 @@ test("/ 是中心首頁（center.html），/<visit_id> 仍然落到來賓專頁"
   assert.ok(rules[root].force, "根目錄本來就有 index.html，不 force 的話 Netlify 會直接給 index.html");
   assert.ok(rest > root && rules[rest].to === "/index.html", "/<visit_id> 那一條（/*）要排在後面，仍然給來賓專頁");
   assert.match(readFileSync("scripts/dev-server.mjs", "utf8"), /if \(p === "\/"\) p = "\/center\.html"/, "本機開發伺服器也要一樣");
+});
+
+test("隱私權政策 /privacy：每一個外部服務、每一個 Google 權限都寫進去，兩種語言都有", () => {
+  // Google 的 OAuth 同意畫面要發布成「正式版」，Branding 頁一定要填首頁與隱私權政策的連結（https://visit.healsdesign.org/privacy）
+  const toml = readFileSync("netlify.toml", "utf8");
+  const rules = toml.split("[[redirects]]").slice(1).map((b) => ({ from: (/from\s*=\s*"([^"]+)"/.exec(b) || [])[1], to: (/to\s*=\s*"([^"]+)"/.exec(b) || [])[1] }));
+  const at = rules.findIndex((r) => r.from === "/privacy");
+  assert.ok(at >= 0 && rules[at].to === "/privacy.html", "要有一條 /privacy → /privacy.html");
+  assert.ok(at < rules.findIndex((r) => r.from === "/*"), "/privacy 要排在 /*（來賓專頁）前面");
+  assert.match(readFileSync("public/center.html", "utf8"), /<a [^>]*href="\/privacy"/, "首頁要連得到隱私權政策（寫在 HTML 裡，不靠 JS）");
+
+  const html = readFileSync("public/privacy.html", "utf8");
+  const open = (id) => (new RegExp(`<article id="${id}"[^>]*>`).exec(html) || [""])[0];
+  const body = (id) => (new RegExp(`<article id="${id}"[^>]*>([\\s\\S]*?)</article>`).exec(html) || [])[1] || "";
+  const langs = [["en", body("en")], ["zh", body("zh")]];
+  assert.ok(langs.every(([, t]) => t.length > 1000), "英文與中文各一份完整的");
+  assert.ok(open("en") && !/hidden/.test(open("en")) && /hidden/.test(open("zh")), "沒有 JavaScript 時看到的是英文（Google 看的是這一份），中文用切的");
+  assert.doesNotMatch(html, /<script[^>]+src=|<link[^>]+href="https?:/i, "隱私權政策這一頁本身不從別的伺服器載東西");
+
+  // 程式連到哪裡，就要點名是誰：多接一個外部服務，這一頁要跟著改
+  const dirs = ["netlify/functions", "netlify/lib"];
+  const code = dirs.flatMap((d) => readdirSync(d).filter((f) => f.endsWith(".mts")).map((f) => readFileSync(`${d}/${f}`, "utf8"))).join("\n");
+  const PROVIDERS = [[/(^|\.)(google|googleapis)\.com$/, "Google"], [/(^|\.)openai\.com$/, "OpenAI"], [/(^|\.)anthropic\.com$/, "Anthropic"], [/(^|\.)netlify\.com$/, "Netlify"], [/^visit\.healsdesign\.org$/, ""]];
+  const named = new Set(["Netlify"]); // 站台本身就在 Netlify 上
+  if (/@anthropic-ai\/sdk/.test(code)) named.add("Anthropic");
+  for (const host of new Set([...code.matchAll(/https:\/\/([a-z0-9.-]+\.[a-z]{2,})/gi)].map((m) => m[1].toLowerCase()))) {
+    const hit = PROVIDERS.find(([re]) => re.test(host));
+    assert.ok(hit, `程式會連到 ${host}：這是新的外部服務，要寫進隱私權政策（public/privacy.html），再加到這裡`);
+    if (hit[1]) named.add(hit[1]);
+  }
+  for (const name of named) for (const [lang, t] of langs) assert.ok(t.includes(name), `隱私權政策（${lang}）要寫出 ${name}`);
+
+  // 同意畫面上要的每一個 Google 權限都要說清楚
+  const scopes = [...readFileSync("netlify/lib/google.mts", "utf8").matchAll(/googleapis\.com\/auth\/([\w.]+)/g)].map((m) => m[1]);
+  assert.deepEqual(scopes, ["drive.file", "gmail.send"]);
+  for (const s of scopes) for (const [lang, t] of langs) assert.ok(t.includes(`<code>${s}</code>`), `Google 的權限 ${s} 要寫進隱私權政策（${lang}）`);
+  assert.match(langs[0][1], /adheres to the <a [^>]*>Google API Services User Data Policy<\/a>, including the Limited Use requirements/, "Google 要的 Limited Use 那一句");
+  for (const [lang, t] of langs) {
+    assert.match(t, /Limited Use/, `Limited Use（${lang}）`);
+    assert.match(t, /ntughrc@gmail\.com/, `聯絡信箱（${lang}）`);
+  }
 });
 
 test("後台的英文：畫面上每一句中文都有翻譯", () => {

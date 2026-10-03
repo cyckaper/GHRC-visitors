@@ -65,6 +65,7 @@
 
   <footer class="text-xs text-stone-400 pt-4 border-t border-stone-200">
     <p id="footerLine"></p>
+    <p class="mt-1"><a class="u" id="privacyLink" href="/privacy">Privacy policy</a></p>
   </footer>
 </main>
 
@@ -97,7 +98,7 @@
       visitors: "Visitors", focus: "Focus and outcome", rooms: "Laboratories visited", only: "Showing visits from", all: "Show all",
       none: "No visits to show yet.", failed: "Could not load the visits. Please try again later.", inZh: "in Chinese",
       mapIn: "Zoom in", mapOut: "Zoom out", mapReset: "Whole world", mapAria: "World map of the institutions that have visited the center",
-      footer: "Green Health Research Center · College of Bioresources and Agriculture, National Taiwan University",
+      footer: "Green Health Research Center · College of Bioresources and Agriculture, National Taiwan University", privacy: "Privacy policy",
       types: { university: "University", government: "Government", enterprise: "Company", school: "School", ngo: "Organisation", other: "" },
     },
     zh: {
@@ -107,7 +108,7 @@
       visitors: "來訪人員", focus: "交流重點／成果", rooms: "參訪的研究室", only: "只看", all: "看全部",
       none: "還沒有可以公開的來訪紀錄。", failed: "讀不到來訪紀錄，請稍後再試。", inZh: "中文",
       mapIn: "放大", mapOut: "縮小", mapReset: "全圖", mapAria: "曾來訪單位的世界地圖",
-      footer: "綠色健康研究中心 · 國立臺灣大學生物資源暨農學院",
+      footer: "綠色健康研究中心 · 國立臺灣大學生物資源暨農學院", privacy: "隱私權政策",
       types: { university: "大學", government: "政府機關", enterprise: "企業", school: "學校", ngo: "團體", other: "" },
     },
   };
@@ -120,6 +121,8 @@
   $("heading").textContent = T("heading");
   $("intro").textContent = T("intro");
   $("footerLine").textContent = T("footer");
+  $("privacyLink").textContent = T("privacy");
+  $("privacyLink").href = inLang("/privacy");
   $("langToggle").innerHTML = `<span class="${primary === "en" ? "on" : ""}">EN</span><span class="${primary === "zh" ? "on" : ""}">中文</span>`;
   $("langToggle").onclick = () => {
     try { localStorage.setItem(UI_KEY, other); } catch (e) {}
