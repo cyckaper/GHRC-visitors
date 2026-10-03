@@ -433,6 +433,11 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
   - 「接好了沒」一律問 `driveReady()`／`gmailReady()`（後台連上的或環境變數的，有一組就算），**不要只看環境變數**——
     只在後台連上的站台會被當成「沒設定」，備份、寄信整個略過。
   - Google 導回來那一次**不帶登入的 cookie**（SameSite=Strict 從別的網站導回來不會帶），靠 `state` 認人：用 ADMIN_TOKEN 簽過、十分鐘內、一次性（`oauth/<nonce>.json`）。
+  - **Google 說 `redirect_uri_mismatch`**＝網站用的那一個 OAuth 用戶端沒有登記導回來的網址。實際踩過：主控台裡不只一個用戶端
+    （同一個專案還有別的站台的），網址加在另一個上面，再按幾次都一樣，畫面上又看不出網站用的是哪一個。所以設定分頁 Google 那一行
+    **不能用的時候**多一塊摺起來的說明：網站用的用戶端 ID 開頭、它在 Netlify 的哪一個環境變數、要登記的那一條網址（可以複製）——
+    `googleStatus()` 的 `client_hint`／`client_from`／`redirect_uri`，網址跟 `/api/google-auth` 導過去時帶的是同一支 `googleRedirectUri()`。
+    用戶端 ID 不是密鑰（每一次導到 Google 的網址上都帶著它），仍然只給開頭（`clientHint()`，對得出是哪一個就夠了）；密鑰與 token 一律不回。
   - 存下來的那一份**不經過 `/api/media`**，設定分頁只回「連上了沒、哪個帳號、現在能不能用」。
   用中心自己的帳號而不是服務帳戶（服務帳戶沒有 Drive 配額）；**帳號選定就不要換**（`drive.file` 只看得到自己建的檔案）。
   站台的 Blobs 仍是主要資料層，Drive 是另存的檔案庫。

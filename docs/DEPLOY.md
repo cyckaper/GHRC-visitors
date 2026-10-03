@@ -113,7 +113,7 @@ python3 scripts/slim-master.py "GHRC 介紹簡報2026-9.pptx" --out public/asset
    回到後台會寫「已連上 xxx@gmail.com」。授權存在站台上（Blobs），不在環境變數裡，**之後不必再動 Netlify**
 
 - **過期了**：每一頁上面會掛一條「Google 的授權過期了」，按「重新連上 Google」再允許一次就好。
-- **Google 說 `redirect_uri_mismatch`**：第 3 步的重新導向 URI 沒加，或加在另一個用戶端上。
+- **Google 說 `redirect_uri_mismatch`**：第 3 步的重新導向 URI 沒加，或加在另一個用戶端上。後台「設定」分頁 Google 那一行底下的「Google 說 redirect_uri_mismatch？」寫著網站用的是哪一個用戶端（ID 開頭、Netlify 的哪一個環境變數）與要登記的那一條網址：到主控台的用戶端清單找 ID 開頭一樣的那一個；清單裡沒有，就是在另一個專案裡。改完等幾分鐘再按。
 - **說「還沒啟用 Gmail API」（或 Drive API）**：第 1 步那個專案少啟用一支，啟用後過幾分鐘再試。
 
 | 變數 | 說明 |

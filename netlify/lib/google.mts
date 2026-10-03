@@ -1,4 +1,4 @@
-import { env, nowISO } from "./http.mts";
+import { env, nowISO, siteUrl } from "./http.mts";
 import { getStore } from "./store.mts";
 
 /**
@@ -32,10 +32,25 @@ export interface StoredGoogle {
   at: string;
 }
 
-/** 用哪一個 OAuth 用戶端（GOOGLE_* 優先，沒有就用寄信那一組）。 */
-export function googleClient(): { id?: string; secret?: string } {
-  if (env("GOOGLE_CLIENT_ID") && env("GOOGLE_CLIENT_SECRET")) return { id: env("GOOGLE_CLIENT_ID"), secret: env("GOOGLE_CLIENT_SECRET") };
-  return { id: env("GMAIL_CLIENT_ID"), secret: env("GMAIL_CLIENT_SECRET") };
+/** 用哪一個 OAuth 用戶端（GOOGLE_* 優先，沒有就用寄信那一組）；`from` 是它在 Netlify 的哪一個環境變數。 */
+export function googleClient(): { id?: string; secret?: string; from: "GOOGLE_CLIENT_ID" | "GMAIL_CLIENT_ID" } {
+  if (env("GOOGLE_CLIENT_ID") && env("GOOGLE_CLIENT_SECRET")) return { id: env("GOOGLE_CLIENT_ID"), secret: env("GOOGLE_CLIENT_SECRET"), from: "GOOGLE_CLIENT_ID" };
+  return { id: env("GMAIL_CLIENT_ID"), secret: env("GMAIL_CLIENT_SECRET"), from: "GMAIL_CLIENT_ID" };
+}
+
+/** Google 允許之後導回來的那一個網址：OAuth 用戶端的「已授權的重新導向 URI」要有**一字不差**的這一條。 */
+export function googleRedirectUri(req?: Request): string {
+  return `${siteUrl(req)}/api/google-auth`;
+}
+
+/**
+ * 用戶端 ID 的開頭（設定分頁給人跟 Google Cloud 主控台的用戶端清單對）。開頭那一串數字是專案編號，
+ * 後面幾個字分得出同一個專案裡的不同用戶端。用戶端 ID 本來就不是密鑰（每一次導到 Google 的網址上都帶著它），
+ * 還是只給開頭：對得出是哪一個就夠了。密鑰與 token 一律不回。
+ */
+export function clientHint(id?: string): string {
+  const s = String(id || "");
+  return s.length > 20 ? `${s.slice(0, 20)}…` : s;
 }
 
 /** refresh token 是發給哪一個用戶端的，就要用那一個用戶端的密鑰去換。 */
@@ -127,17 +142,23 @@ export async function googleAccessToken(purpose: Purpose, hint = "Google 還沒�
 /**
  * 設定分頁用：Google 連上了沒、連的是哪個帳號、**現在能不能用**（真的去換一次 access token）。
  * 以前只看環境變數在不在，過期了也寫「已設定」——備份停了兩週沒人知道。不回任何金鑰內容。
+ *
+ * 另外回「按『連上 Google』會用哪一個用戶端、導回哪一個網址」（`client_hint`／`client_from`／`redirect_uri`）：
+ * Google 說 `redirect_uri_mismatch` 時，就是這個用戶端沒有登記這個網址。實際踩過：主控台裡不只一個用戶端，
+ * 網址加在另一個上面，再按幾次都一樣——畫面上又看不出網站用的是哪一個。
  */
-export async function googleStatus(): Promise<{ client: boolean; connected: boolean; ok: boolean; expired?: boolean; email?: string; via?: "stored" | "env"; gmail?: boolean; error?: string }> {
-  const client = !!(googleClient().id && googleClient().secret);
+export async function googleStatus(req?: Request): Promise<{ client: boolean; client_hint?: string; client_from?: string; redirect_uri: string; connected: boolean; ok: boolean; expired?: boolean; email?: string; via?: "stored" | "env"; gmail?: boolean; error?: string }> {
+  const app = googleClient();
+  const client = !!(app.id && app.secret);
+  const base = { client, ...(client ? { client_hint: clientHint(app.id), client_from: app.from } : {}), redirect_uri: googleRedirectUri(req) };
   const s = await storedGoogle();
   const c = await credentialsFor("drive");
   const gmail = !!(await credentialsFor("gmail"));
-  if (!c) return { client, connected: false, ok: false, gmail };
+  if (!c) return { ...base, connected: false, ok: false, gmail };
   try {
     await googleAccessToken("drive");
-    return { client, connected: true, ok: true, email: c.source === "stored" ? s?.email || "" : "", via: c.source, gmail };
+    return { ...base, connected: true, ok: true, email: c.source === "stored" ? s?.email || "" : "", via: c.source, gmail };
   } catch (e: any) {
-    return { client, connected: true, ok: false, expired: e instanceof GoogleAuthExpired, email: c.source === "stored" ? s?.email || "" : "", via: c.source, gmail, error: String(e?.message || e).slice(0, 200) };
+    return { ...base, connected: true, ok: false, expired: e instanceof GoogleAuthExpired, email: c.source === "stored" ? s?.email || "" : "", via: c.source, gmail, error: String(e?.message || e).slice(0, 200) };
   }
 }

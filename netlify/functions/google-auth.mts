@@ -1,6 +1,6 @@
 import { checkSigned, fail, randomId, requireAdmin, signValue, siteUrl } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
-import { googleClient, saveGoogle, SCOPES } from "../lib/google.mts";
+import { googleClient, googleRedirectUri, saveGoogle, SCOPES } from "../lib/google.mts";
 
 /**
  * 連上（或重新連上）Google——Drive 備份、參訪名單的 Google 試算表、Gmail 寄信共用的那組授權。
@@ -19,7 +19,7 @@ const TEN_MINUTES = 10 * 60 * 1000;
 export default async (req: Request) => {
   if (req.method !== "GET") return fail(405, "method not allowed");
   const url = new URL(req.url);
-  const redirectUri = `${siteUrl(req)}/api/google-auth`;
+  const redirectUri = googleRedirectUri(req); // 設定分頁寫給人去登記的也是這一個（同一支函式），不會兩邊對不上
   const back = (result: string) => Response.redirect(`${siteUrl(req)}/admin.html?google=${encodeURIComponent(result)}`, 302);
 
   if (url.searchParams.get("start")) {
