@@ -176,7 +176,12 @@
 
     <div class="card space-y-3" id="noticeCard">
       <h2 class="font-semibold"><span class="num">4</span>通告研究室 <span class="muted font-normal">多半是貼到 LINE 群組</span></h2>
-      <p class="muted">查完背景就先告訴各研究室哪個單位什麼時候來，<b>請各室填接待人員與共需幾分鐘</b>——通告最後附支援人力表的連結，老師點進去填。<b>各室填的分鐘會自動排進下面的今日流程</b>，也會出現在來賓專頁；定案之後再回報一次。<b>座談的場次</b>（第 5 步勾了「這場是座談」）只問老師能否出席。<br>這幾則是寫給中心同事看的，所以一律中文、條列、不署名，貼得進 LINE。</p>
+      <p class="muted">查完背景就先告訴各研究室哪個單位什麼時候來，<b>請各室填接待人員與共需幾分鐘</b>——通告最後附支援人力表的連結，老師點進去填。<b>各室填的分鐘會自動排進下面的今日流程</b>，也會出現在來賓專頁；定案之後再回報一次。<b>座談的場次</b>（勾下面的「這場是座談」）只問老師能否出席。<br>這幾則是寫給中心同事看的，所以一律中文、條列、不署名，貼得進 LINE。</p>
+      <!-- 座談的場次（明確指示：有些單位是來跟老師們座談，不用介紹各研究室）。**放在擬通告之前**（明確指示：「要移到通告前各研究室才知如何參與」）：
+           通告怎麼寫跟著它走——座談只問老師能否出席。勾了流程就換成「總體介紹 → 座談」，動線上只剩總體介紹；
+           支援人力表上那一場每一間只選老師「可參加」或「無法參加」（老師是固定的，不填名字、不問分鐘）。規則在 lib/visit.mjs isForum／toForumProgramme -->
+      <label class="flex items-start gap-2 text-sm"><input type="checkbox" id="forumMode" class="mt-1"><span><b>這場是座談，不參觀研究室</b> <span class="muted">跟中心老師們座談、不介紹各研究室：流程換成「總體介紹 → 座談」，支援人力表上每一間只選老師可參加或無法參加。</span></span></label>
+      <p class="err text-sm" id="forumNote" hidden></p>
 
       <div class="space-y-2">
         <div class="f mb-0">一、通告與徵詢簡報人員</div>
@@ -218,9 +223,6 @@
     <div class="card space-y-3" id="programmeCard">
       <h2 class="font-semibold"><span class="num">5</span>今日流程 <span class="muted font-normal">自動排好，看一眼就好</span></h2>
       <p class="muted">不必自己排：各研究室在支援人力表上填的分鐘會自動排進來，時間照著往後推算。這一份會印在簡報第 2 頁，也會出現在來賓專頁。</p>
-      <!-- 座談的場次（明確指示：有些單位是來跟老師們座談，不用介紹各研究室）：勾了流程就換成「總體介紹 → 座談」，
-           動線上只剩總體介紹；支援人力表上那一場每一間只選老師「可參加」或「無法參加」（老師是固定的，不填名字、不問分鐘）。規則在 lib/visit.mjs isForum／toForumProgramme -->
-      <label class="flex items-start gap-2 text-sm"><input type="checkbox" id="forumMode" class="mt-1"><span><b>這場是座談，不參觀研究室</b> <span class="muted">跟中心老師們座談、不介紹各研究室：流程換成「總體介紹 → 座談」，支援人力表上每一間只選老師可參加或無法參加。</span></span></label>
       <div id="programmeView" class="space-y-1 text-sm"></div>
       <p class="muted" id="programmeTotal"></p>
       <details id="programmeEdit">
@@ -932,6 +934,10 @@
       renderProgramme(defaultProgramme({ start_time: $("startTime").value, duration_minutes: minutesBetween($("startTime").value, $("endTime").value), itinerary: it, format: "tour" }), it);
       retimeProgramme();
     }
+    // 通告的寫法跟著座談與否（座談只問老師能否出席）：已經擬好的那一份就不對了，說一聲要重擬
+    const drafted = !!$("noticeBody").value.trim();
+    $("forumNote").hidden = !drafted;
+    $("forumNote").textContent = !drafted ? "" : isForumForm() ? "改成座談了：已經擬好的通告還是參觀的寫法，請重新按「AI 擬通告」。" : "改回參觀了：已經擬好的通告還是座談的寫法，請重新按「AI 擬通告」。";
     scheduleSave();
   };
 
@@ -983,6 +989,7 @@
     $("draftDiscard").hidden = state.saved || !state.draft?.fields?.form;
     if (!state.saved) $("saveInfo").textContent = "";
     $("forumMode").checked = v.format === "forum"; // 要在畫流程之前：空的流程照這個排預設的那一份
+    $("forumNote").hidden = true;
     renderGuests(v.guests || []); renderProgramme(v.programme || [], v.itinerary); renderBackground(v.background);
     $("uncertainties").innerHTML = (v.uncertainties || []).map((u) => `<li>${esc(u)}</li>`).join("");
     $("afterSave").hidden = !state.saved;
@@ -1459,16 +1466,30 @@
     // 連單位名稱或日期都還沒有，算不出 visit_id（日期＋代碼）：整份表單先暫存，填上了就存
     if (!$("orgName").value.trim() || !$("date").value) return queueDraft();
     clearTimeout(scheduleSave.t);
+    scheduleSave.pending = true;
     $("saveInfo").textContent = "存檔中…";
     scheduleSave.t = setTimeout(saveVisit, AUTOSAVE_DELAY);
   }
+  /**
+   * 還在等那 1.2 秒的改動先存出去。AI 擬通告、回報、確認信讀的是**伺服器上**那一份——
+   * 剛勾的「這場是座談」、剛改的時間還沒存到，擬出來的就是舊的（勾完馬上按「AI 擬通告」就會遇到）。
+   */
+  async function flushSave() {
+    const idle = async () => { for (let i = 0; saveVisit.running && i < 150; i++) await new Promise((r) => setTimeout(r, 100)); };
+    await idle();
+    if (scheduleSave.pending) await saveVisit();
+    await idle();
+  }
   async function saveVisit() {
     clearTimeout(scheduleSave.t);
+    scheduleSave.pending = false;
     const v = readForm();
     if (!v.org.name) return;
     if (!v.date) { showDateMissing(); return queueDraft(); } // 讀信讀不到日期：不要拿今天建一場，等人填
     if (saveVisit.running) { scheduleSave.t = setTimeout(saveVisit, AUTOSAVE_DELAY); return; } // 上一次還沒回來，等一下再存
     saveVisit.running = true;
+    // 存之前的流程與座談與否：存完對不上就重讀通告的收件人（各室的時段、座談的五間都跟著這兩樣）
+    const was = JSON.stringify([state.visit?.format, state.visit?.programme]);
     try {
       const r = await api("/api/visits", { method: "POST", body: v });
       if (!r.ok) { $("saveInfo").textContent = ""; return flash(`存不起來：${r.error}`, "err"); }
@@ -1480,6 +1501,7 @@
       const focused = document.activeElement;
       fillForm(r.visit);
       if (focused && focused.id) $(focused.id)?.focus?.(); // 重畫表單不要把游標從手上搶走
+      if (JSON.stringify([r.visit.format, r.visit.programme]) !== was) loadLabRecipients(); // 勾了座談、改了時間：收件人那幾行的時段跟著換
       if (first || r.renamed_from) await migrateDraft(first ? "new" : r.renamed_from, r.visit.visit_id);
       if (first) flash(`建好這一場了：${r.visit.visit_id}`);
       else if (r.renamed_from) flash(`網址改成 ${r.visit.visit_id}`);
@@ -2320,6 +2342,7 @@
   $("copyThanks").onclick = () => copy(`${$("thanksSubject").value}\n\n${$("thanksBody").value}`);
   $("copyConfirm").onclick = () => copy(`${$("confirmSubject").value}\n\n${$("confirmBody").value}`);
   $("confirmLetterBtn").onclick = () => busy($("confirmLetterBtn"), async () => {
+    await flushSave(); // 剛改的行程要先存到，信裡才是新的
     const r = await runJob("/api/letter", { visit_id: $("visitSelect").value, kind: "confirmation", sender: $("confirmSender").value }, noteInto("confirmLetterInfo"), "AI 草擬中……大約一分鐘。");
     if (!r) return;
     $("confirmSubject").value = r.draft.subject; $("confirmBody").value = r.draft.body;
@@ -2349,12 +2372,14 @@
 
   // ── 研究室通告與回報（寫給中心自己的，多半是貼 LINE，寄 email 只是備援）──
   const draftInternal = (kind) => busy($(`${kind}Btn`), async () => {
+    await flushSave(); // 剛勾的「這場是座談」要先存到，擬出來才是座談的寫法
     const id = $("visitSelect").value;
     if (!id) return flash("請先選一場參訪", "err");
     const r = await runJob("/api/letter", { visit_id: id, kind }, noteInto(`${kind}Info`), "AI 擬稿中……大約一分鐘。");
     if (!r) return;
     $(`${kind}Subject`).value = r.draft.subject; $(`${kind}Body`).value = r.draft.body;
     if (r.recipients) state.labRecipients = r.recipients;
+    if (kind === "notice") $("forumNote").hidden = true; // 重擬過了，「要重擬」那一句收起來
     renderLabRecipients();
     rebase(LETTER_FIELDS); queueDraft(); applyDraft(); refreshLetters(id);
   });

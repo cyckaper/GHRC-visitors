@@ -856,10 +856,17 @@ try {
     await page.selectOption("#visitSelect", id);
     await page.waitForFunction((v) => document.getElementById("preStatus").textContent === v, id, { timeout: 30000 });
     check((await page.locator("#programmeView .room").count()) === 5 && !(await page.isChecked("#forumMode")), "a new visit starts as a laboratory tour");
+    // 那個勾在第 4 步、擬通告之前（明確指示：「要移到通告前各研究室才知如何參與」）
+    check(await page.$eval("#forumMode", (el) => !!el.closest("#noticeCard") && !!(el.compareDocumentPosition(document.getElementById("noticeBtn")) & Node.DOCUMENT_POSITION_FOLLOWING)), "the roundtable tick sits in step 4, before drafting the notice");
     const endBefore = await page.evaluate(() => [...document.querySelectorAll("#programmeTable tbody tr:not([data-rooms-row])")].pop().cells[1].firstChild.value);
     const saved = page.waitForResponse((r) => r.url().endsWith("/api/visits") && r.request().method() === "POST", { timeout: 20000 });
+    // 勾完馬上按「AI 擬通告」：還在等自動存檔的那一下要先存出去，擬出來才是座談的寫法
     await page.check("#forumMode");
+    await page.click("#noticeBtn");
     await saved;
+    await page.waitForFunction(() => /請各研究室回覆/.test(document.getElementById("noticeBody").value), null, { timeout: 60000 });
+    const draftedNotice = await page.inputValue("#noticeBody");
+    check(/老師能否出席座談/.test(draftedNotice) && !/尚未分配到各室/.test(draftedNotice), `drafting the notice right after ticking it already asks whether each teacher can attend (${draftedNotice.slice(-80).replace(/\s+/g, " ")})`);
     const view = await page.textContent("#programmeView");
     check(/座談/.test(view) && !/研究室參訪|綜合討論/.test(view) && (await page.locator("#programmeView [data-not-filled]").count()) === 5, `ticking “roundtable” turns the schedule into overview → roundtable, each lab's attending teacher still to fill (${view.replace(/\s+/g, " ")})`);
     const stored = await visitOf(id);
@@ -886,9 +893,14 @@ try {
     await page.waitForFunction((v) => document.getElementById("preStatus").textContent === v, id, { timeout: 30000 });
     const forumView = (await page.textContent("#programmeView")).replace(/\s+/g, "");
     check(await page.isChecked("#forumMode") && /303陳惠美可參加/.test(forumView) && /302林寶秀無法參加/.test(forumView) && (await page.locator("#programmeView [data-not-filled]").count()) === 3, `back in the admin, the roundtable shows which teachers can attend and which labs have not answered (${forumView})`);
+    await page.waitForFunction(() => document.getElementById("noticeBody").value.trim() !== "", null, { timeout: 30000 }); // 剛才擬好的通告載回來了
     const unsaved = page.waitForResponse((r) => r.url().endsWith("/api/visits") && r.request().method() === "POST", { timeout: 20000 });
     await page.uncheck("#forumMode");
     await unsaved;
+    check(!(await page.isHidden("#forumNote")) && /改回參觀.*重新按「AI 擬通告」/.test(await page.textContent("#forumNote")), "unticking after the notice was drafted says the notice has to be drafted again");
+    // 通告底下的收件人也跟著換回參觀的時段（座談時 305 寫的是整段座談 14:20–16:35）
+    await until(async () => { const t = await page.textContent("#noticeRecipients"); return /305/.test(t) && !/14:20–16:35/.test(t); }, "the notice recipients to show the tour slots again");
+    check(true, "…and the notice recipients switch back to the tour slots");
     const back = await visitOf(id);
     check((await page.locator("#programmeView .room").count()) === 5 && /研究室參訪/.test(await page.textContent("#programmeView")) && back.format === "tour", "unticking it goes back to the laboratory tour");
     check((await page.locator("#programmeView [data-from-lab]").count()) === 1 && back.itinerary.find((s) => s.room === "301")?.minutes === 30, `…with the minutes a lab had already filled in put back on the schedule (${JSON.stringify(back.itinerary.map((s) => [s.room, s.minutes]))})`);
