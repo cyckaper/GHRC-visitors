@@ -1,5 +1,5 @@
 import { env, nowISO } from "./http.mts";
-import { apiDisabled, googleAccessToken, googleReady } from "./google.mts";
+import { apiDisabled, gmailAccount, googleAccessToken, googleReady } from "./google.mts";
 import { getStore } from "./store.mts";
 
 /**
@@ -31,9 +31,11 @@ export async function gmailSend(to: string, subject: string, text: string): Prom
     await getStore().putMedia("mail/last.json", new TextEncoder().encode(JSON.stringify({ to, subject, text, at: nowISO() })), "application/json");
     return;
   }
-  const from = env("GMAIL_SENDER") || "me";
+  // 寄件人＝授權的那個帳號（後台連上的那一個，或 GMAIL_SENDER）。不知道是誰就不寫，讓 Gmail 自己填——
+  // 以前寫成 `From: me`，那不是一個信箱，Gmail 會擋
+  const from = await gmailAccount();
   const mime = [
-    `From: ${from}`,
+    ...(from ? [`From: ${from}`] : []),
     `To: ${to}`,
     `Subject: ${encodeHeader(subject)}`,
     "MIME-Version: 1.0",

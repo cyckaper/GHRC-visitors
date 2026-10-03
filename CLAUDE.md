@@ -452,7 +452,10 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
   還缺哪幾件，附一個直接打開後台「後續」分頁的連結（`/admin.html#wrapup=<visit_id>`）。管道選寄信是因為
   Gmail 已經接了、手機收信就會跳，不必再接第三個服務。一場只寄一次（`visit.reminders.wrapup_sent_at`）、
   四件事都做完了就不寄、只看結束後六小時內的場次；寄成功才記，失敗下一輪再試。收件信箱在後台「設定」分頁
-  （`settings.reminder_to`，留空就用 `REMINDER_TO`／`GMAIL_SENDER`）。
+  （`settings.reminder_to`，留空就用 `REMINDER_TO`，再沒有就**寄給寄信的那個帳號自己**——`google.mts gmailAccount()`：
+  後台連上 Google 的那一個，或 `GMAIL_SENDER`）。信的**寄件人（From）也是 `gmailAccount()`**：以前沒設 `GMAIL_SENDER` 時寫成 `From: me`，
+  那不是一個信箱，Gmail 會擋（Invalid From header）——後台連上之後 Gmail 那一格寫「已設定」，按寄出卻寄不出去；
+  後續提醒那一格也因為只看 `GMAIL_SENDER` 而一直是「未設定」。不知道是誰就不寫 From，讓 Gmail 自己填。
 - **回饋的來源分開算**（明確要求）：「主持人覺得對方有合作興趣」**不等於**「對方說他想合作」。
   `slideHistory()` 的 `rooms[]` 因此分成 `wanted`／`cooperate`（**來賓自己回的**）與 `host_noted`
   （**主持人口述裡聽到的**），提示詞明講兩者不要混著談；一頁摘要的「最想看什麼」「想合作誰」也各自分行寫來源。

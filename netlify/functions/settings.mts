@@ -1,7 +1,7 @@
 import { env, fail, json, randomId, readJSON, requireAdmin } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import { driveReady } from "../lib/drive.mts";
-import { googleStatus } from "../lib/google.mts";
+import { gmailAccount, googleStatus } from "../lib/google.mts";
 import { gmailReady } from "../lib/mail.mts";
 import { aiConfigured } from "../lib/ai.mts";
 
@@ -63,12 +63,13 @@ export async function ensureRotaKey(): Promise<string> {
 
 /**
  * 後續提醒寄到哪裡（reminder-cron 用）：後台「設定」填的優先，沒填就用 Netlify 的
- * `REMINDER_TO`，再沒有就用寄件帳號 `GMAIL_SENDER`。三個都沒有就不寄——寧可不寄，
- * 也不要亂猜一個地址。
+ * `REMINDER_TO`，再沒有就寄給寄信的那個帳號自己（`gmailAccount()`：後台連上 Google 的那一個，或 `GMAIL_SENDER`）——
+ * 設定分頁那一格寫的就是「留空就用寄信那個帳號」。以前只看 `GMAIL_SENDER`，在後台連上 Google 的站台
+ * 那一格留空就是「未設定」、提醒不寄。都沒有就不寄——寧可不寄，也不要亂猜一個地址。
  */
 export async function reminderTo(): Promise<string> {
   const s = await loadSettings();
-  return (s.reminder_to || env("REMINDER_TO") || env("GMAIL_SENDER") || "").trim().toLowerCase();
+  return (s.reminder_to || env("REMINDER_TO") || (await gmailAccount()) || "").trim().toLowerCase();
 }
 
 export default async (req: Request) => {
@@ -82,7 +83,7 @@ export default async (req: Request) => {
     if (sender === "contact" || sender === "director") next.sender_default = sender;
     if (typeof body?.settings?.reminder_to === "string") {
       const to = body.settings.reminder_to.trim().slice(0, 200).toLowerCase();
-      if (to && !EMAIL.test(to)) return fail(400, "後續提醒的收件者要填一個 email 位址（留空就用 Netlify 設的寄件帳號）");
+      if (to && !EMAIL.test(to)) return fail(400, "後續提醒的收件者要填一個 email 位址（留空就寄給寄信的那個帳號）");
       next.reminder_to = to;
     }
     // 支援人力表的連結：只有「換一個」（外流時用）。沒有「收回」——連結是自動產生的，

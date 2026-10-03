@@ -1508,6 +1508,7 @@ test("連上 Google：後台按一下走 Google 的同意畫面，refresh token 
   const realFetch = globalThis.fetch;
   let refresh = "ok"; // 換 access token 時 Google 怎麼回：ok／expired
   const exchanged = [];
+  const sentRaw = []; // 送到 Gmail 的信（base64url 的整封 MIME）
   const jwt = (o) => ["e30", Buffer.from(JSON.stringify(o)).toString("base64url"), "sig"].join(".");
   globalThis.fetch = async (url, init = {}) => {
     if (String(url) === "https://oauth2.googleapis.com/token") {
@@ -1520,6 +1521,7 @@ test("連上 Google：後台按一下走 Google 的同意畫面，refresh token 
       return new Response(JSON.stringify({ access_token: `at-${body.get("refresh_token")}`, expires_in: 3600 }), { status: 200 });
     }
     if (String(url).startsWith("https://gmail.googleapis.com/")) {
+      sentRaw.push(JSON.parse(String(init.body || "{}")).raw || "");
       // 這個用戶端的專案沒有啟用 Gmail API（Google 實際回的樣子）
       return new Response(JSON.stringify({ error: { code: 403, message: "Gmail API has not been used in project 123 before or it is disabled.", status: "PERMISSION_DENIED", details: [{ reason: "SERVICE_DISABLED" }] } }), { status: 403 });
     }
@@ -1582,6 +1584,12 @@ test("連上 Google：後台按一下走 Google 的同意畫面，refresh token 
     // 授權是哪一個用戶端給的，就要在那一個專案裡啟用 Gmail API——沒啟用時講人話，不是一串 JSON
     const { gmailSend } = await import("../netlify/lib/mail.mts");
     await assert.rejects(gmailSend("someone@example.test", "主旨", "內文"), (e) => /還沒啟用 Gmail API/.test(e.message) && !/PERMISSION_DENIED/.test(e.message));
+    // 寄件人＝連上的那個帳號（沒設 GMAIL_SENDER 時以前寫成「From: me」，那不是一個信箱，Gmail 會擋）
+    const mime = Buffer.from(sentRaw.at(-1) || "", "base64url").toString("utf8");
+    assert.match(mime, /^From: center@example\.test\r?$/m, "寄件人是連上 Google 的那個帳號");
+    assert.doesNotMatch(mime, /^From: me\r?$/m);
+    // 後續提醒的收件信箱留空：寄給寄信的那個帳號自己（設定分頁那一格寫的就是「留空就用寄信那個帳號」），所以不再是「未設定」
+    assert.deepEqual({ to: st.body.effective.reminder_to, reminder: st.body.status.reminder }, { to: "center@example.test", reminder: true });
 
     // 過期了：設定分頁寫「授權過期」；Drive 那邊的錯誤講人話，不是一串 invalid_grant
     refresh = "expired";

@@ -97,6 +97,17 @@ async function credentialsFor(purpose: Purpose): Promise<Creds | null> {
 }
 
 /**
+ * 寄信的是哪一個帳號：用後台連上的那一份就是那個帳號（連上時 Google 給的 email），用環境變數那一份就看 `GMAIL_SENDER`。
+ * 信的寄件人（From）與後續提醒的預設收件者都用它。以前沒設 `GMAIL_SENDER` 時寄件人寫成 `From: me`——
+ * 那不是一個信箱，Gmail 會擋（Invalid From header）；後台連上之後 Gmail 那一格是「已設定」，按寄出卻寄不出去。
+ */
+export async function gmailAccount(): Promise<string> {
+  const c = await credentialsFor("gmail");
+  if (c?.source === "stored") return ((await storedGoogle())?.email || env("GMAIL_SENDER") || "").trim();
+  return (env("GMAIL_SENDER") || "").trim();
+}
+
+/**
  * 這個用途有沒有一組授權可以用（後台連上的那一份，或環境變數）。**不打網路**：
  * 過期了沒有，要真的換一次才知道（`googleStatus`）。以前只看環境變數——只在後台連上、環境變數裡沒有
  * refresh token 的站台，Drive 備份、寄信全都會當成「沒設定」略過。
