@@ -874,7 +874,7 @@ try {
     const card = page.locator(`section[data-rota-visit="${id}"]`);
     await card.waitFor({ timeout: 30000 });
     const options = await card.locator('select[data-room="303"] option').allTextContents();
-    check((await card.locator('select[data-field="attend"]').count()) === 5 && (await card.locator("input").count()) === 0 && options.join() === "請選擇,可參加,無法參加" && /陳惠美/.test(await card.textContent()) && /座談/.test(await card.textContent()), `on the lab rota, that visit only asks each lab to pick whether its teacher can attend (${options.join("/")})`);
+    check((await card.locator('select[data-field="attend"]').count()) === 5 && (await card.locator("input").count()) === 0 && options.map((o) => o.trim()).join() === "請選擇,陳惠美 可參加,陳惠美 無法參加" && /陳惠美/.test(await card.textContent()) && /座談/.test(await card.textContent()), `on the lab rota, that visit only asks each lab to pick whether its teacher can attend, the teacher's name in front of each choice (${options.join("/")})`);
     await card.locator('select[data-room="303"]').selectOption("yes");
     await card.locator('select[data-room="302"]').selectOption("no");
     await until(async () => { const a = (await visitOf(id)).attendance || {}; return a["303"] === "yes" && a["302"] === "no"; }, "the choices to save");

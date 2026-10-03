@@ -124,12 +124,14 @@ function background(v) {
 /**
  * 座談的場次：那一間的老師能否出席。**老師是固定的**（各研究室的負責人），不必填名字——
  * 下拉選「可參加」「無法參加」就好（明確指示）。空的＝還沒回。
+ * **選項前面就是老師的名字**（「張俊彥 可參加」「張俊彥 無法參加」，明確指示）：選好之後格子上一眼看得出是誰。
  */
 const ATTEND = { yes: "可參加", no: "無法參加" };
+const attendText = (lead, k) => `${lead ? `${lead} ` : ""}${ATTEND[k]}`;
 function attendSelect(v, room, lead, empty) {
   const now = v.attendance?.[room] || "";
   return `<select class="rota-in" data-visit="${esc(v.visit_id)}" data-room="${esc(room)}" data-field="attend" ${v.past ? "disabled" : ""} aria-label="${esc(room)} ${esc(lead || "")} 能否出席座談">
-      <option value="">${esc(empty)}</option>${Object.entries(ATTEND).map(([k, t]) => `<option value="${k}" ${now === k ? "selected" : ""}>${t}</option>`).join("")}
+      <option value="">${esc(empty)}</option>${Object.keys(ATTEND).map((k) => `<option value="${k}" ${now === k ? "selected" : ""}>${esc(attendText(lead, k))}</option>`).join("")}
     </select>`;
 }
 
@@ -187,7 +189,7 @@ function tableCell(v, room, lead) {
   if (!on) return `<td class="rota-td rota-na">免填</td>`;
   if (v.forum) {
     const now = v.attendance?.[room] || "";
-    if (v.past) return `<td class="rota-td">${now ? esc(ATTEND[now]) : `<span class="rota-muted">—</span>`}</td>`;
+    if (v.past) return `<td class="rota-td">${now ? esc(attendText(lead, now)) : `<span class="rota-muted">—</span>`}</td>`;
     return `<td class="rota-td ${now ? "" : "rota-todo"}" style="--tone:var(--c${esc(room)})">${attendSelect(v, room, lead, "未填")}</td>`;
   }
   const name = v.presenters?.[room] || "";
