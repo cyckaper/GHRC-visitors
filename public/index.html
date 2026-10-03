@@ -308,7 +308,7 @@
         return `<span class="block text-xs text-stone-500 mt-0.5" data-lab-slot="${esc(r)}"><span style="color:${roomTone(r)}">Lab ${esc(r)}</span> ${slot}</span>`;
       }).join("");
     };
-    const blockTone = (b) => (b.rooms && b.rooms.length ? roomTone(b.rooms[0]) : b.kind === "discussion" ? "#4d7c0f" : b.kind === "photo" ? "#b45309" : "var(--cbriefing)");
+    const blockTone = (b) => (b.rooms && b.rooms.length ? roomTone(b.rooms[0]) : b.kind === "discussion" || b.kind === "forum" ? "#4d7c0f" : b.kind === "photo" ? "#b45309" : "var(--cbriefing)");
     $("programme").innerHTML = visit.programme.map((b, i) => `
       <li class="flex gap-4 py-3 reveal" style="--d:${i * 70}ms; --tone:${blockTone(b)}" data-start="${esc(b.start)}" data-end="${esc(b.end)}">
         <span class="dot" aria-hidden="true"></span>
@@ -347,8 +347,10 @@
   }
 
   // 五間研究室的老師卡片：先排今天的動線，其餘放後面；標題依階段用「將參訪／今天參訪／參訪過」，
-  // 沒有參訪代碼的首頁沒有「今天」可言，用中性的「五間研究室」
-  const labsKey = !visit ? "labs_generic" : phase === "before" ? "labs" : phase === "after" ? "labs_after" : "labs_today";
+  // 沒有參訪代碼的首頁沒有「今天」可言，用中性的「五間研究室」。
+  // **座談的場次**（跟中心老師們座談，不參觀研究室）也用中性的標題，卡片不標動線的順序
+  const forum = !!visit && visit.format === "forum";
+  const labsKey = !visit || forum ? "labs_generic" : phase === "before" ? "labs" : phase === "after" ? "labs_after" : "labs_today";
   $("labsTitle").textContent = T(labsKey);
   $("labsTitle2").textContent = T2(labsKey);
   const steps = visit && visit.itinerary ? visit.itinerary.map((s) => ({ ...s, room: String(s.room) })) : [];
@@ -357,14 +359,17 @@
   const ordered = [...labsData.labs].sort((a, b) => rank(a.room) - rank(b.room));
   function rank(room) { const i = route.indexOf(room); return i < 0 ? 100 + Number(room) : i; }
   // 動線第一站：總體介紹（總體簡報），預設在 302
+  // 座談的場次：總體介紹之後是座談（不是走訪研究室），標題也不寫「與研究室」
+  const briefingKey = forum ? "kind_briefing" : "briefing";
+  const hintKey = forum ? "briefing_hint_forum" : "briefing_hint";
   const briefingCard = briefingStep ? `
       <article class="card lab-card reveal" id="briefing-card" style="--tone:#0f766e">
         <div class="flex gap-3 items-start">
-          <span class="step">1</span>
+          ${forum ? "" : `<span class="step">1</span>`}
           <div class="min-w-0 flex-1">
-            <h3 class="font-semibold text-lg leading-snug">${esc(T("briefing"))}${T2("briefing") ? ` <span class="second font-normal">${esc(T2("briefing"))}</span>` : ""}</h3>
+            <h3 class="font-semibold text-lg leading-snug">${esc(T(briefingKey))}${T2(briefingKey) ? ` <span class="second font-normal">${esc(T2(briefingKey))}</span>` : ""}</h3>
             <p class="mt-1 text-stone-600 text-sm">${briefingStep.location ? `Room ${esc(briefingStep.location)} · ` : ""}${esc(String(briefingStep.minutes))} ${esc(T("minutes"))}${T2("minutes") ? " / " + esc(T2("minutes")) : ""}</p>
-            <p class="mt-1 text-sm text-stone-500">${esc(T("briefing_hint"))}${T2("briefing_hint") ? `<span class="second block">${esc(T2("briefing_hint"))}</span>` : ""}</p>
+            <p class="mt-1 text-sm text-stone-500">${esc(T(hintKey))}${T2(hintKey) ? `<span class="second block">${esc(T2(hintKey))}</span>` : ""}</p>
           </div>
         </div>
       </article>` : "";
@@ -376,7 +381,7 @@
     const oneLine = pick("one_line");
     const expertise = lab["expertise_" + primary] || lab.expertise_en;
     const papers = (lab.papers || []).map((p) => `<li><a class="underline decoration-stone-300 hover:decoration-stone-900" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a>${p.venue ? ` <span class="text-stone-400">· ${esc(p.venue)}</span>` : ""}</li>`).join("");
-    const stepNo = briefingStep && onRoute ? (route.indexOf(lab.room) >= 0 ? route.indexOf(lab.room) + 2 : idx + 2) : null;
+    const stepNo = briefingStep && onRoute && !forum ? (route.indexOf(lab.room) >= 0 ? route.indexOf(lab.room) + 2 : idx + 2) : null;
     const contact = lead.email ? `<p class="mt-3 text-sm"><span class="text-stone-500">${esc(bi("contact"))}</span> <a class="underline decoration-stone-300 hover:decoration-stone-900" href="mailto:${esc(lead.email)}">${esc(lead.email)}</a></p>` : "";
     return `
       <article class="card lab-card reveal ${onRoute ? "" : "opacity-60"}" id="lab-${lab.room}" style="--d:${(idx + 1) * 60}ms; --tone:${roomTone(lab.room)}">

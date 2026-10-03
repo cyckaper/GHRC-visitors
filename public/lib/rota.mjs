@@ -5,6 +5,7 @@
  * 老師看到的那一張，改的也是同一格——在群組裡直接回的，就由主辦端填進對應的格子，資料只有一份。
  *
  * **簡單明瞭**（明確指示）：每一間只填兩件事——接待人員、共需幾分鐘；說明越少越好。
+ * **座談的場次**（不參觀研究室，`v.forum`）：每一間只填一件事——出席座談的老師（同一個 `presenters` 欄位），不問分鐘。
  * 卡片上只有「誰、哪一天、幾位」，其他（國家、對口、目的、背景研判）摺在「訪客背景」裡。
  *
  * 樣式自帶、類名一律 `rota-` 開頭：放進後台時不會跟後台自己的 .card／.muted 打架。
@@ -33,6 +34,8 @@ const CSS = `
 .rota-card.rota-focus { outline: 3px solid #0f766e; outline-offset: 2px; }
 .rota-muted { color: #78716c; font-size: .86rem; }
 .rota-over { font-weight: 600; color: #57534e; }
+/* 座談的場次（不參觀研究室）：一個小標籤，格子只問出席的老師 */
+.rota-tag { display: inline-block; font-size: .78rem; font-weight: 600; padding: .05rem .5rem; border-radius: 9999px; background: #ecfccb; color: #3f6212; border: 1px solid #bef264; }
 /*
  * 老師多半是從 LINE 點連結、用手機填（實際回報：手機上整頁比螢幕寬，右邊那一欄與字尾都被切掉）。
  * 所以：手機上一間一列（一格至少 11rem，放不下兩格就一格；字放大了 rem 跟著變大，也就自動變一欄），
@@ -129,6 +132,12 @@ function card(v, labs) {
           const tone = esc(l.color || "#0f766e");
           const attrs = `data-visit="${esc(v.visit_id)}" data-room="${esc(s.room)}" ${v.past ? "disabled" : ""}`;
           const mins = v.lab_minutes?.[s.room];
+          // 座談的場次只問出席的老師（不問分鐘：座談不參觀研究室）
+          if (v.forum)
+            return `<div class="rota-cell" style="--tone:${tone}">
+              <div class="rota-lab" style="color:${tone}">${esc(s.room)} ${esc(l.name_zh)}</div>
+              <input class="rota-in" ${attrs} data-field="name" value="${esc(v.presenters?.[s.room] || "")}" placeholder="${v.past ? "" : "出席老師"}" aria-label="${esc(s.room)} 出席座談的老師">
+            </div>`;
           return `<div class="rota-cell" style="--tone:${tone}">
               <div class="rota-lab" style="color:${tone}">${esc(s.room)} ${esc(l.name_zh)}</div>
               <input class="rota-in" ${attrs} data-field="name" value="${esc(v.presenters?.[s.room] || "")}" placeholder="${v.past ? "" : "接待人員"}" aria-label="${esc(s.room)} 接待人員">
@@ -143,6 +152,7 @@ function card(v, labs) {
         ${v.org?.name_local && v.org.name_local !== v.org.name ? `<span class="rota-muted">${esc(v.org.name_local)}</span>` : ""}
         <span class="rota-muted">${esc(when)}</span>
         ${v.headcount ? `<span class="rota-muted">${esc(String(v.headcount))} 位</span>` : ""}
+        ${v.forum ? `<span class="rota-tag" title="跟中心老師們座談，不參觀研究室：請填哪位老師出席">座談・填出席老師</span>` : ""}
         ${v.past ? `<span class="rota-over">已結束</span>` : ""}
       </div>
       ${background(v)}
@@ -161,12 +171,16 @@ function tableCell(v, room) {
   const on = (v.stops || []).some((s) => String(s.room) === room);
   if (!on) return `<td class="rota-td rota-na">免填</td>`;
   const name = v.presenters?.[room] || "";
-  const mins = v.lab_minutes?.[room];
+  const mins = v.forum ? undefined : v.lab_minutes?.[room]; // 座談只問出席的老師
   if (v.past) {
     const text = name || mins != null ? `${esc(name || "—")}${mins != null ? `<span class="rota-muted">　${esc(String(mins))} 分</span>` : ""}` : `<span class="rota-muted">—</span>`;
     return `<td class="rota-td">${text}</td>`;
   }
   const attrs = `data-visit="${esc(v.visit_id)}" data-room="${esc(room)}"`;
+  if (v.forum)
+    return `<td class="rota-td ${name ? "" : "rota-todo"}" style="--tone:var(--c${esc(room)})">
+      <input class="rota-in" ${attrs} data-field="name" value="${esc(name)}" placeholder="未填" aria-label="${esc(room)} 出席座談的老師">
+    </td>`;
   return `<td class="rota-td ${name ? "" : "rota-todo"}" style="--tone:var(--c${esc(room)})">
       <input class="rota-in" ${attrs} data-field="name" value="${esc(name)}" placeholder="未填" aria-label="${esc(room)} 接待人員">
       <label class="rota-min"><input class="rota-in" ${attrs} data-field="minutes" inputmode="numeric" maxlength="3" value="${esc(mins == null ? "" : String(mins))}" aria-label="${esc(room)} 共需幾分鐘"> 分</label>
@@ -187,7 +201,7 @@ function table(visits, labs) {
     const wk = weekdayOf(v.date);
     const when = `${String(v.date || "").slice(5).replace("-", "/")}${wk ? `（${wk}）` : ""}${v.start_time || ""}${v.end_time ? `–${v.end_time}` : ""}`;
     return `<tr class="${v.past ? "rota-past" : ""}" data-rota-visit="${esc(v.visit_id)}">
-        <th scope="row" class="rota-rh"><b>${esc(v.org?.name_local || v.org?.name)}</b><div class="rota-sub">${esc(when)}</div></th>
+        <th scope="row" class="rota-rh"><b>${esc(v.org?.name_local || v.org?.name)}</b><div class="rota-sub">${esc(when)}</div>${v.forum ? `<span class="rota-tag" title="跟中心老師們座談，不參觀研究室：每一間只填出席的老師">座談・填出席老師</span>` : ""}</th>
         ${rooms.map((room) => tableCell(v, room)).join("")}
       </tr>`;
   };

@@ -1,7 +1,7 @@
 import { fail, json, nowISO, readJSON, requireAdmin, siteUrl } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
-import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes, needsGeo, sanitizeGeo, sanitizePublic, institutionKeys, visitEndAt } from "../../lib/visit.mjs";
+import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes, needsGeo, sanitizeGeo, sanitizePublic, institutionKeys, visitEndAt, isForum, toForumProgramme, defaultProgramme } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
 import { purgePublicVisits } from "../lib/cdn.mts";
 import { dropDraft, moveDraft } from "./draft.mts";
@@ -99,6 +99,11 @@ export default async (req: Request) => {
       // 產檔只送 generated_at 與頁數）——訪前分頁的存檔不送 deck，產過的簡報就不會被它洗掉。指紋只由伺服器蓋（下面）
       const { fingerprint: _sentFingerprint, ...sentDeck } = ((body as any).deck && typeof (body as any).deck === "object" && !Array.isArray((body as any).deck) ? (body as any).deck : {}) as Visit["deck"];
       merged.deck = { ...(existing?.deck || {}), ...sentDeck };
+      // 座談與否是訪前分頁在改的：沒帶就沿用伺服器上的（還開著舊版後台的那一台送來的沒有這一格，不能把座談改回參觀）
+      if ((body as any).format === undefined && existing?.format) {
+        merged.format = existing.format;
+        enforceFormat(merged);
+      }
       // 各研究室自己填的那幾格：帶了也不算，一律沿用伺服器上的（見 ROTA_FIELDS）
       if (existing) for (const k of ROTA_FIELDS) if ((existing as any)[k] !== undefined) (merged as any)[k] = (existing as any)[k];
       // 訪客地圖上的位置只有 geo-background 在寫：後台送回來的那一份一律不算（單位改了名字，key 對不上就會重查）
@@ -107,9 +112,10 @@ export default async (req: Request) => {
       if (existing) (merged as any).public = (existing as any).public;
       // 研究室填的分鐘已經自動排進行程（/api/rota）。**後台手上那一份還沒看過**（它的 updated_at 比那一間
       // 填的時間早）就不能把它蓋回去：那幾間照伺服器上的分鐘、今日流程重推一次。看過之後主辦端要改就照他的。
+      // 座談的場次不參觀研究室：以前填過的分鐘不排回去
       const base = String((body as any).updated_at || "");
       const filledAt: Record<string, string> = (existing as any)?.lab_minutes_at || {};
-      unseen = existing ? Object.keys(filledAt).filter((room) => !base || filledAt[room] > base) : [];
+      unseen = existing && !isForum(merged) ? Object.keys(filledAt).filter((room) => !base || filledAt[room] > base) : [];
       for (const room of unseen) {
         const step = (existing!.itinerary || []).find((s) => String(s.room) === room);
         if (step && Number(step.minutes) > 0) merged.itinerary = withLabMinutes(merged.itinerary, room, Number(step.minutes)) as Visit["itinerary"];
@@ -242,6 +248,18 @@ function mediaKeys(v: Visit): string[] {
   return keys.filter((k): k is string => typeof k === "string" && !!k && !/^https?:/i.test(k));
 }
 
+/**
+ * 座談的場次：動線上只留總體介紹，流程裡的研究室參訪換成座談（`lib/visit.mjs toForumProgramme`）。
+ * 還沒有流程的就照座談的預設排一份（總體介紹 → 座談）——不然換出來只有孤零零一段座談，總體介紹不見了。
+ */
+function enforceFormat(v: Visit): void {
+  if (!isForum(v)) return;
+  v.itinerary = (v.itinerary || []).filter((s) => s.room === "briefing");
+  const programme = (v.programme || []).filter(Boolean);
+  if (!programme.length) v.programme = defaultProgramme(v) as Visit["programme"];
+  else if (programme.some((b) => b?.kind === "tour") || !programme.some((b) => b?.kind === "forum")) v.programme = toForumProgramme(programme, v.start_time) as Visit["programme"];
+}
+
 export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   const base = emptyVisit() as Visit;
   const v: Visit = { ...base, ...input } as Visit;
@@ -268,6 +286,10 @@ export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   // 公開頁上的說明（/api/visit-log 寫的；匯入時帶原表的）：只留認得的欄位
   (v as any).public = sanitizePublic((input as any).public);
   v.language = (["en", "zh", "ko", "ja"] as const).includes(v.language) ? v.language : "en";
+  // 座談的場次（跟老師們座談，不參觀研究室）：動線上只留總體介紹，流程裡的「研究室參訪」換成座談
+  // （後台勾的時候已經換好了；這裡是保險——不管誰送來的，座談的場次都不會留著研究室的分鐘）
+  v.format = (input as any).format === "forum" ? "forum" : "tour";
+  enforceFormat(v);
   v.status = (["draft", "confirmed", "done"] as const).includes(v.status) ? v.status : "draft";
   v.deck = input.deck || {};
   v.signbook = input.signbook || {};

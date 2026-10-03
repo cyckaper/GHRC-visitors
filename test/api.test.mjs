@@ -1660,3 +1660,67 @@ test("來訪紀錄（公開）：匯入的帶原表的說明，同一列拆出�
 
   for (const id of ids) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
 });
+
+test("座談的場次：存檔時換成總體介紹 → 座談；支援人力表五間都只問出席的老師；通告、回報、AI 挑頁照這樣做", async () => {
+  // 明確指示：「有一些單位參訪是跟老師們座談，不用介紹各研究室」；明確選的：研究室照樣通告，表上只問哪位老師出席
+  const put = (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const key = (await api("/api/settings", { headers: admin })).body.settings.rota_key;
+  const rooms = ["301", "302", "303", "304", "305"];
+  const tour = {
+    org: { name: "Roundtable Future University" }, date: "2099-11-02", code: "forum", start_time: "10:00", end_time: "12:30",
+    programme: [
+      { start: "10:00", end: "10:20", kind: "briefing", title_en: "Welcome and centre overview", title_2nd: "歡迎與中心總體介紹" },
+      { start: "10:20", end: "12:00", kind: "tour", title_en: "Laboratory visits", title_2nd: "研究室參訪", rooms },
+      { start: "12:00", end: "12:30", kind: "discussion", title_en: "General discussion", title_2nd: "綜合討論" },
+    ],
+    itinerary: [{ room: "briefing", minutes: 20, location: "302" }, ...rooms.map((room) => ({ room, minutes: 20 }))],
+  };
+  // 勾成座談：送來的流程就算還是參觀的樣子，存起來也是座談（研究室參訪的時間給座談，結束時間不變）
+  const made = await put({ ...tour, format: "forum" });
+  assert.equal(made.status, 200, JSON.stringify(made.body));
+  const v = made.body.visit;
+  assert.equal(v.format, "forum");
+  assert.deepEqual(v.itinerary.map((s) => s.room), ["briefing"], "動線上只留總體介紹");
+  assert.deepEqual(v.programme.map((b) => [b.kind, b.start, b.end]), [["briefing", "10:00", "10:20"], ["forum", "10:20", "12:30"]]);
+  // 還開著舊版後台的那一台送來的沒有 format：不能把座談改回參觀
+  const old = (await put({ ...tour, visit_id: v.visit_id, updated_at: v.updated_at })).body.visit;
+  assert.equal(old.format, "forum");
+  assert.deepEqual(old.itinerary.map((s) => s.room), ["briefing"]);
+  // 還沒有流程就建成座談：照座談的預設排（總體介紹 → 座談，到結束時間為止），不是孤零零一段座談
+  const bare = (await put({ org: { name: "Roundtable Bare University" }, date: "2099-11-04", code: "forumbare", start_time: "14:00", end_time: "16:30", format: "forum" })).body.visit;
+  assert.deepEqual(bare.programme.map((b) => [b.kind, b.start, b.end]), [["briefing", "14:00", "14:20"], ["forum", "14:20", "16:30"]]);
+  await api(`/api/visits?id=${bare.visit_id}`, { method: "DELETE", headers: admin });
+
+  // 支援人力表：五間都列（forum 標起來）；分鐘不收、也不排進動線，出席的老師照收
+  const row = (await api(`/api/rota?key=${key}`)).body.visits.find((x) => x.visit_id === v.visit_id);
+  assert.equal(row.forum, true);
+  assert.deepEqual(row.stops.map((s) => s.room), rooms);
+  const fill = (body) => api(`/api/rota?key=${key}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visit_id: v.visit_id, ...body }) });
+  assert.equal((await fill({ room: "302", minutes: 30 })).status, 200);
+  assert.equal((await fill({ room: "301", name: "張俊彥" })).status, 200);
+  const after = (await api(`/api/visits?id=${v.visit_id}`, { headers: admin })).body.visit;
+  assert.deepEqual(after.lab_minutes, {}, "座談不問分鐘");
+  assert.deepEqual(after.itinerary.map((s) => s.room), ["briefing"], "也不排進動線");
+  assert.deepEqual(after.presenters, { 301: "張俊彥" });
+
+  // 通告：五間都寄；最後一段問的是哪位老師出席；沒有研究室參訪那一句
+  const rec = await api("/api/letter", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: v.visit_id, action: "recipients", kind: "notice" }) });
+  assert.deepEqual(rec.body.recipients.map((r) => r.room), rooms);
+  const notice = (await runJob("letter", { visit_id: v.visit_id, kind: "notice" })).body.draft.body;
+  assert.match(notice, new RegExp(`\\n請各研究室回覆，哪位老師出席座談\\nhttps://visit\\.example\\.test/rota\\?key=[a-z0-9]{24}#${v.visit_id}$`));
+  assert.ok(notice.includes("與中心老師座談") && !/研究室參訪|尚未分配到各室/.test(notice), notice);
+  // 回報：出席座談的老師，還沒回的標待補
+  const rundown = (await runJob("letter", { visit_id: v.visit_id, kind: "rundown" })).body.draft.body;
+  assert.ok(rundown.includes("出席座談") && rundown.includes("張俊彥") && rundown.includes("（待補）"), rundown);
+
+  // AI 挑頁：不挑各研究室的頁；行程照主辦端那一份（不補研究室參訪，也不補綜合討論）
+  const index = JSON.parse(await readFile("public/data/slides.json", "utf8"));
+  const labSlides = new Set(index.groups.filter((g) => /^lab30[1-5]$/.test(g.id)).flatMap((g) => g.slides));
+  const picked = await plan(after);
+  assert.equal(picked.status, 200, JSON.stringify(picked.body));
+  assert.ok(picked.body.plan.slides.length && !picked.body.plan.slides.some((n) => labSlides.has(n)), `座談不介紹各研究室（${picked.body.plan.slides.join(",")}）`);
+  assert.deepEqual(picked.body.plan.programme.map((b) => b.kind), ["briefing", "forum"]);
+  assert.ok(!(picked.body.warnings || []).some((w) => /綜合討論/.test(w)));
+
+  await api(`/api/visits?id=${v.visit_id}`, { method: "DELETE", headers: admin });
+});
