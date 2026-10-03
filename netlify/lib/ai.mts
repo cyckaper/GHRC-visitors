@@ -366,7 +366,7 @@ export async function draftLetter(ctx: LetterContext): Promise<{ subject: string
       ? `你替 GHRC 草擬一則**回報給中心自己五間研究室**的訊息：通告發出去、各室回覆簡報人員之後，把定案的安排再送回去一次。收信的是同事，**一律用繁體中文**。
 語氣：同事之間，簡短、條列、看一眼就知道自己幾點要做什麼。不要客套話，不要感謝詞，不要公文腔。
 結構：1) 一句話說哪個單位、什麼時候來、幾位；2) **定案動線**——照 lab_stops 逐條列「幾點–幾點　房號　研究室　簡報人員　N 分鐘」，presenter 是空的就寫「（待補）」；3) 一兩句提醒當天的重點（來賓想看什麼、簡報大概講多久）；4) 最後一句「有問題直接回這則訊息」。
-**format="forum"（座談的場次）**：不參觀研究室，第 2 段改成兩部分——先照 programme 列當天流程（幾點–幾點　內容），再列「出席座談的老師」：照 attendees 逐條列「房號　研究室　出席老師」，attendee 是空的就寫「（待補）」。不要寫各室的時段與分鐘。
+**format="forum"（座談的場次）**：不參觀研究室，第 2 段改成兩部分——先照 programme 列當天流程（幾點–幾點　內容），再列「座談出席」：照 attendees 逐條列「房號　研究室　老師　可參加／無法參加」（lead 是那一間的老師，attend 是空的就寫「（待回覆）」）。不要寫各室的時段與分鐘。
 **不要署名**：這一則是貼進中心自己的 LINE 群組，誰發的大家都看得到。
 時間與人員一律照提供的資料，不要自己改也不要補上沒有的人。回傳 subject 與純文字 body。
 
@@ -382,7 +382,7 @@ ${CENTER_FACTS}`
 5) **原封不動**放入提供的 roll_call_block（請各研究室回覆，下一行是支援人力表的網址），一個字都不要改，網址要完整（含 # 後面那一段，那是直接跳到這一場用的）。
 **roll_call_block 就是整則的最後一段，後面什麼都不要加**：不要回覆期限、不要署名、不要結尾的客套話——這一則是貼進中心自己的 LINE 群組，誰發的大家都看得到。
 只寫這一場真的有的資訊：沒有的欄位就不要提，不要自己補上參觀路線以外的安排，也不要另外再問 demo、設備、研究生之類的事——這一則只問一件事：誰來接待（要多少時間，老師在網址那張表上填）。
-**format="forum"（座談的場次）**：來賓是來跟中心老師們座談的，不參觀研究室——第 2 句要說明是座談；這一則只問一件事：哪位老師出席座談（老師在網址那張表上填），不要提接待、參觀或分鐘。回傳 subject 與純文字 body。
+**format="forum"（座談的場次）**：來賓是來跟中心老師們座談的，不參觀研究室——第 2 句要說明是座談；這一則只問一件事：老師能否出席座談（老師在網址那張表上選「可參加」或「無法參加」），不要提接待、參觀或分鐘。回傳 subject 與純文字 body。
 
 ${CENTER_FACTS}`
       : ctx.kind === "confirmation"
@@ -400,7 +400,7 @@ ${CENTER_FACTS}`;
     visit: { org: v.org, guests: v.guests.map((g) => ({ name: g.name, title: g.title })), date: v.date, start_time: v.start_time, programme: v.programme, itinerary: v.itinerary, language: v.language, contact_teacher: v.contact_teacher, purpose: v.purpose },
     // forum＝座談的場次（跟中心老師們座談，不參觀研究室）
     format: isForum(v) ? "forum" : "tour",
-    // 座談：五間各是哪位老師出席（支援人力表上填的）
+    // 座談：五間的老師能否出席（支援人力表上選的）
     attendees: internal && isForum(v) ? forumAttendees(v, ctx.labs) : undefined,
     briefing_location: briefingLocation,
     page_url: pageUrl,
@@ -532,7 +532,7 @@ export async function summarizeVisit(visit: Visit, responses: ResponseRow[]): Pr
   if (isMock()) return mockSummary(visit, responses);
   const payload = { visit: { ...visit, letters: undefined }, responses };
   return plain(
-    `替 GHRC 寫一頁參訪摘要（繁體中文，Markdown，300 字內）。段落固定：誰來（單位、主要來賓、人數）；看了哪幾間各多久（用 visit.itinerary 當天排定的動線；visit.format 是 forum 的是**座談的場次、不參觀研究室**——這一段改寫「座談，不參觀研究室」，並列出席的老師 visit.presenters）；最想看什麼——**分兩行寫，來源不能混**：「來賓自己說」（responses 的 most_wanted_rooms）與「主持人聽到的」（visit.dictation 抽取），只有一邊有資料就只寫那一邊；問了哪些問題；想合作誰（來賓回的 cooperate_rooms；口述裡的合作意願另外一行寫「主持人記下」）；收到什麼建議（responses 的 suggestion，不具名的不要試圖猜是誰）；待辦。沒有資料的段落寫「（無）」。不要評分、不要用滿意度用語。\n\n${CENTER_FACTS}`,
+    `替 GHRC 寫一頁參訪摘要（繁體中文，Markdown，300 字內）。段落固定：誰來（單位、主要來賓、人數）；看了哪幾間各多久（用 visit.itinerary 當天排定的動線；visit.format 是 forum 的是**座談的場次、不參觀研究室**——這一段改寫「座談，不參觀研究室」，並列出席的老師：visit.attendance 是 yes 的那幾間的負責老師（no＝無法參加）；最想看什麼——**分兩行寫，來源不能混**：「來賓自己說」（responses 的 most_wanted_rooms）與「主持人聽到的」（visit.dictation 抽取），只有一邊有資料就只寫那一邊；問了哪些問題；想合作誰（來賓回的 cooperate_rooms；口述裡的合作意願另外一行寫「主持人記下」）；收到什麼建議（responses 的 suggestion，不具名的不要試圖猜是誰）；待辦。沒有資料的段落寫「（無）」。不要評分、不要用滿意度用語。\n\n${CENTER_FACTS}`,
     JSON.stringify(payload),
   );
 }
@@ -823,14 +823,18 @@ function routeBlock(v: Visit, labs: any): string {
  * 連結是自動產生的（`ensureRotaKey()`），所以一定帶得出去；沒有連結那條路只是保險。
  */
 function rollCallBlock(v: Visit, rotaUrl = ""): string {
-  // 座談的場次不參觀研究室：問的是哪位老師出席（支援人力表上那一場只填這一格）
-  const ask = isForum(v) ? "請各研究室回覆，哪位老師出席座談" : "請各研究室回覆，該時段由哪位老師或人員接待";
+  // 座談的場次不參觀研究室：問的是老師能否出席（各室的老師是固定的，支援人力表上那一場只選「可參加」「無法參加」）
+  const ask = isForum(v) ? "請各研究室回覆，老師能否出席座談" : "請各研究室回覆，該時段由哪位老師或人員接待";
   return [ask, ...(rotaUrl ? [`${rotaUrl}#${v.visit_id}`] : [])].join("\n");
 }
 
-/** 座談的場次：五間各是哪位老師出席（支援人力表上填的；還沒填就是空的）。回報那一則照這一份列。 */
-function forumAttendees(v: Visit, labs: any): { room: string; name_zh: string; lead: string; attendee: string }[] {
-  return ((labs && labs.labs) || []).map((l: any) => ({ room: String(l.room), name_zh: l.name_zh || "", lead: [l.lead?.name_zh, l.lead?.name_en].filter(Boolean).join(" "), attendee: (v as any).presenters?.[l.room] || "" }));
+/**
+ * 座談的場次：五間的老師能否出席（支援人力表上選的；還沒選就是空的）。回報那一則照這一份列。
+ * 各研究室的老師是固定的（負責人），所以只記「可參加」「無法參加」，不記名字。
+ */
+const ATTEND_LABEL: Record<string, string> = { yes: "可參加", no: "無法參加" };
+function forumAttendees(v: Visit, labs: any): { room: string; name_zh: string; lead: string; attend: string }[] {
+  return ((labs && labs.labs) || []).map((l: any) => ({ room: String(l.room), name_zh: l.name_zh || "", lead: l.lead?.name_zh || l.lead?.name_en || "", attend: ATTEND_LABEL[(v as any).attendance?.[l.room]] || "" }));
 }
 
 /**
@@ -861,7 +865,7 @@ function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, con
       : {
           subject: `（AI_MOCK）定案回報：${v.org?.name || v.visit_id} ${v.date}`,
           body: isForum(v)
-            ? `各位老師好：\n\n${head}　座談\n\n${(v.programme || []).map((b) => `${b.start}–${b.end}　${b.title_2nd || b.title_en}`).join("\n")}\n\n出席座談的老師：\n${forumAttendees(v, ctx.labs).map((x) => `${x.room} ${x.name_zh}　${x.attendee || "（待補）"}`).join("\n")}\n\n有問題直接回這則訊息。`
+            ? `各位老師好：\n\n${head}　座談\n\n${(v.programme || []).map((b) => `${b.start}–${b.end}　${b.title_2nd || b.title_en}`).join("\n")}\n\n座談出席：\n${forumAttendees(v, ctx.labs).map((x) => `${x.room} ${x.name_zh}　${x.lead}　${x.attend || "（待回覆）"}`).join("\n")}\n\n有問題直接回這則訊息。`
             : `各位老師好：\n\n${head}\n\n定案動線與簡報人員：\n${stops.map(line).join("\n")}\n\n有問題直接回這則訊息。`,
         };
   }
@@ -901,7 +905,7 @@ function mockSummary(v: Visit, responses: ResponseRow[]): string {
     "",
     `**誰來**：${v.org?.name || "（無）"}，${lead ? `${lead.name} ${lead.title}` : ""}，${v.headcount || v.guests?.length || 0} 人`,
     isForum(v)
-      ? `**看了哪幾間**：座談，不參觀研究室${Object.keys((v as any).presenters || {}).length ? `（出席：${Object.entries((v as any).presenters).map(([room, name]) => `${room} ${name}`).join("、")}）` : ""}`
+      ? `**看了哪幾間**：座談，不參觀研究室${Object.entries((v as any).attendance || {}).some(([, a]) => a === "yes") ? `（出席：${Object.entries((v as any).attendance).filter(([, a]) => a === "yes").map(([room]) => room).sort().join("、")}）` : ""}`
       : `**看了哪幾間**：${(v.itinerary || []).filter((s) => Number(s.minutes) > 0).map((s) => `${s.room}（${s.minutes} 分）`).join("、") || "（無）"}`,
     `**最想看什麼（來賓自己說）**：${[...new Set(responses.flatMap((r) => r.most_wanted_rooms || []))].join("、") || "（無）"}`,
     `**最想看什麼（主持人聽到的）**：${(v.dictation?.extracted?.most_wanted_rooms || []).join("、") || "（無）"}`,

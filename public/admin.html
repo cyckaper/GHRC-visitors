@@ -176,7 +176,7 @@
 
     <div class="card space-y-3" id="noticeCard">
       <h2 class="font-semibold"><span class="num">4</span>通告研究室 <span class="muted font-normal">多半是貼到 LINE 群組</span></h2>
-      <p class="muted">查完背景就先告訴各研究室哪個單位什麼時候來，<b>請各室填接待人員與共需幾分鐘</b>——通告最後附支援人力表的連結，老師點進去填。<b>各室填的分鐘會自動排進下面的今日流程</b>，也會出現在來賓專頁；定案之後再回報一次。<b>座談的場次</b>（第 5 步勾了「這場是座談」）只問哪位老師出席。<br>這幾則是寫給中心同事看的，所以一律中文、條列、不署名，貼得進 LINE。</p>
+      <p class="muted">查完背景就先告訴各研究室哪個單位什麼時候來，<b>請各室填接待人員與共需幾分鐘</b>——通告最後附支援人力表的連結，老師點進去填。<b>各室填的分鐘會自動排進下面的今日流程</b>，也會出現在來賓專頁；定案之後再回報一次。<b>座談的場次</b>（第 5 步勾了「這場是座談」）只問老師能否出席。<br>這幾則是寫給中心同事看的，所以一律中文、條列、不署名，貼得進 LINE。</p>
 
       <div class="space-y-2">
         <div class="f mb-0">一、通告與徵詢簡報人員</div>
@@ -219,8 +219,8 @@
       <h2 class="font-semibold"><span class="num">5</span>今日流程 <span class="muted font-normal">自動排好，看一眼就好</span></h2>
       <p class="muted">不必自己排：各研究室在支援人力表上填的分鐘會自動排進來，時間照著往後推算。這一份會印在簡報第 2 頁，也會出現在來賓專頁。</p>
       <!-- 座談的場次（明確指示：有些單位是來跟老師們座談，不用介紹各研究室）：勾了流程就換成「總體介紹 → 座談」，
-           動線上只剩總體介紹；支援人力表上那一場每一間只填出席的老師（不問分鐘）。規則在 lib/visit.mjs isForum／toForumProgramme -->
-      <label class="flex items-start gap-2 text-sm"><input type="checkbox" id="forumMode" class="mt-1"><span><b>這場是座談，不參觀研究室</b> <span class="muted">跟中心老師們座談、不介紹各研究室：流程換成「總體介紹 → 座談」，支援人力表上每一間只填出席的老師。</span></span></label>
+           動線上只剩總體介紹；支援人力表上那一場每一間只選老師「可參加」或「無法參加」（老師是固定的，不填名字、不問分鐘）。規則在 lib/visit.mjs isForum／toForumProgramme -->
+      <label class="flex items-start gap-2 text-sm"><input type="checkbox" id="forumMode" class="mt-1"><span><b>這場是座談，不參觀研究室</b> <span class="muted">跟中心老師們座談、不介紹各研究室：流程換成「總體介紹 → 座談」，支援人力表上每一間只選老師可參加或無法參加。</span></span></label>
       <div id="programmeView" class="space-y-1 text-sm"></div>
       <p class="muted" id="programmeTotal"></p>
       <details id="programmeEdit">
@@ -1131,8 +1131,12 @@
     const blockName = (b) => (b.kind !== "other" && KIND_LABEL[b.kind]) || b.title_2nd || b.title_en || KIND_LABEL.other;
     $("programmeView").innerHTML = readProgramme().map((b) => {
       const head = row(`${esc(b.start)}–${esc(b.end)}`, `<span class="font-medium">${esc(blockName(b))}</span>${b.kind === "briefing" ? `<span class="muted">${esc(where)}</span>` : ""}`);
-      // 座談：底下一間一行，寫哪位老師出席（各研究室在支援人力表上填的；還沒回就寫「未填」）
-      if (b.kind === "forum") return head + ROOMS.map((room) => { const who = v.presenters?.[room]; return row("", `<span class="room" style="--tone:${roomTone(room)}">${esc(room)}</span>${who ? `<span><span class="muted">出席</span> ${esc(who)}</span>` : `<span class="muted" data-not-filled>未填</span>`}`, "pl-6"); }).join("");
+      // 座談：底下一間一行，寫那一間的老師能否出席（各研究室在支援人力表上選的；還沒回就寫「未填」）
+      if (b.kind === "forum") return head + ROOMS.map((room) => {
+        const lead = (state.labs?.labs || []).find((l) => l.room === room)?.lead?.name_zh || "";
+        const att = v.attendance?.[room];
+        return row("", `<span class="room" style="--tone:${roomTone(room)}">${esc(room)}</span>${lead ? `<span>${esc(lead)}</span>` : ""}${att === "yes" ? `<span data-attend="yes">可參加</span>` : att === "no" ? `<span class="muted" data-attend="no">無法參加</span>` : `<span class="muted" data-not-filled>未填</span>`}`, "pl-6");
+      }).join("");
       if (b.kind !== "tour") return head;
       let cur = hhmm(b.start);
       return head + it.filter((s) => s.room !== "briefing").map((s) => {
@@ -1691,15 +1695,15 @@
     // 已經交出去、但行程之後又改過的（伺服器算的）：綠勾要收回來，改說「需重新產生」
     const stale = (key) => (state.stale || []).some((x) => x.key === key);
     const na = new Set((v.wrapup?.na || []));
-    // 各研究室回了幾間（支援人力表上人名或分鐘填了一樣就算；座談的場次只問出席的老師，只算人名）
-    const replied = new Set([...Object.keys(v.presenters || {}), ...(v.format === "forum" ? [] : Object.keys(v.lab_minutes || {}))]).size;
+    // 各研究室回了幾間（支援人力表上人名或分鐘填了一樣就算；座談的場次只問老師能否出席，選了就算）
+    const replied = v.format === "forum" ? Object.keys(v.attendance || {}).length : new Set([...Object.keys(v.presenters || {}), ...Object.keys(v.lab_minutes || {})]).size;
     // 本次沒有的那幾件不算未完成：顯示「本次沒有」，不是灰點
     const wrap = (key, label, done, why) => ["wrapup", done ? label : na.has(key) ? `${label} 本次沒有` : label, done, why, !done && na.has(key)];
     const groups = [
       ["訪前", [
         ["pre", (v.guests || []).length ? `名單 ${v.guests.length} 人` : "名單", (v.guests || []).length > 0, "訪後信會寄給名單上每一個人，所以名單就是回饋的上限"],
         ["pre", "背景研判", v.background?.status === "done", "查過對方的公開資料，判斷可能的參訪目的"],
-        ["pre", replied ? `通告 ${replied} 間已回` : "通告研究室", !!(v.letters?.notice?.body && replied), v.format === "forum" ? "告訴各研究室哪個單位什麼時候來座談，請各室在支援人力表上填出席的老師" : "告訴各研究室哪個單位什麼時候來，請各室在支援人力表上填接待人員與共需幾分鐘——填的分鐘會自動排進今日流程"],
+        ["pre", replied ? `通告 ${replied} 間已回` : "通告研究室", !!(v.letters?.notice?.body && replied), v.format === "forum" ? "告訴各研究室哪個單位什麼時候來座談，請各室在支援人力表上選老師能否出席" : "告訴各研究室哪個單位什麼時候來，請各室在支援人力表上填接待人員與共需幾分鐘——填的分鐘會自動排進今日流程"],
         ["deck", v.deck?.skip ? "不用簡報" : stale("deck") ? "簡報 需重產" : v.deck?.generated_at ? "簡報已產" : `選了 ${(v.slides || []).length} 頁`, !!(v.deck?.skip || (v.deck?.generated_at && !stale("deck"))), stale("deck") ? "行程或選頁在產檔之後改過，手上那份 .pptx 是舊的" : "挑頁並產出這一場的 .pptx；只口頭介紹的場次可以整頁關掉"],
         ["pre", stale("confirmation") ? "確認信 行程已改" : v.letters?.confirmation?.sent_at ? "確認信 已寄" : "確認信", !!(v.letters?.confirmation?.sent_at && !stale("confirmation")), stale("confirmation") ? "寄出之後行程又改過，對方手上的時間是舊的" : "跟對方確認日期時間，順便把來賓專頁網址交出去"],
       ]],

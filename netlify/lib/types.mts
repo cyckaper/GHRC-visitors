@@ -64,6 +64,8 @@ export interface Visit {
   language: Lang;
   /** forum：座談的場次（跟老師們座談，不參觀研究室）；沒有或 tour：照常參觀研究室。 */
   format?: "tour" | "forum";
+  /** 座談的場次：各間的老師能否出席（房號 → yes 可參加／no 無法參加；沒有＝還沒回）。只有 /api/rota 在寫。 */
+  attendance?: Record<string, "yes" | "no">;
   programme: ProgrammeBlock[];
   itinerary: ItineraryStep[];
   slides: number[];

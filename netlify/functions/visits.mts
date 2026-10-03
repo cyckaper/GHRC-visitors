@@ -227,8 +227,9 @@ async function saveWrapupNA(store: ReturnType<typeof getStore>, id: string, na: 
  * `lab_minutes_at`：各間是什麼時候填的（存檔時比對，後台還沒看過的分鐘不蓋回去）；
  * `lab_added`：哪幾間是研究室自己填進動線的（支援人力表判斷「這一場排了沒」用）。
  * `lab_hours` 是改成「共需幾分鐘」之前問的「方便的時段」：不再收，存過的也不刪。
+ * `attendance`：座談的場次各間的老師能否出席（yes／no），一樣只有 `/api/rota` 在寫。
  */
-const ROTA_FIELDS = ["presenters", "lab_minutes", "lab_minutes_at", "lab_added", "lab_hours"] as const;
+const ROTA_FIELDS = ["presenters", "lab_minutes", "lab_minutes_at", "lab_added", "lab_hours", "attendance"] as const;
 
 /** 這一場的網址還沒「用出去」：沒人回覆、兩封信都還沒寄出、沒放任何檔案、還沒備份到 Drive。 */
 async function isUnused(store: ReturnType<typeof getStore>, v: Visit): Promise<boolean> {
@@ -304,6 +305,7 @@ export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   (v as any).lab_minutes = {};
   (v as any).lab_minutes_at = {};
   (v as any).lab_added = [];
+  (v as any).attendance = {};
   delete (v as any).lab_hours;
   const code = String((input as any).code || "").trim();
   if (!isValidVisitId(v.visit_id) || code) v.visit_id = makeVisitId(v.date, v.org.name, code);

@@ -40,7 +40,7 @@ function rotaVisit(v: Visit, labs: any, now: Date) {
   // **行程還沒排的那一場，五間都列出來**（明確指示：還沒填的也要看得到，才知道有填沒填）。
   // 主辦端排好之後只列動線上那幾間（加上已經填過的），其他的是「免填」。研究室自己填的分鐘會排進動線，
   // 那幾間不算主辦端排的——規則在 `lib/visit.mjs rotaRooms()`
-  // 座談的場次（不參觀研究室）：五間都列，每一間只填「出席座談的老師」，不問分鐘（forum: true）
+  // 座談的場次（不參觀研究室）：五間都列，每一間只選老師「可參加」或「無法參加」，不問分鐘（forum: true）
   const { rooms, planned, forum } = rotaRooms(v, labs) as { rooms: string[]; planned: boolean; forum?: boolean };
   return {
     visit_id: v.visit_id,
@@ -57,6 +57,8 @@ function rotaVisit(v: Visit, labs: any, now: Date) {
     forum: !!forum,
     presenters: (v as any).presenters || {},
     lab_minutes: (v as any).lab_minutes || {},
+    // 座談的場次：各間的老師能否出席（yes＝可參加、no＝無法參加）
+    attendance: (v as any).attendance || {},
     background: (v as any).background?.org_profile ? (v as any).background : null,
     past: visitEndAt(v) < now,
   };
@@ -90,7 +92,7 @@ export default async (req: Request) => {
 
   if (req.method !== "POST") return fail(405, "method not allowed");
 
-  const body = await readJSON<{ visit_id?: string; room?: string; name?: string; minutes?: string | number }>(req);
+  const body = await readJSON<{ visit_id?: string; room?: string; name?: string; minutes?: string | number; attend?: string }>(req);
   const room = String(body?.room || "");
   if (!/^30[1-5]$/.test(room)) return fail(400, "房號只有 301–305");
   const visitId = String(body?.visit_id || "");
@@ -104,6 +106,14 @@ export default async (req: Request) => {
     if (minutes === 0) minutes = null;
   }
 
+  // 座談的場次：老師能否出席（各研究室的老師是固定的，不必填名字——下拉選「可參加」「無法參加」；空的＝還沒回）
+  let attend: "yes" | "no" | null | undefined;
+  if (body?.attend !== undefined) {
+    const a = String(body.attend ?? "").trim();
+    if (a && a !== "yes" && a !== "no") return fail(400, "能否出席：選「可參加」或「無法參加」");
+    attend = (a || null) as "yes" | "no" | null;
+  }
+
   // 只改送上來的那一格，而且**在 updateVisit 裡改**：讀到的一定是最新那一份，寫的時候中間有人存過就重讀重改。
   // 五間同時在填、主辦端開著行程表自動存、背景在備份 Drive——誰都不會把別人剛存的那一格蓋回去
   let ended = false;
@@ -112,18 +122,20 @@ export default async (req: Request) => {
       ended = true;
       return false;
     }
-    const put = (field: "presenters" | "lab_minutes", val: string | number | null | undefined) => {
+    const put = (field: "presenters" | "lab_minutes" | "attendance", val: string | number | null | undefined) => {
       if (val === undefined) return;
       const map: Record<string, string | number> = { ...((v as any)[field] || {}) };
       if (val === null || val === "") delete map[room];
       else map[room] = val;
       (v as any)[field] = map;
     };
-    // 座談的場次只問出席的老師：分鐘不收（送來了也不排進行程——座談不參觀研究室）。
-    // 用區域變數：change 可能被叫好幾次（中間有人存過就重讀重改），不改外面那一份
-    const mins = isForum(v) ? undefined : minutes;
-    put("presenters", body?.name === undefined ? undefined : String(body.name ?? "").trim().slice(0, 60));
+    // 座談的場次只問老師能否出席：接待人員與分鐘都不收（座談不參觀研究室，沒有東西要排進行程）；
+    // 參觀的場次反過來，不收能否出席。用區域變數：change 可能被叫好幾次（中間有人存過就重讀重改），不改外面那一份
+    const forum = isForum(v);
+    const mins = forum ? undefined : minutes;
+    put("presenters", forum || body?.name === undefined ? undefined : String(body.name ?? "").trim().slice(0, 60));
     put("lab_minutes", mins);
+    put("attendance", forum ? attend : undefined);
     const now = nowISO();
     if (mins !== undefined) {
       const at: Record<string, string> = { ...((v as any).lab_minutes_at || {}) };
@@ -153,5 +165,5 @@ export default async (req: Request) => {
   if (!saved) return fail(404, "找不到這一場");
   if (ended) return fail(409, "這一場已經結束了，不能再改");
   await triggerDriveSync(saved.visit_id);
-  return json({ ok: true, presenters: (saved as any).presenters || {}, lab_minutes: (saved as any).lab_minutes || {} });
+  return json({ ok: true, presenters: (saved as any).presenters || {}, lab_minutes: (saved as any).lab_minutes || {}, attendance: (saved as any).attendance || {} });
 };

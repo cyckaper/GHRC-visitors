@@ -838,7 +838,8 @@ try {
   }
 
   // ── 座談的場次（明確指示：「有一些單位參訪是跟老師們座談，不用介紹各研究室」）──
-  // 勾了流程就換成「總體介紹 → 座談」；支援人力表上那一場五間都只問出席的老師（明確選的），不問分鐘
+  // 勾了流程就換成「總體介紹 → 座談」；支援人力表上那一場五間都只下拉選老師「可參加／無法參加」
+  // （明確指示：「各研究室老師都是固定的，就不用再填寫表單了」），不填名字、不問分鐘
   {
     const auth = { authorization: "Bearer e2e-token", "content-type": "application/json" };
     const until = async (fn, what) => {
@@ -867,21 +868,24 @@ try {
     await page.goto(`${base}/${id}?ui=en`);
     await page.waitForSelector("#briefing-card");
     check(/Roundtable with the faculty/.test(await page.textContent("#programme")) && /roundtable with the faculty/.test(await page.textContent("#briefing-card")) && (await page.locator("#labs .step").count()) === 0 && (await page.textContent("#labsTitle")) === "The five laboratories", "the guest page shows the roundtable, without numbering the laboratories as stops on a tour");
-    // 支援人力表（老師那一頁）：那一場五間都只有一格「出席老師」，沒有分鐘
+    // 支援人力表（老師那一頁）：那一場五間都只有一個下拉選單（可參加／無法參加），沒有要打字的格子
     const key = (await (await fetch(`${base}/api/settings`, { headers: auth })).json()).settings.rota_key;
     await page.goto(`${base}/rota?key=${key}#${encodeURIComponent(id)}`);
     const card = page.locator(`section[data-rota-visit="${id}"]`);
     await card.waitFor({ timeout: 30000 });
-    check((await card.locator('input[data-field="name"]').count()) === 5 && (await card.locator('input[data-field="minutes"]').count()) === 0 && (await card.locator('input[data-field="name"]').first().getAttribute("placeholder")) === "出席老師" && /座談/.test(await card.textContent()), "on the lab rota, that visit asks each lab only who will attend — no minutes");
-    await card.locator('input[data-room="303"][data-field="name"]').fill("陳惠美");
-    await until(async () => (await visitOf(id)).presenters?.["303"] === "陳惠美", "the attending teacher to save");
-    // 回到後台：今日流程的座談底下寫出誰出席、還有哪幾間沒回；取消勾就回到參觀的流程
+    const options = await card.locator('select[data-room="303"] option').allTextContents();
+    check((await card.locator('select[data-field="attend"]').count()) === 5 && (await card.locator("input").count()) === 0 && options.join() === "請選擇,可參加,無法參加" && /陳惠美/.test(await card.textContent()) && /座談/.test(await card.textContent()), `on the lab rota, that visit only asks each lab to pick whether its teacher can attend (${options.join("/")})`);
+    await card.locator('select[data-room="303"]').selectOption("yes");
+    await card.locator('select[data-room="302"]').selectOption("no");
+    await until(async () => { const a = (await visitOf(id)).attendance || {}; return a["303"] === "yes" && a["302"] === "no"; }, "the choices to save");
+    // 回到後台：今日流程的座談底下寫出每一間的老師能否出席、還有哪幾間沒回；取消勾就回到參觀的流程
     await page.goto(`${base}/admin.html`);
     await page.waitForSelector("#authOk:not([hidden])");
     await page.click('[data-tab="pre"]');
     await page.selectOption("#visitSelect", id);
     await page.waitForFunction((v) => document.getElementById("preStatus").textContent === v, id, { timeout: 30000 });
-    check(await page.isChecked("#forumMode") && /出席\s*陳惠美/.test(await page.textContent("#programmeView")) && (await page.locator("#programmeView [data-not-filled]").count()) === 4, "back in the admin, the roundtable lists who is attending and which labs have not answered");
+    const forumView = (await page.textContent("#programmeView")).replace(/\s+/g, "");
+    check(await page.isChecked("#forumMode") && /303陳惠美可參加/.test(forumView) && /302林寶秀無法參加/.test(forumView) && (await page.locator("#programmeView [data-not-filled]").count()) === 3, `back in the admin, the roundtable shows which teachers can attend and which labs have not answered (${forumView})`);
     const unsaved = page.waitForResponse((r) => r.url().endsWith("/api/visits") && r.request().method() === "POST", { timeout: 20000 });
     await page.uncheck("#forumMode");
     await unsaved;

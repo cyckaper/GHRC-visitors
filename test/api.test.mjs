@@ -1661,8 +1661,9 @@ test("來訪紀錄（公開）：匯入的帶原表的說明，同一列拆出�
   for (const id of ids) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
 });
 
-test("座談的場次：存檔時換成總體介紹 → 座談；支援人力表五間都只問出席的老師；通告、回報、AI 挑頁照這樣做", async () => {
-  // 明確指示：「有一些單位參訪是跟老師們座談，不用介紹各研究室」；明確選的：研究室照樣通告，表上只問哪位老師出席
+test("座談的場次：存檔時換成總體介紹 → 座談；支援人力表五間都只選老師可否出席；通告、回報、AI 挑頁照這樣做", async () => {
+  // 明確指示：「有一些單位參訪是跟老師們座談，不用介紹各研究室」；研究室照樣通告。
+  // 「各研究室老師都是固定的，就不用再填寫表單了，只要拉開來說可參加、無法參加就好了」
   const put = (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
   const key = (await api("/api/settings", { headers: admin })).body.settings.rota_key;
   const rooms = ["301", "302", "303", "304", "305"];
@@ -1691,27 +1692,37 @@ test("座談的場次：存檔時換成總體介紹 → 座談；支援人力表
   assert.deepEqual(bare.programme.map((b) => [b.kind, b.start, b.end]), [["briefing", "14:00", "14:20"], ["forum", "14:20", "16:30"]]);
   await api(`/api/visits?id=${bare.visit_id}`, { method: "DELETE", headers: admin });
 
-  // 支援人力表：五間都列（forum 標起來）；分鐘不收、也不排進動線，出席的老師照收
+  // 支援人力表：五間都列（forum 標起來）；只收「可參加／無法參加」——老師是固定的，名字與分鐘都不收、也不排進動線
   const row = (await api(`/api/rota?key=${key}`)).body.visits.find((x) => x.visit_id === v.visit_id);
   assert.equal(row.forum, true);
   assert.deepEqual(row.stops.map((s) => s.room), rooms);
+  assert.deepEqual(row.attendance, {});
   const fill = (body) => api(`/api/rota?key=${key}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visit_id: v.visit_id, ...body }) });
-  assert.equal((await fill({ room: "302", minutes: 30 })).status, 200);
-  assert.equal((await fill({ room: "301", name: "張俊彥" })).status, 200);
+  assert.equal((await fill({ room: "303", attend: "yes" })).status, 200);
+  assert.equal((await fill({ room: "302", attend: "no" })).status, 200);
+  assert.equal((await fill({ room: "304", attend: "yes" })).status, 200);
+  assert.equal((await fill({ room: "304", attend: "" })).status, 200, "選回「請選擇」＝還沒回");
+  assert.equal((await fill({ room: "301", attend: "maybe" })).status, 400);
+  assert.equal((await fill({ room: "305", minutes: 30 })).status, 200);
+  assert.equal((await fill({ room: "301", name: "某某" })).status, 200);
   const after = (await api(`/api/visits?id=${v.visit_id}`, { headers: admin })).body.visit;
+  assert.deepEqual(after.attendance, { 302: "no", 303: "yes" });
   assert.deepEqual(after.lab_minutes, {}, "座談不問分鐘");
+  assert.deepEqual(after.presenters, {}, "也不填名字（老師是固定的）");
   assert.deepEqual(after.itinerary.map((s) => s.room), ["briefing"], "也不排進動線");
-  assert.deepEqual(after.presenters, { 301: "張俊彥" });
+  // 後台一般存檔帶什麼都蓋不掉老師選的（跟接待人員、分鐘同一條規則）
+  const resaved = (await put({ ...after, attendance: { 301: "yes" } })).body.visit;
+  assert.deepEqual(resaved.attendance, { 302: "no", 303: "yes" });
 
-  // 通告：五間都寄；最後一段問的是哪位老師出席；沒有研究室參訪那一句
+  // 通告：五間都寄；最後一段問的是老師能否出席；沒有研究室參訪那一句
   const rec = await api("/api/letter", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: v.visit_id, action: "recipients", kind: "notice" }) });
   assert.deepEqual(rec.body.recipients.map((r) => r.room), rooms);
   const notice = (await runJob("letter", { visit_id: v.visit_id, kind: "notice" })).body.draft.body;
-  assert.match(notice, new RegExp(`\\n請各研究室回覆，哪位老師出席座談\\nhttps://visit\\.example\\.test/rota\\?key=[a-z0-9]{24}#${v.visit_id}$`));
+  assert.match(notice, new RegExp(`\\n請各研究室回覆，老師能否出席座談\\nhttps://visit\\.example\\.test/rota\\?key=[a-z0-9]{24}#${v.visit_id}$`));
   assert.ok(notice.includes("與中心老師座談") && !/研究室參訪|尚未分配到各室/.test(notice), notice);
-  // 回報：出席座談的老師，還沒回的標待補
+  // 回報：每一間的老師可參加或無法參加，還沒回的標待回覆
   const rundown = (await runJob("letter", { visit_id: v.visit_id, kind: "rundown" })).body.draft.body;
-  assert.ok(rundown.includes("出席座談") && rundown.includes("張俊彥") && rundown.includes("（待補）"), rundown);
+  assert.ok(/303 景觀環境模擬室\s+陳惠美\s+可參加/.test(rundown) && /302 療癒環境規劃室\s+林寶秀\s+無法參加/.test(rundown) && rundown.includes("（待回覆）"), rundown);
 
   // AI 挑頁：不挑各研究室的頁；行程照主辦端那一份（不補研究室參訪，也不補綜合討論）
   const index = JSON.parse(await readFile("public/data/slides.json", "utf8"));
