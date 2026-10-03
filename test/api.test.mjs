@@ -124,6 +124,11 @@ test("extract 跑在背景：一般函式 10 秒不夠，所以回 202 加工作
   assert.equal(done.body.status, "done");
   assert.ok(done.body.result.visit.guests.length, "結果留在工作上，前端輪到就拿得到");
   assert.equal(done.body.result.visit.date, "2026-10-07");
+
+  // 信裡沒有寫哪一天：日期留空、說一聲填上才會存——**不補今天**（以前補了，信裡寫 10/5 的那一場變成當天）
+  const undated = await extract({ email_text: "Dear Prof. Chang,\n\nWe would love to visit your center some time.\n\nAnna Lee, University of Testing\nanna.lee@testing.example" });
+  assert.equal(undated.body.visit.date, "", JSON.stringify(undated.body.visit.uncertainties));
+  assert.ok(undated.body.visit.uncertainties.some((u) => /填上日期才會存/.test(u)));
 });
 
 test("plan 也跑在背景：提示詞帶整份頁次索引，10 秒同樣不夠", async () => {
@@ -1542,7 +1547,9 @@ test("連上 Google：後台按一下走 Google 的同意畫面，refresh token 
 
     // 導回來：state 不對、被改過、或沒有允許
     const back = async (q) => new URL((await manual(`/api/google-auth?${q}`)).headers.get("location"));
-    assert.equal((await back(`code=x&state=${encodeURIComponent(state.replace(/.$/, "0"))}`)).searchParams.get("google"), "expired", "簽章對不上");
+    // 簽章最後一個字換成別的（原本是 0 就換 1——直接換成 0 的話，十六次有一次根本沒改到，CI 上就遇到過）
+    const tampered = state.slice(0, -1) + (state.endsWith("0") ? "1" : "0");
+    assert.equal((await back(`code=x&state=${encodeURIComponent(tampered)}`)).searchParams.get("google"), "expired", "簽章對不上");
     assert.equal((await back("error=access_denied")).searchParams.get("google"), "denied");
     assert.equal(exchanged.length, 0, "state 不對就不去換");
 

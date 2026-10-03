@@ -109,7 +109,7 @@ const EXTRACT_SYSTEM = `你是臺大生農學院綠色健康研究中心（GHRC�
 - guests：來訪方**每一位**被點名的人都要列出，含職稱與 email（隨行者的 email 是訪後信寄送的關鍵，不要只留主要窗口）。**名單檔（<file> 區塊、PDF、照片）裡的每一列都是一個人**，表格欄位常見順序是姓名／職稱／單位／email，請對應好；沒有 email 的人也要列，email 留空。主要來賓 role=lead，其餘 member。**contact=true 給真正在往來這件事的人**（寄這封信的人、信裡指定的承辦人或秘書；他常常不是主賓，也可能不在來訪名單上但仍要列）——確認信預設只寄給 contact，所以寧可只標一兩個，不要全部標 true；看不出來就全部 false。affiliation 填該人的單位（可能與 org 不同）。
 - org：來訪單位的正式名稱（英文為主，name_local 放當地語言名稱）；type 取 government／university／enterprise／school／ngo／other；country 用英文國名。
 - headcount：預計人數；不知道就用 guests 人數。
-- date：**已確定**的參訪日期（YYYY-MM-DD）；未定則留空字串，把候選日期放 candidate_dates。start_time、end_time 用 HH:MM（台北時間），未提到留空——**來信通常寫「10:00-12:30」，照抽**。duration_minutes 只有在信裡直接寫分鐘數（例如「兩小時」）時才給，否則 0。
+- date：來信**提議或約好**的參訪日期（YYYY-MM-DD）。**用問句提的也算**——「請問您下週 10/5（一）有空嗎？……10/5 週一早上 9:00 到中心」，date 就是那一天，不要因為對方還在問、還沒回覆就留空；還要跟對方確認的話在 uncertainties 寫一句。只有信裡**完全沒提日期**，或列了好幾個日期、看不出偏好哪一個，才留空字串，把那幾個日期放 candidate_dates（YYYY-MM-DD）。沒寫年份就用「今天」之後最近的那一個；信裡也寫了星期幾的話要對得上，對不上就在 uncertainties 說。start_time、end_time 用 HH:MM（台北時間），未提到留空——**來信通常寫「10:00-12:30」，照抽**。duration_minutes 只有在信裡直接寫分鐘數（例如「兩小時」）時才給，否則 0。
 - contact_teacher：中心這邊負責聯絡的老師，只能是 ${TEACHERS.join("／")} 之一，看不出來留空。
 - purpose：來訪目的一句話；interests：信中透露的研究興趣關鍵字（英文，每項 2–6 字）。
 - language：來賓的第二語言層：台灣／華語團 zh、韓國 ko、日本 ja，其餘 en。

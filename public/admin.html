@@ -149,7 +149,7 @@
         <div><label class="f">單位類型</label><select id="orgType"><option value="government">政府單位</option><option value="university">大學</option><option value="enterprise">企業</option><option value="school">中小學／學生團</option><option value="ngo">NGO</option><option value="other">其他</option></select></div>
         <div><label class="f">國家</label><input type="text" id="orgCountry"></div>
         <div><label class="f">第二語言</label><select id="language"><option value="en">English</option><option value="zh">中文</option><option value="ko">한국어</option><option value="ja">日本語</option></select></div>
-        <div><label class="f">日期</label><input type="date" id="date"></div>
+        <div><label class="f">日期</label><input type="date" id="date"><p class="err text-sm mt-1" id="dateMissing" hidden>信裡沒有寫哪一天：填上日期就會自己存</p></div>
         <div><label class="f">開始時間</label><input type="time" id="startTime"></div>
         <div><label class="f">結束時間</label><input type="time" id="endTime"><p class="muted mt-1" id="durationInfo"></p></div>
         <div><label class="f">人數（不確定就留著，之後再改）</label><input type="number" id="headcount" min="0"></div>
@@ -915,7 +915,7 @@
   function fillForm(v) {
     state.visit = v; state.saved = !!v.visit_id && state.visits.some((x) => x.visit_id === v.visit_id);
     $("orgName").value = v.org?.name || ""; $("orgLocal").value = v.org?.name_local || ""; $("orgType").value = v.org?.type || "university"; $("orgCountry").value = v.org?.country || "";
-    $("language").value = v.language || "en"; $("date").value = v.date || ""; $("startTime").value = v.start_time || "10:00"; $("endTime").value = endTimeOf(v); showDuration(); $("headcount").value = v.headcount || 0;
+    $("language").value = v.language || "en"; $("date").value = v.date || ""; showDateMissing(); $("startTime").value = v.start_time || "10:00"; $("endTime").value = endTimeOf(v); showDuration(); $("headcount").value = v.headcount || 0;
     $("contactTeacher").value = v.contact_teacher || "張俊彥"; $("purpose").value = v.purpose || ""; $("interests").value = (v.interests || []).join(", ");
     $("code").value = v.visit_id ? v.visit_id.slice(11) : ""; $("code").disabled = !!state.urlFixed;
     $("preStatus").textContent = state.saved ? v.visit_id : "";
@@ -1381,8 +1381,15 @@
    * 網址（日期 ＋ 代碼）在還沒用出去之前跟著欄位走，所以先打錯日期再改也不會留下怪網址。
    */
   const AUTOSAVE_DELAY = 1200;
+  /**
+   * 日期空著（讀信讀不到哪一天）就在日期底下說一聲。以前讀不到就補「今天」，
+   * 結果信裡明明寫 10/5，表單上是當天的 10/3（實際發生過），網址也跟著錯。
+   */
+  function showDateMissing() { $("dateMissing").hidden = !!$("date").value; }
   function scheduleSave() {
-    if (!$("orgName").value.trim()) return queueDraft(); // 連單位名稱都還沒有，算不出 visit_id：整份表單先暫存
+    showDateMissing();
+    // 連單位名稱或日期都還沒有，算不出 visit_id（日期＋代碼）：整份表單先暫存，填上了就存
+    if (!$("orgName").value.trim() || !$("date").value) return queueDraft();
     clearTimeout(scheduleSave.t);
     $("saveInfo").textContent = "存檔中…";
     scheduleSave.t = setTimeout(saveVisit, AUTOSAVE_DELAY);
@@ -1391,6 +1398,7 @@
     clearTimeout(scheduleSave.t);
     const v = readForm();
     if (!v.org.name) return;
+    if (!v.date) { showDateMissing(); return queueDraft(); } // 讀信讀不到日期：不要拿今天建一場，等人填
     if (saveVisit.running) { scheduleSave.t = setTimeout(saveVisit, AUTOSAVE_DELAY); return; } // 上一次還沒回來，等一下再存
     saveVisit.running = true;
     try {

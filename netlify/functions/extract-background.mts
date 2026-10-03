@@ -1,4 +1,5 @@
 import { siteUrl, taipeiToday } from "../lib/http.mts";
+import { extractedDate } from "../../lib/visit.mjs";
 import { extractVisit } from "../lib/ai.mts";
 import type { Extracted } from "../lib/files.mts";
 import { backgroundHandler } from "../lib/jobs.mts";
@@ -13,12 +14,14 @@ export default backgroundHandler<{ text?: string; attachments?: Extracted[]; war
   const attachments = Array.isArray(input.attachments) ? input.attachments : [];
   const warnings = Array.isArray(input.warnings) ? input.warnings : [];
   const extracted = await extractVisit(String(input.text || ""), taipeiToday(), attachments);
+  // 日期：AI 給的，沒有就用候選的，再沒有就留空（後台說「填上日期才會存」）——**不補今天**
+  const when = extractedDate(extracted.date, extracted.candidate_dates);
   const visit = normalizeVisit(
     {
       org: extracted.org,
       guests: extracted.guests,
       headcount: extracted.headcount,
-      date: extracted.date || taipeiToday(),
+      date: when.date,
       start_time: extracted.start_time || "10:00",
       // 信裡寫「10:00-12:30」就照著填；只寫分鐘數的用分鐘數；都沒有就預設一場的長度
       end_time: extracted.end_time || "",
@@ -27,7 +30,7 @@ export default backgroundHandler<{ text?: string; attachments?: Extracted[]; war
       purpose: extracted.purpose,
       interests: extracted.interests,
       language: extracted.language,
-      uncertainties: [...extracted.uncertainties, ...(extracted.date ? [] : ["參訪日期未定"]), ...extracted.candidate_dates.map((d) => `候選日期：${d}`)],
+      uncertainties: [...extracted.uncertainties, ...when.notes],
     } as any,
     siteUrl(req),
   );

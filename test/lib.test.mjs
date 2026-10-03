@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
 import { weekdayOf } from "../public/lib/rota.mjs";
-import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
+import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -134,6 +134,20 @@ test("名片併進名單：同一個人只補空欄位，不覆寫已確認的�
   const again = mergeGuests(r.guests, [{ name: "李小華", title: "研究員", affiliation: "X 大學", email: "hua@x.edu.tw" }]);
   assert.equal(again.added, 0, "同一張名片再讀一次不會多一個人");
   assert.deepEqual(mergeGuests([{ name: "陳大文", affiliation: "Y 所" }], [{ name: "陳大文", affiliation: "Y 所", phone: "09" }]).guests.length, 1);
+});
+
+test("讀信抽出來的日期：沒有就用候選的，都沒有就留空——絕不補今天", () => {
+  // 實際發生過：信裡寫「請問您下週 10/5（一）有空嗎？……10/5 週一早上 9:00 到中心」，
+  // AI 只把 10/5 放進候選，程式把空的日期補成當天（10/3）
+  assert.deepEqual(extractedDate("", ["2026-10-05"]), { date: "2026-10-05", notes: ["日期先填了信裡提的 2026-10-05，還要跟對方確認"] });
+  assert.deepEqual(extractedDate("2026-10-05", []), { date: "2026-10-05", notes: [] });
+  const none = extractedDate("", []);
+  assert.equal(none.date, "", "沒有日期就留空，不是今天");
+  assert.match(none.notes[0], /填上日期才會存/);
+  const many = extractedDate(" ", ["十月初", "2026-10-05", "2026-10-06"]);
+  assert.equal(many.date, "2026-10-05", "第一個真的日期");
+  assert.deepEqual(many.notes.slice(1), ["另一個候選日期：2026-10-06", "候選日期：十月初"], "其他候選照列，寫不成日期的也照列");
+  assert.deepEqual(extractedDate("2026-10-05", ["2026-10-05", "2026-10-06"]).notes, ["另一個候選日期：2026-10-06"], "跟 date 一樣的那個不再列一次");
 });
 
 test("visit id generation and validation", () => {
