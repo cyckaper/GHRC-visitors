@@ -870,6 +870,32 @@ try {
   await page.click("#langToggle");
   await page.waitForFunction(() => document.querySelector("h1")?.textContent === "Green Health Research Center", null, { timeout: 15000 });
 
+  // ── 隱私權政策 /privacy：Google 的 OAuth 同意畫面要發布成「正式版」，Branding 頁要填首頁與隱私權政策的連結，首頁要連得到它 ──
+  check((await page.getAttribute("#privacyLink", "href")) === "/privacy", "the homepage links to the privacy policy (Google asks for it before the app can be published)");
+  await page.click("#privacyLink");
+  await page.waitForSelector("#en h1");
+  check((await page.textContent("#en h1")) === "Privacy Policy" && (await page.isHidden("#zh")) && /Limited Use/.test(await page.textContent("#en")), "…an English page by default, with Google's Limited Use statement, one language at a time");
+  await page.click("#langToggle");
+  await page.waitForFunction(() => !document.getElementById("zh").hidden && document.getElementById("en").hidden, null, { timeout: 15000 });
+  check((await page.textContent("#zh h1")) === "隱私權政策" && (await page.getAttribute("#homeLink", "href")) === "/?ui=zh", "…that switches to Chinese like the rest of the site");
+  await page.click("#langToggle");
+  await page.waitForFunction(() => !document.getElementById("en").hidden, null, { timeout: 15000 });
+  {
+    // 來賓多半用手機看：長網址要能換行，整頁不必左右捲
+    const phone = await browser.newContext({ viewport: { width: 375, height: 800 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+    const mp = await phone.newPage();
+    const external = [];
+    mp.on("request", (r) => { if (!r.url().startsWith(base)) external.push(r.url()); });
+    for (const ui of ["en", "zh"]) {
+      await mp.goto(`${base}/privacy?ui=${ui}`);
+      await mp.waitForSelector(`#${ui} h1`);
+      const fit = await mp.evaluate(() => ({ inner: innerWidth, scroll: document.documentElement.scrollWidth }));
+      check(fit.scroll <= fit.inner, `the ${ui} privacy policy fits a phone screen without sideways scrolling (${JSON.stringify(fit)})`);
+    }
+    check(!external.length, `…and the privacy page itself loads nothing from other servers (${external.join(" ")})`);
+    await phone.close();
+  }
+
   // ── 來賓端：沒有參訪代碼（/index.html、打錯的網址）一律從訪前開始 ──
   await page.goto(`${base}/index.html`);
   await page.waitForSelector("#lab-303");

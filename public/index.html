@@ -171,6 +171,7 @@
     <p id="footerLine">Green Health Research Center · Landscape Building 3F, Department of Horticulture and Landscape Architecture, National Taiwan University</p>
     <p><span id="footerContact"></span> <a class="underline decoration-stone-300 hover:decoration-stone-900 hover:text-stone-700" href="mailto:ntughrc@gmail.com">ntughrc@gmail.com</a></p>
     <p><a class="underline decoration-stone-300 hover:decoration-stone-900 hover:text-stone-700" id="aboutCenter" href="/"></a></p>
+    <p><a class="underline decoration-stone-300 hover:decoration-stone-900 hover:text-stone-700" id="privacyLink" href="/privacy">Privacy policy</a></p>
   </footer>
 </main>
 
@@ -286,6 +287,9 @@
   // 中心首頁（/）：介紹中心與五間研究室。語言跟著帶過去（首頁與這一頁各記各的）
   $("aboutCenter").href = primary === "zh" ? "/?ui=zh" : "/";
   $("aboutCenter").textContent = bi("about_center") + " →";
+  // 隱私權政策：留信箱、回覆都在這一頁，系統拿了什麼、誰看得到寫在那裡（那一頁只有中英文，韓／日來賓看英文）
+  $("privacyLink").href = primary === "zh" ? "/privacy?ui=zh" : "/privacy";
+  $("privacyLink").textContent = bi("privacy");
 
   // 今日流程（時間軸；參訪當天會標出「現在」進行到哪一段）
   if (visit && visit.programme && visit.programme.length) {
