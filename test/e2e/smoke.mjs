@@ -1013,6 +1013,21 @@ try {
   await page.waitForFunction(() => document.querySelector('[data-tab="pre"]')?.textContent === "訪前", null, { timeout: 20000 });
   check(true, "and back to Chinese");
 
+  // 讀信讀不到哪一天：以前補「今天」（信裡寫 10/5 的那一場變成當天 10/3，網址也跟著錯）。
+  // 現在日期空著、底下說一聲，不拿今天建一場；填上日期就自己存
+  await page.click('[data-tab="pre"]');
+  await page.selectOption("#visitSelect", "");
+  const optionsBefore = await page.locator("#visitSelect option").count();
+  await page.fill("#emailText", "Dear Prof. Chang,\n\nWe would love to visit your center some time.\n\nAnna Lee, University of Testing\nanna.lee@testing.example");
+  await page.click("#extractBtn");
+  await page.waitForFunction(() => document.getElementById("orgName").value.includes("Testing"), null, { timeout: 90000 });
+  check((await page.inputValue("#date")) === "" && (await page.isVisible("#dateMissing")), "an email that names no day leaves the date empty and says so, instead of filling in today");
+  await page.waitForTimeout(2000); // 自動存檔的間隔過了
+  check((await page.locator("#visitSelect option").count()) === optionsBefore && (await page.inputValue("#visitSelect")) === "", "…and no visit is created under a made-up date");
+  await page.fill("#date", "2026-12-01");
+  await page.waitForFunction(() => document.getElementById("visitSelect").value === "2026-12-01-testing", null, { timeout: 15000 });
+  check(await page.isHidden("#dateMissing"), "filling in the date saves it by itself, under that date");
+
   check(errors.length === 0, `no page errors (${errors.join(" | ")})`);
   console.log("\nSMOKE OK");
 } catch (e) {

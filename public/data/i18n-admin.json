@@ -727,7 +727,8 @@
   "要勾「Google 雲端硬碟」那一項，系統才看得到名單與備份；請再按一次「連上 Google」。": "Tick the “Google Drive” item so the system can see the list and backups; press “Connect Google” again.",
   "這一次連結逾時了，請再按一次「連上 Google」。": "That attempt timed out; press “Connect Google” again.",
   "Google 沒有連上，請再按一次「連上 Google」。": "Google did not connect; press “Connect Google” again.",
-  "只存成 Google 試算表": "Only save as a Google Sheet"
+  "只存成 Google 試算表": "Only save as a Google Sheet",
+  "信裡沒有寫哪一天：填上日期就會自己存": "The email doesn't say which day: fill in the date and it saves itself"
  },
  "patterns": [
   [

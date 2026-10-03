@@ -124,6 +124,11 @@ test("extract 跑在背景：一般函式 10 秒不夠，所以回 202 加工作
   assert.equal(done.body.status, "done");
   assert.ok(done.body.result.visit.guests.length, "結果留在工作上，前端輪到就拿得到");
   assert.equal(done.body.result.visit.date, "2026-10-07");
+
+  // 信裡沒有寫哪一天：日期留空、說一聲填上才會存——**不補今天**（以前補了，信裡寫 10/5 的那一場變成當天）
+  const undated = await extract({ email_text: "Dear Prof. Chang,\n\nWe would love to visit your center some time.\n\nAnna Lee, University of Testing\nanna.lee@testing.example" });
+  assert.equal(undated.body.visit.date, "", JSON.stringify(undated.body.visit.uncertainties));
+  assert.ok(undated.body.visit.uncertainties.some((u) => /填上日期才會存/.test(u)));
 });
 
 test("plan 也跑在背景：提示詞帶整份頁次索引，10 秒同樣不夠", async () => {
