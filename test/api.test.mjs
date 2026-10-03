@@ -1529,16 +1529,27 @@ test("連上 Google：後台按一下走 Google 的同意畫面，refresh token 
   try {
     assert.equal((await manual("/api/google-auth?start=1")).status, 401, "要登入");
     assert.equal((await manual("/api/google-auth?start=1", admin)).status, 409, "Netlify 環境變數裡沒有 OAuth 用戶端");
+    // Google 說 redirect_uri_mismatch 時，要看得出網站用的是哪一個用戶端（實際踩過：主控台裡不只一個，網址加錯了一個）：
+    // 設定分頁寫出用戶端 ID 的開頭與它在 Netlify 的哪一個環境變數。只有寄信那一組時用的就是那一組
+    process.env.GMAIL_CLIENT_ID = "123456789012-gmailclientabcdef.apps.googleusercontent.com";
+    process.env.GMAIL_CLIENT_SECRET = "gmail-secret-1";
+    const g0 = (await api("/api/settings", { headers: admin })).body.status.google;
+    assert.deepEqual({ hint: g0.client_hint, from: g0.client_from }, { hint: "123456789012-gmailcl…", from: "GMAIL_CLIENT_ID" });
+    delete process.env.GMAIL_CLIENT_ID;
+    delete process.env.GMAIL_CLIENT_SECRET;
     process.env.GOOGLE_CLIENT_ID = "client-1.apps.googleusercontent.com";
     process.env.GOOGLE_CLIENT_SECRET = "client-secret-1";
     const st0 = (await api("/api/settings", { headers: admin })).body.status;
     assert.deepEqual({ drive: st0.drive, gmail: st0.gmail, connected: st0.google.connected, client: st0.google.client }, { drive: false, gmail: false, connected: false, client: true }, "只有用戶端、還沒連上");
+    assert.deepEqual({ hint: st0.google.client_hint, from: st0.google.client_from, uri: st0.google.redirect_uri }, { hint: "client-1.apps.google…", from: "GOOGLE_CLIENT_ID", uri: "https://visit.example.test/api/google-auth" }, "GOOGLE_ 那一組優先");
+    assert.ok(!JSON.stringify(st0).includes("client-1.apps.googleusercontent.com") && !JSON.stringify(st0).includes("client-secret-1"), "用戶端 ID 只給開頭，密鑰不給");
     const start = await manual("/api/google-auth?start=1", admin);
     assert.equal(start.status, 302);
     const to = new URL(start.headers.get("location"));
     assert.equal(to.origin + to.pathname, "https://accounts.google.com/o/oauth2/v2/auth");
     assert.equal(to.searchParams.get("client_id"), "client-1.apps.googleusercontent.com");
     assert.equal(to.searchParams.get("redirect_uri"), "https://visit.example.test/api/google-auth");
+    assert.equal(to.searchParams.get("redirect_uri"), st0.google.redirect_uri, "設定分頁叫人去登記的，就是導到 Google 時帶的那一條");
     assert.match(to.searchParams.get("scope"), /drive\.file/);
     assert.match(to.searchParams.get("scope"), /gmail\.send/);
     assert.equal(to.searchParams.get("access_type"), "offline");
@@ -1589,7 +1600,7 @@ test("連上 Google：後台按一下走 Google 的同意畫面，refresh token 
     assert.doesNotMatch(job.error, /invalid_grant/);
   } finally {
     globalThis.fetch = realFetch;
-    for (const k of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN"]) delete process.env[k];
+    for (const k of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN", "GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET"]) delete process.env[k];
     await getStore().deleteMedia("secrets/google.json");
     await getStore().deleteMedia("sync/visit-list.json");
   }

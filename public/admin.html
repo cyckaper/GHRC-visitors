@@ -550,6 +550,16 @@
       <h2 class="font-semibold">外部服務</h2>
       <p class="muted">金鑰放在 Netlify 的環境變數，改完要重新部署才會生效；Google 的授權不必動環境變數，按下面的「連上 Google」就好。這裡只看得到「接好了沒」。</p>
       <div class="flex flex-wrap items-center gap-2 text-sm"><span id="googleInfo"></span><a class="btn btn-soft" id="googleConnect" href="/api/google-auth?start=1" title="用中心的 Google 帳號允許一次：Drive 備份、參訪名單的 Google 試算表、從後台寄信都用這一組。授權過期了也按這裡">連上 Google</a></div>
+      <!-- Google 說 redirect_uri_mismatch＝網站用的那一個 OAuth 用戶端沒有登記導回來的網址。寫出是哪一個用戶端（ID 開頭）、要登記哪一條：
+           實際踩過——主控台裡不只一個用戶端，網址加在另一個上面，畫面上又看不出網站用的是哪一個。能用的時候整塊不出現（設定分頁不再多一塊） -->
+      <details class="text-sm" id="googleHelp" hidden>
+        <summary class="cursor-pointer font-medium">Google 說 redirect_uri_mismatch？</summary>
+        <div class="mt-2 space-y-1.5">
+          <p><span>網站用的 OAuth 用戶端：</span> <code class="break-all" id="googleClientHint" translate="no"></code> <span class="muted">· Netlify 環境變數</span> <code id="googleClientFrom" translate="no"></code></p>
+          <p class="flex flex-wrap items-center gap-x-2 gap-y-1"><span>要登記的重新導向 URI：</span> <code class="break-all" id="googleRedirectUri" translate="no"></code> <button type="button" class="btn btn-soft" id="googleCopyUri">複製</button></p>
+          <p class="muted">到 Google Cloud 主控台 → Google Auth Platform → 用戶端，打開 ID 開頭一樣的那一個，在「已授權的重新導向 URI」加上這一條、按儲存，等幾分鐘再按「重新連上 Google」。清單裡找不到這個 ID，就是在另一個專案裡：從主控台左上角切換專案。</p>
+        </div>
+      </details>
       <ul class="text-sm space-y-1" id="statusList"></ul>
     </div>
 
@@ -2368,7 +2378,13 @@
         : g.ok
           ? `<span class="ok">已連上</span> <span>Google（Drive 備份、參訪名單、寄信）</span>${g.email ? ` <span class="muted" translate="no">${esc(g.email)}</span>` : ""}`
           : `<span class="err">${g.expired ? "授權過期了" : "連不上"}</span> <span>Google（Drive 備份、參訪名單、寄信）</span>${g.email ? ` <span class="muted" translate="no">${esc(g.email)}</span>` : ""}${g.expired ? "" : ` <span class="muted">${esc(g.error || "")}</span>`}`;
+    // 連不上的時候才出現：網站用哪一個 OAuth 用戶端、要登記哪一條網址（Google 說 redirect_uri_mismatch 就是這兩個對不上）
+    $("googleHelp").hidden = !g.client || g.ok;
+    $("googleClientHint").textContent = g.client_hint || "";
+    $("googleClientFrom").textContent = g.client_from || "";
+    $("googleRedirectUri").textContent = g.redirect_uri || "";
   }
+  $("googleCopyUri").onclick = () => copy($("googleRedirectUri").textContent);
   function renderServiceNotes() {
     if (!state.services) return;
     renderGoogle();

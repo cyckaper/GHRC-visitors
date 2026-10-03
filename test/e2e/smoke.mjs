@@ -589,7 +589,25 @@ try {
   check((await page.locator("#statusList li").count()) >= 6, "the settings tab says which external services are wired up");
   check(/後續提醒/.test(await page.textContent("#statusList")), "…including whether the wrap-up reminder can be sent");
   // Google（備份、名單、寄信共用那一組）：連上了沒寫在上面那一行；這裡沒有 OAuth 用戶端，所以是「未設定」、沒有那顆按鈕，也沒有「授權過期」那一條
-  check(/Google（Drive 備份、參訪名單、寄信）/.test(await page.textContent("#googleInfo")) && /未設定/.test(await page.textContent("#googleInfo")) && (await page.isHidden("#googleConnect")) && (await page.isHidden("#googleWarn")), "…and whether Google (backups, the visitor list, mail) is connected, with no reconnect button when there is no OAuth client");
+  check(/Google（Drive 備份、參訪名單、寄信）/.test(await page.textContent("#googleInfo")) && /未設定/.test(await page.textContent("#googleInfo")) && (await page.isHidden("#googleConnect")) && (await page.isHidden("#googleWarn")) && (await page.isHidden("#googleHelp")), "…and whether Google (backups, the visitor list, mail) is connected, with no reconnect button when there is no OAuth client");
+  {
+    // Google 說 redirect_uri_mismatch＝網站用的那一個 OAuth 用戶端沒有登記導回來的網址（實際踩過：主控台裡不只一個用戶端，加錯了一個）。
+    // 有用戶端、還沒連上的時候，寫出是哪一個（ID 開頭）、要登記哪一條，可以直接複製
+    process.env.GOOGLE_CLIENT_ID = "123456789012-e2eclientabcdef.apps.googleusercontent.com";
+    process.env.GOOGLE_CLIENT_SECRET = "e2e-client-secret";
+    await page.click('[data-tab="pre"]');
+    await page.click('[data-tab="settings"]');
+    await page.waitForFunction(() => !document.getElementById("googleHelp").hidden, null, { timeout: 15000 });
+    await page.click("#googleHelp summary");
+    const help = { hint: await page.textContent("#googleClientHint"), from: await page.textContent("#googleClientFrom"), uri: await page.textContent("#googleRedirectUri") };
+    check(help.hint === "123456789012-e2eclie…" && help.from === "GOOGLE_CLIENT_ID" && help.uri === `${base}/api/google-auth` && (await page.isVisible("#googleCopyUri")), `with an OAuth client but no connection, settings say which client the site uses and the exact redirect URI to register (${JSON.stringify(help)})`);
+    check(!(await page.textContent("#googleHelp")).includes("e2e-client-secret") && !(await page.textContent("#googleHelp")).includes("apps.googleusercontent.com"), "…showing only the start of the client ID, never the secret");
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CLIENT_SECRET;
+    await page.click('[data-tab="pre"]');
+    await page.click('[data-tab="settings"]');
+    await page.waitForFunction(() => document.getElementById("googleHelp").hidden && /未設定/.test(document.getElementById("googleInfo").textContent), null, { timeout: 15000 });
+  }
   check(/不會寄|現在寄到/.test(await page.textContent("#reminderInfo")), "the settings tab says where the wrap-up reminder would go");
   await page.fill("#reminderTo", "wrapup@ntu.edu.tw");
   await page.locator("#senderDefault").focus(); // blur → change

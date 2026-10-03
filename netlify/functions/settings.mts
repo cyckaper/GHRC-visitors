@@ -112,7 +112,7 @@ export default async (req: Request) => {
       store: getStore().backend,
       master: !!master,
       // Google 連上了沒、哪個帳號、**現在能不能用**（過期了也要看得出來——以前寫「已設定」，備份停了兩週沒人知道）
-      google: await googleStatus(),
+      google: await googleStatus(req),
     },
   });
 };
