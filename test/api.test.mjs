@@ -1547,7 +1547,9 @@ test("連上 Google：後台按一下走 Google 的同意畫面，refresh token 
 
     // 導回來：state 不對、被改過、或沒有允許
     const back = async (q) => new URL((await manual(`/api/google-auth?${q}`)).headers.get("location"));
-    assert.equal((await back(`code=x&state=${encodeURIComponent(state.replace(/.$/, "0"))}`)).searchParams.get("google"), "expired", "簽章對不上");
+    // 簽章最後一個字換成別的（原本是 0 就換 1——直接換成 0 的話，十六次有一次根本沒改到，CI 上就遇到過）
+    const tampered = state.slice(0, -1) + (state.endsWith("0") ? "1" : "0");
+    assert.equal((await back(`code=x&state=${encodeURIComponent(tampered)}`)).searchParams.get("google"), "expired", "簽章對不上");
     assert.equal((await back("error=access_denied")).searchParams.get("google"), "denied");
     assert.equal(exchanged.length, 0, "state 不對就不去換");
 
