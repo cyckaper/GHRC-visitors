@@ -837,6 +837,64 @@ try {
     for (const id of [a, b]) await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: auth });
   }
 
+  // ── 座談的場次（明確指示：「有一些單位參訪是跟老師們座談，不用介紹各研究室」）──
+  // 勾了流程就換成「總體介紹 → 座談」；支援人力表上那一場五間都只下拉選老師「可參加／無法參加」
+  // （明確指示：「各研究室老師都是固定的，就不用再填寫表單了」），不填名字、不問分鐘
+  {
+    const auth = { authorization: "Bearer e2e-token", "content-type": "application/json" };
+    const until = async (fn, what) => {
+      for (let i = 0; i < 100; i++) { if (await fn()) return; await new Promise((r) => setTimeout(r, 300)); }
+      throw new Error(`FAIL: timed out waiting for ${what}`);
+    };
+    const visitOf = async (vid) => (await (await fetch(`${base}/api/visits?id=${encodeURIComponent(vid)}`, { headers: auth })).json()).visit;
+    const id = (await (await fetch(`${base}/api/visits`, { method: "POST", headers: auth, body: JSON.stringify({ org: { name: "Roundtable E2E University" }, date: "2099-11-03", code: "roundtable", start_time: "14:00", end_time: "16:30", itinerary: [{ room: "briefing", minutes: 20, location: "302" }, ...["301", "302", "303", "304", "305"].map((room) => ({ room, minutes: 20 }))] }) })).json()).visit.visit_id;
+    // 301 先在支援人力表上填了 30 分（還是參觀的時候）：之後改成座談再改回來，這 30 分要回到行程上
+    await fetch(`${base}/api/rota`, { method: "POST", headers: auth, body: JSON.stringify({ visit_id: id, room: "301", minutes: 30 }) });
+    await page.goto(`${base}/admin.html`);
+    await page.waitForSelector("#authOk:not([hidden])");
+    await page.click('[data-tab="pre"]');
+    await page.selectOption("#visitSelect", id);
+    await page.waitForFunction((v) => document.getElementById("preStatus").textContent === v, id, { timeout: 30000 });
+    check((await page.locator("#programmeView .room").count()) === 5 && !(await page.isChecked("#forumMode")), "a new visit starts as a laboratory tour");
+    const endBefore = await page.evaluate(() => [...document.querySelectorAll("#programmeTable tbody tr:not([data-rooms-row])")].pop().cells[1].firstChild.value);
+    const saved = page.waitForResponse((r) => r.url().endsWith("/api/visits") && r.request().method() === "POST", { timeout: 20000 });
+    await page.check("#forumMode");
+    await saved;
+    const view = await page.textContent("#programmeView");
+    check(/座談/.test(view) && !/研究室參訪|綜合討論/.test(view) && (await page.locator("#programmeView [data-not-filled]").count()) === 5, `ticking “roundtable” turns the schedule into overview → roundtable, each lab's attending teacher still to fill (${view.replace(/\s+/g, " ")})`);
+    const stored = await visitOf(id);
+    check(stored.format === "forum" && stored.itinerary.length === 1 && stored.programme.map((b) => b.kind).join() === "briefing,forum" && stored.programme[1].start === "14:20" && stored.programme[1].end === endBefore, `…and saves that way: no lab minutes, the tour's time goes to the roundtable (${JSON.stringify(stored.programme.map((b) => [b.kind, b.start, b.end]))}, was until ${endBefore})`);
+    // 來賓專頁：流程寫「與中心老師座談」，老師卡片不標動線的順序，總體介紹那一張說接著是座談
+    await page.goto(`${base}/${id}?ui=en`);
+    await page.waitForSelector("#briefing-card");
+    check(/Roundtable with the faculty/.test(await page.textContent("#programme")) && /roundtable with the faculty/.test(await page.textContent("#briefing-card")) && (await page.locator("#labs .step").count()) === 0 && (await page.textContent("#labsTitle")) === "The five laboratories", "the guest page shows the roundtable, without numbering the laboratories as stops on a tour");
+    // 支援人力表（老師那一頁）：那一場五間都只有一個下拉選單（可參加／無法參加），沒有要打字的格子
+    const key = (await (await fetch(`${base}/api/settings`, { headers: auth })).json()).settings.rota_key;
+    await page.goto(`${base}/rota?key=${key}#${encodeURIComponent(id)}`);
+    const card = page.locator(`section[data-rota-visit="${id}"]`);
+    await card.waitFor({ timeout: 30000 });
+    const options = await card.locator('select[data-room="303"] option').allTextContents();
+    check((await card.locator('select[data-field="attend"]').count()) === 5 && (await card.locator("input").count()) === 0 && options.map((o) => o.trim()).join() === "請選擇,陳惠美 可參加,陳惠美 無法參加" && /陳惠美/.test(await card.textContent()) && /座談/.test(await card.textContent()), `on the lab rota, that visit only asks each lab to pick whether its teacher can attend, the teacher's name in front of each choice (${options.join("/")})`);
+    await card.locator('select[data-room="303"]').selectOption("yes");
+    await card.locator('select[data-room="302"]').selectOption("no");
+    await until(async () => { const a = (await visitOf(id)).attendance || {}; return a["303"] === "yes" && a["302"] === "no"; }, "the choices to save");
+    // 回到後台：今日流程的座談底下寫出每一間的老師能否出席、還有哪幾間沒回；取消勾就回到參觀的流程
+    await page.goto(`${base}/admin.html`);
+    await page.waitForSelector("#authOk:not([hidden])");
+    await page.click('[data-tab="pre"]');
+    await page.selectOption("#visitSelect", id);
+    await page.waitForFunction((v) => document.getElementById("preStatus").textContent === v, id, { timeout: 30000 });
+    const forumView = (await page.textContent("#programmeView")).replace(/\s+/g, "");
+    check(await page.isChecked("#forumMode") && /303陳惠美可參加/.test(forumView) && /302林寶秀無法參加/.test(forumView) && (await page.locator("#programmeView [data-not-filled]").count()) === 3, `back in the admin, the roundtable shows which teachers can attend and which labs have not answered (${forumView})`);
+    const unsaved = page.waitForResponse((r) => r.url().endsWith("/api/visits") && r.request().method() === "POST", { timeout: 20000 });
+    await page.uncheck("#forumMode");
+    await unsaved;
+    const back = await visitOf(id);
+    check((await page.locator("#programmeView .room").count()) === 5 && /研究室參訪/.test(await page.textContent("#programmeView")) && back.format === "tour", "unticking it goes back to the laboratory tour");
+    check((await page.locator("#programmeView [data-from-lab]").count()) === 1 && back.itinerary.find((s) => s.room === "301")?.minutes === 30, `…with the minutes a lab had already filled in put back on the schedule (${JSON.stringify(back.itinerary.map((s) => [s.room, s.minutes]))})`);
+    await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: auth });
+  }
+
   // ── 中心首頁（/）：介紹中心，五間研究室各連到自己的介紹頁 ──
   // 首頁的世界地圖只標**已經來過**的單位：建一場過去的（只填了國家、還沒查位置——放在國家的位置）
   const pastVisit = await (await fetch(`${base}/api/visits`, { method: "POST", headers: { authorization: "Bearer e2e-token", "content-type": "application/json" }, body: JSON.stringify({ org: { name: "Konkuk University", name_local: "건국대학교", country: "South Korea" }, date: "2025-04-21", code: "konkuk", start_time: "10:00", end_time: "11:30" }) })).json();

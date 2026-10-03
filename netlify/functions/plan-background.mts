@@ -6,7 +6,7 @@ import { slideHistory } from "../lib/history.mts";
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
 import { normalizeVisit } from "./visits.mts";
-import { applyProgrammeTimes, briefingBlockMinutes, ensureBriefingFirst, retimeProgramme, snapSlidesToGroups, withLabMinutes } from "../../lib/visit.mjs";
+import { applyProgrammeTimes, briefingBlockMinutes, defaultProgramme, ensureBriefingFirst, isForum, retimeProgramme, snapSlidesToGroups, withLabMinutes } from "../../lib/visit.mjs";
 
 /**
  * 排行程與選頁（背景函式，15 分鐘上限）：提示詞裡有整份頁次索引與母簡報文字，
@@ -29,11 +29,15 @@ export default backgroundHandler<{ visit?: Partial<Visit> }>("排程", async (in
   // 而且**選頁以區塊為單位**（後台只勾區塊）：AI 挑到某一區的任何一頁，就整個區塊一起進去，
   // 這樣「也挑了 N 頁」跟簡報分頁上看到的才會是同一件事。
   const known = new Map<number, any>((slidesIndex.slides as any[]).map((s) => [s.n, s]));
-  const slides = snapSlidesToGroups(plan.slides.filter((n) => known.has(n)), slidesIndex);
+  // **座談的場次不介紹各研究室**：研究室那幾區整區拿掉——包括沒標研究室、但併在研究室那一區的頁
+  // （研究成果 39–42 併在 303 那一區：挑到其中一頁，整個 303 就會跟著進來）
+  const labBlocks = new Set<number>(((slidesIndex.groups || []) as any[]).filter((g) => (g.slides || []).some((n: number) => known.get(n)?.lab)).flatMap((g) => g.slides));
+  const slides = snapSlidesToGroups(plan.slides.filter((n) => known.has(n)), slidesIndex).filter((n: number) => !isForum(visit) || !labBlocks.has(n));
   // 今日流程固定要有「綜合討論」：AI 漏掉就在最後補 10 分鐘並提醒主辦端調整
   const warnings: string[] = [];
   let programme = plan.programme;
-  if (!programme.some((b) => b.kind === "discussion")) {
+  // 座談的場次沒有綜合討論（座談本身就是），不補
+  if (!isForum(visit) && !programme.some((b) => b.kind === "discussion")) {
     const last = programme[programme.length - 1];
     const start = last?.end || visit.start_time || "10:00";
     const [h, m] = start.split(":").map(Number);
@@ -56,6 +60,13 @@ export default backgroundHandler<{ visit?: Partial<Visit> }>("排程", async (in
     cover_text: plan.cover_text,
     plan_rationale: plan.rationale,
   };
+  // **座談的場次**（不參觀研究室）：行程不歸 AI、也不歸研究室的分鐘——照主辦端那一份（總體介紹 → 座談），AI 只負責挑頁
+  if (isForum(visit)) {
+    merged = { ...merged, programme: visit.programme.length ? visit.programme : (defaultProgramme(visit) as Visit["programme"]), itinerary: visit.itinerary };
+    const minutes = slides.reduce((sum, n) => sum + (known.get(n)?.minutes || 1), 0);
+    merged = { ...merged, presenters: (stored as any)?.presenters || {} } as Visit;
+    return { plan: { ...plan, programme: merged.programme, itinerary: merged.itinerary, slides }, visit: merged, estimated_briefing_minutes: Math.round(minutes), master_text_available: !!masterText, history: history ? { visits: history.visits, same_type: history.same_type } : null, warnings };
+  }
   // 分鐘數不歸 AI 決定：一律照「時間分配預設」重算（每間研究室 20 分，時間不夠才依序縮短）
   const timed = applyProgrammeTimes(merged);
   if (timed.changed) warnings.push(`每間研究室一律 ${timed.alloc.perRoom} 分、總體介紹 ${timed.alloc.briefing} 分（AI 排的分鐘數已按預設重算）；要改就直接在下面改。`);

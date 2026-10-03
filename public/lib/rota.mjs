@@ -5,6 +5,8 @@
  * 老師看到的那一張，改的也是同一格——在群組裡直接回的，就由主辦端填進對應的格子，資料只有一份。
  *
  * **簡單明瞭**（明確指示）：每一間只填兩件事——接待人員、共需幾分鐘；說明越少越好。
+ * **座談的場次**（不參觀研究室，`v.forum`）：各研究室的老師是固定的，不必填名字——每一間只要下拉選
+ * 「可參加」或「無法參加」（`attendance`，明確指示），不問分鐘。
  * 卡片上只有「誰、哪一天、幾位」，其他（國家、對口、目的、背景研判）摺在「訪客背景」裡。
  *
  * 樣式自帶、類名一律 `rota-` 開頭：放進後台時不會跟後台自己的 .card／.muted 打架。
@@ -33,6 +35,8 @@ const CSS = `
 .rota-card.rota-focus { outline: 3px solid #0f766e; outline-offset: 2px; }
 .rota-muted { color: #78716c; font-size: .86rem; }
 .rota-over { font-weight: 600; color: #57534e; }
+/* 座談的場次（不參觀研究室）：一個小標籤，格子只問老師能否出席 */
+.rota-tag { display: inline-block; font-size: .78rem; font-weight: 600; padding: .05rem .5rem; border-radius: 9999px; background: #ecfccb; color: #3f6212; border: 1px solid #bef264; }
 /*
  * 老師多半是從 LINE 點連結、用手機填（實際回報：手機上整頁比螢幕寬，右邊那一欄與字尾都被切掉）。
  * 所以：手機上一間一列（一格至少 11rem，放不下兩格就一格；字放大了 rem 跟著變大，也就自動變一欄），
@@ -75,6 +79,8 @@ const CSS = `
 /* 還沒填：整格淡黃、那一格寫著「未填」——顏色之外還有字，只看得到灰階也分得出來 */
 .rota-td.rota-todo { background: #fffbeb; }
 .rota-td.rota-todo .rota-in[data-field="name"]::placeholder { color: #b45309; opacity: 1; }
+.rota-td.rota-todo select.rota-in { color: #b45309; }
+.rota-td.rota-todo select.rota-in option { color: #1c1917; }
 /* 這一場不走這一間 */
 .rota-td.rota-na { background: #fafaf9; border-style: dashed; border-top-width: 1px; color: #a8a29e; text-align: center; vertical-align: middle; }
 .rota-past .rota-rh, .rota-past .rota-td { color: #78716c; }
@@ -115,6 +121,20 @@ function background(v) {
     </details>`;
 }
 
+/**
+ * 座談的場次：那一間的老師能否出席。**老師是固定的**（各研究室的負責人），不必填名字——
+ * 下拉選「可參加」「無法參加」就好（明確指示）。空的＝還沒回。
+ * **選項前面就是老師的名字**（「張俊彥 可參加」「張俊彥 無法參加」，明確指示）：選好之後格子上一眼看得出是誰。
+ */
+const ATTEND = { yes: "可參加", no: "無法參加" };
+const attendText = (lead, k) => `${lead ? `${lead} ` : ""}${ATTEND[k]}`;
+function attendSelect(v, room, lead, empty) {
+  const now = v.attendance?.[room] || "";
+  return `<select class="rota-in" data-visit="${esc(v.visit_id)}" data-room="${esc(room)}" data-field="attend" ${v.past ? "disabled" : ""} aria-label="${esc(room)} ${esc(lead || "")} 能否出席座談">
+      <option value="">${esc(empty)}</option>${Object.keys(ATTEND).map((k) => `<option value="${k}" ${now === k ? "selected" : ""}>${esc(attendText(lead, k))}</option>`).join("")}
+    </select>`;
+}
+
 function card(v, labs) {
   const lab = (room) => labs.find((l) => String(l.room) === String(room)) || { room, name_zh: room, color: "#0f766e" };
   const wk = weekdayOf(v.date);
@@ -129,6 +149,12 @@ function card(v, labs) {
           const tone = esc(l.color || "#0f766e");
           const attrs = `data-visit="${esc(v.visit_id)}" data-room="${esc(s.room)}" ${v.past ? "disabled" : ""}`;
           const mins = v.lab_minutes?.[s.room];
+          // 座談的場次只問老師能否出席（老師是固定的；不問分鐘：座談不參觀研究室）
+          if (v.forum)
+            return `<div class="rota-cell" style="--tone:${tone}">
+              <div class="rota-lab" style="color:${tone}">${esc(s.room)} ${esc(l.name_zh)}${l.lead ? ` <span class="rota-muted" style="font-weight:400">${esc(l.lead)}</span>` : ""}</div>
+              ${attendSelect(v, s.room, l.lead, "請選擇")}
+            </div>`;
           return `<div class="rota-cell" style="--tone:${tone}">
               <div class="rota-lab" style="color:${tone}">${esc(s.room)} ${esc(l.name_zh)}</div>
               <input class="rota-in" ${attrs} data-field="name" value="${esc(v.presenters?.[s.room] || "")}" placeholder="${v.past ? "" : "接待人員"}" aria-label="${esc(s.room)} 接待人員">
@@ -143,6 +169,7 @@ function card(v, labs) {
         ${v.org?.name_local && v.org.name_local !== v.org.name ? `<span class="rota-muted">${esc(v.org.name_local)}</span>` : ""}
         <span class="rota-muted">${esc(when)}</span>
         ${v.headcount ? `<span class="rota-muted">${esc(String(v.headcount))} 位</span>` : ""}
+        ${v.forum ? `<span class="rota-tag" title="跟中心老師們座談，不參觀研究室：請選老師可參加或無法參加">座談・選可否出席</span>` : ""}
         ${v.past ? `<span class="rota-over">已結束</span>` : ""}
       </div>
       ${background(v)}
@@ -155,11 +182,16 @@ const shortName = (l) => String(l?.name_zh || "").replace(/（[^）]*）$/, "").
 
 /**
  * 總表的一格。三種狀態，字就寫在格子裡：填了（人名、分鐘）、**未填**（淡黃，這一場要走這一間但還沒回）、
- * **免填**（這一場不走這一間）。已經結束的只顯示字、不給格子。
+ * **免填**（這一場不走這一間）。已經結束的只顯示字、不給格子。座談的場次每一格是「可參加／無法參加」的下拉選單。
  */
-function tableCell(v, room) {
+function tableCell(v, room, lead) {
   const on = (v.stops || []).some((s) => String(s.room) === room);
   if (!on) return `<td class="rota-td rota-na">免填</td>`;
+  if (v.forum) {
+    const now = v.attendance?.[room] || "";
+    if (v.past) return `<td class="rota-td">${now ? esc(attendText(lead, now)) : `<span class="rota-muted">—</span>`}</td>`;
+    return `<td class="rota-td ${now ? "" : "rota-todo"}" style="--tone:var(--c${esc(room)})">${attendSelect(v, room, lead, "未填")}</td>`;
+  }
   const name = v.presenters?.[room] || "";
   const mins = v.lab_minutes?.[room];
   if (v.past) {
@@ -187,8 +219,8 @@ function table(visits, labs) {
     const wk = weekdayOf(v.date);
     const when = `${String(v.date || "").slice(5).replace("-", "/")}${wk ? `（${wk}）` : ""}${v.start_time || ""}${v.end_time ? `–${v.end_time}` : ""}`;
     return `<tr class="${v.past ? "rota-past" : ""}" data-rota-visit="${esc(v.visit_id)}">
-        <th scope="row" class="rota-rh"><b>${esc(v.org?.name_local || v.org?.name)}</b><div class="rota-sub">${esc(when)}</div></th>
-        ${rooms.map((room) => tableCell(v, room)).join("")}
+        <th scope="row" class="rota-rh"><b>${esc(v.org?.name_local || v.org?.name)}</b><div class="rota-sub">${esc(when)}</div>${v.forum ? `<span class="rota-tag" title="跟中心老師們座談，不參觀研究室：每一間只選老師可參加或無法參加">座談・選可否出席</span>` : ""}</th>
+        ${rooms.map((room) => tableCell(v, room, lab(room)?.lead)).join("")}
       </tr>`;
   };
   const grid = (list) => `<div class="rota-scroll"><table class="rota-table">${head}<tbody>${list.map(row).join("")}</tbody></table></div>`;
@@ -213,7 +245,7 @@ export function focusVisit(root, id) {
  * 讀資料、畫表、接上「填完自己存」。回傳讀到的那一份（失敗回 null，訊息已經交給 onStatus）。
  *
  *   load()          → { ok, visits, labs } 或 { ok:false, error }
- *   save(body)      → { ok, error? }；body 是 { visit_id, room, name } 或 { visit_id, room, minutes }
+ *   save(body)      → { ok, error? }；body 是 { visit_id, room, name }、{ visit_id, room, minutes } 或 { visit_id, room, attend }（座談）
  *   onStatus(msg, isError)
  *   focus           要亮起來的那一場的 visit_id（通告連結 # 後面那一段）
  *   layout          "cards"（老師那一頁，一場一張卡片）或 "table"（後台設定分頁，一場一列的總表）
@@ -242,6 +274,11 @@ export async function mountRota(root, { load, save, onStatus = () => {}, focus =
   // 疊上好幾個 listener 就會同一格存好幾次。
   const timers = new Map();
   const pending = new Set(); // 打了字、還沒存完的格子
+  // 下拉選單（座談的「可參加／無法參加」）選了就存；有的瀏覽器只送 change、有的 input 與 change 都送——
+  // 兩個都接，同一格排在同一個計時器上，所以只會存一次
+  root.onchange = (e) => {
+    if (e.target && e.target.matches && e.target.matches("select.rota-in")) root.oninput(e);
+  };
   root.oninput = (e) => {
     const el = e.target.closest && e.target.closest(".rota-in");
     if (!el || el.disabled) return;
@@ -251,21 +288,21 @@ export async function mountRota(root, { load, save, onStatus = () => {}, focus =
       if (clean !== el.value) el.value = clean;
     }
     el.classList.remove("rota-saved");
-    // 總表：人名一填上，那一格就不再是「未填」（清空又變回來）
-    if (el.dataset.field === "name") el.closest(".rota-td")?.classList.toggle("rota-todo", !el.value.trim());
+    // 總表：人名一填上（座談：可否出席一選），那一格就不再是「未填」（清空又變回來）
+    if (el.dataset.field === "name" || el.dataset.field === "attend") el.closest(".rota-td")?.classList.toggle("rota-todo", !el.value.trim());
     clearTimeout(timers.get(el));
     pending.add(el);
     timers.set(
       el,
       setTimeout(async () => {
-        const field = el.dataset.field === "minutes" ? "minutes" : "name";
+        const field = el.dataset.field === "minutes" || el.dataset.field === "attend" ? el.dataset.field : "name";
         const res = await save({ visit_id: el.dataset.visit, room: el.dataset.room, [field]: el.value });
         pending.delete(el);
         if (res && res.ok) {
           el.classList.add("rota-saved");
           onStatus(`已存 ${new Date().toTimeString().slice(0, 5)}`, false);
         } else onStatus((res && res.error) || "存不起來", true);
-      }, 800),
+      }, el.tagName === "SELECT" ? 0 : 800),
     );
   };
   if (focus) focusVisit(root, focus);

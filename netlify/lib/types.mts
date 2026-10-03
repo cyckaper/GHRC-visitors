@@ -22,7 +22,7 @@ export interface Guest {
 export interface ProgrammeBlock {
   start: string; // HH:MM（台北時間）
   end: string;
-  kind: "briefing" | "tour" | "discussion" | "photo" | "other";
+  kind: "briefing" | "tour" | "discussion" | "forum" | "photo" | "other"; // forum：座談（座談的場次不參觀研究室，見 lib/visit.mjs isForum）
   title_en: string;
   title_2nd: string;
   rooms?: string[];
@@ -62,6 +62,10 @@ export interface Visit {
   purpose: string;
   interests: string[];
   language: Lang;
+  /** forum：座談的場次（跟老師們座談，不參觀研究室）；沒有或 tour：照常參觀研究室。 */
+  format?: "tour" | "forum";
+  /** 座談的場次：各間的老師能否出席（房號 → yes 可參加／no 無法參加；沒有＝還沒回）。只有 /api/rota 在寫。 */
+  attendance?: Record<string, "yes" | "no">;
   programme: ProgrammeBlock[];
   itinerary: ItineraryStep[];
   slides: number[];

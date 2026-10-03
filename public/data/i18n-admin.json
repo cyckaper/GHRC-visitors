@@ -714,6 +714,18 @@
   "名單正在讀，讀完這一行會更新。": "The list is being read; this line updates when it is done.",
   "Google 的授權過期了：Drive 備份、參訪名單的自動同步、從後台寄信都停了。": "Google's authorisation has expired: Drive backups, the visitor-list sync and sending mail from here have all stopped.",
   "重新連上 Google": "Reconnect Google",
+  "座談的場次": "Roundtables",
+  "（第 5 步勾了「這場是座談」）只問老師能否出席。": "(“This visit is a roundtable” ticked in step 5) only ask whether each teacher can attend.",
+  "這場是座談，不參觀研究室": "This visit is a roundtable, no laboratory tour",
+  "跟中心老師們座談、不介紹各研究室：流程換成「總體介紹 → 座談」，支援人力表上每一間只選老師可參加或無法參加。": "A roundtable with the centre's faculty, without introducing each laboratory: the programme becomes “overview → roundtable”, and on the cover table each lab only picks whether its teacher can attend.",
+  "座談": "Roundtable",
+  "可參加": "Can attend",
+  "無法參加": "Cannot attend",
+  "請選擇": "Choose",
+  "座談・選可否出席": "Roundtable · can the teacher attend?",
+  "告訴各研究室哪個單位什麼時候來座談，請各室在支援人力表上選老師能否出席": "Tells the labs who is coming for a roundtable and when, and asks each lab to pick on the cover table whether its teacher can attend",
+  "跟中心老師們座談，不參觀研究室：請選老師可參加或無法參加": "A roundtable with the centre's faculty, no laboratory tour: please pick whether the teacher can attend",
+  "跟中心老師們座談，不參觀研究室：每一間只選老師可參加或無法參加": "A roundtable with the centre's faculty, no laboratory tour: each lab only picks whether its teacher can attend",
   "Google 說 redirect_uri_mismatch？": "Google says redirect_uri_mismatch?",
   "網站用的 OAuth 用戶端：": "OAuth client this site uses:",
   "· Netlify 環境變數": "· Netlify variable",
@@ -736,6 +748,14 @@
   "信裡沒有寫哪一天：填上日期就會自己存": "The email doesn't say which day: fill in the date and it saves itself"
  },
  "patterns": [
+  [
+   "^(\\S+) 可參加$",
+   "$1 can attend"
+  ],
+  [
+   "^(\\S+) 無法參加$",
+   "$1 cannot attend"
+  ],
   [
    "^已存 (\\d{1,2}:\\d{2})$",
    "Saved $1"

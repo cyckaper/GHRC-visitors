@@ -5,7 +5,7 @@ import { env } from "./http.mts";
 import { isMock } from "./data.mts";
 import type { DictationExtract, ResponseRow, SignbookEntry, Visit } from "./types.mts";
 import type { Extracted } from "./files.mts";
-import { allocateProgramme, briefingBlockMinutes, endTimeOf, labStops, pageContents } from "../../lib/visit.mjs";
+import { allocateProgramme, briefingBlockMinutes, endTimeOf, FORUM_TITLES, isForum, labStops, pageContents } from "../../lib/visit.mjs";
 import { parseVisitTable } from "../../lib/import.mjs";
 
 /**
@@ -240,7 +240,7 @@ export const PlanSchema = z.object({
     z.object({
       start: z.string(),
       end: z.string(),
-      kind: z.enum(["briefing", "tour", "discussion", "photo", "other"]),
+      kind: z.enum(["briefing", "tour", "discussion", "forum", "photo", "other"]),
       title_en: z.string(),
       title_2nd: z.string(),
       rooms: z.array(z.string()),
@@ -265,6 +265,7 @@ const PLAN_SYSTEM = `你替 GHRC 排一次參訪的行程並從母簡報挑頁�
 - **history（歷次實際表現，有才給）**：slides[].used／used_same_type 是這一頁過去選過幾次、同類單位選過幾次；asked 是那一場被提問、mentioned 是在回饋中被提到。rooms[] 每一間分兩種來源：wanted／cooperate 是**來賓自己回的**（最想看、想合作），host_noted 是**主持人口述裡聽到的**——「主持人覺得對方有興趣」不等於「對方說他有興趣」，兩者不要混著講。用法：**被提問或被提到過的頁優先留下**，同類單位常選的頁優先考慮，來賓自己點名多的研究室優先排進動線（host_noted 只當佐證）。但**沒有數字不代表那頁不好**——可能只是沒人選過，該講還是要講；history 是佐證，不是排行榜。
 - **選頁以「區塊」為單位**（groups）：挑到某一區的任何一頁，整個區塊都會進去（後台也只勾區塊、不勾單頁），所以請以區塊為單位思考，不必逐頁斟酌。
 - 實驗室頁：只放 **route** 上那幾間的頁（route＝今日流程上這一場要去的研究室，是各研究室在支援人力表上填的、或主辦端排好的；route 是空的才自己依興趣判斷）；分隔頁（role=divider）只在放了該實驗室內容時保留。
+- **format="forum"（座談的場次）**：來賓是來跟中心老師們座談的，**不參觀研究室、不介紹各研究室**——不要放任何實驗室的頁（含分隔頁），只挑中心整體的介紹；行程是 briefing（總體簡報）→ forum（座談，title_en "Roundtable with the faculty"）→ photo（可省略），沒有 tour 也沒有 discussion，itinerary 只有 briefing 一步。
 - 最後的「您最想看哪一部分」頁與 QR 頁由產檔程式另外加，不要選。
 - 不放中心總預算數字；HEALS Design 是 301 專屬方法論。
 
@@ -290,6 +291,8 @@ export async function planVisit(visit: Visit, slidesIndex: any, labs: any, maste
       duration_minutes: visit.duration_minutes, purpose: visit.purpose, interests: visit.interests, language: visit.language, contact_teacher: visit.contact_teacher,
     },
     briefing_location: visit.itinerary?.find((s) => s.room === "briefing")?.location || "302",
+    // forum＝座談的場次：不參觀研究室，挑頁不挑各研究室的頁
+    format: isForum(visit) ? "forum" : "tour",
     // 今日流程是自動排的（各研究室在支援人力表上填的分鐘）：挑頁照這一份動線與總體簡報的長度，不要另排一份
     route: (visit.itinerary || []).filter((s) => s.room !== "briefing" && (Number(s.minutes) || 0) > 0).map((s) => ({ room: s.room, minutes: Number(s.minutes) })),
     briefing_minutes: briefingBlockMinutes(visit.programme) || Number(visit.itinerary?.find((s) => s.room === "briefing")?.minutes) || 20,
@@ -363,6 +366,7 @@ export async function draftLetter(ctx: LetterContext): Promise<{ subject: string
       ? `你替 GHRC 草擬一則**回報給中心自己五間研究室**的訊息：通告發出去、各室回覆簡報人員之後，把定案的安排再送回去一次。收信的是同事，**一律用繁體中文**。
 語氣：同事之間，簡短、條列、看一眼就知道自己幾點要做什麼。不要客套話，不要感謝詞，不要公文腔。
 結構：1) 一句話說哪個單位、什麼時候來、幾位；2) **定案動線**——照 lab_stops 逐條列「幾點–幾點　房號　研究室　簡報人員　N 分鐘」，presenter 是空的就寫「（待補）」；3) 一兩句提醒當天的重點（來賓想看什麼、簡報大概講多久）；4) 最後一句「有問題直接回這則訊息」。
+**format="forum"（座談的場次）**：不參觀研究室，第 2 段改成兩部分——先照 programme 列當天流程（幾點–幾點　內容），再列「座談出席」：照 attendees 逐條列「房號　研究室　老師　可參加／無法參加」（lead 是那一間的老師，attend 是空的就寫「（待回覆）」）。不要寫各室的時段與分鐘。
 **不要署名**：這一則是貼進中心自己的 LINE 群組，誰發的大家都看得到。
 時間與人員一律照提供的資料，不要自己改也不要補上沒有的人。回傳 subject 與純文字 body。
 
@@ -377,12 +381,13 @@ ${CENTER_FACTS}`
 4) **原封不動**放入提供的 route_block（當天動線），一個字都不要改、不要重排、不要補上各室的時間。
 5) **原封不動**放入提供的 roll_call_block（請各研究室回覆，下一行是支援人力表的網址），一個字都不要改，網址要完整（含 # 後面那一段，那是直接跳到這一場用的）。
 **roll_call_block 就是整則的最後一段，後面什麼都不要加**：不要回覆期限、不要署名、不要結尾的客套話——這一則是貼進中心自己的 LINE 群組，誰發的大家都看得到。
-只寫這一場真的有的資訊：沒有的欄位就不要提，不要自己補上參觀路線以外的安排，也不要另外再問 demo、設備、研究生之類的事——這一則只問一件事：誰來接待（要多少時間，老師在網址那張表上填）。回傳 subject 與純文字 body。
+只寫這一場真的有的資訊：沒有的欄位就不要提，不要自己補上參觀路線以外的安排，也不要另外再問 demo、設備、研究生之類的事——這一則只問一件事：誰來接待（要多少時間，老師在網址那張表上填）。
+**format="forum"（座談的場次）**：來賓是來跟中心老師們座談的，不參觀研究室——第 2 句要說明是座談；這一則只問一件事：老師能否出席座談（老師在網址那張表上選「可參加」或「無法參加」），不要提接待、參觀或分鐘。回傳 subject 與純文字 body。
 
 ${CENTER_FACTS}`
       : ctx.kind === "confirmation"
       ? `你替 GHRC 草擬參訪確認信。語氣：同行學者之間的誠懇與簡潔，不是服務業。用來賓的語言寫（language=zh 用繁體中文；en 用英文；ko／ja 用英文為主並在開頭與結尾附一句該語言問候）。
-內容：確認日期時間與地點（臺大園藝系造園館三樓；總體介紹在 briefing_location 那一間，之後依序走訪研究室）、當天流程（附 programme）、專屬網頁連結（訪前可先看五間研究室的老師背景）、對口老師。
+內容：確認日期時間與地點（臺大園藝系造園館三樓；總體介紹在 briefing_location 那一間，之後依序走訪研究室——**format="forum" 時不參觀研究室，之後是與中心老師座談**）、當天流程（附 programme）、專屬網頁連結（訪前可先看五間研究室的老師背景）、對口老師。
 不要問來賓任何問題；不要加交通、步行、穿著、天氣之類的提醒；不要提到中心以外的地點或單位。署名用提供的 sender。回傳 subject 與純文字 body。
 
 ${CENTER_FACTS}`
@@ -393,6 +398,10 @@ ${CENTER_FACTS}`
 ${CENTER_FACTS}`;
   const payload = {
     visit: { org: v.org, guests: v.guests.map((g) => ({ name: g.name, title: g.title })), date: v.date, start_time: v.start_time, programme: v.programme, itinerary: v.itinerary, language: v.language, contact_teacher: v.contact_teacher, purpose: v.purpose },
+    // forum＝座談的場次（跟中心老師們座談，不參觀研究室）
+    format: isForum(v) ? "forum" : "tour",
+    // 座談：五間的老師能否出席（支援人力表上選的）
+    attendees: internal && isForum(v) ? forumAttendees(v, ctx.labs) : undefined,
     briefing_location: briefingLocation,
     page_url: pageUrl,
     page_contents: ctx.kind === "thanks" ? contents.map((c) => c.zh) : undefined,
@@ -523,7 +532,7 @@ export async function summarizeVisit(visit: Visit, responses: ResponseRow[]): Pr
   if (isMock()) return mockSummary(visit, responses);
   const payload = { visit: { ...visit, letters: undefined }, responses };
   return plain(
-    `替 GHRC 寫一頁參訪摘要（繁體中文，Markdown，300 字內）。段落固定：誰來（單位、主要來賓、人數）；看了哪幾間各多久（用 visit.itinerary 當天排定的動線）；最想看什麼——**分兩行寫，來源不能混**：「來賓自己說」（responses 的 most_wanted_rooms）與「主持人聽到的」（visit.dictation 抽取），只有一邊有資料就只寫那一邊；問了哪些問題；想合作誰（來賓回的 cooperate_rooms；口述裡的合作意願另外一行寫「主持人記下」）；收到什麼建議（responses 的 suggestion，不具名的不要試圖猜是誰）；待辦。沒有資料的段落寫「（無）」。不要評分、不要用滿意度用語。\n\n${CENTER_FACTS}`,
+    `替 GHRC 寫一頁參訪摘要（繁體中文，Markdown，300 字內）。段落固定：誰來（單位、主要來賓、人數）；看了哪幾間各多久（用 visit.itinerary 當天排定的動線；visit.format 是 forum 的是**座談的場次、不參觀研究室**——這一段改寫「座談，不參觀研究室」，並列出席的老師：visit.attendance 是 yes 的那幾間的負責老師（no＝無法參加）；最想看什麼——**分兩行寫，來源不能混**：「來賓自己說」（responses 的 most_wanted_rooms）與「主持人聽到的」（visit.dictation 抽取），只有一邊有資料就只寫那一邊；問了哪些問題；想合作誰（來賓回的 cooperate_rooms；口述裡的合作意願另外一行寫「主持人記下」）；收到什麼建議（responses 的 suggestion，不具名的不要試圖猜是誰）；待辦。沒有資料的段落寫「（無）」。不要評分、不要用滿意度用語。\n\n${CENTER_FACTS}`,
     JSON.stringify(payload),
   );
 }
@@ -712,7 +721,8 @@ function mockPlan(visit: Visit, slidesIndex: any): Plan {
   const all: any[] = slidesIndex.slides || [];
   const total = Number(visit.duration_minutes) || 150;
   const labSteps = (visit.itinerary || []).map((s) => String(s.room)).filter((r) => r !== "briefing");
-  const rooms = (labSteps.length ? labSteps : ["301", "302", "303", "304", "305"]) as any[];
+  const forum = isForum(visit); // 座談：不參觀研究室，也不挑各研究室的頁
+  const rooms = (forum ? [] : labSteps.length ? labSteps : ["301", "302", "303", "304", "305"]) as any[];
   // 預設規則：總體介紹 20、每間 20、合照 5，剩下全給綜合討論
   const alloc = allocateProgramme(total, rooms.length);
   const briefing = alloc.briefing;
@@ -723,7 +733,9 @@ function mockPlan(visit: Visit, slidesIndex: any): Plan {
   const type = visit.org?.type || "university";
   const picked = new Set<number>(all.filter((s) => s.always).map((s) => s.n));
   let budget = briefing - 3.5;
-  const candidates = all.filter((s) => !s.always && !s.video && s.role !== "divider" && (!s.lab || rooms.includes(s.lab)));
+  // 座談：研究室那幾區整區不挑（含併在研究室那一區、沒標研究室的頁）
+  const labBlocks = new Set<number>(forum ? ((slidesIndex.groups || []) as any[]).filter((g) => (g.slides || []).some((n: number) => all.find((x) => x.n === n)?.lab)).flatMap((g) => g.slides) : []);
+  const candidates = all.filter((s) => !s.always && !s.video && s.role !== "divider" && (!s.lab || rooms.includes(s.lab)) && !labBlocks.has(s.n));
   candidates.sort((a, b) => score(b) - score(a));
   function score(s: any) {
     let sc = 0;
@@ -745,8 +757,11 @@ function mockPlan(visit: Visit, slidesIndex: any): Plan {
     b.push({ start, end: fmt(hm(start) + mins), kind, title_en: en, title_2nd: visit.language === "en" ? "" : second, rooms: rooms2, slides_range: range });
   };
   add("briefing", briefing, "Center overview and the laboratories", "中心簡介與研究室概覽", [], `01 – ${String(slides.length).padStart(2, "0")}`);
-  add("tour", tour, `Laboratory tour, Rooms ${rooms[0]} to ${rooms[rooms.length - 1]}`, `研究室參訪 ${rooms[0]}–${rooms[rooms.length - 1]}`, rooms, "—");
-  add("discussion", discussion, "General discussion", "綜合討論", [], "—");
+  if (forum) add("forum", total - briefing - photo, FORUM_TITLES.title_en, FORUM_TITLES.title_2nd, [], "—");
+  else {
+    add("tour", tour, `Laboratory tour, Rooms ${rooms[0]} to ${rooms[rooms.length - 1]}`, `研究室參訪 ${rooms[0]}–${rooms[rooms.length - 1]}`, rooms, "—");
+    add("discussion", discussion, "General discussion", "綜合討論", [], "—");
+  }
   if (photo) add("photo", photo, "Group photo in the panoramic cinema", "全景影院合照", ["304"], "—");
   const lead = visit.guests?.find((g) => g.role === "lead") || visit.guests?.[0];
   return {
@@ -785,14 +800,18 @@ function routeBlock(v: Visit, labs: any): string {
       ? `研究室參訪（${rooms.join("、") || "301–305"}，全程同一層樓）`
       : b.kind === "discussion"
       ? "綜合討論"
+      : b.kind === "forum"
+      ? "與中心老師座談"
       : b.kind === "photo"
       ? "合照"
       : b.title_2nd || b.title_en || "";
-  const lines = (v.programme || []).filter((b) => b && b.start && b.end).map((b) => `${b.start}–${b.end}　${label(b)}`);
+  const blocks = (v.programme || []).filter((b) => b && b.start && b.end);
+  const lines = blocks.map((b) => `${b.start}–${b.end}　${label(b)}`);
   return [
     "當天動線（時間已排定）：",
     ...lines,
-    "※ 研究室參訪時段目前尚未分配到各室，確定後再補上。",
+    // 座談的場次沒有研究室參訪，這一句就不用了
+    ...(blocks.some((b) => b.kind === "tour") ? ["※ 研究室參訪時段目前尚未分配到各室，確定後再補上。"] : []),
   ].join("\n");
 }
 
@@ -804,7 +823,18 @@ function routeBlock(v: Visit, labs: any): string {
  * 連結是自動產生的（`ensureRotaKey()`），所以一定帶得出去；沒有連結那條路只是保險。
  */
 function rollCallBlock(v: Visit, rotaUrl = ""): string {
-  return ["請各研究室回覆，該時段由哪位老師或人員接待", ...(rotaUrl ? [`${rotaUrl}#${v.visit_id}`] : [])].join("\n");
+  // 座談的場次不參觀研究室：問的是老師能否出席（各室的老師是固定的，支援人力表上那一場只選「可參加」「無法參加」）
+  const ask = isForum(v) ? "請各研究室回覆，老師能否出席座談" : "請各研究室回覆，該時段由哪位老師或人員接待";
+  return [ask, ...(rotaUrl ? [`${rotaUrl}#${v.visit_id}`] : [])].join("\n");
+}
+
+/**
+ * 座談的場次：五間的老師能否出席（支援人力表上選的；還沒選就是空的）。回報那一則照這一份列。
+ * 各研究室的老師是固定的（負責人），所以只記「可參加」「無法參加」，不記名字。
+ */
+const ATTEND_LABEL: Record<string, string> = { yes: "可參加", no: "無法參加" };
+function forumAttendees(v: Visit, labs: any): { room: string; name_zh: string; lead: string; attend: string }[] {
+  return ((labs && labs.labs) || []).map((l: any) => ({ room: String(l.room), name_zh: l.name_zh || "", lead: l.lead?.name_zh || l.lead?.name_en || "", attend: ATTEND_LABEL[(v as any).attendance?.[l.room]] || "" }));
 }
 
 /**
@@ -834,13 +864,15 @@ function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, con
         }
       : {
           subject: `（AI_MOCK）定案回報：${v.org?.name || v.visit_id} ${v.date}`,
-          body: `各位老師好：\n\n${head}\n\n定案動線與簡報人員：\n${stops.map(line).join("\n")}\n\n有問題直接回這則訊息。`,
+          body: isForum(v)
+            ? `各位老師好：\n\n${head}　座談\n\n${(v.programme || []).map((b) => `${b.start}–${b.end}　${b.title_2nd || b.title_en}`).join("\n")}\n\n座談出席：\n${forumAttendees(v, ctx.labs).map((x) => `${x.room} ${x.name_zh}　${x.lead}　${x.attend || "（待回覆）"}`).join("\n")}\n\n有問題直接回這則訊息。`
+            : `各位老師好：\n\n${head}\n\n定案動線與簡報人員：\n${stops.map(line).join("\n")}\n\n有問題直接回這則訊息。`,
         };
   }
   if (ctx.kind === "confirmation") {
     return {
       subject: `(AI_MOCK) Your visit to the Green Health Research Center, ${v.date}`,
-      body: `Dear colleagues,\n\nWe look forward to welcoming ${v.org?.name || "you"} on ${v.date} at ${v.start_time}. We begin with a short overview in Room ${location}, Landscape Building, 3rd floor, and then walk through the laboratories next door.\n\nProgramme and the laboratories you will see: ${pageUrl}\n\n${senderBlock(ctx)}`,
+      body: `Dear colleagues,\n\nWe look forward to welcoming ${v.org?.name || "you"} on ${v.date} at ${v.start_time}. We begin with a short overview in Room ${location}, Landscape Building, 3rd floor, ${isForum(v) ? "followed by a roundtable with the faculty" : "and then walk through the laboratories next door"}.\n\n${isForum(v) ? "Programme and the faculty you will meet" : "Programme and the laboratories you will see"}: ${pageUrl}\n\n${senderBlock(ctx)}`,
     };
   }
   // 只提頁面上真的有的東西（page_contents），跟真提示詞同一條規則
@@ -872,7 +904,9 @@ function mockSummary(v: Visit, responses: ResponseRow[]): string {
     `# ${v.org?.name || v.visit_id} · ${v.date}`,
     "",
     `**誰來**：${v.org?.name || "（無）"}，${lead ? `${lead.name} ${lead.title}` : ""}，${v.headcount || v.guests?.length || 0} 人`,
-    `**看了哪幾間**：${(v.itinerary || []).filter((s) => Number(s.minutes) > 0).map((s) => `${s.room}（${s.minutes} 分）`).join("、") || "（無）"}`,
+    isForum(v)
+      ? `**看了哪幾間**：座談，不參觀研究室${Object.entries((v as any).attendance || {}).some(([, a]) => a === "yes") ? `（出席：${Object.entries((v as any).attendance).filter(([, a]) => a === "yes").map(([room]) => room).sort().join("、")}）` : ""}`
+      : `**看了哪幾間**：${(v.itinerary || []).filter((s) => Number(s.minutes) > 0).map((s) => `${s.room}（${s.minutes} 分）`).join("、") || "（無）"}`,
     `**最想看什麼（來賓自己說）**：${[...new Set(responses.flatMap((r) => r.most_wanted_rooms || []))].join("、") || "（無）"}`,
     `**最想看什麼（主持人聽到的）**：${(v.dictation?.extracted?.most_wanted_rooms || []).join("、") || "（無）"}`,
     `**問了哪些問題**：${(v.dictation?.extracted?.questions || []).map((q) => `\n- ${q}`).join("") || "（無）"}`,

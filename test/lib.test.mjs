@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
 import { weekdayOf } from "../public/lib/rota.mjs";
-import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
+import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION, toForumProgramme, labRecipients, labStops, FORUM_TITLES } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -429,6 +429,32 @@ test("隱私權政策 /privacy：每一個外部服務、每一個 Google 權限
     assert.match(t, /Limited Use/, `Limited Use（${lang}）`);
     assert.match(t, /ntughrc@gmail\.com/, `聯絡信箱（${lang}）`);
   }
+});
+
+test("座談的場次：總體介紹 → 座談、沒有研究室參訪；換成座談時研究室參訪的時間給座談；支援人力表與通告五間都問", () => {
+  // 明確指示：「有一些單位參訪是跟老師們座談，不用介紹各研究室」
+  const forum = defaultProgramme({ format: "forum", start_time: "14:00", duration_minutes: 120 });
+  assert.deepEqual(forum.map((b) => [b.kind, b.start, b.end]), [["briefing", "14:00", "14:20"], ["forum", "14:20", "16:00"]]);
+  assert.equal(forum[1].title_en, FORUM_TITLES.title_en);
+  // 從照常參觀的流程換過來：研究室參訪拿掉、那一段的時間給座談（綜合討論就是座談），結束時間不變，合照照舊
+  const tour = [
+    { start: "10:00", end: "10:20", kind: "briefing", title_en: "Welcome", title_2nd: "歡迎" },
+    { start: "10:20", end: "12:00", kind: "tour", title_en: "Laboratory visits", title_2nd: "研究室參訪", rooms: ["301", "302"] },
+    { start: "12:00", end: "12:25", kind: "discussion", title_en: "General discussion", title_2nd: "綜合討論" },
+    { start: "12:25", end: "12:30", kind: "photo", title_en: "Photo", title_2nd: "合照" },
+  ];
+  const conv = toForumProgramme(tour, "10:00");
+  assert.deepEqual(conv.map((b) => [b.kind, b.start, b.end]), [["briefing", "10:00", "10:20"], ["forum", "10:20", "12:25"], ["photo", "12:25", "12:30"]]);
+  assert.equal(conv[1].title_2nd, FORUM_TITLES.title_2nd);
+  assert.deepEqual(toForumProgramme(tour.filter((b) => b.kind !== "discussion"), "10:00").map((b) => b.kind), ["briefing", "forum", "photo"], "沒有綜合討論就在總體介紹後面補一段座談");
+  assert.deepEqual(toForumProgramme(conv, "10:00"), conv, "已經是座談的再換一次不變");
+  // 支援人力表：五間都列、每一間只問出席的老師；通告五間都寄、時間寫座談那一段；動線上沒有研究室
+  const labs = { labs: ["301", "302", "303", "304", "305"].map((room) => ({ room, name_zh: `${room} 室`, lead: { name_zh: `老師${room}` } })) };
+  const v = { format: "forum", programme: conv, itinerary: [{ room: "briefing", minutes: 20 }] };
+  assert.deepEqual(rotaRooms(v, labs), { rooms: ["301", "302", "303", "304", "305"], planned: true, forum: true });
+  assert.deepEqual(labRecipients(v, labs).map((r) => [r.room, r.start, r.end]), ["301", "302", "303", "304", "305"].map((room) => [room, "10:20", "12:25"]));
+  assert.deepEqual(labStops({ ...v, itinerary: [{ room: "briefing", minutes: 20 }, { room: "301", minutes: 20 }] }, labs), [], "座談不參觀研究室：動線上殘留研究室也不算");
+  assert.equal(rotaRooms({ itinerary: [{ room: "briefing", minutes: 20 }] }, labs).forum, undefined, "照常參觀的場次不受影響");
 });
 
 test("後台的英文：畫面上每一句中文都有翻譯", () => {
