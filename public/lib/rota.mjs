@@ -33,19 +33,28 @@ const CSS = `
 .rota-card.rota-focus { outline: 3px solid #0f766e; outline-offset: 2px; }
 .rota-muted { color: #78716c; font-size: .86rem; }
 .rota-over { font-weight: 600; color: #57534e; }
-.rota-grid { display: grid; gap: .5rem; margin-top: .75rem; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+/*
+ * 老師多半是從 LINE 點連結、用手機填（實際回報：手機上整頁比螢幕寬，右邊那一欄與字尾都被切掉）。
+ * 所以：手機上一間一列（一格至少 11rem，放不下兩格就一格；字放大了 rem 跟著變大，也就自動變一欄），
+ * 格子裡的東西可以縮、可以換行，整頁不會被撐寬；桌機照樣五間一排。
+ */
+.rota-grid { display: grid; gap: .6rem; margin-top: .75rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr)); }
 /* 名稱長的那一間（305）會換行：名稱吃掉多出來的高度，兩格就跟隔壁對齊在底下 */
-.rota-cell { border-top: 3px solid var(--tone); border-radius: .5rem; padding: .4rem .5rem; background: #fff; display: flex; flex-direction: column; }
+.rota-cell { border-top: 3px solid var(--tone); border-radius: .5rem; padding: .45rem .55rem; background: #fff; display: flex; flex-direction: column; min-width: 0; }
 .rota-cell > .rota-lab { flex: 1 0 auto; }
 .rota-past .rota-cell { background: #f5f5f4; border-top-color: #d6d3d1 !important; }
 .rota-past .rota-lab { color: #a8a29e !important; }
-.rota-lab { font-size: .78rem; font-weight: 600; }
+.rota-lab { font-size: .9rem; font-weight: 600; }
 .rota-in { display: block; width: 100%; margin-top: .3rem; border: 1px solid #d6d3d1; border-radius: .45rem; padding: .3rem .5rem; font-size: .92rem; background: #fff; box-sizing: border-box; color: inherit; }
 .rota-in:focus { outline: 2px solid var(--tone); outline-offset: 1px; }
 .rota-in:disabled { background: #f5f5f4; color: #a8a29e; border-style: dashed; }
 .rota-in.rota-saved { border-color: #15803d; }
-.rota-min { display: flex; align-items: center; gap: .35rem; margin-top: .3rem; font-size: .88rem; color: #57534e; }
-.rota-min .rota-in { display: inline-block; width: 4.2em; margin-top: 0; text-align: right; }
+.rota-min { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin-top: .35rem; font-size: .95rem; color: #57534e; }
+.rota-min > span { white-space: nowrap; } /* 「共需」「分鐘」不要被拆成一個字一行 */
+.rota-min .rota-in { display: inline-block; width: 4.5em; margin-top: 0; text-align: right; }
+/* 手機上的格子字至少 16px：看得清楚，iPhone 點下去也不會自己放大（小於 16px 的輸入框一點就整頁放大，放大了就要左右捲） */
+.rota-cell .rota-in { font-size: 1rem; padding: .4rem .55rem; max-width: 100%; }
+.rota-title { font-size: 1.05rem; overflow-wrap: anywhere; }
 .rota-past .rota-min { color: #a8a29e; }
 .rota-bg > summary { cursor: pointer; list-style: none; font-size: .88rem; font-weight: 500; margin-top: .5rem; }
 .rota-bg > summary::-webkit-details-marker { display: none; }
@@ -123,14 +132,14 @@ function card(v, labs) {
           return `<div class="rota-cell" style="--tone:${tone}">
               <div class="rota-lab" style="color:${tone}">${esc(s.room)} ${esc(l.name_zh)}</div>
               <input class="rota-in" ${attrs} data-field="name" value="${esc(v.presenters?.[s.room] || "")}" placeholder="${v.past ? "" : "接待人員"}" aria-label="${esc(s.room)} 接待人員">
-              <label class="rota-min">共需 <input class="rota-in" ${attrs} data-field="minutes" inputmode="numeric" maxlength="3" value="${esc(mins == null ? "" : String(mins))}" aria-label="${esc(s.room)} 共需幾分鐘"> 分鐘</label>
+              <label class="rota-min"><span>共需</span><input class="rota-in" ${attrs} data-field="minutes" inputmode="numeric" maxlength="3" value="${esc(mins == null ? "" : String(mins))}" aria-label="${esc(s.room)} 共需幾分鐘"><span>分鐘</span></label>
             </div>`;
         })
         .join("")}</div>`
     : `<p class="rota-muted" style="margin-top:.5rem">行程還沒排，排好之後這裡就會列出要走哪幾間。</p>`;
   return `<section class="rota-card ${v.past ? "rota-past" : ""}" data-rota-visit="${esc(v.visit_id)}">
       <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:.25rem .75rem">
-        <b>${esc(v.org?.name)}</b>
+        <b class="rota-title">${esc(v.org?.name)}</b>
         ${v.org?.name_local && v.org.name_local !== v.org.name ? `<span class="rota-muted">${esc(v.org.name_local)}</span>` : ""}
         <span class="rota-muted">${esc(when)}</span>
         ${v.headcount ? `<span class="rota-muted">${esc(String(v.headcount))} 位</span>` : ""}

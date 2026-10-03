@@ -679,6 +679,22 @@ try {
     const row = page.locator(`#rows section[data-rota-visit="${id}"]`);
     check((await row.locator(".rota-cell").first().locator("input").count()) === 2 && (await page.locator('[data-field="hours"]').count()) === 0, "each lab fills in just two things: who will host, and how many minutes");
     check(/接待人員/.test(await page.textContent("header")) && /共需幾分鐘/.test(await page.textContent("header")), "…and the one line on top says exactly that");
+    {
+      // 老師多半是從 LINE 點連結、用手機填（實際回報：手機上整頁比螢幕寬，右邊那一欄與字尾被切掉）：
+      // 一間一列、不必左右捲，格子的字至少 16px（看得清楚；iPhone 點下去也不會自己放大）
+      const phone = await browser.newContext({ viewport: { width: 375, height: 800 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+      const mp = await phone.newPage();
+      await mp.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+      await mp.goto(`${base}/rota?key=${key}#${id}`);
+      await mp.waitForSelector(`#rows section[data-rota-visit="${id}"] .rota-cell`, { timeout: 30000 });
+      const fit = await mp.evaluate((vid) => {
+        const grid = document.querySelector(`section[data-rota-visit="${vid}"] .rota-grid`);
+        const words = [...grid.querySelectorAll(".rota-min > span")].map((e) => e.getClientRects().length);
+        return { inner: innerWidth, scroll: document.documentElement.scrollWidth, cols: getComputedStyle(grid).gridTemplateColumns.split(" ").length, px: parseFloat(getComputedStyle(grid.querySelector(".rota-in")).fontSize), oneLine: words.every((n) => n === 1) };
+      }, id);
+      check(fit.scroll <= fit.inner && fit.cols === 1 && fit.px >= 16 && fit.oneLine, `on a phone the rota fits the screen: one lab per row, nothing to scroll sideways, 16px boxes, 共需／分鐘 on one line (${JSON.stringify(fit)})`);
+      await phone.close();
+    }
     await row.locator(`input[data-room="${room}"][data-field="name"]`).fill("王小明");
     await row.locator(`input[data-room="${room}"][data-field="minutes"]`).fill("２５分");
     check((await row.locator(`input[data-room="${room}"][data-field="minutes"]`).inputValue()) === "25", "typing 「２５分」 leaves just the number");
