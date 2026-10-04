@@ -724,6 +724,9 @@
   "可參加": "Can attend",
   "照片比例更正 # 張：母簡報裡被拉變形的照片，整張照原比例放回框裡": "Fixed the proportions of # pictures: pictures stretched out of shape in the master slides are now shown whole, in their own proportions, inside their frames",
   "封面找不到寫來賓的那一塊（單位、來賓、日期），封面沒有換": "Could not find the part of the cover that names the guests (organisation, guests, date), so the cover was left as it is",
+  "沒有帶母簡報的講稿（# 頁）：那是寫給上一次來賓的，寄出去對方也看得到": "Left out the master's speaker notes (# slides): they were written for the previous visitors, and anyone you send the file to could read them",
+  "目錄頁的排法認不出來，目錄沒有跟著選頁改": "Could not make out the layout of the contents slide, so it does not follow the chosen slides",
+  "目錄頁照母簡報：選到的頁看不出屬於哪一章": "The contents slide is as in the master: none of the chosen slides shows which chapter it belongs to",
   "無法參加": "Cannot attend",
   "請選擇": "Choose",
   "座談・選可否出席": "Roundtable · can the teacher attend?",
@@ -1031,6 +1034,10 @@
   [
    "^第 (\\d+) 頁 (.+)$",
    "Slide $1 $2"
+  ],
+  [
+   "^目錄頁只留這一份講到的章節：(.+)$",
+   "The contents slide lists only the chapters in this deck: $1"
   ],
   [
    "^封面換成這一場：(.+)$",

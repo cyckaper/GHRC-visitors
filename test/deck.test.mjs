@@ -82,7 +82,8 @@ test("build: subset, edits, programme table, Korean swap, ask + QR slides, orpha
   assert.ok(!files.some((f) => f.endsWith(".mp4")), "video from dropped slide removed");
   assert.ok(!files.includes("ppt/media/image3.png"), "big image from dropped slide removed");
   assert.ok(files.includes("ppt/media/image1.png"), "portrait shared by kept slides stays");
-  assert.equal(files.filter((f) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(f)).length, 1, "only the kept slide's notes remain");
+  assert.equal(files.filter((f) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(f)).length, 0, "the master's speaker notes are left out (they were written for the previous visitors)");
+  assert.equal(report.notes_removed, 1);
   const slides = await deck.slides();
   assert.equal(slides.length, 8);
   const cover = await deck.paragraphs(slides[0].path);
@@ -92,7 +93,8 @@ test("build: subset, edits, programme table, Korean swap, ask + QR slides, orpha
   assert.ok(prog.includes("10:00 – 10:20") && prog.includes("센터 개요") && prog.includes("11:20 – 11:30"), "table filled with 4 rows");
   assert.ok(!prog.includes("研究室參訪 301–305"), "old table rows gone");
   const xml3 = await deck.text(slides[2].path);
-  assert.ok(/\[ko\] 為什麼是現在/.test(xml3), "Chinese run replaced by translation");
+  assert.ok(/\[ko\] 四間研究室/.test(xml3), "Chinese run replaced by translation");
+  assert.ok(!/為什麼是現在/.test(xml3), "the contents slide keeps only the chapters in this deck (slide 9 is chapter 03)");
   assert.ok(/lang="ko-KR"[^>]*>\s*<a:ea typeface="Malgun Gothic"\/>/.test(xml3), "Korean font set on translated runs");
   for (const m of xml3.matchAll(/<a:t>([^<]*)<\/a:t>/g)) if (/\p{Script=Han}/u.test(m[1])) assert.ok(m[1].startsWith("[ko] "), `untranslated run left on contents slide: ${m[1]}`);
   const askTitle = await deck.paragraphs(slides[6].path);
@@ -424,6 +426,100 @@ test("封面找不到寫來賓的那一塊：報告說一聲，照樣產檔", { 
   assert.equal(report.cover, undefined);
   assert.ok(report.warnings.some((w) => w.includes("封面找不到寫來賓的那一塊")), report.warnings.join(" | "));
   assert.deepEqual(report.validation.errors, []);
+});
+
+/** 目錄頁上每一張卡片（底、圓圈、文字框）的位置與文字。 */
+async function contentsCardsOf(deck, slidePath) {
+  const xml = await deck.text(slidePath);
+  return [...xml.matchAll(/<p:sp>[\s\S]*?<\/p:sp>/g)].map((m) => m[0]).map((sp) => ({ off: /<a:off x="(\d+)" y="(\d+)"/.exec(sp)?.slice(1).map(Number), text: [...sp.matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((t) => t[1]).join("|") }));
+}
+
+test("目錄頁只留這一份講到的章節，留下來的卡片往前補位；「09 提問回覆」那一句也拿掉", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
+  // 明確指示：「第 3 頁目錄跟著選頁改」——目錄還寫著上一次韓國團的「對六項提問的回覆」「09 Responses to Your Questions」
+  const master = await readFile(FIXTURE);
+  const before = await contentsCardsOf(await Deck.load(master), "ppt/slides/slide3.xml");
+  const at = (cards, text) => cards.find((c) => c.text === text)?.off;
+  // 第 6 頁是第 01 章的分隔頁（「01」下一行就是目錄上的「Why Now」），第 9 頁的頁眉是「03 · FOUR LABORATORIES」
+  const { pptx, report } = await buildDeck({ ...spec, language: "zh", slides: [1, 2, 3, 6, 9, 10], text_edits: [] }, master, { slidesIndex, lang: "zh" });
+  assert.deepEqual(report.contents, { all: ["01", "02", "03", "04", "08", "09"], kept: ["01", "03"] });
+  const deck = await Deck.load(pptx);
+  const after = await contentsCardsOf(deck, (await deck.slides())[2].path);
+  const words = after.map((c) => c.text).join(" ");
+  assert.ok(!/Core Proposition|Research Outcomes|The Next Three Years|Responses to Your Questions|提問回覆/.test(words), words);
+  assert.deepEqual(at(after, "Why Now|為什麼是現在"), at(before, "Why Now|為什麼是現在"), "01 留在第一個位置");
+  assert.deepEqual(at(after, "Four Laboratories|四間研究室"), at(before, "Core Proposition|核心主張"), "03 搬到原本 02 的位置，不留空洞");
+  assert.deepEqual(at(after, "03"), at(before, "02"), "圓圈跟著整張卡片一起搬");
+  assert.ok(after.some((c) => c.text === "要解決什麼問題、用什麼解決、未來三年"), "副標題裡「以及對六項提問的回覆」拿掉");
+  assert.deepEqual(report.validation.errors, []);
+
+  // 組織架構那一頁的頁眉誤標成「08 · THE NEXT THREE YEARS」：不能因為它就把 08 留在目錄上
+  const org = await buildDeck({ ...spec, language: "zh", slides: [1, 2, 3, 5, 9, 10], text_edits: [] }, master, { slidesIndex, lang: "zh" });
+  assert.deepEqual(org.report.contents.kept, ["03"]);
+
+  // 選到的頁看不出屬於哪一章：目錄照母簡報，報告說一聲
+  const bare = await buildDeck({ ...spec, language: "zh", slides: [1, 2, 3, 10], text_edits: [] }, master, { slidesIndex, lang: "zh" });
+  assert.equal(bare.report.contents, undefined);
+  assert.ok(bare.report.warnings.some((w) => w.includes("目錄頁照母簡報")), bare.report.warnings.join(" | "));
+
+  // 目錄不在索引寫的那一頁（站台上的母簡報就是：目錄在第 2 頁）也認得出來
+  const moved = await buildDeck({ ...spec, language: "zh", slides: [1, 2, 3, 6, 9, 10], text_edits: [] }, master, { slidesIndex: { slides: [{ n: 1, role: "cover" }, { n: 2, role: "contents" }] }, lang: "zh" });
+  assert.deepEqual(moved.report.contents.kept, ["01", "03"]);
+});
+
+test("目錄頁的卡片是一張一個群組、或沒有底的排法也認得；認不出來就不動", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
+  const xfrm = (x, y, cx, cy) => `<a:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>`;
+  const sp = (id, x, y, cx, cy, ...paras) => `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="S${id}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>${xfrm(x, y, cx, cy)}</p:spPr><p:txBody><a:bodyPr/>${(paras.length ? paras : [""]).map((t) => `<a:p><a:r><a:t>${t}</a:t></a:r></a:p>`).join("")}</p:txBody></p:sp>`;
+  const page = (body) => `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>${body}</p:spTree></p:cSld></p:sld>`;
+  const zipOf = async (xml) => {
+    const base = await Deck.load(await readFile(FIXTURE));
+    base.set("ppt/slides/slide3.xml", xml);
+    return base;
+  };
+  // 一張卡片一個群組（底、圓圈、文字都在群組裡），三張排成一欄
+  const card = (i, no, en) => `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${10 + i}" name="G${i}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr>${xfrm(0, i * 1000000, 5000000, 900000).replace("</a:xfrm>", '<a:chOff x="0" y="0"/><a:chExt cx="5000000" cy="900000"/></a:xfrm>')}</p:grpSpPr>${sp(100 + i, 0, 0, 5000000, 900000)}${sp(200 + i, 100000, 200000, 400000, 400000, no)}${sp(300 + i, 700000, 100000, 4000000, 700000, en)}</p:grpSp>`;
+  let d = await zipOf(page(sp(2, 0, 0, 9000000, 500000, "CONTENTS · 簡報架構") + card(0, "01", "Why Now") + card(1, "02", "Core Proposition") + card(2, "03", "Five Laboratories")));
+  assert.deepEqual(await d.contentsItems("ppt/slides/slide3.xml"), [{ no: "01", title: "Why Now" }, { no: "02", title: "Core Proposition" }, { no: "03", title: "Five Laboratories" }]);
+  assert.deepEqual(await d.keepContents("ppt/slides/slide3.xml", new Set(["03"])), { all: ["01", "02", "03"], kept: ["03"] });
+  let xml = await d.text("ppt/slides/slide3.xml");
+  assert.ok(!/Why Now|Core Proposition/.test(xml));
+  assert.match(xml, /name="G2"\/>[\s\S]*?<p:grpSpPr><a:xfrm><a:off x="0" y="0"\/>/, "03 那一整個群組搬到第一個位置");
+
+  // 沒有底：圓圈右邊、同一列的文字就是那一章的標題（兩欄）
+  d = await zipOf(page(sp(2, 0, 0, 9000000, 500000, "Contents") + sp(3, 0, 1000000, 400000, 400000, "01") + sp(4, 600000, 1000000, 3000000, 400000, "Why Now") + sp(5, 5000000, 1000000, 400000, 400000, "02") + sp(6, 5600000, 1000000, 3000000, 400000, "Core Proposition")));
+  assert.deepEqual(await d.keepContents("ppt/slides/slide3.xml", new Set(["02"])), { all: ["01", "02"], kept: ["02"] });
+  xml = await d.text("ppt/slides/slide3.xml");
+  assert.match(xml, /<a:off x="0" y="1000000"\/>[\s\S]*?<a:t>02<\/a:t>/);
+  assert.match(xml, /<a:off x="600000" y="1000000"\/>[\s\S]*?<a:t>Core Proposition<\/a:t>/);
+
+  // 沒有底、章節號底下墊一個圓圈（沒有字的形狀）：圓圈跟著章節號一起搬，拿掉的那一章圓圈也一起拿掉
+  d = await zipOf(page(sp(2, 0, 0, 9000000, 500000, "Contents") + sp(7, 0, 1000000, 500000, 500000) + sp(3, 50000, 1050000, 400000, 400000, "01") + sp(4, 700000, 1050000, 3000000, 400000, "Why Now") + sp(8, 5000000, 1000000, 500000, 500000) + sp(5, 5050000, 1050000, 400000, 400000, "02") + sp(6, 5700000, 1050000, 3000000, 400000, "Core Proposition")));
+  assert.deepEqual(await d.keepContents("ppt/slides/slide3.xml", new Set(["02"])), { all: ["01", "02"], kept: ["02"] });
+  xml = await d.text("ppt/slides/slide3.xml");
+  assert.ok(!/name="S7"/.test(xml), "01 的圓圈一起拿掉");
+  assert.match(xml, /name="S8"\/>[\s\S]*?<a:off x="0" y="1000000"\/>/, "02 的圓圈搬到第一個位置");
+
+  // 一個文字框寫了好幾個章節號：認不出來，不動
+  d = await zipOf(page(sp(2, 0, 0, 9000000, 500000, "Contents") + sp(3, 0, 1000000, 4000000, 3000000, "01", "Why Now", "02", "Core Proposition")));
+  assert.equal(await d.keepContents("ppt/slides/slide3.xml", new Set(["02"])), null);
+});
+
+test("產出的簡報不帶母簡報的講稿（寫給上一次來賓的），母簡報本身不動", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
+  // 明確指示：「講稿：產檔時拿掉」。母簡報第 2 頁、第 7 頁有講稿
+  const master = await readFile(FIXTURE);
+  assert.ok((await Deck.load(master)).files().some((f) => /notesSlide\d+\.xml$/.test(f)));
+  const { pptx, report } = await buildDeck({ ...spec, language: "zh", slides: [1, 2, 7, 10], text_edits: [] }, master, { slidesIndex, lang: "zh" });
+  const deck = await Deck.load(pptx);
+  assert.equal(report.notes_removed, 2);
+  assert.ok(!deck.files().some((f) => /notesSlide/.test(f)), deck.files().filter((f) => /notes/.test(f)).join(", "));
+  for (const s of await deck.slides()) assert.ok(!(await deck.rels(s.path)).some((r) => /notesSlide$/.test(r.type)), `${s.path} 還連著講稿`);
+  assert.deepEqual(report.validation.errors, []);
+});
+
+test("母簡報各頁頁眉寫的「FOUR LABORATORIES」也更正成五間", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
+  const { pptx, report } = await buildDeck({ ...spec, language: "zh", slides: [1, 2, 9, 10], text_edits: [] }, await readFile(FIXTURE), { slidesIndex, masterFixes, lang: "zh" });
+  const text = (await (await Deck.load(pptx)).paragraphs("ppt/slides/slide9.xml")).join(" ");
+  assert.ok(text.includes("03 · FIVE LABORATORIES") && !text.includes("FOUR"), text);
+  assert.ok(report.fixes.some((f) => f.find === "FOUR LABORATORIES"));
 });
 
 test("瘦身：縮完的圖換副檔名時不能蓋掉另一張同名的圖；縮完比例不對就維持原檔", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {

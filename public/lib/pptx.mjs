@@ -40,6 +40,14 @@ const GUEST_LINE = /^(?:(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof|Professor|Sir|Dame|Hon|Rev)
 /** 「像日期的一行」：7 September 2026、Sep 7, 2026、2026 年 9 月 7 日、2026년 9월 7일、2026-09-07。 */
 const MONTH_RE = "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\.?";
 const DATE_LINE = new RegExp(`\\b\\d{1,2}\\s+${MONTH_RE}\\s+\\d{4}\\b|\\b${MONTH_RE}\\s+\\d{1,2},?\\s+\\d{4}\\b|\\d{4}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日|\\d{4}년\\s*\\d{1,2}월\\s*\\d{1,2}일|\\b\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}\\b`, "i");
+/** 目錄頁（母簡報的「CONTENTS · 簡報架構」）。 */
+const CONTENTS_TITLE = /^CONTENTS\b|簡報架構|^Contents$|^目錄$/i;
+/** 目錄上的章節號（01–09，自己一段）。 */
+const CHAPTER_NO = /^0[1-9]$/;
+/** 章節頁眉：「03 · FOUR LABORATORIES · 01 MEASURE · 量測」＝這一頁屬於第 03 章。 */
+const KICKER = /^(0[1-9])\s*[·•・‧]\s*\S/;
+/** 組織架構那一頁：母簡報把它的頁眉誤標成「08 · THE NEXT THREE YEARS」（見 CLAUDE.md 的頁次表），不能拿來算章節。 */
+const ORG_TITLE = /^(?:Organisation|Organization|組織架構)$/i;
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const unesc = (s) => String(s).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d)).replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&amp;/g, "&");
@@ -55,6 +63,113 @@ const attrsOf = (tag) => Object.fromEntries([...tag.matchAll(/\s([\w:]+)="([^"]*
 const withAttrs = (tag, values) => Object.entries(values).reduce((t, [k, v]) => t.replace(new RegExp(`(\\s${k}=")[^"]*(")`), (_, a, b) => `${a}${v}${b}`), tag);
 /** 一段（a:p）的文字，run 合併。 */
 const paraText = (p) => [...p.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map((m) => unesc(m[1])).join("");
+/** 一個元素裡每一段的文字（空的不算）。 */
+const parasOf = (x) => [...x.matchAll(/<a:p\b[^>]*>[\s\S]*?<\/a:p>/g)].map((p) => paraText(p[0]).trim()).filter(Boolean);
+/**
+ * spTree（或一個群組）裡**直屬**的元素：[{ start, end, tag, xml }]。群組會巢狀，數深度找對應的結束標籤；
+ * 群組自己的 nvGrpSpPr／grpSpPr 不算元素。
+ */
+function childElements(inner) {
+  const out = [];
+  const open = /<(p:sp|p:pic|p:cxnSp|p:graphicFrame|p:grpSp|p:contentPart|mc:AlternateContent)\b[^>]*?(\/?)>/g;
+  let m;
+  while ((m = open.exec(inner))) {
+    const tag = m[1];
+    let end;
+    if (m[2] === "/") end = open.lastIndex;
+    else if (tag === "p:grpSp" || tag === "mc:AlternateContent") {
+      const re = new RegExp(`<${tag}\\b[^>]*?(/?)>|</${tag}>`, "g");
+      re.lastIndex = open.lastIndex;
+      let depth = 1, t;
+      while (depth && (t = re.exec(inner))) if (t[0].startsWith("</")) depth--; else if (!t[1]) depth++;
+      end = depth ? inner.length : re.lastIndex;
+    } else {
+      const close = inner.indexOf(`</${tag}>`, open.lastIndex);
+      end = close < 0 ? inner.length : close + tag.length + 3;
+    }
+    out.push({ start: m.index, end, tag, xml: inner.slice(m.index, end) });
+    open.lastIndex = end;
+  }
+  return out;
+}
+/** 元素在投影片上的位置與大小（群組看 grpSpPr，表格看 p:xfrm）；沒寫就是 null。off＝那一個 a:off 標籤（搬動時改它）。 */
+function boundsOf(el) {
+  let xfrm;
+  if (el.tag === "p:grpSp") {
+    const pr = /<p:grpSpPr\b[^>]*\/>|<p:grpSpPr\b[^>]*>[\s\S]*?<\/p:grpSpPr>/.exec(el.xml)?.[0];
+    xfrm = pr && /<a:xfrm\b[\s\S]*?<\/a:xfrm>/.exec(pr)?.[0];
+  } else if (el.tag === "p:graphicFrame") xfrm = /<p:xfrm\b[\s\S]*?<\/p:xfrm>/.exec(el.xml)?.[0];
+  else if (el.tag !== "mc:AlternateContent") xfrm = /<a:xfrm\b[\s\S]*?<\/a:xfrm>/.exec(el.xml)?.[0];
+  const off = xfrm && /<a:off\b[^>]*\/>/.exec(xfrm)?.[0], ext = xfrm && /<a:ext\b[^>]*\/>/.exec(xfrm)?.[0];
+  if (!off || !ext) return null;
+  const o = attrsOf(off), e = attrsOf(ext);
+  return [o.x, o.y, e.cx, e.cy].every((v) => Number.isFinite(+v)) ? { x: +o.x, y: +o.y, cx: +e.cx, cy: +e.cy, off } : null;
+}
+/**
+ * 目錄頁上一章一張的卡片。母簡報的目錄是兩欄的卡片（圓角底＋綠色圓圈裡的章節號＋英文、中文標題），
+ * 可能是分開的幾個形狀，也可能每一張是一個群組（整張表包在一個群組裡也行，往裡面找一層）。
+ * 一張卡片＝一個章節號（01–09）＋它的底（裡面只有這一個章節號、比圓圈大的最小那一個形狀）與底上面的東西；
+ * 沒有底就拿同一列、圓圈右邊的文字。認不出來（一個形狀裡好幾個章節號、一個形狀屬於兩張卡片……）就回 null，不去動。
+ * 回傳 { base, inner, kids, items:[{ no, title, els, box }] }：base 是 inner 在整頁 XML 裡的位置。
+ */
+function contentsCards(xml) {
+  const tree = /<p:spTree\b[^>]*>([\s\S]*)<\/p:spTree>/.exec(xml);
+  if (!tree) return null;
+  let base = tree.index + tree[0].indexOf(tree[1]);
+  let inner = tree[1];
+  const center = (b) => ({ x: b.x + b.cx / 2, y: b.y + b.cy / 2 });
+  const inside = (p, b) => p.x >= b.x && p.x <= b.x + b.cx && p.y >= b.y && p.y <= b.y + b.cy;
+  const area = (b) => b.cx * b.cy;
+  for (let depth = 0; depth < 4; depth++) {
+    const kids = childElements(inner).map((el) => ({ ...el, paras: parasOf(el.xml), box: boundsOf(el) }));
+    const count = (k) => k.paras.filter((t) => CHAPTER_NO.test(t)).length;
+    const numbered = kids.filter((k) => count(k) > 0);
+    if (!numbered.length) return null;
+    if (numbered.length === 1 && numbered[0].tag === "p:grpSp" && count(numbered[0]) > 1) {
+      const g = numbered[0];
+      const head = /^<p:grpSp\b[^>]*>/.exec(g.xml)[0];
+      base += g.start + head.length;
+      inner = g.xml.slice(head.length, g.xml.length - "</p:grpSp>".length);
+      continue;
+    }
+    if (numbered.some((k) => count(k) > 1 || !k.box)) return null;
+    const used = new Set();
+    const items = [];
+    for (const n of numbered) {
+      const ni = kids.indexOf(n);
+      let els = [ni];
+      if (n.tag !== "p:grpSp") {
+        const c = center(n.box);
+        const others = numbered.filter((m) => m !== n).map((m) => center(m.box));
+        // 底上面要有這一章的標題（底自己寫著、或另一個文字框疊在上面）：圓圈底下另墊一個圓的話，那個圓不算底
+        const words = (k) => k.paras.some((t) => !CHAPTER_NO.test(t));
+        const holds = (k) => words(k) || kids.some((o) => o !== n && o !== k && o.box && words(o) && !numbered.includes(o) && inside(center(o.box), k.box) && area(o.box) <= area(k.box));
+        const holder = kids.filter((k, i) => i !== ni && k.box && inside(c, k.box) && area(k.box) >= 1.5 * area(n.box) && !others.some((o) => inside(o, k.box)) && holds(k)).sort((a, b) => area(a.box) - area(b.box))[0];
+        if (holder) {
+          // 底上面的東西：中心在底裡面、又沒有比底大的（整頁的背景圖中心剛好落在卡片上，也不能跟著搬）
+          els = kids.map((k, i) => i).filter((i) => kids[i].box && (i === ni || !numbered.includes(kids[i])) && inside(center(kids[i].box), holder.box) && area(kids[i].box) <= area(holder.box));
+        } else {
+          const right = numbered.filter((m) => m !== n && Math.abs(center(m.box).y - c.y) < n.box.cy && m.box.x > n.box.x).map((m) => m.box.x);
+          const limit = right.length ? Math.min(...right) : Infinity;
+          const sameRow = (k) => k.paras.length && k.box.x >= n.box.x + n.box.cx / 2 && k.box.x < limit && Math.abs(center(k.box).y - c.y) <= Math.max(n.box.cy, k.box.cy) * 0.75;
+          const disc = (k) => inside(c, k.box) && area(k.box) <= 6 * area(n.box) && !others.some((o) => inside(o, k.box)); // 墊在章節號底下的圓圈
+          els = [ni, ...kids.map((k, i) => i).filter((i) => i !== ni && !numbered.includes(kids[i]) && kids[i].box && (sameRow(kids[i]) || disc(kids[i])))];
+        }
+      }
+      for (const i of els) {
+        if (used.has(i)) return null;
+        used.add(i);
+      }
+      const words = els.flatMap((i) => kids[i].paras).filter((t) => !CHAPTER_NO.test(t));
+      const boxes = els.map((i) => kids[i].box);
+      const x = Math.min(...boxes.map((b) => b.x)), y = Math.min(...boxes.map((b) => b.y));
+      items.push({ no: n.paras.find((t) => CHAPTER_NO.test(t)), title: words.find((t) => !HAN.test(t)) || words[0] || "", els, box: { x, y } });
+    }
+    if (new Set(items.map((it) => it.no)).size !== items.length) return null;
+    return { base, inner, kids, items: items.sort((a, b) => a.no.localeCompare(b.no)) };
+  }
+  return null;
+}
 /** 一段的格式：段落屬性、第一個有字的 run 的字型屬性、段尾屬性——照這個格式寫新的一段。 */
 const paraFormat = (p) => {
   const runs = [...p.matchAll(/<a:r\b[^>]*>[\s\S]*?<\/a:r>/g)].map((m) => m[0]);
@@ -439,6 +554,58 @@ export class Deck {
     const head = first >= 0 ? body[1].slice(0, first) : body[1];
     this.set(path, swapOnce(xml, sp, swapOnce(sp, body[0], `<p:txBody>${head}${out.join("")}</p:txBody>`)));
     return lines;
+  }
+
+  /** 目錄頁上的章節：[{ no, title }]（`contentsCards`）；認不出來回 null。 */
+  async contentsItems(path) {
+    return contentsCards(await this.text(path))?.items.map(({ no, title }) => ({ no, title })) || null;
+  }
+
+  /**
+   * 目錄頁只留 keep 裡的章節（明確指示：「第 3 頁目錄跟著選頁改」——以前永遠列滿九章，連上一次韓國團的「09 提問回覆」都在）。
+   * 拿掉的那幾張卡片整張刪掉，留下來的**依章節號往前補位**（第 k 張搬到原本第 k 個位置，整張卡片一起搬，格式不動），
+   * 不會留一個一個的空洞。章節號不重編：投影片上的頁眉寫的是原本的章節號，目錄要對得起來。
+   * 「09 提問回覆」拿掉時，副標題裡「以及對六項提問的回覆」那一句也拿掉。回傳 { all, kept }；認不出排法回 null。
+   */
+  async keepContents(path, keep) {
+    const xml = await this.text(path);
+    const cards = contentsCards(xml);
+    if (!cards) return null;
+    const { base, inner, kids, items } = cards;
+    const kept = items.filter((it) => keep.has(it.no));
+    const result = { all: items.map((it) => it.no), kept: kept.map((it) => it.no) };
+    if (!kept.length || kept.length === items.length) return result;
+    const edits = new Map();
+    for (const it of items) if (!keep.has(it.no)) for (const i of it.els) edits.set(i, "");
+    kept.forEach((it, k) => {
+      const dx = items[k].box.x - it.box.x, dy = items[k].box.y - it.box.y;
+      if (!dx && !dy) return;
+      for (const i of it.els) {
+        const b = kids[i].box;
+        edits.set(i, swapOnce(kids[i].xml, b.off, withAttrs(b.off, { x: Math.round(b.x + dx), y: Math.round(b.y + dy) })));
+      }
+    });
+    let out = inner;
+    for (const i of [...edits.keys()].sort((a, b) => kids[b].start - kids[a].start)) out = out.slice(0, kids[i].start) + edits.get(i) + out.slice(kids[i].end);
+    this.set(path, xml.slice(0, base) + out + xml.slice(base + inner.length));
+    if (items.some((it) => it.no === "09") && !keep.has("09")) {
+      for (const t of await this.paragraphs(path)) {
+        const m = /[，,、]\s*以及對[^，,。]*?提問的回覆/.exec(t);
+        if (m) await this.editText(path, [{ find: m[0], replace: "" }]);
+      }
+    }
+    return result;
+  }
+
+  /** 拿掉這一頁的講稿（備忘稿）關聯；沒人引用的講稿檔由 clean() 清掉。回傳 1（拿掉了）或 0（本來就沒有）。 */
+  async dropNotes(path) {
+    const p = relsPath(path);
+    if (!this.has(p)) return 0;
+    const xml = await this.text(p);
+    const out = xml.replace(/<Relationship\b[^>]*Type="[^"]*\/notesSlide"[^>]*\/>/g, "");
+    if (out === xml) return 0;
+    this.set(p, out);
+    return 1;
   }
 
   /** 含漢字的 run 文字（去重，保序），供翻譯。 */
@@ -955,6 +1122,12 @@ export async function buildDeck(spec, masterBuf, opts = {}) {
   for (const p of new Set(order)) picturesFixed += await deck.fixPictureAspect(p);
   if (picturesFixed) report.pictures_fixed = picturesFixed;
 
+  // 3.6 講稿（備忘稿）不帶（明確指示：「講稿：產檔時拿掉」）：母簡報的講稿是寫給上一次的來賓的
+  // （「看著吳組長與金研究員說第一句」），把 .pptx 寄給這一場的來賓，對方也看得到。母簡報本身的講稿不受影響
+  let notesDropped = 0;
+  for (const p of new Set(order)) notesDropped += await deck.dropNotes(p);
+  if (notesDropped) report.notes_removed = notesDropped;
+
   // 4. 逐字取代（母簡報頁碼 → path）
   const edits = Array.isArray(spec.text_edits) ? spec.text_edits : [];
   const byPage = new Map();
@@ -987,6 +1160,39 @@ export async function buildDeck(spec, masterBuf, opts = {}) {
       if (n) hits.push({ find: f.find, replace: f.replace, count: n });
     }
     if (hits.length) report.fixes = hits;
+  }
+
+  // 4.6 目錄頁只列這一份講到的章節（Deck.keepContents）。目錄頁用內容認（「CONTENTS · 簡報架構」），不靠頁次：
+  // 實際踩過，站台上那一份母簡報的頁序跟索引對不上（目錄在第 2 頁、組織架構在第 3 頁）。
+  // 講到哪幾章看這一份實際選到的頁：頁眉「03 · FOUR LABORATORIES · …」＝第 03 章；分隔頁是「01」下一行接那一章的標題
+  // （跟目錄上的標題一樣才算——「三項承諾」那一頁也有 01、02、03）。組織架構那一頁的頁眉誤標 08，不算。
+  const chosenPaths = chosen.map((n) => byN.get(n));
+  const isContents = async (p) => (await deck.paragraphs(p)).some((t) => CONTENTS_TITLE.test(t.trim()));
+  const indexed = byN.get(Number(roleN(slidesIndex, "contents")));
+  let contentsPath = indexed && chosenPaths.includes(indexed) && (await isContents(indexed)) ? indexed : null;
+  for (const p of chosenPaths) if (!contentsPath && (await isContents(p))) contentsPath = p;
+  const contentsItems = contentsPath ? await deck.contentsItems(contentsPath) : null;
+  if (contentsPath && !contentsItems) report.warnings.push("目錄頁的排法認不出來，目錄沒有跟著選頁改");
+  else if (contentsItems) {
+    const norm = (t) => String(t || "").replace(/\s+/g, " ").trim().toLowerCase();
+    const titleOf = new Map(contentsItems.map((it) => [it.no, norm(it.title)]));
+    const keep = new Set();
+    for (const p of chosenPaths) {
+      if (p === contentsPath) continue;
+      const paras = (await deck.paragraphs(p)).map((t) => t.trim());
+      if (paras.some((t) => ORG_TITLE.test(t))) continue;
+      paras.forEach((t, i) => {
+        const k = KICKER.exec(t);
+        if (k) keep.add(k[1]);
+        if (CHAPTER_NO.test(t) && titleOf.get(t) && norm(paras[i + 1]) === titleOf.get(t)) keep.add(t);
+      });
+    }
+    if (!keep.size) report.warnings.push("目錄頁照母簡報：選到的頁看不出屬於哪一章");
+    else {
+      const r = await deck.keepContents(contentsPath, keep);
+      if (!r) report.warnings.push("目錄頁的排法認不出來，目錄沒有跟著選頁改");
+      else if (r.kept.length && r.kept.length < r.all.length) report.contents = r;
+    }
   }
 
   // 5. 今日流程表（第 2 頁若是表格）：時間、英文、第二語言、頁碼

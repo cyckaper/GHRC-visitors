@@ -7,6 +7,7 @@
   { "find": "four laboratories", "replace": "five laboratories", "all": true },
   { "find": "Four laboratories", "replace": "Five laboratories", "all": true },
   { "find": "Four Laboratories", "replace": "Five Laboratories", "all": true },
+  { "find": "FOUR LABORATORIES", "replace": "FIVE LABORATORIES", "all": true },
   { "find": "Rooms 301-304", "replace": "Rooms 301-305", "all": true },
   { "find": "301 to 304", "replace": "301 to 305", "all": true },
   { "find": "301 至 304", "replace": "301 至 305", "all": true },

@@ -138,6 +138,8 @@ async function main() {
   console.log(`✔ ${path.relative(ROOT, pptxPath)}（${report.output_slides} 頁，${(pptx.length / 1e6).toFixed(1)} MB；文字取代 ${report.edits.applied} 處${report.edits.missed.length ? `，${report.edits.missed.length} 處沒找到` : ""}）`);
   for (const f of report.fixes || []) console.log(`  · 更正母簡報內文：「${f.find}」→「${f.replace}」${f.count} 處`);
   if (report.cover) console.log(`  · 封面換成這一場：${report.cover.join("／")}`);
+  if (report.contents) console.log(`  · 目錄頁只留這一份講到的章節：${report.contents.kept.join("、")}`);
+  if (report.notes_removed) console.log(`  · 沒有帶母簡報的講稿（${report.notes_removed} 頁）`);
   if (report.pictures_fixed) console.log(`  · 照片比例更正 ${report.pictures_fixed} 張（母簡報裡被拉變形的照片，整張照原比例放回框裡）`);
   for (const w of report.warnings) console.log(`  ⚠ ${w}`);
   for (const m of report.edits.missed) console.log(`  ⚠ 第 ${m.slide} 頁找不到「${m.find.slice(0, 40)}」`);
