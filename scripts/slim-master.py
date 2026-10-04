@@ -188,7 +188,8 @@ def retarget(root, old_part, new_part):
         text = read(root, part)
         if old_name not in text:
             continue
-        new_text = re.sub(r'(Target="[^"]*?)' + re.escape(old_name) + '"', lambda m: m.group(1) + new_name + '"', text)
+        # 檔名前面要是「/」或什麼都沒有：image3.png 不能連 myimage3.png 一起改到
+        new_text = re.sub(r'(Target="(?:[^"]*/)?)' + re.escape(old_name) + '"', lambda m: m.group(1) + new_name + '"', text)
         if new_text != text:
             write(root, part, new_text)
 
@@ -235,8 +236,17 @@ def shrink_images(root, threshold, max_edge, quality, all_images, report):
             img.save(buf, format="PNG", optimize=True)
             new_fn = posixpath.splitext(fn)[0] + ".png"
         else:
-            img.convert("RGB").save(buf, format="JPEG", quality=quality, optimize=True, progressive=True)
+            # EXIF 一起帶著：轉向（Orientation）留著，顯示的方向才跟原圖一樣
+            exif = img.info.get("exif")
+            img.convert("RGB").save(buf, format="JPEG", quality=quality, optimize=True, progressive=True, **({"exif": exif} if exif else {}))
             new_fn = posixpath.splitext(fn)[0] + ".jpeg"
+        # 換副檔名時不能撞到別張圖（image3.png → image3.jpeg，但 image3.jpeg 可能本來就是另一張）：
+        # 撞到就換一個沒人用的名字——不然那一張會被蓋掉，用到它的那一頁就變成顯示這一張、還被拉成那一張的框
+        base, new_ext = posixpath.splitext(new_fn)
+        k = 2
+        while new_fn != fn and os.path.exists(os.path.join(media_dir, new_fn)):
+            new_fn = f"{base}-{k}{new_ext}"
+            k += 1
         data = buf.getvalue()
         if len(data) >= size:
             report.append(f"  {fn}: 壓不小（{size/1e6:.1f} MB → {len(data)/1e6:.1f} MB），維持原檔")

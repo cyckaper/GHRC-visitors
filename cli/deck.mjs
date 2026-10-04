@@ -137,6 +137,7 @@ async function main() {
   await fs.writeFile(path.join(outDir, `${spec.visit_id}.report.json`), JSON.stringify(report, null, 2));
   console.log(`✔ ${path.relative(ROOT, pptxPath)}（${report.output_slides} 頁，${(pptx.length / 1e6).toFixed(1)} MB；文字取代 ${report.edits.applied} 處${report.edits.missed.length ? `，${report.edits.missed.length} 處沒找到` : ""}）`);
   for (const f of report.fixes || []) console.log(`  · 更正母簡報內文：「${f.find}」→「${f.replace}」${f.count} 處`);
+  if (report.pictures_fixed) console.log(`  · 照片比例更正 ${report.pictures_fixed} 張（母簡報裡被拉變形的照片，照原比例放回框裡）`);
   for (const w of report.warnings) console.log(`  ⚠ ${w}`);
   for (const m of report.edits.missed) console.log(`  ⚠ 第 ${m.slide} 頁找不到「${m.find.slice(0, 40)}」`);
   if (!args["no-pdf"]) {

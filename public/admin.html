@@ -308,7 +308,7 @@
     <div id="deckWork" class="space-y-5">
       <div class="card space-y-3">
         <div class="flex flex-wrap items-center justify-between gap-2"><h2 class="font-semibold">選用頁次 <span id="slideCount" class="muted font-normal"></span></h2><span class="muted">一個區塊一個勾，整區一起進去——不必逐頁挑。「只選這區」會清掉其他區塊；必選頁（封面、流程、架構、核心宣稱、謝謝）永遠保留，畫面上是鎖住的。勾完自己會存</span></div>
-        <div class="flex flex-wrap gap-2 items-center"><button type="button" class="btn" id="pickBtn" title="依單位類型、來訪目的、興趣與今日流程上要去的那幾間挑區塊，也參考過去同類單位選過哪幾頁、哪幾頁被提問">AI 挑頁</button><button type="button" class="btn btn-soft" id="slidesAll" title="把母簡報的每一個區塊都選上（很少這樣做，時間不夠）">全選</button><button type="button" class="btn btn-soft" id="slidesNone" title="清掉所有勾選，只留封面、流程、架構、核心宣稱、謝謝這幾頁">全不選（保留必選頁）</button><span class="muted" id="pickInfo"></span></div>
+        <div class="flex flex-wrap gap-2 items-center"><button type="button" class="btn" id="pickBtn" title="依單位類型、來訪目的、興趣與今日流程上要去的那幾間挑區塊，也參考過去同類單位選過哪幾頁、哪幾頁被提問">AI 挑頁</button><button type="button" class="btn btn-soft" id="slidesAll" aria-pressed="false" title="把母簡報的每一個區塊都選上（很少這樣做，時間不夠）">全選</button><button type="button" class="btn btn-soft" id="slidesNone" aria-pressed="false" title="清掉所有勾選，只留封面、流程、架構、核心宣稱、謝謝這幾頁">全不選（保留必選頁）</button><span class="muted" id="pickInfo"></span></div>
         <p class="muted" id="pickRationale" translate="no" data-ai-text></p>
         <div class="space-y-2" id="slideGrid"></div>
         <p class="muted" id="deckNeedsVisit" hidden>這裡列的是母簡報的區塊，先看先勾都可以；但要記得住、產得出 .pptx，得先到「訪前」填一場參訪（填了單位名稱就會自己建一場）。</p>
@@ -1360,6 +1360,17 @@
     const blocks = blockInputs().filter((i) => i.checked).length;
     const mins = chosen.reduce((s, n) => s + ((state.slides?.slides || []).find((x) => x.n === n)?.minutes || 1), 0);
     $("slideCount").textContent = `（${blocks} 區、${chosen.length} 頁，約 ${Math.round(mins)} 分鐘）`;
+    // 全選／全不選：現在是哪一種，那一顆就變成實心的顏色（明確指示：「按全選，按鍵要變顏色才知道有選到」）。
+    // 前面另外打一個 ✓——只看得到灰階也分得出來（顏色不單獨講狀態）
+    const free = blockInputs().filter((i) => !i.disabled);
+    const showOn = (id, on, label) => {
+      const b = $(id);
+      b.classList.toggle("btn-soft", !on);
+      b.setAttribute("aria-pressed", String(on));
+      b.textContent = on ? `✓ ${label}` : label;
+    };
+    showOn("slidesAll", free.length > 0 && free.every((i) => i.checked), "全選");
+    showOn("slidesNone", free.length > 0 && free.every((i) => !i.checked), "全不選（保留必選頁）");
   }
 
   // ── 訪前：訪客背景研判（訪前功課） ──
@@ -1965,6 +1976,7 @@
         const lines = [...(offerSave && state.slimReport ? [slimSummary(state.slimReport)] : []), ...report.warnings, ...report.edits.missed.map((m) => `第 ${m.slide} 頁找不到「${(m.find || "").slice(0, 40)}」`)];
         if (report.programme_table && report.programme_table !== "filled") lines.push(`第 2 頁流程表：${report.programme_table}`);
         for (const f of report.fixes || []) lines.push(`更正母簡報內文：「${f.find}」→「${f.replace}」${f.count} 處`);
+        if (report.pictures_fixed) lines.push(`照片比例更正 ${report.pictures_fixed} 張：母簡報裡被拉變形的照片，照原比例放回框裡`);
         // 影片：留在檔案裡才播得動。母簡報是站台上那份瘦過的就不會有，說一句怎麼辦，不要讓人以為壞了
         if (report.videos) lines.push(`保留了 ${report.videos} 支影片，現場直接播。檔案大，寄給對方請改寄 PDF 或雲端連結`);
         else if ((state.slides?.slides || []).some((x) => x.video && (spec.slides || []).includes(x.n))) lines.push("這一場選到了影片頁，但母簡報裡沒有影片（站台上那份是瘦過的），那幾頁只有海報；現場要真的播，產簡報時當場選原始的母簡報");
