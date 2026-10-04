@@ -725,6 +725,8 @@
   "照片比例更正 # 張：母簡報裡被拉變形的照片，整張照原比例放回框裡": "Fixed the proportions of # pictures: pictures stretched out of shape in the master slides are now shown whole, in their own proportions, inside their frames",
   "封面找不到寫來賓的那一塊（單位、來賓、日期），封面沒有換": "Could not find the part of the cover that names the guests (organisation, guests, date), so the cover was left as it is",
   "沒有帶母簡報的講稿（# 頁）：那是寫給上一次來賓的，寄出去對方也看得到": "Left out the master's speaker notes (# slides): they were written for the previous visitors, and anyone you send the file to could read them",
+  "母簡報裡沒有今日流程那一頁（有表格、寫著 Programme 的那一頁），這一份簡報沒有流程表": "The master slides have no programme slide (the one with a table headed Programme), so this deck has no programme",
+  "母簡報裡找不到組織架構那一頁，「您最想看哪一部分」那一頁略過": "Could not find the Organisation slide in the master, so the “Which part would you most like to see?” slide was left out",
   "目錄頁的排法認不出來，目錄沒有跟著選頁改": "Could not make out the layout of the contents slide, so it does not follow the chosen slides",
   "目錄頁照母簡報：選到的頁看不出屬於哪一章": "The contents slide is as in the master: none of the chosen slides shows which chapter it belongs to",
   "無法參加": "Cannot attend",
@@ -1034,6 +1036,10 @@
   [
    "^第 (\\d+) 頁 (.+)$",
    "Slide $1 $2"
+  ],
+  [
+   "^「(.+)」那一區在母簡報裡找不到，沒有放進來$",
+   "Could not find the “$1” block in the master slides, so it was left out"
   ],
   [
    "^目錄頁只留這一份講到的章節：(.+)$",

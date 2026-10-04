@@ -233,7 +233,8 @@ try {
     await download.saveAs(pptxPath);
     const built = await Deck.load(await readFile(pptxPath));
     const v = await built.validate();
-    check(v.errors.length === 0 && v.slideCount === 6, `browser-built deck is valid with ${v.slideCount} slides (4 always-slides + ask + QR)${v.errors.length ? ": " + v.errors.join("; ") : ""}`);
+    // 照內容對頁：「只選 303」拿到的是合成簡報裡內容屬於 303 的那一頁（第 9 頁），謝謝那一頁也照內容找到（索引寫第 72 頁）
+    check(v.errors.length === 0 && v.slideCount === 8, `browser-built deck is valid with ${v.slideCount} slides (4 front slides + Lab 303 + thank-you, matched by content, + ask + QR)${v.errors.length ? ": " + v.errors.join("; ") : ""}`);
     // 封面換成這一場（明確指示：「首頁的部分應該要根據本次參訪者，更改首頁的內容」），母簡報封面上的字不留
     const coverParas = await built.paragraphs((await built.slides())[0].path);
     check(coverParas.some((p) => /Western Australia/.test(p)) && coverParas.some((p) => /October 2026/.test(p)) && !coverParas.some((p) => /Guest Name|Visiting Organisation Name|January 2026/.test(p)), `the cover names this visit's organisation and date, not the master's (${coverParas.join(" | ")})`);
@@ -270,7 +271,7 @@ try {
     const pptxPath2 = path.join(tmp, "browser2.pptx");
     await download2.saveAs(pptxPath2);
     const v2 = await (await Deck.load(await readFile(pptxPath2))).validate();
-    check(v2.errors.length === 0 && v2.slideCount === 6, "deck built from the master stored on the site (chunked download, no file picker)");
+    check(v2.errors.length === 0 && v2.slideCount === 8, "deck built from the master stored on the site (chunked download, no file picker)");
   } else console.log("skip - browser deck build (python-pptx fixture unavailable)");
   await page.click('[data-tab="pre"]');
   await page.selectOption("#visitSelect", "2026-10-07-uwa");
