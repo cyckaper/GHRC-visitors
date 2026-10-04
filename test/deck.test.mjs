@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { buildDeck, inspectDeck } from "../cli/deck.mjs";
-import { Deck, slimDeck, hasEmbeddedMedia, imageInfo, coverLines } from "../cli/lib/pptx.mjs";
+import { Deck, slimDeck, hasEmbeddedMedia, imageInfo, coverLines, slideBlock } from "../cli/lib/pptx.mjs";
 import zlib from "node:zlib";
 
 /** 一張真的 PNG（全黑）：寬、高、色彩型態（2＝RGB，6＝RGBA 有透明）。 */
@@ -520,6 +520,96 @@ test("母簡報各頁頁眉寫的「FOUR LABORATORIES」也更正成五間", { s
   const text = (await (await Deck.load(pptx)).paragraphs("ppt/slides/slide9.xml")).join(" ");
   assert.ok(text.includes("03 · FIVE LABORATORIES") && !text.includes("FOUR"), text);
   assert.ok(report.fixes.some((f) => f.find === "FOUR LABORATORIES"));
+});
+
+test("照內容認一頁屬於哪一區：頁眉、標題、分隔頁（站台上那一份母簡報的寫法）", () => {
+  // 字是從產出的簡報裡抄來的（2026-09 的母簡報）
+  const cases = [
+    [["08 · THE NEXT THREE YEARS · 未來三年", "Organisation", "組織架構"], "org"],
+    [["01", "Why Now", "為什麼是現在"], "ch01"],
+    [["01 · WHY NOW · 2024.04.10", "Opening Ceremony and International Forum"], "ch01"],
+    [["02 · CORE PROPOSITION · 核心主張", "Five Laboratories, One Closed Evidence Loop", "01", "Measure"], "ch02"],
+    [["03", "Five Laboratories"], "lab301"],
+    [["03 · FOUR LABORATORIES · 01 MEASURE · 方法論", "A Landscape-Planning Journey in Seven Stations"], "lab301"],
+    [["03 · FOUR LABORATORIES · 01 MEASURE · 量測", "HealthCloud — An In-house Platform Built at Lab 301"], "lab301"],
+    [["03 · FOUR LABORATORIES · 02 DESIGN · 設計", "Lab 302 — Facility"], "lab302"],
+    [["03 · FOUR LABORATORIES · 03 VALIDATE · 驗證", "360 VR for Public Environmental Education"], "lab303"],
+    [["04 · RESEARCH OUTCOMES · PATIENT CARE · 病患照護", "When the Patient Cannot Reach the Forest"], "lab303"],
+    [["04 · RESEARCH OUTCOMES · FIELD IMPLEMENTATION · 場域落地", "Four Community Models"], "lab303"],
+    [["03 · FOUR LABORATORIES · 04 PRESCRIBE · 處方", "Lab 304 — Panoramic Cinema Lab"], "lab304"],
+    [["04 · RESEARCH OUTCOMES · FLAGSHIP STUDY · 旗艦案例", "Film — Slow Jogging in an Immersive CAVE"], "lab304"],
+    [["03 · FOUR LABORATORIES · 03 VALIDATE · 驗證", "Lab 305 — Landscape and Place: Selected IVR Studies"], "lab305"],
+    [["03 · FOUR LABORATORIES · 03 VALIDATE · 驗證 · IVR STUDY 02", "Spatial Perception — Crowding: Findings"], "lab305"],
+    [["05", "Talent and Education"], "ch05"],
+    [["04 · RESEARCH OUTCOMES · COMMISSIONED RESEARCH · 委託研究", "Commissioned Research Projects"], "commis"],
+    [["06 · INTERNATIONAL PLATFORM · 國際平台", "Signed and Established Partnerships"], "ch06"],
+    [["07 · EXTERNAL RECOGNITION · 成果認證", "The Numbers Behind the Award"], "ch07"],
+    [["08 · THE NEXT THREE YEARS · 未來三年", "Three Commitments", "01", "Institutionalise services"], "ch08"],
+    [["謝謝", "Thank you", "Green Health Research Center"], "closing"],
+    [["CONTENTS · 簡報架構", "What This Deck Answers", "01", "Why Now"], "front"],
+  ];
+  for (const [paras, block] of cases) assert.equal(slideBlock(paras)?.block, block, paras.join(" / "));
+  // 「04 · RESEARCH OUTCOMES · 研究成果」沒寫是哪一類：歸到前一頁那一區（它緊跟在旗艦案例後面）
+  assert.equal(slideBlock(["04 · RESEARCH OUTCOMES · 研究成果", "Research Projects, Grouped by Target Population"]), null);
+  assert.equal(slideBlock(["Programme for Today", "今日流程"], { table: true }).role, "programme");
+  assert.equal(slideBlock(["Programme for Today"], { table: false }), null, "沒有表格就不是今日流程那一頁");
+  assert.equal(slideBlock(["anything"], { first: true }).role, "cover");
+});
+
+/**
+ * 跟站台上那一份母簡報同樣的排法：封面、目錄、組織架構、各章……沒有今日流程與核心宣稱那兩頁，
+ * 研究成果夾在研究室中間、委託研究在 05 的分隔頁後面（索引寫的頁次全部對不上）。名字都是虛構的。
+ */
+async function siteLikeMaster() {
+  const deck = await Deck.load(await readFile(FIXTURE));
+  const page = (paras) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="T"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="9000000" cy="5000000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/>${paras.map((t) => `<a:p><a:r><a:rPr lang="en-US"/><a:t>${t}</a:t></a:r></a:p>`).join("")}</p:txBody></p:sp></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
+  const make = async (...paras) => { const p = await deck.cloneSlide("ppt/slides/slide4.xml"); deck.set(p, page(paras)); return p; };
+  const order = [
+    "ppt/slides/slide1.xml", "ppt/slides/slide3.xml", "ppt/slides/slide5.xml",
+    await make("01", "Why Now", "為什麼是現在"), await make("01 · WHY NOW · 為什麼是現在", "Three Policy Currents"),
+    await make("02 · CORE PROPOSITION · 核心主張", "Facilities and Funding Sources"),
+    await make("03", "Five Laboratories"), await make("03 · FOUR LABORATORIES · 01 MEASURE · 量測", "Lab 301 — Health Landscape Intelligence Lab"),
+    await make("03 · FOUR LABORATORIES · 02 DESIGN · 設計", "Lab 302 — Facility"), await make("03 · FOUR LABORATORIES · 02 DESIGN · 設計", "Lab 302 — Simulation Outputs"),
+    await make("03 · FOUR LABORATORIES · 03 VALIDATE · 驗證", "Lab 303 — Facility"), await make("04 · RESEARCH OUTCOMES · PATIENT CARE · 病患照護", "When the Patient Cannot Reach the Forest"),
+    await make("03 · FOUR LABORATORIES · 04 PRESCRIBE · 處方", "Lab 304 — Facility"), await make("04 · RESEARCH OUTCOMES · FLAGSHIP STUDY · 旗艦案例", "Slow Jogging"),
+    await make("04 · RESEARCH OUTCOMES · 研究成果", "Research Projects, Grouped by Target Population"),
+    await make("03 · FOUR LABORATORIES · 03 VALIDATE · 驗證 · IVR STUDY 01", "Travel Behavior — Virtual Tour"),
+    await make("05", "Talent and Education"), await make("04 · RESEARCH OUTCOMES · COMMISSIONED RESEARCH · 委託研究", "Commissioned Research Projects"),
+    await make("05 · TALENT AND EDUCATION · 人才與教育", "Curriculum and Teaching"),
+    await make("08 · THE NEXT THREE YEARS · 未來三年", "Three Commitments", "01", "Institutionalise services"),
+    "ppt/slides/slide10.xml",
+  ];
+  await deck.setSlideOrder(order);
+  await deck.clean();
+  return deck.save();
+}
+
+test("照內容對頁：母簡報的頁序跟索引對不上，勾的那幾區照樣拿到那幾區的頁；組織架構、謝謝也照內容找", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
+  // 明確指示：「照內容自動對頁」。實際踩過：站台上的母簡報目錄在第 2 頁、沒有今日流程那一頁，
+  // 勾「302」拿到的不是 302 的頁，「您最想看哪一部分」複製到的是政策線那一頁
+  const slidesIndex = JSON.parse(await readFile("public/data/slides.json", "utf8"));
+  const pick = (...ids) => slidesIndex.groups.filter((g) => g.required || ids.includes(g.id)).flatMap((g) => g.slides);
+  const master = await siteLikeMaster();
+  const titles = async (pptx) => { const d = await Deck.load(pptx); const out = []; for (const s of await d.slides()) out.push((await d.paragraphs(s.path)).slice(0, 2).join(" / ")); return out; };
+
+  const a = await buildDeck({ ...spec, language: "zh", slides: pick("lab302", "commis"), text_edits: [] }, master, { slidesIndex, lang: "zh" });
+  assert.equal(a.report.matched, "content");
+  const got = await titles(a.pptx);
+  assert.ok(got[0].startsWith("Welcome") && got[1].startsWith("Contents"), `封面、目錄在最前面：${got.join(" | ")}`);
+  assert.deepEqual(got.filter((t) => /Lab 30\d|Commissioned/.test(t)).map((t) => t.split(" / ")[1] || t), ["Lab 302 — Facility", "Lab 302 — Simulation Outputs", "Commissioned Research Projects"], got.join(" | "));
+  assert.ok(got.some((t) => t.startsWith("Thank you")), "謝謝那一頁照內容找到（索引寫第 72 頁）");
+  assert.ok(got.some((t) => t.startsWith("Which part would you most like to see? / 您最想看哪一部分？")), `「您最想看哪一部分」從組織架構那一頁複製：${got.join(" | ")}`);
+  assert.ok(!got.some((t) => /Three Policy Currents/.test(t)), "不是政策線那一頁");
+  assert.equal(a.report.programme_table, "missing", "母簡報沒有今日流程那一頁：報告說一聲，不去填目錄頁");
+  assert.deepEqual(a.report.validation.errors, []);
+
+  // 304 那一區：研究室的頁＋旗艦案例＋沒寫類別的「研究成果」（跟在旗艦案例後面）
+  const b = await buildDeck({ ...spec, language: "zh", slides: pick("lab304"), programme: [], text_edits: [] }, master, { slidesIndex, lang: "zh" });
+  assert.deepEqual((await titles(b.pptx)).filter((t) => /304|Slow Jogging|Grouped/.test(t)).map((t) => t.split(" / ")[1]), ["Lab 304 — Facility", "Slow Jogging", "Research Projects, Grouped by Target Population"]);
+
+  // 母簡報裡沒有的那一區：說一聲
+  const c = await buildDeck({ ...spec, language: "zh", slides: pick("ch07"), programme: [], text_edits: [] }, master, { slidesIndex, lang: "zh" });
+  assert.ok(c.report.warnings.some((w) => /那一區在母簡報裡找不到/.test(w)), c.report.warnings.join(" | "));
 });
 
 test("瘦身：縮完的圖換副檔名時不能蓋掉另一張同名的圖；縮完比例不對就維持原檔", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {

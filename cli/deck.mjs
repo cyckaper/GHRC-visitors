@@ -141,6 +141,7 @@ async function main() {
   if (report.contents) console.log(`  · 目錄頁只留這一份講到的章節：${report.contents.kept.join("、")}`);
   if (report.notes_removed) console.log(`  · 沒有帶母簡報的講稿（${report.notes_removed} 頁）`);
   if (report.pictures_fixed) console.log(`  · 照片比例更正 ${report.pictures_fixed} 張（母簡報裡被拉變形的照片，整張照原比例放回框裡）`);
+  if (report.programme_table === "missing") console.log("  ⚠ 母簡報裡沒有今日流程那一頁，這一份簡報沒有流程表");
   for (const w of report.warnings) console.log(`  ⚠ ${w}`);
   for (const m of report.edits.missed) console.log(`  ⚠ 第 ${m.slide} 頁找不到「${m.find.slice(0, 40)}」`);
   if (!args["no-pdf"]) {

@@ -40,6 +40,8 @@ const GUEST_LINE = /^(?:(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof|Professor|Sir|Dame|Hon|Rev)
 /** 「像日期的一行」：7 September 2026、Sep 7, 2026、2026 年 9 月 7 日、2026년 9월 7일、2026-09-07。 */
 const MONTH_RE = "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\.?";
 const DATE_LINE = new RegExp(`\\b\\d{1,2}\\s+${MONTH_RE}\\s+\\d{4}\\b|\\b${MONTH_RE}\\s+\\d{1,2},?\\s+\\d{4}\\b|\\d{4}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日|\\d{4}년\\s*\\d{1,2}월\\s*\\d{1,2}일|\\b\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}\\b`, "i");
+/** 「您最想看哪一部分」那一頁的標題記號（換語言前放、換完填；沒有中文，換語言不會動它）。 */
+const ASK_MARK = ["[[GHRC-ASK-EN]]", "[[GHRC-ASK-2ND]]"];
 /** 目錄頁（母簡報的「CONTENTS · 簡報架構」）。 */
 const CONTENTS_TITLE = /^CONTENTS\b|簡報架構|^Contents$|^目錄$/i;
 /** 目錄上的章節號（01–09，自己一段）。 */
@@ -556,6 +558,43 @@ export class Deck {
     return lines;
   }
 
+  /**
+   * 「您最想看哪一部分」那一頁（組織架構頁複製來的）：「Organisation」「組織架構」兩行先換成記號，頁眉（誤標的 08）清掉。
+   * 要在換語言之前做——英文版會刪掉「組織架構」那一行、韓／日文版會把它翻譯掉，換完就找不到了；記號沒有中文，換語言不會動它。
+   * 回傳有沒有認到那兩行。
+   */
+  async markAskTitle(path) {
+    let found = false;
+    const xml = (await this.text(path)).replace(/<a:p\b[^>]*>[\s\S]*?<\/a:p>/g, (para) => {
+      const t = paraText(para).trim();
+      const mark = /^(?:Organisation|Organization)$/i.test(t) ? ASK_MARK[0] : /^組織架構$/.test(t) ? ASK_MARK[1] : KICKER.test(t) ? "" : null;
+      if (mark === null) return para;
+      if (mark) found = true;
+      return setParaText(para, mark);
+    });
+    this.set(path, xml);
+    return found;
+  }
+
+  /** 換完語言，把 `markAskTitle` 的記號填成這一句（英文一行＋這一份的第二語言一行；英文版第二行拿掉）。 */
+  async fillAskTitle(path, en, second, lang = "zh") {
+    const xml = (await this.text(path)).replace(/<p:txBody>[\s\S]*?<\/p:txBody>/g, (body) => {
+      const paras = [...body.matchAll(/<a:p\b[^>]*>[\s\S]*?<\/a:p>/g)].map((m) => m[0]);
+      let out = body;
+      for (const para of paras) {
+        const t = paraText(para).trim();
+        if (t === ASK_MARK[0]) out = swapOnce(out, para, setParaText(para, en));
+        else if (t === ASK_MARK[1]) {
+          const script = scriptOf(second, lang);
+          const filled = setParaText(para, second, script ? (run) => setRunFont(run, LANG_TAG[script], EA_FONT[script]) : null);
+          out = swapOnce(out, para, second || paras.length < 2 ? filled : "");
+        }
+      }
+      return out;
+    });
+    this.set(path, xml);
+  }
+
   /** 目錄頁上的章節：[{ no, title }]（`contentsCards`）；認不出來回 null。 */
   async contentsItems(path) {
     return contentsCards(await this.text(path))?.items.map(({ no, title }) => ({ no, title })) || null;
@@ -1051,6 +1090,77 @@ function roleN(slidesIndex, role) {
   return slidesIndex?.slides?.find((s) => s.role === role)?.n;
 }
 
+/** 章節頁眉的章節號 → slides.json 的區塊（03 研究室、04 研究成果另外分）。 */
+const CHAPTER_BLOCK = { "01": "ch01", "02": "ch02", "05": "ch05", "06": "ch06", "07": "ch07", "08": "ch08" };
+/** 「front」那一區裡的順序：封面、今日流程、目錄、核心宣稱。 */
+const FRONT_ORDER = ["cover", "programme", "contents", "claim"];
+
+/**
+ * 一頁屬於哪一區（slides.json 的 groups 的 id）——**照內容認**，不靠頁次（明確指示：「照內容自動對頁」）。
+ * 實際踩過：站台上那一份母簡報的頁序跟索引對不上（目錄在第 2 頁、沒有今日流程那一頁），勾「302」拿到的不是 302 的頁。
+ * 母簡報幾乎每一頁都有頁眉：「01 · WHY NOW · 為什麼是現在」「03 · FOUR LABORATORIES · 02 DESIGN · 設計」
+ * 「04 · RESEARCH OUTCOMES · FLAGSHIP STUDY · 旗艦案例」；分隔頁是「01」「Why Now」各一段、沒有頁眉。
+ *   - 第一頁是封面；有 CONTENTS／簡報架構是目錄；有表格又寫著 Programme／今日流程是今日流程；The Claim／核心宣稱；
+ *     Organisation／組織架構（它的頁眉誤標 08，要先認）；謝謝／Thank you 是最後一頁
+ *   - 03：頁眉或標題寫 IVR STUDY／Lab 305 → 305；Lab 30N → 那一間；不然看 01 MEASURE／02 DESIGN／03 VALIDATE／04 PRESCRIBE
+ *   - 04 研究成果照 slides.json 的分法：委託研究自成一區，旗艦案例（CAVE 超慢跑）跟 304，病患照護、場域落地、高齡與學童跟 303
+ *   - 認不出來的回 null，由呼叫的人歸到前一頁那一區（影片頁、說明頁都緊跟在它那一區後面）
+ * 回傳 { block, role }。
+ */
+export function slideBlock(paras, { first = false, table = false } = {}) {
+  const t = paras.map((x) => String(x).trim()).filter(Boolean);
+  const has = (re) => t.some((x) => re.test(x));
+  if (first) return { block: "front", role: "cover" };
+  if (has(CONTENTS_TITLE)) return { block: "front", role: "contents" };
+  if (table && has(/^(?:Programme|Program|Agenda)\b|^今日流程|^議程$/i)) return { block: "front", role: "programme" };
+  if (has(/^The Claim$|^核心宣稱$/i)) return { block: "front", role: "claim" };
+  if (has(ORG_TITLE)) return { block: "org", role: "organisation" };
+  if (has(/^(?:謝謝|Thank you)$/i)) return { block: "closing", role: "closing" };
+  const kicker = t.find((x) => KICKER.test(x));
+  const k = kicker ? KICKER.exec(kicker)[1] : null;
+  const head = t.slice(0, 4).join(" ");
+  const lab = /\bLab (30[1-5])\b/.exec(head)?.[1];
+  if (k === "03" || (!k && lab)) {
+    if (/IVR STUDY/i.test(kicker || "") || lab === "305") return { block: "lab305" };
+    if (lab) return { block: `lab${lab}` };
+    const stage = { "01 MEASURE": "lab301", "02 DESIGN": "lab302", "03 VALIDATE": "lab303", "04 PRESCRIBE": "lab304" };
+    for (const [word, block] of Object.entries(stage)) if (kicker.toUpperCase().includes(word)) return { block };
+    return null;
+  }
+  if (k === "04") {
+    if (/COMMISSIONED|委託研究/i.test(kicker)) return { block: "commis" };
+    if (/FLAGSHIP|旗艦/i.test(kicker)) return { block: "lab304" };
+    if (/PATIENT|FIELD|AGEING|AGING|ELDER|CHILD|SCHOOL|RURAL|病患|場域|高齡|學童|農村/i.test(kicker)) return { block: "lab303" };
+    return null;
+  }
+  if (k) return CHAPTER_BLOCK[k] ? { block: CHAPTER_BLOCK[k] } : null;
+  // 分隔頁：沒有頁眉，前幾段裡有一段只寫章節號（03 的分隔頁照 slides.json 歸在 301 那一區）
+  const no = t.slice(0, 3).find((x) => CHAPTER_NO.test(x));
+  if (no === "03") return { block: "lab301" };
+  return no && CHAPTER_BLOCK[no] ? { block: CHAPTER_BLOCK[no] } : null;
+}
+
+/**
+ * 整份母簡報照內容分區：{ ok, blockOf: Map(頁次 → 區), roles: {cover, programme, contents, claim, organisation, closing → 頁次} }。
+ * 認得出來的不到一半（不是這一套頁眉的簡報，例如測試用的合成簡報沒加頁眉時），ok 是 false，呼叫的人照舊用頁次。
+ */
+export async function slideBlocks(deck, slides) {
+  const blockOf = new Map();
+  const roles = {};
+  let known = 0, last = null;
+  for (const s of slides) {
+    const xml = await deck.text(s.path);
+    const hit = slideBlock(await deck.paragraphs(s.path), { first: s === slides[0], table: /<a:tbl>/.test(xml) });
+    if (hit) known++;
+    const block = hit?.block || last;
+    if (block) blockOf.set(s.n, block);
+    if (hit?.role && !roles[hit.role]) roles[hit.role] = s.n;
+    last = block;
+  }
+  const distinct = new Set([...blockOf.values()].filter((b) => b !== "front"));
+  return { ok: known >= slides.length / 2 && distinct.size >= 3, blockOf, roles };
+}
+
 /**
  * 封面那一塊這一場要寫的字（`Deck.fillVisitBox`）：單位、來賓（主賓排第一，最多三行）、日期。
  * 跟母簡報同一個寫法——英文為主，中／韓／日版在後面接「 · 」與對方的寫法（「Rural Development Administration · 韓國農村振興廳」
@@ -1094,24 +1204,46 @@ export async function buildDeck(spec, masterBuf, opts = {}) {
   const byN = new Map(all.map((s) => [s.n, s.path]));
   const report = { visit_id: spec.visit_id, master_slides: all.length, chosen: [], edits: { applied: 0, missed: [] }, warnings: [] };
 
-  // 1. 選頁
+  // 1. 選頁。spec.slides 是 slides.json 的頁次，但真正要的是「哪幾區」（後台一區一個勾）。
+  // 有 groups 就**照內容對頁**（slideBlocks）：選到的那幾區，各自拿母簡報裡內容屬於那一區的頁——
+  // 站台上的母簡報頁序跟索引對不上也照樣對（明確指示：「照內容自動對頁」）。認不出來的母簡報才照頁次。
   const wanted = Array.isArray(spec.slides) && spec.slides.length ? spec.slides.map(Number) : all.map((s) => s.n);
-  const chosen = [];
-  for (const n of wanted) {
-    if (byN.has(n)) chosen.push(n);
-    else report.warnings.push(`spec 選了不存在的第 ${n} 頁（母簡報只有 ${all.length} 頁）`);
+  const groups = Array.isArray(slidesIndex?.groups) ? slidesIndex.groups : [];
+  const mapped = groups.length ? await slideBlocks(deck, all) : { ok: false };
+  const roles = mapped.ok ? mapped.roles : {};
+  let chosen = [];
+  if (mapped.ok) {
+    report.matched = "content";
+    const want = new Set(wanted);
+    const picked = groups.filter((g) => g.required || (g.slides || []).some((n) => want.has(Number(n))));
+    for (const g of picked) {
+      const ns = all.filter((s) => mapped.blockOf.get(s.n) === g.id).map((s) => s.n);
+      // front 那一區照「封面、今日流程、目錄、核心宣稱」排；認不出是哪一種的排在後面、照母簡報的順序
+      const rank = (n) => { const i = FRONT_ORDER.indexOf(Object.keys(roles).find((r) => roles[r] === n)); return i < 0 ? FRONT_ORDER.length : i; };
+      if (g.id === "front") ns.sort((a, b) => rank(a) - rank(b));
+      if (!ns.length && !g.required) report.warnings.push(`「${g.title || g.id}」那一區在母簡報裡找不到，沒有放進來`);
+      chosen.push(...ns);
+    }
+  } else {
+    for (const n of wanted) {
+      if (byN.has(n)) chosen.push(n);
+      else report.warnings.push(`spec 選了不存在的第 ${n} 頁（母簡報只有 ${all.length} 頁）`);
+    }
   }
   if (!chosen.length) throw new Error("沒有任何可用的頁");
   report.chosen = chosen;
 
-  // 2. 複製「您最想看哪一部分」頁（預設從組織架構頁複製：五位老師照片並列）與 QR 頁（從謝謝頁複製）
-  const askFrom = spec.deck?.ask_clone_from ?? roleN(slidesIndex, "organisation") ?? 5;
-  const qrFrom = spec.deck?.qr_clone_from ?? roleN(slidesIndex, "closing") ?? all.length;
-  const askSrc = byN.get(Number(askFrom));
+  // 2. 複製「您最想看哪一部分」頁（從組織架構頁複製：五位老師並列）與 QR 頁（從謝謝頁複製）。
+  // 照內容對頁時這兩頁也照內容找：以前照索引的第 5 頁複製，拿到的是政策線那一頁
+  const askFrom = spec.deck?.ask_clone_from ?? (mapped.ok ? roles.organisation : roleN(slidesIndex, "organisation") ?? 5);
+  const qrFrom = spec.deck?.qr_clone_from ?? (mapped.ok ? roles.closing : roleN(slidesIndex, "closing")) ?? all.length;
+  const askSrc = askFrom != null ? byN.get(Number(askFrom)) : null;
   const qrSrc = byN.get(Number(qrFrom)) || all[all.length - 1].path;
   const askPath = askSrc ? await deck.cloneSlide(askSrc) : null;
-  if (!askSrc) report.warnings.push(`找不到可複製成「您最想看哪一部分」的第 ${askFrom} 頁，略過`);
+  if (!askSrc) report.warnings.push(askFrom == null ? "母簡報裡找不到組織架構那一頁，「您最想看哪一部分」那一頁略過" : `找不到可複製成「您最想看哪一部分」的第 ${askFrom} 頁，略過`);
   const qrPath = await deck.cloneSlide(qrSrc);
+  // 那一頁的標題先換成記號，換完語言再填（`fillAskTitle`）：「組織架構」那一行換語言時會被刪掉或拿去翻譯，就找不到了
+  const askMarked = askPath ? await deck.markAskTitle(askPath) : false;
 
   // 3. 重排
   const order = [...chosen.map((n) => byN.get(n)), askPath, qrPath].filter(Boolean);
@@ -1200,8 +1332,10 @@ export async function buildDeck(spec, masterBuf, opts = {}) {
   // 其他區塊沒有投影片寫「—」。最後那兩頁（您最想看哪一部分、QR）是另外加的，不算在裡面——跟以前 AI 填的算法一樣。
   const pad2 = (n) => String(n).padStart(2, "0");
   const slidesRange = (b) => String(b.slides_range || "").trim() || (b.kind === "briefing" ? `${pad2(1)} – ${pad2(chosen.length)}` : "—");
-  const progN = roleN(slidesIndex, "programme") ?? 2;
-  const progPath = byN.get(progN);
+  // 照內容對頁時，今日流程那一頁也照內容找（有表格、寫著 Programme／今日流程）；母簡報沒有那一頁就說一聲
+  const progN = mapped.ok ? roles.programme : roleN(slidesIndex, "programme") ?? 2;
+  const progPath = progN != null ? byN.get(progN) : null;
+  if (mapped.ok && !progPath && Array.isArray(spec.programme) && spec.programme.length) report.programme_table = "missing";
   if (progPath && order.includes(progPath) && Array.isArray(spec.programme) && spec.programme.length) {
     const cols = spec.deck?.programme_columns || ["time", "title_en", "title_2nd", "slides_range"];
     const rows = spec.programme.map((b) => cols.map((c) => (c === "time" ? `${b.start} – ${b.end}` : c === "slides_range" ? slidesRange(b) : String(b[c] ?? ""))));
@@ -1212,7 +1346,7 @@ export async function buildDeck(spec, masterBuf, opts = {}) {
   // 5.5 封面：先認出寫來賓的那一塊、記下每一種行的格式——下一步換語言時，英文版會把含中文的單位、日期整行刪掉（6.5 才重寫）。
   // 英文版的「歡迎蒞臨」也會被刪掉，封面就沒有歡迎的字了：先換成 Welcome
   const lang = opts.lang || spec.language || "zh";
-  const coverPath = byN.get(Number(roleN(slidesIndex, "cover") ?? 1));
+  const coverPath = byN.get(Number((mapped.ok ? roles.cover : roleN(slidesIndex, "cover")) ?? 1));
   const onCover = !!coverPath && order.includes(coverPath);
   const cover = coverLines(spec, lang);
   const coverWanted = onCover && !!(cover.org || cover.guests.length || cover.date);
@@ -1250,10 +1384,11 @@ export async function buildDeck(spec, masterBuf, opts = {}) {
     if (lines) report.cover = lines;
   } else if (coverWanted) report.warnings.push("封面找不到寫來賓的那一塊（單位、來賓、日期），封面沒有換");
 
-  // 7. 「您最想看哪一部分」頁標題
+  // 7. 「您最想看哪一部分」頁標題：組織架構頁的「Organisation／組織架構」換成這一句（頁眉誤標的 08 已經清掉）；
+  // 認不出那兩行（從別的頁複製來的）才照舊換掉標題那一塊
   if (askPath) {
-    const lines = lang === "en" ? [ASK_TITLE.en] : [ASK_TITLE.en, ASK_TITLE[lang] || ASK_TITLE.zh];
-    await deck.setTitle(askPath, lines);
+    if (askMarked) await deck.fillAskTitle(askPath, ASK_TITLE.en, lang === "en" ? "" : ASK_TITLE[lang] || ASK_TITLE.zh, lang);
+    else await deck.setTitle(askPath, lang === "en" ? [ASK_TITLE.en] : [ASK_TITLE.en, ASK_TITLE[lang] || ASK_TITLE.zh]);
   }
 
   // 8. QR 頁
@@ -1302,6 +1437,16 @@ function findTitleShape(xml) {
     if (/<p:ph\b[^>]*type="(title|ctrTitle)"/.test(m[0])) return { xml: m[0] };
   }
   return null;
+}
+
+/** 整段換成 text：留第一個 run（字型照舊）、其餘的 run 拿掉；fix(run) 可以再改那個 run（換字型）。 */
+function setParaText(para, text, fix = null) {
+  const runs = [...para.matchAll(/<a:r\b[^>]*>[\s\S]*?<\/a:r>/g)].map((m) => m[0]);
+  if (!runs.length) return para;
+  let out = para;
+  for (let i = runs.length - 1; i > 0; i--) out = swapOnce(out, runs[i], "");
+  const run = setRunText(runs[0], text);
+  return swapOnce(out, runs[0], fix ? fix(run) : run);
 }
 
 function setRunText(run, text) {
