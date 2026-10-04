@@ -1977,6 +1977,8 @@
         if (report.programme_table && report.programme_table !== "filled") lines.push(`第 2 頁流程表：${report.programme_table}`);
         for (const f of report.fixes || []) lines.push(`更正母簡報內文：「${f.find}」→「${f.replace}」${f.count} 處`);
         if (report.cover) lines.push(`封面換成這一場：${report.cover.join("／")}`);
+        if (report.contents) lines.push(`目錄頁只留這一份講到的章節：${report.contents.kept.join("、")}`);
+        if (report.notes_removed) lines.push(`沒有帶母簡報的講稿（${report.notes_removed} 頁）：那是寫給上一次來賓的，寄出去對方也看得到`);
         if (report.pictures_fixed) lines.push(`照片比例更正 ${report.pictures_fixed} 張：母簡報裡被拉變形的照片，整張照原比例放回框裡`);
         // 影片：留在檔案裡才播得動。母簡報是站台上那份瘦過的就不會有，說一句怎麼辦，不要讓人以為壞了
         if (report.videos) lines.push(`保留了 ${report.videos} 支影片，現場直接播。檔案大，寄給對方請改寄 PDF 或雲端連結`);
