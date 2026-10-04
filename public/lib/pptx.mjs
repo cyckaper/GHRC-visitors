@@ -38,6 +38,74 @@ export const QR_CAPTION = { en: "Today's slides, papers and contacts", zh: "當�
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const unesc = (s) => String(s).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d)).replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&amp;/g, "&");
 
+/** 只換第一處、不吃 `$` 特殊字（String.replace 的替換字串會把 `$&` 之類的當成特殊字）。 */
+const swapOnce = (str, find, rep) => {
+  const i = str.indexOf(find);
+  return i < 0 ? str : str.slice(0, i) + rep + str.slice(i + find.length);
+};
+/** 一個標籤的屬性（`<a:ext cx="1" cy="2"/>` → { cx: "1", cy: "2" }）。 */
+const attrsOf = (tag) => Object.fromEntries([...tag.matchAll(/\s([\w:]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
+/** 改一個標籤裡幾個屬性的值（屬性本來就在才改）。 */
+const withAttrs = (tag, values) => Object.entries(values).reduce((t, [k, v]) => t.replace(new RegExp(`(\\s${k}=")[^"]*(")`), (_, a, b) => `${a}${v}${b}`), tag);
+
+/**
+ * 點陣圖本身的寬高——**只讀檔頭，不解碼**（瀏覽器與 Node 都能用）：PNG、JPEG、GIF、BMP。讀不出來回 null。
+ * `alpha`：有透明（PNG 的 alpha 通道或 tRNS、GIF）。那多半是疊在照片上的漸層、圖示——本來就是拉伸著用的。
+ * `orientation`：JPEG 的 EXIF 方向（5–8 是轉了 90 度，寬高要對調著看）。
+ */
+export function imageInfo(bytes) {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const u16 = (i) => (b[i] << 8) | b[i + 1];
+  const u32 = (i) => ((b[i] << 24) >>> 0) + (b[i + 1] << 16) + (b[i + 2] << 8) + b[i + 3];
+  if (b.length > 29 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    let alpha = b[25] === 4 || b[25] === 6; // 色彩型態 4、6 帶 alpha
+    // tRNS（調色盤或灰階的透明色）一定在 IDAT 之前
+    for (let i = 8; !alpha && i + 8 <= b.length; ) {
+      const type = String.fromCharCode(b[i + 4], b[i + 5], b[i + 6], b[i + 7]);
+      if (type === "tRNS") alpha = true;
+      if (type === "IDAT" || type === "IEND") break;
+      i += 12 + u32(i);
+    }
+    return { type: "png", w: u32(16), h: u32(20), alpha, orientation: 1 };
+  }
+  if (b.length > 4 && b[0] === 0xff && b[1] === 0xd8) {
+    let orientation = 1;
+    for (let i = 2; i + 9 <= b.length; ) {
+      if (b[i] !== 0xff) return null;
+      const marker = b[i + 1];
+      if (marker === 0xff) { i++; continue; } // 填充位元組
+      if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) { i += 2; continue; } // 沒有長度的標記
+      if (marker === 0xe1 && String.fromCharCode(b[i + 4], b[i + 5], b[i + 6], b[i + 7]) === "Exif") orientation = exifOrientation(b, i + 10);
+      // SOF0–15（C4 DHT、C8、CC DAC 不是）：高在 +5、寬在 +7
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) return { type: "jpeg", w: u16(i + 7), h: u16(i + 5), alpha: false, orientation };
+      if (marker === 0xda) return null;
+      i += 2 + u16(i + 2);
+    }
+    return null;
+  }
+  if (b.length > 10 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return { type: "gif", w: b[6] | (b[7] << 8), h: b[8] | (b[9] << 8), alpha: true, orientation: 1 };
+  if (b.length > 26 && b[0] === 0x42 && b[1] === 0x4d) {
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    return { type: "bmp", w: Math.abs(dv.getInt32(18, true)), h: Math.abs(dv.getInt32(22, true)), alpha: false, orientation: 1 };
+  }
+  return null;
+}
+/** EXIF 的方向（tag 0x0112）；讀不到回 1。tiff＝TIFF 檔頭（"II"／"MM"）在 bytes 裡的位置。 */
+function exifOrientation(b, tiff) {
+  if (tiff + 8 > b.length) return 1;
+  const le = b[tiff] === 0x49;
+  const u16 = (i) => (le ? b[i] | (b[i + 1] << 8) : (b[i] << 8) | b[i + 1]);
+  const u32 = (i) => (le ? (b[i] | (b[i + 1] << 8) | (b[i + 2] << 16) | (b[i + 3] << 24)) >>> 0 : ((b[i] << 24) | (b[i + 1] << 16) | (b[i + 2] << 8) | b[i + 3]) >>> 0);
+  const ifd = tiff + u32(tiff + 4);
+  if (ifd + 2 > b.length) return 1;
+  for (let k = 0, n = u16(ifd); k < n; k++) {
+    const e = ifd + 2 + k * 12;
+    if (e + 12 > b.length) break;
+    if (u16(e) === 0x0112) return u16(e + 8) || 1;
+  }
+  return 1;
+}
+
 export function relsPath(part) {
   const i = part.lastIndexOf("/");
   return `${part.slice(0, i + 1)}_rels/${part.slice(i + 1)}.rels`;
@@ -354,6 +422,114 @@ export class Deck {
     this.set(path, xml.replace(/<\/p:spTree>/, `${sp}</p:spTree>`));
   }
 
+  /**
+   * **照片不拉變形**（明確指示：「產出的 ppt 照片不要拉變形」；既有標準：照片維持真實比例，不變形、不裁切、不旋轉）。
+   * 每一張圖拿圖檔本身的寬高（扣掉作者自己的裁切 srcRect）跟它在投影片上的框比，比例差超過 2% 就是被拉變形了：
+   *   - 一般的圖（p:pic）：照原比例縮進原本的框裡、置中——不裁切，框的旁邊留白
+   *   - 鋪滿整頁的背景：照原比例裁掉多出來的邊（鋪滿才是背景的用意；留白反而像壞掉）
+   *   - 填了照片的形狀（圓形的老師照片之類，p:sp 的 a:blipFill）：形狀是版面的一部分、不動它，照片照比例裁到形狀的比例
+   * 群組裡的要乘上群組的縮放（chExt → ext），轉了角度的框照樣以中心為準。不去動的：有透明的圖
+   * （疊在照片上的漸層、圖示，本來就是拉伸著用的）、很小的圖、比例差到四倍以上的（多半是刻意拉長的裝飾條）、
+   * 平鋪的填滿、填滿區另外內縮的、沒寫框大小的版面配置區、EXIF 轉了 90 度的照片（各家軟體顯示的方式不一樣，算不準就不動）。
+   * 回傳更正了幾張。
+   */
+  async fixPictureAspect(path) {
+    const { cx: slideW, cy: slideH } = await this.slideSize();
+    const rels = new Map((await this.rels(path)).map((r) => [r.id, r]));
+    const xml = await this.text(path);
+    const info = new Map();
+    const pct = (v) => Math.round(v * 100000);
+    /** 這一塊的框、填滿與圖檔比例；不用動或算不準就回 null。fill＝放圖的那一段（p:blipFill 或 a:blipFill）。 */
+    const measure = async (el, fill, scale) => {
+      const blip = /<a:blip\b[^>]*\br:embed="([^"]+)"/.exec(fill);
+      const stretch = /<a:stretch\b[^>]*\/>|<a:stretch\b[^>]*>[\s\S]*?<\/a:stretch>/.exec(fill)?.[0];
+      if (!blip || !stretch || /<a:tile\b/.test(fill) || /<a:fillRect\b[^>]*\s[ltrb]="-?[1-9]/.test(stretch)) return null;
+      const rel = rels.get(blip[1]);
+      if (!rel || rel.external || !rel.part || !this.has(rel.part)) return null;
+      if (!info.has(rel.part)) info.set(rel.part, imageInfo(await this.bytes(rel.part)));
+      const img = info.get(rel.part);
+      if (!img || img.alpha || !(img.w >= 48 && img.h >= 48) || img.orientation >= 5) return null;
+      const spPr = /<p:spPr\b[^>]*>[\s\S]*?<\/p:spPr>/.exec(el)?.[0];
+      const xfrm = spPr && /<a:xfrm\b[^>]*>[\s\S]*?<\/a:xfrm>/.exec(spPr)?.[0];
+      const offTag = xfrm && /<a:off\b[^>]*\/>/.exec(xfrm)?.[0];
+      const extTag = xfrm && /<a:ext\b[^>]*\/>/.exec(xfrm)?.[0];
+      if (!offTag || !extTag) return null; // 沒寫框大小（版面配置區）：不知道框多大，不去動
+      const [x, y] = [+attrsOf(offTag).x, +attrsOf(offTag).y];
+      const [cx, cy] = [+attrsOf(extTag).cx, +attrsOf(extTag).cy];
+      if (!(cx > 0 && cy > 0)) return null;
+      const srcTag = /<a:srcRect\b[^>]*\/>|<a:srcRect\b[^>]*>[\s\S]*?<\/a:srcRect>/.exec(fill)?.[0];
+      const crop = srcTag ? attrsOf(srcTag) : {};
+      const [l, t, r, b] = ["l", "t", "r", "b"].map((k) => (+crop[k] || 0) / 100000);
+      const fx = 1 - l - r, fy = 1 - t - b;
+      if (!(fx > 0 && fy > 0)) return null;
+      const imgAspect = (img.w * fx) / (img.h * fy);
+      const frameAspect = (cx * scale.sx) / (cy * scale.sy);
+      const ratio = imgAspect / frameAspect;
+      if (Math.abs(Math.log(ratio)) < Math.log(1.02) || ratio > 4 || ratio < 0.25) return null;
+      return { spPr, xfrm, offTag, extTag, x, y, cx, cy, srcTag, l, t, r, b, fx, fy, W: img.w, H: img.h, imgAspect, frameAspect, ratio };
+    };
+    /** 照原比例裁掉多出來的邊（兩邊各裁一半），讓看得見的那一塊就是框的比例。 */
+    const cover = (fill, m) => {
+      let [L, T, R, B] = [m.l, m.t, m.r, m.b];
+      if (m.ratio > 1) { const d = (m.fx - (m.frameAspect * m.H * m.fy) / m.W) / 2; L += d; R += d; }
+      else { const d = (m.fy - (m.W * m.fx) / (m.H * m.frameAspect)) / 2; T += d; B += d; }
+      const rect = `<a:srcRect${[["l", L], ["t", T], ["r", R], ["b", B]].filter(([, v]) => pct(v)).map(([k, v]) => ` ${k}="${pct(v)}"`).join("")}/>`;
+      if (m.srcTag) return swapOnce(fill, m.srcTag, rect);
+      const blipEl = /<a:blip\b[^>]*\/>|<a:blip\b[^>]*>[\s\S]*?<\/a:blip>/.exec(fill)?.[0];
+      return blipEl ? swapOnce(fill, blipEl, blipEl + rect) : fill;
+    };
+    const fixPic = async (pic, scale) => {
+      const fill = /<p:blipFill\b[^>]*>[\s\S]*?<\/p:blipFill>/.exec(pic)?.[0];
+      const m = fill && (await measure(pic, fill, scale));
+      if (!m) return pic;
+      // 鋪滿整頁的背景：裁邊，框不動
+      if (m.cx * scale.sx >= slideW * 0.9 && m.cy * scale.sy >= slideH * 0.9) return swapOnce(pic, fill, cover(fill, m));
+      // 一般的圖：照原比例縮進原本的框裡、置中
+      let [nx, ny, ncx, ncy] = [m.x, m.y, m.cx, m.cy];
+      if (m.ratio > 1) { ncy = Math.round((m.cx * scale.sx) / m.imgAspect / scale.sy); ny = Math.round(m.y + (m.cy - ncy) / 2); }
+      else { ncx = Math.round((m.cy * scale.sy * m.imgAspect) / scale.sx); nx = Math.round(m.x + (m.cx - ncx) / 2); }
+      const newXfrm = swapOnce(swapOnce(m.xfrm, m.offTag, withAttrs(m.offTag, { x: nx, y: ny })), m.extTag, withAttrs(m.extTag, { cx: ncx, cy: ncy }));
+      return swapOnce(pic, m.spPr, swapOnce(m.spPr, m.xfrm, newXfrm));
+    };
+    const fixShape = async (sp, scale) => {
+      const spPr = /<p:spPr\b[^>]*>[\s\S]*?<\/p:spPr>/.exec(sp)?.[0];
+      const fill = spPr && /<a:blipFill\b[^>]*>[\s\S]*?<\/a:blipFill>/.exec(spPr)?.[0];
+      const m = fill && (await measure(sp, fill, scale));
+      return m ? swapOnce(sp, fill, cover(fill, m)) : sp;
+    };
+    // 依序走過群組（群組的縮放＝ext ÷ chExt，一層一層乘上去）、圖與形狀。
+    // 自己結束的 <p:grpSpPr/> 要排在前面：不然會一路吃到下一個 </p:grpSpPr>，把中間的圖一起吞掉
+    const stack = [{ sx: 1, sy: 1 }];
+    let out = "", last = 0, fixed = 0;
+    for (const m of xml.matchAll(/<p:grpSpPr\b[^>]*\/>|<p:grpSpPr\b[^>]*>[\s\S]*?<\/p:grpSpPr>|<p:grpSp\b[^>]*>|<\/p:grpSp>|<p:pic\b[^>]*>[\s\S]*?<\/p:pic>|<p:sp\b[^>]*>[\s\S]*?<\/p:sp>/g)) {
+      const tok = m[0];
+      if (tok.startsWith("<p:grpSpPr")) {
+        if (stack.length < 2) continue; // spTree 自己那一份不算
+        const ext = /<a:ext\b[^>]*\/>/.exec(tok)?.[0], ch = /<a:chExt\b[^>]*\/>/.exec(tok)?.[0];
+        const e = ext ? attrsOf(ext) : {}, c = ch ? attrsOf(ch) : {};
+        const parent = stack[stack.length - 2];
+        stack[stack.length - 1] = { sx: parent.sx * (+c.cx > 0 && +e.cx > 0 ? +e.cx / +c.cx : 1), sy: parent.sy * (+c.cy > 0 && +e.cy > 0 ? +e.cy / +c.cy : 1) };
+        continue;
+      }
+      if (tok === "</p:grpSp>") {
+        if (stack.length > 1) stack.pop();
+        continue;
+      }
+      if (tok.startsWith("<p:grpSp")) {
+        if (!tok.endsWith("/>")) stack.push({ ...stack[stack.length - 1] }); // 空的 <p:grpSp/> 沒有內容，不算一層
+        continue;
+      }
+      const next = tok.startsWith("<p:pic") ? await fixPic(tok, stack[stack.length - 1]) : await fixShape(tok, stack[stack.length - 1]);
+      if (next !== tok) {
+        out += xml.slice(last, m.index) + next;
+        last = m.index + tok.length;
+        fixed++;
+      }
+    }
+    if (fixed) this.set(path, out + xml.slice(last));
+    return fixed;
+  }
+
   /** 表格填值：保留表頭列，資料列不夠就複製最後一列，多的刪掉。rows = [[cell, ...], ...]。 */
   async fillTable(path, rows, { header = 1 } = {}) {
     const xml = await this.text(path);
@@ -470,7 +646,8 @@ export async function hasEmbeddedMedia(buf) {
 async function retarget(deck, oldPart, newPart) {
   const oldName = oldPart.split("/").pop();
   const newName = newPart.split("/").pop();
-  const re = new RegExp(`(Target="[^"]*?)${oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`, "g");
+  // 檔名前面要是「/」或什麼都沒有：image3.png 不能連 myimage3.png 一起改到
+  const re = new RegExp(`(Target="(?:[^"]*/)?)${oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`, "g");
   for (const f of deck.files()) {
     if (!f.endsWith(".rels")) continue;
     const text = await deck.text(f);
@@ -536,6 +713,13 @@ export async function slimDeck(buf, { maxEdge = 2000, imageThreshold = 3_000_000
       if (!m) continue;
       const bytes = await deck.bytes(part);
       if (bytes.length <= imageThreshold) continue;
+      // 照片帶著 EXIF 轉向的不縮：瀏覽器解圖時會照 EXIF 轉好、存回去就沒有 EXIF 了，各家軟體顯示的方式不一樣，
+      // 一不小心就轉錯或拉變形——寧可留著大一點的原檔
+      const pre = imageInfo(bytes);
+      if (pre && pre.orientation !== 1) {
+        report.warnings.push(`${part} 帶著拍照時的轉向資訊，維持原檔`);
+        continue;
+      }
       log(`縮圖 ${part}（${(bytes.length / 1e6).toFixed(1)} MB）`);
       let out = null;
       try {
@@ -548,8 +732,17 @@ export async function slimDeck(buf, { maxEdge = 2000, imageThreshold = 3_000_000
         report.warnings.push(`${part} 壓不小，維持原檔`);
         continue;
       }
+      // 縮完的比例要跟原圖一樣（照片不拉變形）：解不出來、或寬高比差超過 1%（瀏覽器解大圖時偷偷縮了一邊之類），就維持原檔
+      const before = pre, after = imageInfo(out.bytes);
+      if (!before || !after || !(before.w && before.h && after.w && after.h) || Math.abs(after.w / after.h / (before.w / before.h) - 1) > 0.01) {
+        report.warnings.push(`${part} 縮完比例不對，維持原檔`);
+        continue;
+      }
       const ext = out.ext === "png" ? "png" : "jpeg";
-      const newPart = `ppt/media/${m[1]}.${ext}`;
+      // 換副檔名時不能撞到別張圖（image3.png → image3.jpeg，但 image3.jpeg 可能本來就是另一張）：
+      // 撞到就換一個沒人用的名字——不然那一張會被蓋掉，用到它的那一頁變成顯示這一張、還被拉成那一張的框
+      let newPart = `ppt/media/${m[1]}.${ext}`;
+      for (let k = 2; newPart !== part && deck.has(newPart); k++) newPart = `ppt/media/${m[1]}-${k}.${ext}`;
       if (newPart !== part) {
         deck.remove(part);
         await retarget(deck, part, newPart);
@@ -611,6 +804,11 @@ export async function buildDeck(spec, masterBuf, opts = {}) {
   // 3. 重排
   const order = [...chosen.map((n) => byN.get(n)), askPath, qrPath].filter(Boolean);
   await deck.setSlideOrder(order);
+
+  // 3.5 照片不拉變形（明確指示）：母簡報裡被拉成別的比例的照片，照原比例放回框裡（Deck.fixPictureAspect）
+  let picturesFixed = 0;
+  for (const p of new Set(order)) picturesFixed += await deck.fixPictureAspect(p);
+  if (picturesFixed) report.pictures_fixed = picturesFixed;
 
   // 4. 逐字取代（母簡報頁碼 → path）
   const edits = Array.isArray(spec.text_edits) ? spec.text_edits : [];

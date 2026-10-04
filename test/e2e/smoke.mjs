@@ -193,7 +193,13 @@ try {
   check((await slideCount()) === 19, "ticking a block adds all of its pages at once");
   await page.click("#slidesAll");
   check((await slideCount()) === 72, "全選 selects every block");
+  // 按了全選，那一顆變成實心的顏色、前面打 ✓（明確指示：要變顏色才知道有選到）；全不選那一顆回到淡色
+  const pressed = (sel) => page.$eval(sel, (b) => ({ on: b.getAttribute("aria-pressed") === "true", soft: b.classList.contains("btn-soft"), bg: getComputedStyle(b).backgroundColor, text: b.textContent.trim() }));
+  const allOn = await pressed("#slidesAll"), noneOff = await pressed("#slidesNone");
+  check(allOn.on && !allOn.soft && allOn.text.startsWith("✓") && !noneOff.on && noneOff.soft && allOn.bg !== noneOff.bg, `after 全選 the button turns solid and ticked (${allOn.bg} vs ${noneOff.bg}, “${allOn.text}”)`);
   await page.click("#slidesNone");
+  const allOff = await pressed("#slidesAll"), noneOn = await pressed("#slidesNone");
+  check(!allOff.on && allOff.soft && noneOn.on && !noneOn.soft && noneOn.text.startsWith("✓"), "…and 全不選 lights up instead once everything is cleared");
   await page.click('#slideGrid [data-group-only="lab303"]');
   await page.waitForFunction(() => /已存 \d+ 頁/.test(document.getElementById("slidesInfo").textContent), null, { timeout: 30000 });
   check(true, "picking pages saves itself, no button to press");

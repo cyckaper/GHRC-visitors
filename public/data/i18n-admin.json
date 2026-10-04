@@ -722,6 +722,7 @@
   "跟中心老師們座談、不介紹各研究室：流程換成「總體介紹 → 座談」，支援人力表上每一間只選老師可參加或無法參加。": "A roundtable with the centre's faculty, without introducing each laboratory: the programme becomes “overview → roundtable”, and on the cover table each lab only picks whether its teacher can attend.",
   "座談": "Roundtable",
   "可參加": "Can attend",
+  "照片比例更正 # 張：母簡報裡被拉變形的照片，照原比例放回框裡": "Fixed the proportions of # pictures: pictures stretched out of shape in the master slides now keep their own proportions inside their frames",
   "無法參加": "Cannot attend",
   "請選擇": "Choose",
   "座談・選可否出席": "Roundtable · can the teacher attend?",
