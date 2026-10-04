@@ -34,6 +34,12 @@ export const EA_FONT = { ko: "Malgun Gothic", ja: "Yu Gothic", zh: "Microsoft Jh
 export const LANG_TAG = { ko: "ko-KR", ja: "ja-JP", zh: "zh-TW", en: "en-US" };
 export const ASK_TITLE = { en: "Which part would you most like to see?", zh: "您最想看哪一部分？", ko: "어느 부분을 가장 보고 싶으십니까?", ja: "どの部分を最もご覧になりたいですか。" };
 export const QR_CAPTION = { en: "Today's slides, papers and contacts", zh: "當天簡報、論文與老師聯絡方式", ko: "오늘 발표 자료 · 논문 · 연락처", ja: "本日のスライド・論文・連絡先" };
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+/** 封面那一塊裡「像來賓的一行」：Mr.／Ms.／Dr.／Prof.… 開頭，或樣板的 Guest Name／來賓姓名。 */
+const GUEST_LINE = /^(?:(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof|Professor|Sir|Dame|Hon|Rev)\b\.?\s|Guest Name)|來賓姓名/i;
+/** 「像日期的一行」：7 September 2026、Sep 7, 2026、2026 年 9 月 7 日、2026년 9월 7일、2026-09-07。 */
+const MONTH_RE = "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\.?";
+const DATE_LINE = new RegExp(`\\b\\d{1,2}\\s+${MONTH_RE}\\s+\\d{4}\\b|\\b${MONTH_RE}\\s+\\d{1,2},?\\s+\\d{4}\\b|\\d{4}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日|\\d{4}년\\s*\\d{1,2}월\\s*\\d{1,2}일|\\b\\d{4}[-/.]\\d{1,2}[-/.]\\d{1,2}\\b`, "i");
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const unesc = (s) => String(s).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d)).replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&amp;/g, "&");
@@ -47,6 +53,18 @@ const swapOnce = (str, find, rep) => {
 const attrsOf = (tag) => Object.fromEntries([...tag.matchAll(/\s([\w:]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
 /** 改一個標籤裡幾個屬性的值（屬性本來就在才改）。 */
 const withAttrs = (tag, values) => Object.entries(values).reduce((t, [k, v]) => t.replace(new RegExp(`(\\s${k}=")[^"]*(")`), (_, a, b) => `${a}${v}${b}`), tag);
+/** 一段（a:p）的文字，run 合併。 */
+const paraText = (p) => [...p.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map((m) => unesc(m[1])).join("");
+/** 一段的格式：段落屬性、第一個有字的 run 的字型屬性、段尾屬性——照這個格式寫新的一段。 */
+const paraFormat = (p) => {
+  const runs = [...p.matchAll(/<a:r\b[^>]*>[\s\S]*?<\/a:r>/g)].map((m) => m[0]);
+  const run = runs.find((r) => /<a:t>[^<]*\S[^<]*<\/a:t>/.test(r)) || runs[0] || "";
+  return {
+    pPr: /<a:pPr\b[^>]*\/>|<a:pPr\b[^>]*>[\s\S]*?<\/a:pPr>/.exec(p)?.[0] || "",
+    rPr: /<a:rPr\b[^>]*\/>|<a:rPr\b[^>]*>[\s\S]*?<\/a:rPr>/.exec(run)?.[0] || "",
+    endPr: /<a:endParaRPr\b[^>]*\/>|<a:endParaRPr\b[^>]*>[\s\S]*?<\/a:endParaRPr>/.exec(p)?.[0] || "",
+  };
+};
 
 /**
  * 點陣圖本身的寬高——**只讀檔頭，不解碼**（瀏覽器與 Node 都能用）：PNG、JPEG、GIF、BMP。讀不出來回 null。
@@ -360,6 +378,69 @@ export class Deck {
     this.set(path, xml.replace(sp.xml, sp.xml.replace(body[0], newBody)));
   }
 
+  /**
+   * 封面上寫來賓的那一塊（單位、來賓、日期）。明確指示：「首頁的部分應該要根據本次參訪者，更改首頁的內容」——
+   * 母簡報的封面寫的是上一次的來賓，每一份產出的簡報都還是他們。
+   * 認法：不是標題的文字框裡，像來賓的行（Mr.／Dr.／Prof.… 開頭，或樣板的 Guest Name）與像日期的行最多的那一個。
+   * 要在**換語言之前**認：英文版會把含中文的行整行刪掉（母簡報的單位與日期那兩行都是「English · 中文」寫在同一段），
+   * 刪掉之後就不知道那兩行長什麼樣子了。所以這裡只記下位置與每一種行的格式，換完語言再由 `fillVisitBox` 整塊重寫。
+   * 回傳 { index, id, old, org, guest, date }（三種行的格式，母簡報裡沒有日期那一行時 date 是 null）；找不到回 null。
+   */
+  async visitBox(path) {
+    const xml = await this.text(path);
+    let best = null;
+    [...xml.matchAll(/<p:sp\b[\s\S]*?<\/p:sp>/g)].forEach((m, index) => {
+      const sp = m[0];
+      const body = /<p:txBody>([\s\S]*?)<\/p:txBody>/.exec(sp);
+      if (!body || /<p:ph\b[^>]*type="(?:title|ctrTitle)"/.test(sp)) return;
+      const paras = [...body[1].matchAll(/<a:p\b[^>]*>[\s\S]*?<\/a:p>/g)].map((p) => ({ xml: p[0], text: paraText(p[0]).trim() })).filter((p) => p.text);
+      const kinds = paras.map((p) => (GUEST_LINE.test(p.text) ? "guest" : DATE_LINE.test(p.text) ? "date" : "other"));
+      const score = kinds.filter((k) => k === "guest").length * 2 + kinds.filter((k) => k === "date").length;
+      if (score && (!best || score > best.score)) best = { score, index, id: /<p:cNvPr\b[^>]*\bid="(\d+)"/.exec(sp)?.[1] || "", paras, kinds };
+    });
+    if (!best) return null;
+    const { paras, kinds } = best;
+    const firstGuest = kinds.indexOf("guest");
+    const dateAt = kinds.indexOf("date");
+    // 單位是來賓前面那一行；認不出來賓的行（只認得出日期）時，日期前面第一行是單位、第二行是來賓
+    const end = firstGuest >= 0 ? firstGuest : dateAt >= 0 ? dateAt : paras.length;
+    const lead = paras.filter((p, i) => i < end && kinds[i] === "other");
+    const orgP = lead[0], guestP = firstGuest >= 0 ? paras[firstGuest] : lead[1] || lead[0], dateP = dateAt >= 0 ? paras[dateAt] : null;
+    const f = (p) => (p ? paraFormat(p.xml) : null);
+    // 母簡報那一塊沒有單位那一行，單位也照樣寫（照來賓那一行的格式）：封面最要緊的就是哪個單位來
+    return { index: best.index, id: best.id, old: paras.map((p) => p.text), org: f(orgP || guestP || dateP), guest: f(guestP || orgP || dateP), date: f(dateP) };
+  }
+
+  /**
+   * 把 `visitBox` 認出來的那一塊整塊換成這一場的字（`coverLines`）：單位、來賓、日期各沿用母簡報那一種行的格式，
+   * 上一次的來賓一行都不留。有韓文、日文的行換成對應的字型（不然會掉成方框）。回傳寫進去的行；那一塊不見了回 null。
+   */
+  async fillVisitBox(path, box, { org = "", guests = [], date = "" }, lang = "zh") {
+    const xml = await this.text(path);
+    const shapes = [...xml.matchAll(/<p:sp\b[\s\S]*?<\/p:sp>/g)].map((m) => m[0]);
+    const byId = box.id ? shapes.filter((sp) => new RegExp(`<p:cNvPr\\b[^>]*\\bid="${box.id}"`).test(sp)) : [];
+    const sp = byId.length === 1 ? byId[0] : shapes[box.index];
+    const body = sp && /<p:txBody>([\s\S]*?)<\/p:txBody>/.exec(sp);
+    if (!body) return null;
+    const lines = [];
+    const para = (f, text) => {
+      lines.push(text);
+      let run = `<a:r>${f.rPr || '<a:rPr lang="en-US" dirty="0"/>'}<a:t>${esc(text)}</a:t></a:r>`;
+      const script = scriptOf(text, lang);
+      if (script) run = setRunFont(run, LANG_TAG[script], EA_FONT[script]);
+      return `<a:p>${f.pPr}${run}${f.endPr}</a:p>`;
+    };
+    const out = [];
+    if (org) out.push(para(box.org, org));
+    for (const g of guests) out.push(para(box.guest, g));
+    if (date && box.date) out.push(para(box.date, date));
+    if (!out.length) out.push(`<a:p>${box.guest?.endPr || ""}</a:p>`); // 文字框至少要有一段
+    const first = body[1].search(/<a:p\b/);
+    const head = first >= 0 ? body[1].slice(0, first) : body[1];
+    this.set(path, swapOnce(xml, sp, swapOnce(sp, body[0], `<p:txBody>${head}${out.join("")}</p:txBody>`)));
+    return lines;
+  }
+
   /** 含漢字的 run 文字（去重，保序），供翻譯。 */
   async cjkRuns(path) {
     const xml = await this.text(path);
@@ -425,9 +506,12 @@ export class Deck {
   /**
    * **照片不拉變形**（明確指示：「產出的 ppt 照片不要拉變形」；既有標準：照片維持真實比例，不變形、不裁切、不旋轉）。
    * 每一張圖拿圖檔本身的寬高（扣掉作者自己的裁切 srcRect）跟它在投影片上的框比，比例差超過 2% 就是被拉變形了：
-   *   - 一般的圖（p:pic）：照原比例縮進原本的框裡、置中——不裁切，框的旁邊留白
+   *   - 一般的圖（p:pic）：**整張照片**照原比例放進原本的框裡、置中——作者的裁切一起拿掉，不裁切，框的旁邊留白。
+   *     實際回報：只照比例縮的話「上下都被截斷了」——母簡報裡那一張本來就被裁掉上下一大塊，拉長的時候看不出來；
+   *     原圖跟框同比例時（多半就是這樣：裁切是別的軟體轉檔時留下的），拿掉裁切就剛好填滿原本的框
    *   - 鋪滿整頁的背景：照原比例裁掉多出來的邊（鋪滿才是背景的用意；留白反而像壞掉）
    *   - 填了照片的形狀（圓形的老師照片之類，p:sp 的 a:blipFill）：形狀是版面的一部分、不動它，照片照比例裁到形狀的比例
+   *   這兩種要裁的，**先從作者裁掉的地方補回來**（作者選的那一塊整個留著，`cover`），原圖不夠補才裁另一邊
    * 群組裡的要乘上群組的縮放（chExt → ext），轉了角度的框照樣以中心為準。不去動的：有透明的圖
    * （疊在照片上的漸層、圖示，本來就是拉伸著用的）、很小的圖、比例差到四倍以上的（多半是刻意拉長的裝飾條）、
    * 平鋪的填滿、填滿區另外內縮的、沒寫框大小的版面配置區、EXIF 轉了 90 度的照片（各家軟體顯示的方式不一樣，算不準就不動）。
@@ -468,12 +552,37 @@ export class Deck {
       if (Math.abs(Math.log(ratio)) < Math.log(1.02) || ratio > 4 || ratio < 0.25) return null;
       return { spPr, xfrm, offTag, extTag, x, y, cx, cy, srcTag, l, t, r, b, fx, fy, W: img.w, H: img.h, imgAspect, frameAspect, ratio };
     };
-    /** 照原比例裁掉多出來的邊（兩邊各裁一半），讓看得見的那一塊就是框的比例。 */
+    /**
+     * 框不動，看得見的那一塊改成框的比例。**先從作者裁掉的地方補回來**——作者選的那一塊整個留著，
+     * 只在不夠的那個方向往外擴（以那一塊的中心為準，碰到原圖的邊就往回推）；原圖不夠補，才從另一邊照比例裁。
+     * 以前是在作者裁好的那一塊裡面再裁：母簡報裡被裁掉上下一大塊的照片，就只剩中間一小條。
+     * 座標是原圖的比例（0–1，可以是負的＝留白）。
+     */
     const cover = (fill, m) => {
-      let [L, T, R, B] = [m.l, m.t, m.r, m.b];
-      if (m.ratio > 1) { const d = (m.fx - (m.frameAspect * m.H * m.fy) / m.W) / 2; L += d; R += d; }
-      else { const d = (m.fy - (m.W * m.fx) / (m.H * m.frameAspect)) / 2; T += d; B += d; }
-      const rect = `<a:srcRect${[["l", L], ["t", T], ["r", R], ["b", B]].filter(([, v]) => pct(v)).map(([k, v]) => ` ${k}="${pct(v)}"`).join("")}/>`;
+      let [x0, x1, y0, y1] = [m.l, 1 - m.r, m.t, 1 - m.b];
+      const [xlo, xhi, ylo, yhi] = [Math.min(0, x0), Math.max(1, x1), Math.min(0, y0), Math.max(1, y1)];
+      const fit = (a0, a1, len, lo, hi) => { const s = Math.min(Math.max((a0 + a1 - len) / 2, lo), hi - len); return [s, s + len]; };
+      // 補完之後只差不到 2% 就不再裁另一邊（跟判斷有沒有變形同一個門檻：看不出來的差，不值得裁掉一條）
+      if (m.ratio > 1) {
+        // 看得見的那一塊比框扁：先把上下補回來；原圖不夠高，就整張的高、左右照比例裁
+        const h = ((x1 - x0) * m.W) / m.frameAspect / m.H;
+        if (h <= yhi - ylo) [y0, y1] = fit(y0, y1, h, ylo, yhi);
+        else {
+          [y0, y1] = [ylo, yhi];
+          const w = ((y1 - y0) * m.H * m.frameAspect) / m.W;
+          if (w < (x1 - x0) / 1.02) [x0, x1] = fit(x0, x1, w, x0, x1);
+        }
+      } else {
+        const w = ((y1 - y0) * m.H * m.frameAspect) / m.W;
+        if (w <= xhi - xlo) [x0, x1] = fit(x0, x1, w, xlo, xhi);
+        else {
+          [x0, x1] = [xlo, xhi];
+          const h = ((x1 - x0) * m.W) / m.frameAspect / m.H;
+          if (h < (y1 - y0) / 1.02) [y0, y1] = fit(y0, y1, h, y0, y1);
+        }
+      }
+      const attrs = [["l", x0], ["t", y0], ["r", 1 - x1], ["b", 1 - y1]].filter(([, v]) => pct(v)).map(([k, v]) => ` ${k}="${pct(v)}"`).join("");
+      const rect = attrs ? `<a:srcRect${attrs}/>` : ""; // 補回來就是整張：不必再寫一個空的裁切
       if (m.srcTag) return swapOnce(fill, m.srcTag, rect);
       const blipEl = /<a:blip\b[^>]*\/>|<a:blip\b[^>]*>[\s\S]*?<\/a:blip>/.exec(fill)?.[0];
       return blipEl ? swapOnce(fill, blipEl, blipEl + rect) : fill;
@@ -484,12 +593,20 @@ export class Deck {
       if (!m) return pic;
       // 鋪滿整頁的背景：裁邊，框不動
       if (m.cx * scale.sx >= slideW * 0.9 && m.cy * scale.sy >= slideH * 0.9) return swapOnce(pic, fill, cover(fill, m));
-      // 一般的圖：照原比例縮進原本的框裡、置中
+      // 一般的圖：拿掉作者的裁切，**整張照片**照原比例放進原本的框裡、置中（原圖跟框同比例就剛好填滿，框不動）
+      const full = m.W / m.H;
+      const r = full / m.frameAspect;
       let [nx, ny, ncx, ncy] = [m.x, m.y, m.cx, m.cy];
-      if (m.ratio > 1) { ncy = Math.round((m.cx * scale.sx) / m.imgAspect / scale.sy); ny = Math.round(m.y + (m.cy - ncy) / 2); }
-      else { ncx = Math.round((m.cy * scale.sy * m.imgAspect) / scale.sx); nx = Math.round(m.x + (m.cx - ncx) / 2); }
-      const newXfrm = swapOnce(swapOnce(m.xfrm, m.offTag, withAttrs(m.offTag, { x: nx, y: ny })), m.extTag, withAttrs(m.extTag, { cx: ncx, cy: ncy }));
-      return swapOnce(pic, m.spPr, swapOnce(m.spPr, m.xfrm, newXfrm));
+      if (Math.abs(Math.log(r)) >= Math.log(1.02)) {
+        if (r > 1) { ncy = Math.round((m.cx * scale.sx) / full / scale.sy); ny = Math.round(m.y + (m.cy - ncy) / 2); }
+        else { ncx = Math.round((m.cy * scale.sy * full) / scale.sx); nx = Math.round(m.x + (m.cx - ncx) / 2); }
+      }
+      let next = m.srcTag ? swapOnce(pic, fill, swapOnce(fill, m.srcTag, "")) : pic;
+      if (ncx !== m.cx || ncy !== m.cy) {
+        const newXfrm = swapOnce(swapOnce(m.xfrm, m.offTag, withAttrs(m.offTag, { x: nx, y: ny })), m.extTag, withAttrs(m.extTag, { cx: ncx, cy: ncy }));
+        next = swapOnce(next, m.spPr, swapOnce(m.spPr, m.xfrm, newXfrm));
+      }
+      return next;
     };
     const fixShape = async (sp, scale) => {
       const spPr = /<p:spPr\b[^>]*>[\s\S]*?<\/p:spPr>/.exec(sp)?.[0];
@@ -768,6 +885,34 @@ function roleN(slidesIndex, role) {
 }
 
 /**
+ * 封面那一塊這一場要寫的字（`Deck.fillVisitBox`）：單位、來賓（主賓排第一，最多三行）、日期。
+ * 跟母簡報同一個寫法——英文為主，中／韓／日版在後面接「 · 」與對方的寫法（「Rural Development Administration · 韓國農村振興廳」
+ * 「7 September 2026 · 2026 年 9 月 7 日」）；英文版只有英文。來賓一行是「姓名　職稱」。
+ * 四位以上只寫前兩位，第三行寫「and N colleagues」——那一塊的大小是固定的，寧可少寫也不要縮字。
+ */
+export function coverLines(spec, lang = "zh") {
+  const two = lang !== "en";
+  const name = String(spec?.org?.name || "").trim(), local = String(spec?.org?.name_local || "").trim();
+  const org = two ? [name, local && local !== name ? local : ""].filter(Boolean).join(" · ") : name || local;
+  const list = (Array.isArray(spec?.guests) ? spec.guests : []).filter((g) => g && String(g.name || "").trim());
+  const sorted = [...list.filter((g) => g.role === "lead"), ...list.filter((g) => g.role !== "lead")];
+  let guests = sorted.map((g) => [String(g.name).trim(), String(g.title || "").trim()].filter(Boolean).join("　"));
+  if (guests.length > 3) {
+    const n = guests.length - 2;
+    const tail = { zh: `及其他 ${n} 位來賓`, ko: `외 ${n}명`, ja: `ほか ${n} 名` }[lang];
+    guests = [...guests.slice(0, 2), two && tail ? `and ${n} colleagues · ${tail}` : `and ${n} colleagues`];
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(spec?.date || ""));
+  let date = "";
+  if (m && +m[2] >= 1 && +m[2] <= 12) {
+    const [y, mo, d] = [+m[1], +m[2], +m[3]];
+    const loc = { zh: `${y} 年 ${mo} 月 ${d} 日`, ko: `${y}년 ${mo}월 ${d}일`, ja: `${y}年${mo}月${d}日` }[lang];
+    date = `${d} ${MONTHS[mo - 1]} ${y}${two && loc ? ` · ${loc}` : ""}`;
+  }
+  return { org, guests, date };
+}
+
+/**
  * 核心：spec ＋ 母簡報 → { pptx: Uint8Array, report, dump }
  * @param {object} spec  visits 表的一筆（visit_id、slides、language、text_edits、programme、page_url、deck.*）
  * @param {Uint8Array|ArrayBuffer} masterBuf
@@ -858,8 +1003,21 @@ export async function buildDeck(spec, masterBuf, opts = {}) {
     report.programme_table = ok ? "filled" : "no table on programme slide（用 text_edits）";
   }
 
-  // 6. 第二語言
+  // 5.5 封面：先認出寫來賓的那一塊、記下每一種行的格式——下一步換語言時，英文版會把含中文的單位、日期整行刪掉（6.5 才重寫）。
+  // 英文版的「歡迎蒞臨」也會被刪掉，封面就沒有歡迎的字了：先換成 Welcome
   const lang = opts.lang || spec.language || "zh";
+  const coverPath = byN.get(Number(roleN(slidesIndex, "cover") ?? 1));
+  const onCover = !!coverPath && order.includes(coverPath);
+  const cover = coverLines(spec, lang);
+  const coverWanted = onCover && !!(cover.org || cover.guests.length || cover.date);
+  const coverBox = coverWanted ? await deck.visitBox(coverPath) : null;
+  if (onCover && lang === "en") {
+    const x = await deck.text(coverPath);
+    const y = x.replace(/<a:t>\s*歡迎蒞臨\s*<\/a:t>/g, "<a:t>Welcome</a:t>");
+    if (y !== x) deck.set(coverPath, y);
+  }
+
+  // 6. 第二語言
   report.language = lang;
   if (lang === "en") {
     for (const p of order) await deck.swapCjk(p, null, "en");
@@ -878,6 +1036,13 @@ export async function buildDeck(spec, masterBuf, opts = {}) {
     for (const p of order) await deck.swapCjk(p, cache, lang);
     report.translated = list.length;
   }
+
+  // 6.5 封面換成這一場的單位、來賓、日期（明確指示：「首頁的部分應該要根據本次參訪者，更改首頁的內容」）。
+  // 換完語言才寫，寫進去的字就不會被刪掉或拿去翻譯；照的是參訪紀錄（不是 AI 挑頁時的 cover_text——名單之後改過就舊了）
+  if (coverBox) {
+    const lines = await deck.fillVisitBox(coverPath, coverBox, cover, lang);
+    if (lines) report.cover = lines;
+  } else if (coverWanted) report.warnings.push("封面找不到寫來賓的那一塊（單位、來賓、日期），封面沒有換");
 
   // 7. 「您最想看哪一部分」頁標題
   if (askPath) {
@@ -936,6 +1101,14 @@ function findTitleShape(xml) {
 function setRunText(run, text) {
   if (/<a:t>[\s\S]*?<\/a:t>/.test(run)) return run.replace(/<a:t>[\s\S]*?<\/a:t>/, `<a:t>${esc(text)}</a:t>`);
   return run.replace(/<a:t\/>/, `<a:t>${esc(text)}</a:t>`);
+}
+
+/** 這一行要換成哪一種東亞字型：有韓文用韓文的、有假名用日文的；只有漢字時跟著這一份的語言（中文版、英文版沿用原本的字型）。 */
+function scriptOf(text, lang) {
+  if (/[ᄀ-ᇿ㄰-㆏가-힯]/.test(text)) return "ko";
+  if (/[぀-ヿ]/.test(text)) return "ja";
+  if (HAN.test(text) && (lang === "ko" || lang === "ja")) return lang;
+  return "";
 }
 
 function setRunFont(run, lang, ea) {

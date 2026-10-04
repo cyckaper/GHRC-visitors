@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { buildDeck, inspectDeck } from "../cli/deck.mjs";
-import { Deck, slimDeck, hasEmbeddedMedia, imageInfo } from "../cli/lib/pptx.mjs";
+import { Deck, slimDeck, hasEmbeddedMedia, imageInfo, coverLines } from "../cli/lib/pptx.mjs";
 import zlib from "node:zlib";
 
 /** 一張真的 PNG（全黑）：寬、高、色彩型態（2＝RGB，6＝RGBA 有透明）。 */
@@ -278,6 +278,20 @@ test("產出的簡報照片不拉變形：比例不對的照片照原比例放�
   await put(pic("rId2", 0, 0, 2000000, 2000000, '<a:srcRect t="12500" b="12500"/>'));
   assert.equal(await deck.fixPictureAspect(slide), 0);
 
+  // 實際回報：照比例縮回去之後「上下都被截斷了」——母簡報裡那一張本來就被裁掉上下一大塊（看得見的只剩 300×200），
+  // 被拉長到 3:4 的框裡時看不出來。原圖本身就是 3:4：拿掉裁切就剛好填滿原本的框，框不動
+  await put(pic("rId2", 1000000, 1000000, 1500000, 2000000, '<a:srcRect t="25000" b="25000"/>'));
+  assert.equal(await deck.fixPictureAspect(slide), 1);
+  assert.deepEqual(await frame(), [1000000, 1000000, 1500000, 2000000], "原圖跟框同比例：框不動");
+  assert.ok(!/<a:srcRect/.test(await deck.text(slide)), "裁切拿掉，整張照片都看得到");
+  assert.equal(await deck.fixPictureAspect(slide), 0, "整張放回去之後就對了");
+
+  // 原圖跟框也不同比例：一樣拿掉裁切，整張照原比例放進框裡、置中（正方形的框 → 寬度 0.75 倍）
+  await put(pic("rId2", 1000000, 1000000, 2000000, 2000000, '<a:srcRect t="25000" b="25000"/>'));
+  assert.equal(await deck.fixPictureAspect(slide), 1);
+  assert.deepEqual(await frame(), [1250000, 1000000, 1500000, 2000000]);
+  assert.ok(!/<a:srcRect/.test(await deck.text(slide)));
+
   // 群組裡的圖：群組橫向縮了一半（ext 是 chExt 的一半），子座標 2:1 的框實際是 1:1——還是被拉寬了
   await put(`<p:grpSp><p:nvGrpSpPr><p:cNvPr id="91" name="G"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2000000" cy="2000000"/><a:chOff x="0" y="0"/><a:chExt cx="4000000" cy="2000000"/></a:xfrm></p:grpSpPr>${pic("rId2", 0, 0, 4000000, 2000000)}</p:grpSp>`);
   assert.equal(await deck.fixPictureAspect(slide), 1);
@@ -294,6 +308,15 @@ test("產出的簡報照片不拉變形：比例不對的照片照原比例放�
   const visible = (300 / (400 * (1 - 2 * Number(crop[1]) / 100000)));
   assert.ok(Math.abs(visible - W / H) < 0.01, `裁完的比例就是整頁的比例（${visible.toFixed(3)} vs ${(W / H).toFixed(3)}）`);
 
+  // 背景要鋪滿，但先從作者裁掉的地方補回來：原圖跟整頁同比例、只是被裁掉上下各 1/3 → 補回來就是整張，不再裁
+  assert.ok(Math.abs(W / H - 16 / 9) < 0.001, "合成母簡報是 16:9");
+  deck.set("ppt/media/wide.png", pngBytes(1600, 900));
+  const wide = await deck.addRel(slide, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", "../media/wide.png");
+  await put(pic(wide, 0, 0, W, H, '<a:srcRect t="33333" b="33333"/>'));
+  assert.equal(await deck.fixPictureAspect(slide), 1);
+  assert.deepEqual(await frame(), [0, 0, W, H]);
+  assert.ok(!/<a:srcRect/.test(await deck.text(slide)), `以前是在裁好的那一條裡面再裁，只剩中間一小塊：${/<a:srcRect[^>]*>/.exec(await deck.text(slide))?.[0]}`);
+
   // 有透明的圖（疊在照片上的漸層、圖示）本來就是拉伸著用的：不動
   deck.set("ppt/media/overlay.png", pngBytes(64, 64, 6));
   const rid = await deck.addRel(slide, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", "../media/overlay.png");
@@ -306,6 +329,13 @@ test("產出的簡報照片不拉變形：比例不對的照片照原比例放�
   const shape = await deck.text(slide);
   assert.deepEqual(await frame(), [100, 200, 2000000, 2000000], "形狀的位置與大小不動");
   assert.ok(shape.includes('<a:srcRect t="12500" b="12500"/>'), /<a:blipFill[\s\S]*?<\/a:blipFill>/.exec(shape)?.[0]);
+
+  // 作者在圓形裡框了臉（左右各裁 1/4、上 10%、下 50%，看得見的 150×160，放進正方形被拉寬了一點）：
+  // 作者框的那一塊整個留著，只往左右補到正方形——不是在臉上再裁掉上下
+  await put(`<p:sp><p:nvSpPr><p:cNvPr id="93" name="P"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="100" y="200"/><a:ext cx="2000000" cy="2000000"/></a:xfrm><a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom><a:blipFill rotWithShape="1"><a:blip r:embed="rId2"/><a:srcRect l="25000" t="10000" r="25000" b="50000"/><a:stretch><a:fillRect/></a:stretch></a:blipFill></p:spPr></p:sp>`);
+  assert.equal(await deck.fixPictureAspect(slide), 1);
+  const face = await deck.text(slide);
+  assert.ok(face.includes('<a:srcRect l="23333" t="10000" r="23333" b="50000"/>'), /<a:srcRect[^>]*>/.exec(face)?.[0]);
 });
 
 test("產檔時照片比例的更正會寫進報告", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
@@ -319,6 +349,81 @@ test("產檔時照片比例的更正會寫進報告", { skip: !available && "fix
   // 沒有被拉變形的那一份不會多一行
   const clean = await buildDeck({ ...spec, language: "zh", slides: [1, 2, 9, 10], text_edits: [] }, await readFile(FIXTURE), { slidesIndex, lang: "zh" });
   assert.equal(clean.report.pictures_fixed, undefined);
+});
+
+/**
+ * 母簡報封面那一塊的樣子（2026-09 版的母簡報）：單位與日期都是「English · 中文」寫在同一段，來賓是「Mr. 姓名　職稱」；
+ * 標題上方另有一段只寫「歡迎蒞臨」。名字都是虛構的。三種行各給一個字級，才看得出新寫的每一行沿用哪一種行的格式。
+ */
+async function masterWithCover() {
+  const deck = await Deck.load(await readFile(FIXTURE));
+  const slide = "ppt/slides/slide1.xml";
+  let xml = await deck.text(slide);
+  const p = (text, sz, extra = "") => `<a:p><a:pPr algn="l"/><a:r><a:rPr lang="zh-TW" sz="${sz}"${extra} dirty="0"/><a:t>${text}</a:t></a:r></a:p>`;
+  const box = p("Example Agency · 範例機構 範例課", 1600, ' b="1"') + p("Mr. Kim Oldguest　Team Leader, Example Planning", 1400) + p("Ms. Park Formervisit　Senior Researcher", 1400) + p("7 September 2026 · 2026 年 9 月 7 日", 1200);
+  const sp = [...xml.matchAll(/<p:sp\b[\s\S]*?<\/p:sp>/g)].map((m) => m[0]).find((x) => x.includes("Visiting Organisation Name"));
+  xml = xml.replace(sp, () => sp.replace(/(<p:txBody>[\s\S]*?)<a:p\b[\s\S]*<\/a:p>(<\/p:txBody>)/, (_, a, b) => a + box + b));
+  deck.set(slide, xml.replace("歡迎蒞臨綠色健康研究中心", "歡迎蒞臨"));
+  return deck.save();
+}
+const coverVisit = {
+  ...spec, visit_id: "2026-10-05-uoe", date: "2026-10-05", slides: [1, 2, 3, 10], text_edits: [],
+  org: { name: "University of Example", name_local: "範例大學", type: "university", country: "Australia" },
+  // 主賓不一定排在名單第一個：封面上主賓排第一
+  guests: [{ name: "Jordan Placeholder", title: "Research Fellow", role: "member", email: "" }, { name: "Dr. Alex Sample", title: "Senior Lecturer", role: "lead", email: "" }],
+};
+const runAttrs = (xml, text) => new RegExp(`<a:rPr([^>]*?)/?>(?:<a:ea[^>]*/></a:rPr>)?<a:t>${text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</a:t>`).exec(xml)?.[1] || "";
+
+test("封面換成這一場的單位、來賓、日期：上一次的來賓一行都不留，每一行沿用母簡報那一種行的格式", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
+  // 明確指示：「首頁的部分應該要根據本次參訪者，更改首頁的內容，現在內容還是舊的」
+  const master = await masterWithCover();
+  const en = await buildDeck({ ...coverVisit, language: "en" }, master, { slidesIndex, lang: "en" });
+  assert.deepEqual(en.report.cover, ["University of Example", "Dr. Alex Sample　Senior Lecturer", "Jordan Placeholder　Research Fellow", "5 October 2026"]);
+  let deck = await Deck.load(en.pptx);
+  let xml = await deck.text((await deck.slides())[0].path);
+  const paras = await deck.paragraphs((await deck.slides())[0].path);
+  assert.ok(!/Oldguest|Formervisit|Example Agency|September/.test(xml), `上一次的來賓不能留在封面上：${paras.join(" | ")}`);
+  assert.ok(paras.includes("Welcome"), "英文版的「歡迎蒞臨」換成 Welcome（不然會整行被刪掉，封面就沒有歡迎的字）");
+  assert.ok(!/<a:t>[^<]*\p{Script=Han}/u.test(xml), "英文版封面沒有中文");
+  assert.match(runAttrs(xml, "University of Example"), /sz="1600" b="1"/, "單位那一行照母簡報單位那一行的格式");
+  assert.match(runAttrs(xml, "Dr. Alex Sample　Senior Lecturer"), /sz="1400"/);
+  assert.match(runAttrs(xml, "5 October 2026"), /sz="1200"/, "日期那一行照母簡報日期那一行的格式");
+
+  // 中文版：單位與日期跟母簡報一樣是「English · 中文」
+  const zh = await buildDeck({ ...coverVisit, language: "zh" }, master, { slidesIndex, lang: "zh" });
+  assert.deepEqual(zh.report.cover, ["University of Example · 範例大學", "Dr. Alex Sample　Senior Lecturer", "Jordan Placeholder　Research Fellow", "5 October 2026 · 2026 年 10 月 5 日"]);
+  deck = await Deck.load(zh.pptx);
+  assert.ok((await deck.paragraphs((await deck.slides())[0].path)).includes("歡迎蒞臨"), "中文版的歡迎蒞臨照舊");
+
+  // 韓文版：換完語言才寫（不會被拿去翻譯），韓文的行換成韓文字型（不然會掉成方框）
+  const ko = await buildDeck({ ...coverVisit, language: "ko", guests: [{ name: "김가상", title: "교수", role: "lead", email: "" }] }, master, { slidesIndex, lang: "ko", translate });
+  assert.deepEqual(ko.report.cover, ["University of Example · 範例大學", "김가상　교수", "5 October 2026 · 2026년 10월 5일"]);
+  deck = await Deck.load(ko.pptx);
+  xml = await deck.text((await deck.slides())[0].path);
+  assert.match(xml, /<a:rPr lang="ko-KR" sz="1400" dirty="0"><a:ea typeface="Malgun Gothic"\/><\/a:rPr><a:t>김가상　교수<\/a:t>/);
+  assert.ok(!xml.includes("[ko] University"), "新寫的行不會被拿去翻譯");
+  assert.deepEqual(ko.report.validation.errors, []);
+});
+
+test("封面的字：主賓排第一，四位以上只寫前兩位＋「and N colleagues」，日期各語言的寫法", () => {
+  const guests = ["A", "B", "C", "D", "E"].map((name, i) => ({ name, title: "T", role: i === 2 ? "lead" : "member" }));
+  assert.deepEqual(coverLines({ org: { name: "Org" }, guests, date: "2026-10-05" }, "en"), { org: "Org", guests: ["C　T", "A　T", "and 3 colleagues"], date: "5 October 2026" });
+  assert.deepEqual(coverLines({ org: { name: "Org", name_local: "단체" }, guests, date: "2026-01-09" }, "ko").guests[2], "and 3 colleagues · 외 3명");
+  assert.equal(coverLines({ date: "2026-01-09" }, "ja").date, "9 January 2026 · 2026年1月9日");
+  assert.equal(coverLines({ org: { name: "Org", name_local: "単体" } }, "en").org, "Org", "英文版只有英文");
+  assert.equal(coverLines({ org: { name: "", name_local: "範例大學" } }, "en").org, "範例大學", "沒有英文名稱就寫當地的");
+  assert.deepEqual(coverLines({ guests: [{ name: "A", title: "" }, { name: " ", title: "x" }] }, "zh").guests, ["A"], "沒有名字的不寫，沒有職稱就只寫名字");
+  assert.equal(coverLines({ date: "" }, "zh").date, "");
+});
+
+test("封面找不到寫來賓的那一塊：報告說一聲，照樣產檔", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
+  const deck = await Deck.load(await readFile(FIXTURE));
+  const slide = "ppt/slides/slide1.xml";
+  deck.set(slide, (await deck.text(slide)).replace("Guest Name, Title", "Making nature measurable").replace("來賓姓名 職稱", "讓自然可量測").replace("1 January 2026 · 2026年1月1日", "A tagline"));
+  const { report } = await buildDeck({ ...coverVisit, language: "zh" }, await deck.save(), { slidesIndex, lang: "zh" });
+  assert.equal(report.cover, undefined);
+  assert.ok(report.warnings.some((w) => w.includes("封面找不到寫來賓的那一塊")), report.warnings.join(" | "));
+  assert.deepEqual(report.validation.errors, []);
 });
 
 test("瘦身：縮完的圖換副檔名時不能蓋掉另一張同名的圖；縮完比例不對就維持原檔", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
