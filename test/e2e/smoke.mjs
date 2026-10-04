@@ -234,6 +234,10 @@ try {
     const built = await Deck.load(await readFile(pptxPath));
     const v = await built.validate();
     check(v.errors.length === 0 && v.slideCount === 6, `browser-built deck is valid with ${v.slideCount} slides (4 always-slides + ask + QR)${v.errors.length ? ": " + v.errors.join("; ") : ""}`);
+    // 封面換成這一場（明確指示：「首頁的部分應該要根據本次參訪者，更改首頁的內容」），母簡報封面上的字不留
+    const coverParas = await built.paragraphs((await built.slides())[0].path);
+    check(coverParas.some((p) => /Western Australia/.test(p)) && coverParas.some((p) => /October 2026/.test(p)) && !coverParas.some((p) => /Guest Name|Visiting Organisation Name|January 2026/.test(p)), `the cover names this visit's organisation and date, not the master's (${coverParas.join(" | ")})`);
+    await page.waitForFunction(() => /封面換成這一場/.test(document.getElementById("deckReport").textContent));
     await page.waitForFunction(() => /已下載/.test(document.getElementById("deckInfo").textContent));
     // 把這份母簡報存到站台（分塊上傳），重新載入後不必選檔就能產
     await page.click("#saveMasterBtn");

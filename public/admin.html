@@ -1976,7 +1976,8 @@
         const lines = [...(offerSave && state.slimReport ? [slimSummary(state.slimReport)] : []), ...report.warnings, ...report.edits.missed.map((m) => `第 ${m.slide} 頁找不到「${(m.find || "").slice(0, 40)}」`)];
         if (report.programme_table && report.programme_table !== "filled") lines.push(`第 2 頁流程表：${report.programme_table}`);
         for (const f of report.fixes || []) lines.push(`更正母簡報內文：「${f.find}」→「${f.replace}」${f.count} 處`);
-        if (report.pictures_fixed) lines.push(`照片比例更正 ${report.pictures_fixed} 張：母簡報裡被拉變形的照片，照原比例放回框裡`);
+        if (report.cover) lines.push(`封面換成這一場：${report.cover.join("／")}`);
+        if (report.pictures_fixed) lines.push(`照片比例更正 ${report.pictures_fixed} 張：母簡報裡被拉變形的照片，整張照原比例放回框裡`);
         // 影片：留在檔案裡才播得動。母簡報是站台上那份瘦過的就不會有，說一句怎麼辦，不要讓人以為壞了
         if (report.videos) lines.push(`保留了 ${report.videos} 支影片，現場直接播。檔案大，寄給對方請改寄 PDF 或雲端連結`);
         else if ((state.slides?.slides || []).some((x) => x.video && (spec.slides || []).includes(x.n))) lines.push("這一場選到了影片頁，但母簡報裡沒有影片（站台上那份是瘦過的），那幾頁只有海報；現場要真的播，產簡報時當場選原始的母簡報");
