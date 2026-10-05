@@ -216,6 +216,8 @@ try {
   await page.uncheck("#noDeck");
   await page.waitForSelector("#deckWork:not([hidden])");
   await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]:checked").length > 0);
+  // 等「要做簡報」真的存到伺服器才重新整理：不然重新整理之後讀到的還是「不用簡報」，產檔那一區是收起來的（CI 踩過）
+  await page.waitForFunction(() => /這場要做簡報/.test(document.getElementById("flash").textContent));
 
   // 一載入就直接點「簡報」分頁（boot 可能還沒跑完）也要看得到選項，不能一片空白
   await page.reload();
@@ -1214,6 +1216,8 @@ try {
   await page.click("#langToggle");
   await page.waitForFunction(() => document.querySelector('[data-tab="pre"]')?.textContent === "訪前", null, { timeout: 20000 });
   check(true, "and back to Chinese");
+  // 切語言會重新整理：等開場把清單載完（它會自己挑最近的一場）再選「＋ 新的一場」，不然開場晚一步又把它換掉
+  await page.waitForFunction(() => /場參訪/.test(document.getElementById("backendInfo").textContent), null, { timeout: 20000 });
 
   // 讀信讀不到哪一天：以前補「今天」（信裡寫 10/5 的那一場變成當天 10/3，網址也跟著錯）。
   // 現在日期空著、底下說一聲，不拿今天建一場；填上日期就自己存
