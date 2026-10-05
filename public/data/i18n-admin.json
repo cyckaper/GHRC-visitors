@@ -396,7 +396,6 @@
   "尚未寄出：Netlify 沒有設定 Gmail（GMAIL_CLIENT_ID／SECRET／REFRESH_TOKEN）。請用右邊的 mailto 或複製信件自行寄送。": "Not sent: Gmail is not set up in Netlify (GMAIL_CLIENT_ID / SECRET / REFRESH_TOKEN). Use the mailto button on the right, or copy the letter and send it yourself.",
   "地圖資料載不到，其他東西照常用。": "The map data would not load; everything else works as usual.",
   "還沒有填了國家的參訪。": "No visit has a country filled in yet.",
-  "瀏覽器讀不到這個圖檔（HEIC 請先匯出成 JPEG）": "The browser cannot read this image (export HEIC to JPEG first)",
   "瀏覽器縮不了這張圖": "The browser could not resize this image",
   "照片交給 AI 直接讀": "the photo goes to the AI as it is",
   "PDF 交給 AI 直接讀": "the PDF goes to the AI as it is",
@@ -766,7 +765,10 @@
   "# 頁影片頁只有海報：站台上那一份母簡報沒有存影片。到「設定」按「更換」選原始的母簡報（有影片的那一份）放一次，影片會另外存起來，之後產的簡報就有影片": "# video slides show only the poster: the master deck on the site was stored without its videos. In Settings, press “Replace” and choose the original master deck (the one with the videos) once — the videos are stored separately and later decks get them",
   "抓不到站台上的影片清單": "Could not get the list of videos stored on the site",
   "影片沒有下載完整": "The video did not download completely",
-  "影片的大小對不上，請到「設定」重新上傳母簡報": "The video's size does not match — upload the master deck again in Settings"
+  "影片的大小對不上，請到「設定」重新上傳母簡報": "The video's size does not match — upload the master deck again in Settings",
+  "已結束的 # 場（點開來看，可以補改）": "# visits that are over (tap to open — you can still fill them in)",
+  "這一場已經結束了，不能再改（要補請跟中心說）": "This visit is over and can no longer be changed (ask the centre to fill it in)",
+  "瀏覽器讀不到這個圖檔": "The browser cannot read this image file"
  },
  "patterns": [
   [
@@ -1168,6 +1170,14 @@
   [
    "^影片 (\\S+) 的大小對不上，請重新上傳$",
    "Video $1 has the wrong size — please upload again"
+  ],
+  [
+   "^(.+) 是 HEIC，轉不成 JPEG：請在相簿裡把它匯出成 JPEG 再選一次$",
+   "$1 is a HEIC photo that could not be turned into a JPEG: export it as JPEG from your photo library and pick it again"
+  ],
+  [
+   "^這張照片是 HEIC：請重新整理後台再選一次（後台會自動轉成 JPEG），或在相簿裡匯出成 JPEG$",
+   "This photo is HEIC: reload the admin page and pick it again (it is converted to JPEG automatically), or export it as JPEG from your photo library"
   ]
  ]
 }

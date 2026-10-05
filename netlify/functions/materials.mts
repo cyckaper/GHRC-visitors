@@ -1,4 +1,4 @@
-import { fail, json, nowISO, readJSON, requireAdmin } from "../lib/http.mts";
+import { fail, json, nowISO, readJSON, rejectHeic, requireAdmin } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import { sanitizeMaterials } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
@@ -62,6 +62,8 @@ export default async (req: Request) => {
     if (bytes.length > 4.5 * 1024 * 1024) return fail(413, kind === "pdf" ? "PDF 超過 4.5 MB：請放到雲端（Drive／OneDrive）再貼連結" : "照片超過 4.5 MB，請先縮小（後台會自動縮到長邊 1600px）");
     if (kind === "pdf" && !mediaType.includes("pdf")) return fail(400, "簡報請上傳 PDF");
     if (kind === "photo" && !mediaType.startsWith("image/")) return fail(400, "合照請上傳圖片檔");
+    const heic = rejectHeic(mediaType);
+    if (heic) return heic;
     const ext = kind === "pdf" ? "pdf" : mediaType.includes("png") ? "png" : mediaType.includes("webp") ? "webp" : "jpg";
     const base = String(body.name || "").replace(/\.[^.]+$/, "").normalize("NFKD").replace(/[^\w-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || (kind === "pdf" ? "slides" : "photo");
     if (kind === "photo" && current.photos.length >= 30) return fail(400, "合照最多 30 張");

@@ -22,8 +22,10 @@ import type { Visit } from "../lib/types.mts";
  * 所以訪前的行程表、來賓專頁的參訪流程、回報那一則都跟著變，不必主辦端再抄一次。
  * 這兩個欄位**只有這一支在寫**：`visits.mts` 的 `ROTA_FIELDS` 一律沿用伺服器上那一份，後台存檔蓋不掉。
  *
- * **過去的不給改，這件事在伺服器上擋**——畫面灰掉只是提示，擋在前端等於沒擋。
+ * **過去的場次，研究室那一頁（連結裡的 key）不給改，這件事在伺服器上擋**——畫面灰掉只是提示，擋在前端等於沒擋。
  * 判斷用 `visitEndAt()`（跟後續提醒同一個算法）：行程走完那一刻起就是過去式。
+ * **主辦端（登入的後台）過去的也改得了**（明確指示：「已經結束的場次，因為有老師臨時來了或是他沒有填表，
+ * 要能夠在紀錄中修改，就算是過期的也要能夠修改」）：GET 回 `can_edit_past`，後台的總表照著把那幾列做成可以填的格子。
  *
  * **`key` 是連結裡的密語，不是登入**：老師從 LINE 點進來就要能填，卡在帳號密碼回覆率就沒了。
  * 值存在 `settings.rota_key`，後台「設定」分頁可以重新產生——換一個，舊連結就失效。
@@ -72,10 +74,9 @@ async function allowed(req: Request): Promise<boolean> {
 }
 
 export default async (req: Request) => {
-  if (!(await allowed(req))) {
-    const denied = requireAdmin(req);
-    if (denied) return fail(403, "這個連結不對，或是已經換過了。請跟中心要新的網址。");
-  }
+  // 登入的後台（主辦端）：過去的場次也改得了。只帶連結裡的 key 的（研究室老師）：過去的只給看
+  const admin = !requireAdmin(req);
+  if (!admin && !(await allowed(req))) return fail(403, "這個連結不對，或是已經換過了。請跟中心要新的網址。");
   const store = getStore();
 
   if (req.method === "GET") {
@@ -87,7 +88,7 @@ export default async (req: Request) => {
     // 還沒到的照日期由近到遠（那才是現在要填的），過去的由新到舊接在後面
     const upcoming = rows.filter((r) => !r.past).sort((a, b) => `${a.date}${a.start_time}`.localeCompare(`${b.date}${b.start_time}`));
     const done = rows.filter((r) => r.past).sort((a, b) => `${b.date}${b.start_time}`.localeCompare(`${a.date}${a.start_time}`));
-    return json({ ok: true, visits: [...upcoming, ...done], labs: (labs.labs || []).map((l: any) => ({ room: l.room, name_zh: l.name_zh, name_en: l.name_en, color: l.color, lead: l.lead?.name_zh || "" })) });
+    return json({ ok: true, can_edit_past: admin, visits: [...upcoming, ...done], labs: (labs.labs || []).map((l: any) => ({ room: l.room, name_zh: l.name_zh, name_en: l.name_en, color: l.color, lead: l.lead?.name_zh || "" })) });
   }
 
   if (req.method !== "POST") return fail(405, "method not allowed");
@@ -118,7 +119,8 @@ export default async (req: Request) => {
   // 五間同時在填、主辦端開著行程表自動存、背景在備份 Drive——誰都不會把別人剛存的那一格蓋回去
   let ended = false;
   const saved = await store.updateVisit(visitId, (v) => {
-    if (visitEndAt(v) < new Date()) {
+    // 已經結束的：只有主辦端補得了（老師臨時來了、或沒填表——明確指示）；研究室那一頁的連結改不動
+    if (!admin && visitEndAt(v) < new Date()) {
       ended = true;
       return false;
     }
@@ -163,7 +165,7 @@ export default async (req: Request) => {
     (v as any).updated_at = now;
   });
   if (!saved) return fail(404, "找不到這一場");
-  if (ended) return fail(409, "這一場已經結束了，不能再改");
+  if (ended) return fail(409, "這一場已經結束了，不能再改（要補請跟中心說）");
   await triggerDriveSync(saved.visit_id);
   return json({ ok: true, presenters: (saved as any).presenters || {}, lab_minutes: (saved as any).lab_minutes || {}, attendance: (saved as any).attendance || {} });
 };

@@ -1,4 +1,4 @@
-import { fail, json, nowISO, readJSON, requireAdmin } from "../lib/http.mts";
+import { fail, json, nowISO, readJSON, rejectHeic, requireAdmin } from "../lib/http.mts";
 import { loadPublicData } from "../lib/data.mts";
 import { getStore } from "../lib/store.mts";
 
@@ -99,6 +99,8 @@ export default async (req: Request) => {
     const b64 = (m ? m[2] : raw).replace(/\s/g, "");
     if (!b64) return fail(400, "需要照片");
     if (!mediaType.startsWith("image/")) return fail(400, "請上傳圖片檔");
+    const heic = rejectHeic(mediaType);
+    if (heic) return heic;
     const bytes = Buffer.from(b64, "base64");
     if (bytes.length > 4.5 * 1024 * 1024) return fail(413, "照片超過 4.5 MB，請先縮小（後台會自動縮到長邊 800px）");
     const ext = mediaType.includes("png") ? "png" : mediaType.includes("webp") ? "webp" : "jpg";
