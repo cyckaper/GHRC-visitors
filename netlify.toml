@@ -50,6 +50,28 @@
   to = "/privacy.html"
   status = 200
 
+# 網頁版簡報 /deck → deck.html（每一場都看同一份；頁面與圖是 scripts/web-deck/build.mjs 從母簡報做的）
+[[redirects]]
+  from = "/deck"
+  to = "/deck.html"
+  status = 200
+
+# 網頁版簡報不進搜尋引擎（知道連結的人看得到，但不必被搜到）。圖與影片放在每一版自己的資料夾
+# （public/assets/deck/<版本>/），內容不會變，瀏覽器可以一直留著；deck.json 每一次都問一下有沒有新版
+[[headers]]
+  for = "/deck.html"
+  [headers.values]
+    X-Robots-Tag = "noindex"
+[[headers]]
+  for = "/assets/deck/*"
+  [headers.values]
+    X-Robots-Tag = "noindex"
+    Cache-Control = "public, max-age=31536000, immutable"
+[[headers]]
+  for = "/data/deck.json"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
 # 專屬網址 visit.healsdesign.org/<visit_id> → 來賓端專頁（既有靜態檔優先）
 [[redirects]]
   from = "/*"

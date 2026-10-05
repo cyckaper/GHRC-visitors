@@ -1,0 +1,9 @@
+{
+ "_comment": "網頁版簡報 /deck 從哪一份母簡報做（scripts/web-deck/build.mjs，在 GitHub Actions 上跑：.github/workflows/web-deck.yml）。改這個檔推上去就會重做一次：換母簡報改 drive_id、要重做就把 run 加一。source 是 drive 時，母簡報在 Drive 上要暫時開成「知道連結的任何人都能檢視」，做完就關掉（這個 repo 是公開的）。exclude 是不放進網頁版的頁：roles＝照內容認的頁（programme 今日流程每一場不一樣）、text＝頁上寫著這幾個字、chapters＝整章（09 是寫給某一團的提問回覆）、slides＝母簡報的頁次。",
+ "source": "fixture",
+ "drive_id": "",
+ "title": "GHRC 介紹簡報",
+ "run": 1,
+ "width": 1920,
+ "exclude": { "roles": ["programme"], "text": ["此頁不投影"], "chapters": ["09"], "slides": [] }
+}

@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0c0a09">
+<title>GHRC Slides</title>
+<style>
+  /*
+   * 網頁版簡報 /deck（明確指示：「改為用網頁連結方式、簡報都用一樣的版本、用母 ppt 建這個網頁」）。
+   * 每一場都看同一份：每一頁是一張圖（scripts/web-deck/build.mjs 從母簡報畫的），影片疊在原本的位置上直接播。
+   * 現場接投影機用全螢幕（F）與簡報遙控器（PageDown／PageUp）；來賓用手機點連結就左右滑。
+   * 這一頁不從別的伺服器載任何東西——現場網路不一定好，少一個 CDN 少一個卡住的地方。
+   */
+  :root { --bar: 52px; --rw: 16; --rh: 9; --accent: #34d399; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0c0a09; color: #e7e5e4; font-family: system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+  body { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+  #stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; position: relative; touch-action: pan-y pinch-zoom; }
+  #frame { position: relative; width: min(100vw, calc((100dvh - var(--bar)) * var(--rw) / var(--rh))); aspect-ratio: var(--rw) / var(--rh); background: #1c1917; }
+  #slide { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; user-select: none; -webkit-user-select: none; -webkit-user-drag: none; }
+  #media > * { position: absolute; }
+  #media video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+  #media a { display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .55); color: #fff; text-decoration: none; font-size: clamp(14px, 2vw, 22px); border-radius: 8px; }
+  #black { position: absolute; inset: 0; background: #000; }
+  #bar { height: var(--bar); flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px calc(env(safe-area-inset-bottom) * .5); background: #0c0a09; border-top: 1px solid #292524; transition: opacity .25s; }
+  #bar button, #bar a { height: 38px; min-width: 42px; padding: 0 10px; border: 0; border-radius: 10px; background: #1c1917; color: #e7e5e4; font: inherit; font-size: 18px; line-height: 38px; text-align: center; text-decoration: none; cursor: pointer; }
+  #bar button:hover, #bar a:hover { background: #292524; }
+  #bar button:disabled { opacity: .35; cursor: default; }
+  #bar #home { font-size: 13px; font-weight: 600; letter-spacing: .02em; color: var(--accent); }
+  #count { min-width: 74px; text-align: center; font-variant-numeric: tabular-nums; font-size: 15px; color: #d6d3d1; }
+  .spacer { flex: 1; }
+  #hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); padding: 6px 12px; border-radius: 999px; background: rgba(28, 25, 23, .85); color: #d6d3d1; font-size: 13px; white-space: nowrap; pointer-events: none; transition: opacity .6s; }
+  body.full { --bar: 0px; }
+  body.full #bar { position: fixed; left: 0; right: 0; bottom: 0; height: 52px; opacity: 0; pointer-events: none; }
+  body.full.awake #bar { opacity: .92; pointer-events: auto; }
+  body.full:not(.awake) { cursor: none; }
+  #overview { position: fixed; inset: 0; z-index: 10; overflow-y: auto; background: rgba(12, 10, 9, .97); padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); }
+  #overview header { display: flex; align-items: center; gap: 10px; margin: 0 auto 12px; max-width: 1400px; }
+  #overview h1 { flex: 1; margin: 0; font-size: 16px; font-weight: 600; }
+  #overview header button { height: 38px; padding: 0 14px; border: 0; border-radius: 10px; background: #292524; color: #e7e5e4; font: inherit; cursor: pointer; }
+  #thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(46%, 200px), 1fr)); gap: 12px; max-width: 1400px; margin: 0 auto; }
+  #thumbs button { position: relative; padding: 0; border: 2px solid transparent; border-radius: 8px; background: #1c1917; cursor: pointer; overflow: hidden; aspect-ratio: var(--rw) / var(--rh); }
+  #thumbs button[aria-current="true"] { border-color: var(--accent); }
+  #thumbs img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  #thumbs span { position: absolute; left: 6px; bottom: 6px; padding: 1px 7px; border-radius: 6px; background: rgba(0, 0, 0, .7); color: #fff; font-size: 12px; font-variant-numeric: tabular-nums; }
+  #thumbs .vid::after { content: "▶"; position: absolute; right: 6px; bottom: 6px; padding: 1px 6px; border-radius: 6px; background: rgba(0, 0, 0, .7); color: #fff; font-size: 11px; }
+  #empty { margin: auto; max-width: 30rem; padding: 24px; text-align: center; line-height: 1.7; color: #d6d3d1; }
+  #empty a { color: var(--accent); }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { #bar, #hint { transition: none; } }
+</style>
+</head>
+<body>
+<main id="stage">
+  <div id="frame" hidden>
+    <img id="slide" alt="">
+    <div id="media"></div>
+    <div id="black" hidden></div>
+  </div>
+  <p id="hint" hidden></p>
+  <div id="empty" hidden></div>
+</main>
+<p class="sr-only" id="sr" aria-live="polite"></p>
+<nav id="bar" hidden>
+  <a id="home" href="/">GHRC</a>
+  <span class="spacer"></span>
+  <button type="button" id="prev">‹</button>
+  <span id="count"></span>
+  <button type="button" id="next">›</button>
+  <span class="spacer"></span>
+  <button type="button" id="grid">▦</button>
+  <button type="button" id="full">⛶</button>
+</nav>
+<section id="overview" hidden>
+  <header><h1 id="overviewTitle"></h1><button type="button" id="closeOverview"></button></header>
+  <div id="thumbs"></div>
+</section>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  // 介面的字只有幾個，跟其他頁同一套：預設英文，?ui=zh 或這台裝置記著的選擇換中文（投影片本身是中英雙語的圖）
+  const UI_KEY = "ghrc-ui-lang";
+  let ui = new URLSearchParams(location.search).get("ui");
+  if (ui !== "zh" && ui !== "en") { try { ui = localStorage.getItem(UI_KEY); } catch (e) { ui = null; } }
+  if (ui !== "zh") ui = "en";
+  const T = {
+    en: { title: "GHRC Slides", prev: "Previous slide", next: "Next slide", grid: "All slides", full: "Full screen", exit: "Exit full screen", close: "Close", home: "Green Health Research Center", all: "All slides", empty: "The web version of the slides is not ready yet.", back: "Green Health Research Center", video: "▶ Play video", slide: (n, t) => `Slide ${n} of ${t}`, hint: "← → or a clicker to turn pages · F full screen · G all slides", hintTouch: "Swipe to turn pages" },
+    zh: { title: "GHRC 簡報", prev: "上一頁", next: "下一頁", grid: "全部頁面", full: "全螢幕", exit: "離開全螢幕", close: "關閉", home: "綠色健康研究中心", all: "全部頁面", empty: "網頁版簡報還沒建好。", back: "綠色健康研究中心", video: "▶ 播放影片", slide: (n, t) => `第 ${n} 頁，共 ${t} 頁`, hint: "← → 或簡報遙控器翻頁 · F 全螢幕 · G 看全部頁面", hintTouch: "左右滑動翻頁" },
+  }[ui];
+  document.documentElement.lang = ui === "zh" ? "zh-Hant" : "en";
+  document.title = T.title;
+  $("home").href = ui === "zh" ? "/?ui=zh" : "/";
+  $("home").title = T.home;
+  for (const [id, key] of [["prev", "prev"], ["next", "next"], ["grid", "grid"], ["full", "full"]]) { $(id).title = T[key]; $(id).setAttribute("aria-label", T[key]); }
+  $("overviewTitle").textContent = T.all;
+  $("closeOverview").textContent = T.close;
+
+  const url = (p) => (/^https?:\/\//i.test(p) ? p : `/${String(p).replace(/^\/+/, "")}`);
+  let deck = null, i = 0;
+
+  /** 第幾頁（從 0 數）。網址的 #12 是第 12 頁，連結可以直接指到某一頁。 */
+  const fromHash = () => { const n = parseInt(location.hash.slice(1), 10); return Number.isFinite(n) ? Math.min(Math.max(n - 1, 0), deck.slides.length - 1) : 0; };
+
+  function show(n, { push = true } = {}) {
+    if (!deck) return;
+    n = Math.min(Math.max(n, 0), deck.slides.length - 1);
+    for (const v of $("media").querySelectorAll("video")) v.pause(); // 換頁時上一頁的影片停下來
+    i = n;
+    const s = deck.slides[n];
+    $("slide").src = url(s.img);
+    $("slide").alt = s.title || T.slide(n + 1, deck.slides.length);
+    $("media").innerHTML = "";
+    for (const m of s.media || []) {
+      const box = `left:${m.x * 100}%;top:${m.y * 100}%;width:${m.w * 100}%;height:${m.h * 100}%`;
+      if (m.src) {
+        const v = document.createElement(m.type === "audio" ? "audio" : "video");
+        v.src = url(m.src);
+        if (m.poster) v.poster = url(m.poster);
+        v.controls = true; v.preload = "metadata"; v.playsInline = true;
+        v.setAttribute("playsinline", "");
+        v.style.cssText = box;
+        $("media").append(v);
+      } else if (m.url) {
+        const a = document.createElement("a");
+        a.href = m.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = T.video;
+        a.style.cssText = box;
+        $("media").append(a);
+      }
+    }
+    $("count").textContent = `${n + 1} / ${deck.slides.length}`;
+    $("prev").disabled = n === 0;
+    $("next").disabled = n === deck.slides.length - 1;
+    $("sr").textContent = `${T.slide(n + 1, deck.slides.length)}${s.title ? `：${s.title}` : ""}`;
+    if (push) history.replaceState(null, "", `${location.pathname}${location.search}#${n + 1}`);
+    // 前後兩頁先載好，按下去就出來
+    for (const k of [n + 1, n - 1, n + 2]) if (deck.slides[k]) new Image().src = url(deck.slides[k].img);
+    for (const b of $("thumbs").children) b.setAttribute("aria-current", String(Number(b.dataset.i) === n));
+  }
+  const step = (d) => { if (!$("black").hidden) $("black").hidden = true; show(i + d); };
+
+  // 全螢幕：現場接投影機用。按鈕列與滑鼠游標不動一陣子就藏起來，動一下再出現
+  const isFull = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  async function toggleFull() {
+    try {
+      if (isFull()) await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      else await (document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen).call(document.documentElement);
+    } catch (e) { /* 有些手機不給全螢幕：照樣看得到，不必吵 */ }
+  }
+  function onFullChange() {
+    document.body.classList.toggle("full", isFull());
+    $("full").textContent = isFull() ? "✕" : "⛶";
+    $("full").title = isFull() ? T.exit : T.full;
+    wake();
+  }
+  document.addEventListener("fullscreenchange", onFullChange);
+  document.addEventListener("webkitfullscreenchange", onFullChange);
+  function wake() { document.body.classList.add("awake"); clearTimeout(wake.t); wake.t = setTimeout(() => document.body.classList.remove("awake"), 2200); }
+  document.addEventListener("mousemove", wake);
+
+  function openOverview() {
+    $("overview").hidden = false;
+    const cur = $("thumbs").children[i];
+    if (cur) { cur.scrollIntoView({ block: "center" }); cur.focus({ preventScroll: true }); }
+  }
+  const closeOverview = () => { $("overview").hidden = true; };
+  $("grid").onclick = openOverview;
+  $("closeOverview").onclick = closeOverview;
+  $("thumbs").addEventListener("click", (e) => { const b = e.target.closest("button[data-i]"); if (!b) return; closeOverview(); show(Number(b.dataset.i)); });
+  $("prev").onclick = () => step(-1);
+  $("next").onclick = () => step(1);
+  $("full").onclick = toggleFull;
+
+  // 鍵盤與簡報遙控器（大多送 PageDown／PageUp，有的送方向鍵；「開始放映」那顆送 F5 或 Esc，「黑幕」那顆送 B 或句點）
+  let typed = "";
+  document.addEventListener("keydown", (e) => {
+    if (!deck || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.target.closest?.("video, audio")) return; // 影片的空白鍵是播放／暫停
+    const k = e.key;
+    if (!$("overview").hidden) { if (k === "Escape" || k === "g" || k === "G") { e.preventDefault(); closeOverview(); } return; }
+    if (["ArrowRight", "ArrowDown", "PageDown", " ", "Enter", "n", "N"].includes(k)) {
+      if (k === "Enter" && typed) { e.preventDefault(); show(Number(typed) - 1); typed = ""; return; }
+      e.preventDefault(); step(1);
+    } else if (["ArrowLeft", "ArrowUp", "PageUp", "Backspace", "p", "P"].includes(k)) { e.preventDefault(); step(-1); }
+    else if (k === "Home") { e.preventDefault(); show(0); }
+    else if (k === "End") { e.preventDefault(); show(deck.slides.length - 1); }
+    else if (k === "f" || k === "F" || k === "F5") { e.preventDefault(); toggleFull(); }
+    else if (k === "g" || k === "G") { e.preventDefault(); openOverview(); }
+    else if (k === "b" || k === "B" || k === ".") { e.preventDefault(); $("black").hidden = !$("black").hidden; }
+    else if (/^\d$/.test(k)) { typed = (typed + k).slice(-3); clearTimeout(typed.t); setTimeout(() => (typed = ""), 1500); }
+  });
+
+  // 手指：左右滑翻頁；點右邊三分之二下一頁、左邊三分之一上一頁（點在影片上不算）
+  let down = null;
+  $("stage").addEventListener("pointerdown", (e) => { if (e.target.closest("#media > *")) return; down = { x: e.clientX, y: e.clientY, t: Date.now() }; });
+  $("stage").addEventListener("pointerup", (e) => {
+    if (!down || !deck) return;
+    const dx = e.clientX - down.x, dy = e.clientY - down.y;
+    const moved = Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.2;
+    const tap = Math.abs(dx) < 10 && Math.abs(dy) < 10 && Date.now() - down.t < 500;
+    down = null;
+    if (moved) step(dx < 0 ? 1 : -1);
+    else if (tap) {
+      const r = $("frame").getBoundingClientRect();
+      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) step(e.clientX - r.left < r.width / 3 ? -1 : 1);
+    }
+  });
+  window.addEventListener("hashchange", () => { if (deck) show(fromHash(), { push: false }); });
+
+  function empty() {
+    $("empty").hidden = false;
+    $("empty").innerHTML = `<p>${T.empty}</p><p><a href="${ui === "zh" ? "/?ui=zh" : "/"}">${T.back}</a></p>`;
+  }
+
+  fetch("/data/deck.json", { cache: "no-cache" })
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null)
+    .then((d) => {
+      if (!d || !Array.isArray(d.slides) || !d.slides.length) return empty();
+      deck = d;
+      if (d.width && d.height) { document.documentElement.style.setProperty("--rw", d.width); document.documentElement.style.setProperty("--rh", d.height); }
+      $("thumbs").innerHTML = d.slides.map((s, k) => `<button type="button" data-i="${k}" class="${(s.media || []).length ? "vid" : ""}" title="${T.slide(k + 1, d.slides.length)}"><img src="${url(s.thumb || s.img)}" alt="" loading="lazy"><span>${k + 1}</span></button>`).join("");
+      $("frame").hidden = false;
+      $("bar").hidden = false;
+      show(fromHash(), { push: !!location.hash });
+      // 第一次打開的人不知道怎麼翻：說一句就收起來
+      const touch = matchMedia("(pointer: coarse)").matches;
+      $("hint").textContent = touch ? T.hintTouch : T.hint;
+      $("hint").hidden = false;
+      setTimeout(() => { $("hint").style.opacity = "0"; }, 3500);
+      setTimeout(() => { $("hint").hidden = true; }, 4200);
+    });
+})();
+</script>
+</body>
+</html>
