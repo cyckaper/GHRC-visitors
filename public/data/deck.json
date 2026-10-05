@@ -1,0 +1,161 @@
+{
+ "_comment": "網頁版簡報 /deck 的頁序與每一頁的圖、字、影片位置（x、y、w、h 是佔投影片寬高的比例）。由 scripts/web-deck/build.mjs 從母簡報產生，不要手改；母簡報改版就改 scripts/web-deck/source.json 重跑（見 CLAUDE.md）。",
+ "version": "2026-10-05-d79b1f55",
+ "source": {
+  "title": "GHRC 介紹簡報",
+  "drive_id": null,
+  "slides": 10
+ },
+ "built_at": "2026-10-05T07:09:11.870Z",
+ "width": 1920,
+ "height": 1081,
+ "slides": [
+  {
+   "n": 1,
+   "src": 1,
+   "img": "assets/deck/2026-10-05-d79b1f55/s01.webp",
+   "thumb": "assets/deck/2026-10-05-d79b1f55/t01.webp",
+   "title": "Welcome to the Green Health Research Center",
+   "text": "Welcome to the Green Health Research Center\n歡迎蒞臨綠色健康研究中心",
+   "block": "front",
+   "chapter": null
+  },
+  {
+   "n": 2,
+   "src": 3,
+   "img": "assets/deck/2026-10-05-d79b1f55/s02.webp",
+   "thumb": "assets/deck/2026-10-05-d79b1f55/t02.webp",
+   "title": "Contents",
+   "text": "Contents\n簡報架構\n要解決什麼問題、用什麼解決、未來三年\n01\nWhy Now\n為什麼是現在\n03\nFive Laboratories\n五間研究室",
+   "block": "front",
+   "chapter": null
+  },
+  {
+   "n": 3,
+   "src": 4,
+   "img": "assets/deck/2026-10-05-d79b1f55/s03.webp",
+   "thumb": "assets/deck/2026-10-05-d79b1f55/t03.webp",
+   "title": "The Claim",
+   "text": "The Claim\n核心宣稱\nMeasure · Design · Prescribe\n量測 · 設計 · 處方",
+   "block": "front",
+   "chapter": null
+  },
+  {
+   "n": 4,
+   "src": 5,
+   "img": "assets/deck/2026-10-05-d79b1f55/s04.webp",
+   "thumb": "assets/deck/2026-10-05-d79b1f55/t04.webp",
+   "title": "Organisation",
+   "text": "Organisation\n組織架構\n08 · THE NEXT THREE YEARS · 未來三年\nChun-Yen Chang\n張俊彥 301\nBau-Show Lin\n林寶秀 302\nHui-Mei Chen\n陳惠美 303\nPo-Ju Chang\n張伯茹 304\nChia-Kuen Cheng\n鄭佳昆 305",
+   "block": "org",
+   "chapter": null
+  },
+  {
+   "n": 5,
+   "src": 6,
+   "img": "assets/deck/2026-10-05-d79b1f55/s05.webp",
+   "thumb": "assets/deck/2026-10-05-d79b1f55/t05.webp",
+   "title": "01",
+   "text": "01\nWhy Now\n為什麼是現在",
+   "block": "ch01",
+   "chapter": "01"
+  },
+  {
+   "n": 6,
+   "src": 7,
+   "img": "assets/deck/2026-10-05-d79b1f55/s06.webp",
+   "thumb": "assets/deck/2026-10-05-d79b1f55/t06.webp",
+   "title": "Lab 301 — Measurement in Practice",
+   "text": "Lab 301 — Measurement in Practice\n301 量測實況\n03 · FIVE LABORATORIES · 01 MEASURE · 量測",
+   "block": "lab301",
+   "chapter": "03",
+   "media": [
+    {
+     "type": "video",
+     "x": 0.22501,
+     "y": 0.29333,
+     "w": 0.52501,
+     "h": 0.52,
+     "src": "assets/deck/2026-10-05-d79b1f55/v1.mp4",
+     "poster": "assets/deck/2026-10-05-d79b1f55/p06-0.webp"
+    }
+   ]
+  },
+  {
+   "n": 7,
+   "src": 8,
+   "img": "assets/deck/2026-10-05-d79b1f55/s07.webp",
+   "thumb": "assets/deck/2026-10-05-d79b1f55/t07.webp",
+   "title": "Lab 302 — Simulation Outputs",
+   "text": "Lab 302 — Simulation Outputs\n302 模擬結果\n03 · FIVE LABORATORIES · 02 DESIGN · 設計",
+   "block": "lab302",
+   "chapter": "03"
+  },
+  {
+   "n": 8,
+   "src": 9,
+   "img": "assets/deck/2026-10-05-d79b1f55/s08.webp",
+   "thumb": "assets/deck/2026-10-05-d79b1f55/t08.webp",
+   "title": "Lab 303 — Landscape Simulation Lab",
+   "text": "Lab 303 — Landscape Simulation Lab\n303 景觀環境模擬室 · 負責人 陳惠美 Hui-Mei Chen\n03 · FIVE LABORATORIES · 03 VALIDATE · 驗證\nVR head-mounted displays and eye tracking\nVR 頭戴顯示器與眼動追蹤\n360 VR content library\n360VR 教材庫",
+   "block": "lab303",
+   "chapter": "03"
+  },
+  {
+   "n": 9,
+   "src": 10,
+   "img": "assets/deck/2026-10-05-d79b1f55/s09.webp",
+   "thumb": "assets/deck/2026-10-05-d79b1f55/t09.webp",
+   "title": "Thank you",
+   "text": "Thank you\n謝謝",
+   "block": "closing",
+   "chapter": null
+  }
+ ],
+ "excluded": [
+  {
+   "src": 2,
+   "reason": "今日流程（每一場不一樣，來賓專頁上有）"
+  }
+ ],
+ "build": {
+  "warnings": [],
+  "cover_cleared": 5,
+  "contents": {
+   "all": [
+    "01",
+    "02",
+    "03",
+    "04",
+    "08",
+    "09"
+   ],
+   "kept": [
+    "01",
+    "03"
+   ]
+  },
+  "fixes": {
+   "Four Laboratories": 1,
+   "四間研究室": 1,
+   "FOUR LABORATORIES": 3
+  },
+  "fonts": {
+   "used": [
+    "Calibri"
+   ],
+   "from_google": [
+    "Calibri"
+   ],
+   "substituted": []
+  },
+  "videos": [
+   {
+    "part": "ppt/media/media1.mp4",
+    "before": 2246,
+    "after": 2246
+   }
+  ],
+  "image_bytes": 356258
+ }
+}
