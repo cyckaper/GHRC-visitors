@@ -1809,7 +1809,10 @@
       : state.masterOnSite
         ? `<span class="muted">母簡報：用站台靜態檔那一份</span>`
         : `<span class="muted">母簡報還沒放上站台——按「產生簡報」會請你當場選檔，或到「設定」放一份上去（只要做一次）。</span>`;
-    if (state.master) row.innerHTML = `<span class="muted">母簡報 ${esc(state.master.name)} · ${mb(state.master.size)} · ${esc((state.master.uploaded_at || "").slice(0, 10))}</span><label class="underline cursor-pointer">更換<input type="file" id="masterUpload" accept=".pptx" hidden></label><button type="button" class="underline" id="masterRemove" title="把站台上存的母簡報移除（換新版母簡報時才需要）">移除</button>`;
+    // 影片：放上站台時抽出來另外存（產簡報時放回選到的那幾頁）。舊版上傳的那一份沒有存，說一聲怎麼補
+    const vids = state.master?.videos;
+    const videoNote = !state.master ? "" : !vids ? `<span class="muted">影片沒有一起存（舊版上傳的）：要播影片，按「更換」選原始的母簡報再放一次</span>` : vids.count ? `<span class="muted">影片 ${vids.count} 支另外存著（${mb(vids.bytes)}），產簡報時放回選到的那幾頁</span>` : "";
+    if (state.master) row.innerHTML = `<span class="muted">母簡報 ${esc(state.master.name)} · ${mb(state.master.size)} · ${esc((state.master.uploaded_at || "").slice(0, 10))}</span>${videoNote}<label class="underline cursor-pointer">更換<input type="file" id="masterUpload" accept=".pptx" hidden></label><button type="button" class="underline" id="masterRemove" title="把站台上存的母簡報移除（換新版母簡報時才需要）">移除</button>`;
     else if (state.masterOnSite) row.innerHTML = `<span class="muted">母簡報：站台上的 slim-master.pptx</span>`;
     else row.innerHTML = `<span class="muted">母簡報還沒放上站台（只要做一次；可直接選原始母簡報，會先在瀏覽器裡瘦身）</span><label class="btn btn-soft cursor-pointer">上傳母簡報 .pptx<input type="file" id="masterUpload" accept=".pptx" hidden></label>`;
     const up = $("masterUpload"); if (up) up.onchange = () => { const f = up.files[0]; if (f) uploadMaster(f); };
@@ -1818,24 +1821,31 @@
   async function uploadMaster(file) {
     const info = $("deckInfo"); info.hidden = false;
     try {
-      const { bytes, report } = await slimIfNeeded(new Uint8Array(await file.arrayBuffer()), (m) => { info.textContent = m; });
-      await uploadMasterBytes(bytes, file.name.replace(/\.pptx$/i, "") + (report ? "-slim.pptx" : ".pptx"));
+      const { bytes, report, videos } = await slimIfNeeded(new Uint8Array(await file.arrayBuffer()), (m) => { info.textContent = m; });
+      await uploadMasterBytes(bytes, file.name.replace(/\.pptx$/i, "") + (report ? "-slim.pptx" : ".pptx"), videos);
       info.textContent = report ? slimSummary(report) : "";
       info.hidden = !report;
       flash("母簡報已放上站台，以後直接按「產生簡報」");
     } catch (e) { info.textContent = `上傳失敗：${e.message || e}`; flash(String(e.message || e), "err"); renderMasterRow(); }
   }
-  /** 太大或含影片的母簡報先在瀏覽器裡瘦身（同 scripts/slim-master.py 的規則）：抽影片留海報、大圖縮到 2000px、清孤兒。 */
+  /**
+   * 太大或含影片的母簡報先在瀏覽器裡瘦身（同 scripts/slim-master.py 的規則）：抽影片留海報、大圖縮到 2000px、清孤兒。
+   * 抽出來的影片交回去（videos），由 uploadMasterBytes 另外存在站台上——產簡報時放回選到的那幾頁
+   * （實際回報：「影片都不能跑」——以前影片抽掉就沒了，產出的簡報那幾頁只剩海報）。
+   */
   async function slimIfNeeded(bytes, log) {
     const core = await deckCore();
-    if (bytes.length < 60 * 1024 * 1024 && !(await core.hasEmbeddedMedia(bytes))) return { bytes, report: null };
-    log(`母簡報 ${mb(bytes.length)}，瘦身中（抽影片、縮圖），大檔約需一兩分鐘…`);
-    // 影片抽掉之後只剩海報影格（要播就產簡報時當場選原始的母簡報，影片會留在產出的檔案裡）
-    let out = await core.slimDeck(bytes, { resizeImage, log });
-    if (out.pptx.length > 60 * 1024 * 1024) out = await core.slimDeck(out.pptx, { resizeImage, log, imageThreshold: 1_000_000, maxEdge: 1600 });
-    return { bytes: out.pptx, report: out.report };
+    if (bytes.length < 60 * 1024 * 1024 && !(await core.hasEmbeddedMedia(bytes))) return { bytes, report: null, videos: null };
+    log(`母簡報 ${mb(bytes.length)}，瘦身中（影片另外存、縮圖），大檔約需一兩分鐘…`);
+    let out = await core.slimDeck(bytes, { resizeImage, log, keepVideos: true });
+    const { videos, report } = out;
+    if (out.pptx.length > 60 * 1024 * 1024) {
+      out = await core.slimDeck(out.pptx, { resizeImage, log, imageThreshold: 1_000_000, maxEdge: 1600 });
+      out.report = { ...out.report, before: report.before, videos_removed: report.videos_removed, images_resized: report.images_resized + out.report.images_resized, warnings: [...report.warnings, ...out.report.warnings] };
+    }
+    return { bytes: out.pptx, report: out.report, videos };
   }
-  const slimSummary = (r) => `母簡報已瘦身：抽掉 ${r.videos_removed} 個影片／音訊、縮小 ${r.images_resized} 張圖，${mb(r.before)} → ${mb(r.after)}${r.warnings.length ? `；${r.warnings.join("；")}` : ""}`;
+  const slimSummary = (r) => `母簡報已瘦身：${r.videos_removed ? `${r.videos_removed} 支影片另外存在站台上（產簡報時放回選到的那幾頁）、` : ""}縮小 ${r.images_resized} 張圖，${mb(r.before)} → ${mb(r.after)}${r.warnings.length ? `；${r.warnings.join("；")}` : ""}`;
   /** 瀏覽器版縮圖：長邊縮到 maxEdge，有透明留 PNG，其餘轉 JPEG 85。 */
   async function resizeImage(bytes, ext, maxEdge) {
     const type = ext === "png" ? "image/png" : ext === "gif" ? "image/gif" : ext === "bmp" ? "image/bmp" : /tif/.test(ext) ? "image/tiff" : "image/jpeg";
@@ -1850,22 +1860,40 @@
     if (!blob) return null;
     return { bytes: new Uint8Array(await blob.arrayBuffer()), ext: alpha ? "png" : "jpeg" };
   }
-  async function uploadMasterBytes(bytes, name) {
+  async function uploadMasterBytes(bytes, name, videos = null) {
     if (!(bytes[0] === 0x50 && bytes[1] === 0x4b)) throw new Error("這不是 .pptx 檔");
     const total = Math.ceil(bytes.length / PART);
     if (total > 64) throw new Error(`母簡報 ${mb(bytes.length)} 太大，請先瘦身（刪影片、壓縮圖片）到 30 MB 左右`);
     const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
     const row = $("masterRow");
-    for (let i = 0; i < total; i++) {
-      row.innerHTML = `<span class="muted">上傳母簡報 ${i + 1}/${total}…</span>`;
-      const r = await fetch(`/api/master?upload=${id}&part=${i}&total=${total}`, { method: "POST", headers: { ...(token() ? { authorization: `Bearer ${token()}` } : {}), "content-type": "application/octet-stream" }, credentials: "same-origin", body: bytes.slice(i * PART, (i + 1) * PART) });
+    const post = async (query, body, what) => {
+      const r = await fetch(`/api/master?${query}`, { method: "POST", headers: { ...(token() ? { authorization: `Bearer ${token()}` } : {}), "content-type": "application/octet-stream" }, credentials: "same-origin", body });
       const j = await r.json().catch(() => ({}));
       if (r.status === 401) { setAuth(false); throw new Error("這台裝置還沒登入：請到頁面最上方貼 ADMIN_TOKEN 登入後再上傳"); }
-      if (!r.ok || !j.ok) throw new Error(j.error || `第 ${i + 1} 塊上傳失敗（${r.status}）`);
+      if (!r.ok || !j.ok) throw new Error(j.error || `${what}上傳失敗（${r.status}）`);
+    };
+    for (let i = 0; i < total; i++) {
+      row.innerHTML = `<span class="muted">上傳母簡報 ${i + 1}/${total}…</span>`;
+      await post(`upload=${id}&part=${i}&total=${total}`, bytes.slice(i * PART, (i + 1) * PART), `第 ${i + 1} 塊`);
     }
-    const c = await api(`/api/master?upload=${id}&commit=1&total=${total}&name=${encodeURIComponent(name)}`, { method: "POST" });
+    // 影片一支一支解出來、切塊傳（一支一百多 MB，不要同時放在記憶體裡）
+    const list = videos?.media || [];
+    const media = [];
+    for (const [m, v] of list.entries()) {
+      let data = await v.read();
+      const chunks = Math.max(1, Math.ceil(data.length / PART));
+      for (let i = 0; i < chunks; i++) {
+        row.innerHTML = `<span class="muted">上傳影片 ${m + 1}/${list.length}（${Math.round((i / chunks) * 100)}%）……影片大，約需幾分鐘</span>`;
+        await post(`upload=${id}&media=${m}&part=${i}&total=${chunks}`, data.slice(i * PART, (i + 1) * PART), `影片第 ${i + 1} 塊`);
+      }
+      media.push({ part: v.part, content_type: v.content_type, size: data.length, chunks });
+      data = null;
+    }
+    // 沒有影片也送一份空的清單：伺服器才分得出「這一份沒有影片」與「舊版上傳的、影片沒有存」
+    const slides = (videos?.slides || []).map(({ path, n, xml, rels }) => ({ path, n, xml, rels }));
+    const c = await api(`/api/master?upload=${id}&commit=1&total=${total}&name=${encodeURIComponent(name)}`, { method: "POST", body: { videos: { slides, media } } });
     if (!c.ok) throw new Error(c.error || "上傳沒有完成");
-    state.masterBytes = bytes; setMaster(c.master);
+    state.masterBytes = bytes; state.masterFrom = "site"; state.masterBytesId = c.master.upload_id; state.siteVideos = null; setMaster(c.master);
   }
   function loadScript(src) { return new Promise((resolve, reject) => { const el = document.createElement("script"); el.src = src; el.onload = resolve; el.onerror = () => reject(new Error("載入失敗：" + src)); document.head.appendChild(el); }); }
   async function deckCore() {
@@ -1875,7 +1903,8 @@
     return core;
   }
   async function masterBytes(log) {
-    if (state.masterBytes) return state.masterBytes;
+    // 站台上那一份換過了（別台電腦重新上傳）：手上這一份舊的不能再用——影片清單是跟著新的那一份存的
+    if (state.masterBytes && !(state.masterFrom === "site" && state.master && state.masterBytesId !== state.master.upload_id)) return state.masterBytes;
     if (state.master) {
       const parts = [];
       for (let i = 0; i < state.master.parts; i++) {
@@ -1885,15 +1914,56 @@
         parts.push(new Uint8Array(await r.arrayBuffer()));
       }
       const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
-      state.masterBytes = out; return out;
+      state.masterBytes = out; state.masterFrom = "site"; state.masterBytesId = state.master.upload_id; return out;
     }
     if (state.masterOnSite) {
       log("下載母簡報…");
       const r = await fetch(MASTER_URL);
       if (!r.ok || /text\/html/i.test(r.headers.get("content-type") || "")) throw new Error("抓不到站台上的母簡報");
-      state.masterBytes = new Uint8Array(await r.arrayBuffer()); return state.masterBytes;
+      state.masterBytes = new Uint8Array(await r.arrayBuffer()); state.masterFrom = "static"; return state.masterBytes;
     }
     return null;
+  }
+  /**
+   * 站台上另外存的影片（母簡報放上站台時抽出來的）：清單先拿，影片本身選到那一頁才下載（一支一百多 MB）。
+   * 下載過的留著，同一頁再產一次不必再抓；這一次沒用到的丟掉（iPad 的記憶體有限）。
+   */
+  async function siteVideos(log) {
+    const id = state.master?.upload_id;
+    if (!id || !(state.master.videos?.slides || []).length) return null;
+    if (state.siteVideos?.id !== id) {
+      const r = await api("/api/master?videos=1");
+      if (!r.ok) throw new Error(r.error || "抓不到站台上的影片清單");
+      state.siteVideos = { id, data: r.videos, cache: new Map() };
+    }
+    const sv = state.siteVideos;
+    if (!sv.data) return null;
+    const used = new Set();
+    return {
+      slides: sv.data.slides,
+      used,
+      media: async (part) => {
+        used.add(part);
+        if (sv.cache.has(part)) return sv.cache.get(part);
+        const m = sv.data.media.findIndex((x) => x.part === part);
+        if (m < 0) return null;
+        const info = sv.data.media[m];
+        const out = new Uint8Array(info.size); let o = 0;
+        for (let i = 0; i < info.chunks; i++) {
+          log(`下載影片（${Math.round((i / info.chunks) * 100)}%）……影片大，約需一兩分鐘`);
+          const r = await fetch(`/api/master?media=${m}&part=${i}`, { headers: { ...(token() ? { authorization: `Bearer ${token()}` } : {}) }, credentials: "same-origin" });
+          if (!r.ok) throw new Error(`影片第 ${i + 1} 塊抓不到（${r.status}）`);
+          const b = new Uint8Array(await r.arrayBuffer());
+          if (o + b.length > out.length) throw new Error("影片的大小對不上，請到「設定」重新上傳母簡報");
+          out.set(b, o); o += b.length;
+        }
+        if (o !== out.length) throw new Error("影片沒有下載完整");
+        const got = { bytes: out, content_type: info.content_type };
+        sv.cache.set(part, got);
+        return got;
+      },
+      prune() { for (const k of [...sv.cache.keys()]) if (!used.has(k)) sv.cache.delete(k); },
+    };
   }
   /** QR 圖：用頁面已載入的 qrcodejs 畫到 canvas；沒有就回 null（QR 頁只放網址文字）。 */
   async function qrPng(url) {
@@ -1943,7 +2013,7 @@
     const info = $("deckInfo"); info.hidden = false;
     try {
       const bytes = new Uint8Array(await f.arrayBuffer());
-      state.masterBytes = bytes; state.masterName = f.name.replace(/\.pptx$/i, "") + ".pptx"; state.slimReport = null;
+      state.masterBytes = bytes; state.masterFrom = "file"; state.masterName = f.name.replace(/\.pptx$/i, "") + ".pptx"; state.slimReport = null;
       state.masterHasVideo = await (await deckCore()).hasEmbeddedMedia(bytes);
       info.textContent = `母簡報 ${mb(bytes.length)}${state.masterHasVideo ? "（含影片，會留在產出的簡報裡）" : ""}`;
     } catch (e) { info.textContent = `母簡報無法使用：${e.message || e}`; flash(String(e.message || e), "err"); state.buildAfterPick = false; return; }
@@ -1961,8 +2031,11 @@
         const core = await deckCore();
         const master = await masterBytes(log);
         if (!master) throw new Error("沒有母簡報");
+        // 母簡報是站台上那一份（影片放上站台時抽掉了）：選到的影片頁把另外存的影片放回去
+        const videos = state.masterFrom === "site" ? await siteVideos(log) : null;
         log("組裝簡報…");
-        const { pptx, report } = await core.buildDeck(spec, master, { slidesIndex: state.slides, masterFixes: state.masterFixes, lang, site: location.origin, qrPng, translate: lang === "ko" || lang === "ja" ? (texts, target) => translateTexts(texts, target, log) : null, log });
+        const { pptx, report } = await core.buildDeck(spec, master, { slidesIndex: state.slides, masterFixes: state.masterFixes, lang, site: location.origin, qrPng, videos, translate: lang === "ko" || lang === "ja" ? (texts, target) => translateTexts(texts, target, log) : null, log });
+        videos?.prune();
         const name = `GHRC_${spec.visit_id}.pptx`;
         const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([pptx], { type: PPTX_MIME })); a.download = name; a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 60000);
@@ -1971,7 +2044,7 @@
           info.insertAdjacentHTML("beforeend", ` <button type="button" class="underline" id="saveMasterBtn">把這份母簡報存到站台，以後直接按</button>`);
           // 放上站台的那一份才瘦身（抽影片、縮圖）：站台要小、要寄得出去；剛才產的那一份影片還在
           // 瘦身的進度寫在同一行（`info.textContent`），會把這顆按鈕一起洗掉——所以用 `?.`，不要假設它還在
-          $("saveMasterBtn").onclick = () => busy($("saveMasterBtn"), async () => { try { const { bytes, report } = await slimIfNeeded(state.masterBytes, log); await uploadMasterBytes(bytes, (state.masterName || "master.pptx").replace(/\.pptx$/i, report ? "-slim.pptx" : ".pptx")); $("saveMasterBtn")?.remove(); info.textContent = report ? slimSummary(report) : "母簡報已放上站台"; flash("母簡報已放上站台"); } catch (e) { flash(String(e.message || e), "err"); } });
+          $("saveMasterBtn").onclick = () => busy($("saveMasterBtn"), async () => { try { const { bytes, report, videos } = await slimIfNeeded(state.masterBytes, log); await uploadMasterBytes(bytes, (state.masterName || "master.pptx").replace(/\.pptx$/i, report ? "-slim.pptx" : ".pptx"), videos); $("saveMasterBtn")?.remove(); info.textContent = report ? slimSummary(report) : "母簡報已放上站台"; flash("母簡報已放上站台"); } catch (e) { flash(String(e.message || e), "err"); } });
         }
         const lines = [...(offerSave && state.slimReport ? [slimSummary(state.slimReport)] : []), ...report.warnings, ...report.edits.missed.map((m) => `第 ${m.slide} 頁找不到「${(m.find || "").slice(0, 40)}」`)];
         if (report.programme_table === "missing") lines.push("母簡報裡沒有今日流程那一頁（有表格、寫著 Programme 的那一頁），這一份簡報沒有流程表");
@@ -1982,8 +2055,9 @@
         if (report.notes_removed) lines.push(`沒有帶母簡報的講稿（${report.notes_removed} 頁）：那是寫給上一次來賓的，寄出去對方也看得到`);
         if (report.pictures_fixed) lines.push(`照片比例更正 ${report.pictures_fixed} 張：母簡報裡被拉變形的照片，整張照原比例放回框裡`);
         // 影片：留在檔案裡才播得動。母簡報是站台上那份瘦過的就不會有，說一句怎麼辦，不要讓人以為壞了
-        if (report.videos) lines.push(`保留了 ${report.videos} 支影片，現場直接播。檔案大，寄給對方請改寄 PDF 或雲端連結`);
-        else if ((state.slides?.slides || []).some((x) => x.video && (spec.slides || []).includes(x.n))) lines.push("這一場選到了影片頁，但母簡報裡沒有影片（站台上那份是瘦過的），那幾頁只有海報；現場要真的播，產簡報時當場選原始的母簡報");
+        if (report.videos) lines.push(`${report.videos_restored ? "影片放回去了" : "保留了"} ${report.videos} 支影片，現場直接播。檔案大，寄給對方請改寄 PDF 或雲端連結`);
+        // 還是只有海報的影片頁：站台上那一份沒有存影片（舊版上傳的）就說怎麼補；有存卻沒放回去的，原因在上面的警告裡
+        if (report.videos_missing) lines.push(state.masterFrom === "site" && (state.master?.videos?.slides || []).length ? `${report.videos_missing} 頁影片頁沒有放回影片，只有海報` : `${report.videos_missing} 頁影片頁只有海報：站台上那一份母簡報沒有存影片。到「設定」按「更換」選原始的母簡報（有影片的那一份）放一次，影片會另外存起來，之後產的簡報就有影片`);
         $("deckReport").innerHTML = lines.map((l) => `<li>${esc(l)}</li>`).join("");
         const deck = { generated_at: new Date().toISOString(), slides: report.output_slides }; // 只送這兩格，指紋由伺服器蓋
         const saved = await api("/api/visits", { method: "POST", body: { ...forSave(spec), deck } });

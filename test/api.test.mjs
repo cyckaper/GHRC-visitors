@@ -431,6 +431,63 @@ test("master deck: chunked upload, manifest, chunk download, replace, delete", a
   assert.equal((await api("/api/master?part=0", { headers: admin })).status, 404);
 });
 
+test("master deck: the videos taken out of the master are stored with it and come back chunk by chunk", async () => {
+  // 實際回報：「影片都不能跑」——站台上那一份是瘦過的，影片抽掉就沒了。現在影片另外存，產簡報時放回選到的那幾頁
+  const post = (q, body) => fetch(`${base}/api/master?${q}`, { method: "POST", headers: { authorization: "Bearer test-token", "content-type": "application/octet-stream" }, body });
+  const commit = (id, body) => api(`/api/master?upload=${id}&commit=1&total=1&name=v.pptx`, { method: "POST", headers: admin, body: body === undefined ? undefined : JSON.stringify(body) });
+  const zip = Buffer.concat([Buffer.from("PK\x03\x04"), Buffer.alloc(100, 1)]);
+  const big = Buffer.alloc(4 * 1024 * 1024, 7); // 一塊剛好 4 MB
+  const xml = `<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld/></p:sld>`;
+  const slide = { path: "ppt/slides/slide7.xml", n: 7, xml, rels: [
+    { id: "rId2", type: "http://schemas.microsoft.com/office/2007/relationships/media", target: "../media/media1.mp4", external: false },
+    { id: "rId3", type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/video", target: "../media/media1.mp4", external: false },
+  ] };
+  const linked = { path: "ppt/slides/slide9.xml", n: 9, xml, rels: [{ id: "rId5", type: "http://schemas.openxmlformats.org/officeDocument/2006/relationships/video", target: "https://youtu.be/example", external: true }] };
+  const videos = { slides: [slide, linked], media: [{ part: "ppt/media/media1.mp4", content_type: "video/mp4", size: big.length + 10, chunks: 2 }] };
+
+  assert.equal((await post("upload=vid-one&part=0&total=1", zip)).status, 200);
+  assert.equal((await post("upload=vid-one&media=0&part=0&total=2", big)).status, 200);
+  const early = await commit("vid-one", { videos });
+  assert.equal(early.status, 400, "the last chunk is not there yet");
+  assert.match(early.body.error, /沒有傳完/);
+  assert.equal((await post("upload=vid-one&media=0&part=1&total=2", Buffer.alloc(9, 8))).status, 200);
+  const short = await commit("vid-one", { videos });
+  assert.equal(short.status, 400, "one byte short");
+  assert.match(short.body.error, /大小對不上/);
+  assert.equal((await post("upload=vid-one&media=0&part=1&total=2", Buffer.alloc(10, 8))).status, 200);
+  const stray = await commit("vid-one", { videos: { ...videos, slides: [{ ...slide, rels: [{ ...slide.rels[0], target: "../media/media9.mp4" }] }] } });
+  assert.equal(stray.status, 400, "a slide pointing at a video that was not uploaded");
+  assert.equal((await post("upload=vid-one&media=0&part=0&total=999", big)).status, 400, "too many chunks for one video");
+
+  const c = await commit("vid-one", { videos });
+  assert.equal(c.status, 200, JSON.stringify(c.body));
+  assert.deepEqual(c.body.master.videos, { count: 1, bytes: big.length + 10, slides: [7, 9], chunks: [2] });
+  const list = await api("/api/master?videos=1", { headers: admin });
+  assert.deepEqual(list.body.videos, videos, "the slide as it was before the video came out, and which video it used");
+  assert.equal((await api("/api/master?videos=1")).status, 401, "needs the admin token");
+  const p0 = await fetch(`${base}/api/master?media=0&part=0`, { headers: admin });
+  assert.equal(p0.status, 200);
+  assert.equal((await p0.arrayBuffer()).byteLength, big.length);
+  assert.equal((await (await fetch(`${base}/api/master?media=0&part=1`, { headers: admin })).arrayBuffer()).byteLength, 10);
+  assert.equal((await api("/api/master?media=0&part=2", { headers: admin })).status, 400);
+  assert.equal((await api("/api/master?media=1&part=0", { headers: admin })).status, 404);
+
+  // 換一份沒有影片的：舊的影片分塊一起清掉；空的清單＝這一份本來就沒有影片（跟舊版上傳的分得出來）
+  assert.equal((await post("upload=vid-two&part=0&total=1", zip)).status, 200);
+  const c2 = await commit("vid-two", { videos: { slides: [], media: [] } });
+  assert.deepEqual(c2.body.master.videos, { count: 0, bytes: 0, slides: [], chunks: [] });
+  assert.equal((await api("/api/master?videos=1", { headers: admin })).body.videos, null);
+  const store = getStore();
+  assert.equal(await store.getMedia("master/vid-one/media-0-part-0"), null, "the old video chunks are gone");
+  assert.equal(await store.getMedia("master/vid-one/videos.json"), null);
+  // 舊版後台（commit 不帶內容）：沒有 videos——後台就知道要說「影片沒有一起存」
+  assert.equal((await post("upload=vid-old&part=0&total=1", zip)).status, 200);
+  const c3 = await commit("vid-old");
+  assert.equal(c3.status, 200);
+  assert.equal(c3.body.master.videos, undefined);
+  assert.equal((await api("/api/master", { method: "DELETE", headers: admin })).status, 200);
+});
+
 test("translate: mock translations are cached server-side", async () => {
   const r1 = await runJob("translate", { texts: ["健康景觀智能室", "療癒環境規劃室"], target: "ko" });
   assert.equal(r1.status, 200, JSON.stringify(r1.body));

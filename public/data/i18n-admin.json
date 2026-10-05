@@ -628,7 +628,6 @@
   "換好了": "Done — the new link is live",
   "訪客背景（點開來看）": "About the visitors (tap to open)",
   "共需幾分鐘：填一個數字就好": "Minutes needed: just a number",
-  "這一場選到了影片頁，但母簡報裡沒有影片（站台上那份是瘦過的），那幾頁只有海報；現場要真的播，產簡報時當場選原始的母簡報": "This visit includes a video slide, but the master deck has no videos (the copy on the site is the slimmed one), so those slides show only the poster. To play it on the day, pick the original master deck when you generate.",
   "哪一間填了、哪一間還沒填；這裡也可以直接改": "which labs have answered and which have not — you can edit it right here",
   "場次": "Visit",
   "未填": "Not yet",
@@ -754,7 +753,20 @@
   "這一次連結逾時了，請再按一次「連上 Google」。": "That attempt timed out; press “Connect Google” again.",
   "Google 沒有連上，請再按一次「連上 Google」。": "Google did not connect; press “Connect Google” again.",
   "只存成 Google 試算表": "Only save as a Google Sheet",
-  "信裡沒有寫哪一天：填上日期就會自己存": "The email doesn't say which day: fill in the date and it saves itself"
+  "信裡沒有寫哪一天：填上日期就會自己存": "The email doesn't say which day: fill in the date and it saves itself",
+  "影片沒有一起存（舊版上傳的）：要播影片，按「更換」選原始的母簡報再放一次": "Its videos were not stored (uploaded by the old version): to play videos, press “Replace” and choose the original master deck again",
+  "影片 # 支另外存著（# MB），產簡報時放回選到的那幾頁": "# videos stored separately (# MB); they go back into the chosen slides when you generate a deck",
+  "母簡報已瘦身：# 支影片另外存在站台上（產簡報時放回選到的那幾頁）、縮小 # 張圖，# MB → # MB": "Master deck slimmed: # videos stored on the site separately (they go back into the chosen slides when you generate a deck), # images resized, # MB → # MB",
+  "母簡報已瘦身：縮小 # 張圖，# MB → # MB": "Master deck slimmed: # images resized, # MB → # MB",
+  "母簡報 # MB，瘦身中（影片另外存、縮圖），大檔約需一兩分鐘…": "Master deck # MB — slimming it (videos stored separately, images resized); a large file takes a minute or two…",
+  "上傳影片 #/#（#%）……影片大，約需幾分鐘": "Uploading video #/# (#%)… videos are large, this takes a few minutes",
+  "下載影片（#%）……影片大，約需一兩分鐘": "Downloading the video (#%)… videos are large, this takes a minute or two",
+  "影片放回去了 # 支影片，現場直接播。檔案大，寄給對方請改寄 PDF 或雲端連結": "# videos put back, so they play on the day. The file is large — send a PDF or a cloud link instead of emailing it",
+  "# 頁影片頁沒有放回影片，只有海報": "# video slides did not get their video back and show only the poster",
+  "# 頁影片頁只有海報：站台上那一份母簡報沒有存影片。到「設定」按「更換」選原始的母簡報（有影片的那一份）放一次，影片會另外存起來，之後產的簡報就有影片": "# video slides show only the poster: the master deck on the site was stored without its videos. In Settings, press “Replace” and choose the original master deck (the one with the videos) once — the videos are stored separately and later decks get them",
+  "抓不到站台上的影片清單": "Could not get the list of videos stored on the site",
+  "影片沒有下載完整": "The video did not download completely",
+  "影片的大小對不上，請到「設定」重新上傳母簡報": "The video's size does not match — upload the master deck again in Settings"
  },
  "patterns": [
   [
@@ -1128,6 +1140,34 @@
   [
    "^(.+)：檔案裡讀不到文字$",
    "$1: no text could be read from the file"
+  ],
+  [
+   "^第 (\\d+) 頁的影片沒有放回去：站台上存的影片跟這一份母簡報對不上（到「設定」把原始的母簡報重新上傳一次）$",
+   "The video on slide $1 was not put back: the videos stored on the site do not match this master deck (upload the original master deck again in Settings)"
+  ],
+  [
+   "^第 (\\d+) 頁的影片沒有放回去：(.+)$",
+   "The video on slide $1 was not put back: $2"
+  ],
+  [
+   "^影片第 (\\d+) 塊抓不到（(\\d+)）$",
+   "Video chunk $1 could not be downloaded ($2)"
+  ],
+  [
+   "^影片第 (\\d+) 塊上傳失敗（(\\d+)）$",
+   "Video chunk $1 failed to upload ($2)"
+  ],
+  [
+   "^站台上找不到 (\\S+)$",
+   "$1 is not on the site"
+  ],
+  [
+   "^影片 (\\S+) 沒有傳完，請重新上傳$",
+   "Video $1 did not finish uploading — please upload again"
+  ],
+  [
+   "^影片 (\\S+) 的大小對不上，請重新上傳$",
+   "Video $1 has the wrong size — please upload again"
   ]
  ]
 }
