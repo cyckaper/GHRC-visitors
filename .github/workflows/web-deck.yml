@@ -40,10 +40,15 @@ jobs:
           SRC=$(python3 -c "import json;print(json.load(open('scripts/web-deck/source.json'))['source'])")
           if [ "$SRC" = "drive" ]; then
             ID=$(python3 -c "import json;print(json.load(open('scripts/web-deck/source.json'))['drive_id'])")
-            # gdown 處理大檔的「無法掃毒」確認頁；它不行就直接打 Drive 的下載網址再試一次
-            gdown --quiet --fuzzy "https://drive.google.com/file/d/${ID}/view" -O "$RUNNER_TEMP/master.pptx" \
+            # gdown 處理大檔的「無法掃毒」確認頁（新版直接吃檔案 ID）；它不行就直接打 Drive 的下載網址再試一次
+            gdown --quiet "$ID" -O "$RUNNER_TEMP/master.pptx" \
               || curl -sSL --fail -o "$RUNNER_TEMP/master.pptx" "https://drive.usercontent.google.com/download?id=${ID}&export=download&confirm=t" \
               || { echo "::error::母簡報下載不到：Drive 上那個檔要先開成「知道連結的任何人都能檢視」"; exit 1; }
+            # 拿到的是網頁（登入頁＝還沒開分享）就把標題印出來，看得出是哪一種
+            if ! head -c 2 "$RUNNER_TEMP/master.pptx" | grep -q PK; then
+              echo "::error::下載到的不是 pptx（$(grep -o '<title>[^<]*' "$RUNNER_TEMP/master.pptx" | head -1 | sed 's/<title>//')）——Drive 上那個檔要開成「知道連結的任何人都能檢視」"
+              exit 1
+            fi
           else
             sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg > /dev/null
             python3 scripts/make-fixture.py "$RUNNER_TEMP/master.pptx"
