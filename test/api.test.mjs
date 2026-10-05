@@ -596,6 +596,10 @@ test("cards: 名片讀成名單，確認後才併進 guests，原圖留著", asy
   assert.equal((await api("/api/cards", { method: "POST", body: JSON.stringify({ visit_id: visitId, image: cardPng }) })).status, 401, "needs the admin token");
   assert.equal((await post({ visit_id: "2026-01-01-nope", image: cardPng })).status, 404);
   assert.equal((await post({ visit_id: visitId })).status, 400, "needs an image");
+  // HEIC（iPhone、iPad 拍的）原檔不收：Claude 讀不了。後台會先在瀏覽器裡轉成 JPEG，走到這裡的是舊版後台的分頁
+  const heic = await post({ visit_id: visitId, image: "data:image/heic;base64,AAAAHGZ0eXBoZWlj" });
+  assert.equal(heic.status, 415, JSON.stringify(heic.body));
+  assert.match(heic.body.error, /HEIC/, "…and says so in plain words");
 
   const before = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit.guests.length;
   const read = await post({ visit_id: visitId, image: `data:image/png;base64,${cardPng}` });
@@ -1188,9 +1192,15 @@ test("支援人力表：連結自動產生、才打得開，各室只填接待�
   const past = { ...stale, visit_id: "", code: "pastrota", date: "2020-01-01", org: { ...stale.org, name: "Past Rota Institute" } };
   const pastId = (await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(past) })).body.visit.visit_id;
   const blocked = await api(`/api/rota?key=${key}`, { method: "POST", body: JSON.stringify({ visit_id: pastId, room: "301", name: "太晚了" }) });
-  assert.equal(blocked.status, 409, "過去的場次改不動");
+  assert.equal(blocked.status, 409, "過去的場次，研究室那一頁的連結改不動");
   const both = await api(`/api/rota?key=${key}`);
   assert.equal(both.body.visits.find((v) => v.visit_id === pastId).past, true, "…而且表上標成已結束");
+  assert.equal(both.body.can_edit_past, false, "…連結進來的只給看");
+  // 主辦端（登入的後台）補得了：老師臨時來了、或沒填表（明確指示：就算是過期的也要能夠修改）
+  const fixed = await api("/api/rota", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: pastId, room: "301", name: "臨時來的老師" }) });
+  assert.equal(fixed.status, 200, JSON.stringify(fixed.body));
+  assert.equal(fixed.body.presenters["301"], "臨時來的老師");
+  assert.equal((await api("/api/rota", { headers: admin })).body.can_edit_past, true, "後台讀到的表說過去的也能改");
   await api(`/api/visits?id=${pastId}`, { method: "DELETE", headers: admin });
 
   // 通告**自動帶上連結**，後面接 #<visit_id>：點進去直接跳到這一場。連結就是通告的最後一行

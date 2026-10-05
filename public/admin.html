@@ -131,7 +131,7 @@
       <p class="muted">單位、人名、職稱、人數、隨行名單與聯絡方式、對口老師、來訪目的、興趣、日期時間。抽出來的東西會填進下面的欄位，你逐項看過再改。</p>
       <textarea id="emailText" rows="8" placeholder="把 email 往來（含轉寄、簽名檔）整段貼進來……（也可以只上傳名單檔）"></textarea>
       <div class="flex flex-wrap items-center gap-2">
-        <input type="file" id="listFiles" multiple accept=".docx,.xlsx,.xlsm,.pptx,.csv,.tsv,.txt,.md,.pdf,.jpg,.jpeg,.png,.webp">
+        <input type="file" id="listFiles" multiple accept=".docx,.xlsx,.xlsm,.pptx,.csv,.tsv,.txt,.md,.pdf,.jpg,.jpeg,.png,.webp,.heic,.heif">
         <span class="muted">名單檔：Word（.docx）、Excel（.xlsx）、CSV／文字、PDF、名單照片，最多 8 個共 5 MB；.doc／.xls 請先另存新格式</span>
       </div>
       <ul id="listFilesInfo" class="text-sm text-stone-600 list-disc pl-5"></ul>
@@ -1441,7 +1441,9 @@
     if (picked.length > 8) return flash("一次最多 8 個檔案", "err");
     if (picked.reduce((s, f) => s + f.size, 0) > 5 * 1024 * 1024) return flash("檔案總量超過 5 MB，請分批或改貼文字", "err");
     const files = [];
-    for (const f of picked) files.push({ name: f.name, type: f.type, data: await readFileB64(f) });
+    try {
+      for (const f of picked) { const g = await decodableImage(f); files.push({ name: g.name, type: g.type, data: await readFileB64(g) }); }
+    } catch (e) { return flash(String(e.message || e), "err"); }
     const visitSeq = selectVisit.seq || 0;
     const r = await api("/api/extract", { method: "POST", body: { email_text: $("emailText").value, files } });
     if (!r.ok || !r.job_id) return flash(r.error || "抽取沒有開始，請再按一次", "err");
@@ -2101,6 +2103,7 @@
     $("signbookInfo").textContent = "讀取照片…";
     try { state.signbookDataUrl = await downscale(file, 2000, 0.85); }
     catch (e) {
+      if (isHeic(file)) { $("signbookInfo").textContent = String(e.message || e); return flash(String(e.message || e), "err"); }
       if (file.size > 4.5 * 1024 * 1024) { $("signbookInfo").textContent = `讀不到這張照片（${e.message || e}），而且超過 4.5 MB，請先匯出成 JPEG`; return flash(String(e.message || e), "err"); }
       state.signbookDataUrl = await readFileDataUrl(file);
     }
@@ -2121,7 +2124,27 @@
     const r = await api("/api/signbook", { method: "POST", body: { visit_id: $("visitSelect").value, action: "save", entries: readSignbook() } });
     if (!r.ok) return flash(r.error, "err"); flash(`已存入 ${r.saved} 則簽名簿留言`);
   });
-  function downscale(file, maxEdge, quality) {
+  /**
+   * iPhone／iPad 拍的照片常是 HEIC（實際回報：「要能讀 HEIC 檔」——名片選了 HEIC，讀出 0 個人）。
+   * Safari 自己解得開；Chrome、Edge 解不開，Claude 也不收 HEIC。所以**瀏覽器解不開的 HEIC 先轉成 JPEG**
+   * （站台上的 /lib/vendor/heic2any.min.js，第一次遇到 HEIC 才載，約 1.3 MB）。名片、簽名簿、合照、老師照片、
+   * 來信附件都先過這一關。轉不過來就講一句人話，**不要把 HEIC 原檔送上去**——送上去也讀不出來、來賓專頁上也看不到。
+   */
+  const isHeic = (f) => /^image\/hei[cf]/i.test(f?.type || "") || /\.hei[cf]$/i.test(f?.name || "");
+  async function decodableImage(file) {
+    if (!isHeic(file)) return file;
+    try { const bmp = await createImageBitmap(file); bmp.close(); return file; } catch (e) { /* 這個瀏覽器解不開，轉成 JPEG */ }
+    try {
+      if (!window.heic2any) await loadScript("/lib/vendor/heic2any.min.js");
+      const out = await window.heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
+      const blob = Array.isArray(out) ? out[0] : out; // 連拍、原況照片會給好幾張，用第一張
+      return new File([blob], `${String(file.name || "photo").replace(/\.hei[cf]$/i, "")}.jpg`, { type: "image/jpeg" });
+    } catch (e) {
+      throw new Error(`${file.name || "這張照片"} 是 HEIC，轉不成 JPEG：請在相簿裡把它匯出成 JPEG 再選一次`);
+    }
+  }
+  async function downscale(file, maxEdge, quality) {
+    file = await decodableImage(file);
     return new Promise((resolve, reject) => {
       const img = new Image(), url = URL.createObjectURL(file);
       const finish = (fn, v) => { URL.revokeObjectURL(url); fn(v); };
@@ -2135,7 +2158,7 @@
           finish(resolve, data);
         } catch (e) { finish(reject, e instanceof Error ? e : new Error(String(e))); }
       };
-      img.onerror = () => finish(reject, new Error("瀏覽器讀不到這個圖檔（HEIC 請先匯出成 JPEG）"));
+      img.onerror = () => finish(reject, new Error("瀏覽器讀不到這個圖檔"));
       img.src = url;
     });
   }
@@ -2292,6 +2315,7 @@
   async function photoData(file, maxEdge = 1600) {
     try { return await downscale(file, maxEdge, 0.85); }
     catch (e) {
+      if (isHeic(file)) throw e; // HEIC 原檔送上去也讀不出來、來賓專頁上也看不到
       if (file.size > 4.5 * 1024 * 1024) throw new Error(`瀏覽器縮不了這張圖（${e.message || e}），而且原檔超過 4.5 MB，請先在相簿匯出成 JPEG`);
       return await readFileDataUrl(file);
     }
@@ -2741,6 +2765,7 @@
   /** 照片先在瀏覽器縮到長邊 maxEdge（跟合照同一套做法），縮不動就原檔送。 */
   async function shrinkImage(file, maxEdge) {
     const toData = (blob) => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob); });
+    file = await decodableImage(file);
     try {
       const bmp = await createImageBitmap(file);
       const scale = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
@@ -2749,7 +2774,7 @@
       c.getContext("2d").drawImage(bmp, 0, 0, w, h); bmp.close();
       const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.85));
       if (blob) return await toData(blob);
-    } catch (e) { /* HEIC、壞檔、記憶體不夠：原檔送，伺服器那邊還有 4.5 MB 的門檻擋著 */ }
+    } catch (e) { /* 壞檔、記憶體不夠：原檔送，伺服器那邊還有 4.5 MB 的門檻擋著（HEIC 上面已經轉好了） */ }
     return await toData(file);
   }
   $("senderDefault").onchange = () => saveSettings({ sender_default: $("senderDefault").value }, "settingsInfo");

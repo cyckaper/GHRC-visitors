@@ -16,6 +16,14 @@ export function json(data: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(data), { ...init, headers });
 }
 
+/**
+ * HEIC／HEIF 照片（iPhone、iPad 拍的）伺服器不收：Claude 讀不了，存起來來賓專頁上 Chrome 也看不到。
+ * 後台在瀏覽器裡就先轉成 JPEG（admin.html 的 `decodableImage`）；走到這裡的是還開著舊版後台的分頁。
+ */
+export function rejectHeic(mediaType: string): Response | null {
+  return /^image\/hei[cf]/i.test(mediaType) ? fail(415, "這張照片是 HEIC：請重新整理後台再選一次（後台會自動轉成 JPEG），或在相簿裡匯出成 JPEG") : null;
+}
+
 export function fail(status: number, message: string, extra: Record<string, unknown> = {}): Response {
   return json({ ok: false, error: message, ...extra }, { status });
 }

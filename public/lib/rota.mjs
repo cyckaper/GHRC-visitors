@@ -13,6 +13,8 @@
  * 格子不帶 `type=`，後台 `input[type=text]` 那條全域樣式也就套不上來。
  * 資料怎麼讀、怎麼寫由呼叫的那一頁給（`/rota` 帶連結裡的 key，後台走登入的 session）——這裡不管授權，
  * **過去的場次改不動也是伺服器在擋**，畫面上的灰底與 disabled 只是照著顯示。
+ * 主辦端（登入的後台）過去的也改得了（伺服器回 `can_edit_past`；明確指示：老師臨時來了、或沒填表，紀錄要補得了）：
+ * 那幾列照樣灰底、照樣收在「已結束」底下，只是格子可以填。
  */
 
 const WEEK = ["日", "一", "二", "三", "四", "五", "六"];
@@ -130,7 +132,7 @@ const ATTEND = { yes: "可參加", no: "無法參加" };
 const attendText = (lead, k) => `${lead ? `${lead} ` : ""}${ATTEND[k]}`;
 function attendSelect(v, room, lead, empty) {
   const now = v.attendance?.[room] || "";
-  return `<select class="rota-in" data-visit="${esc(v.visit_id)}" data-room="${esc(room)}" data-field="attend" ${v.past ? "disabled" : ""} aria-label="${esc(room)} ${esc(lead || "")} 能否出席座談">
+  return `<select class="rota-in" data-visit="${esc(v.visit_id)}" data-room="${esc(room)}" data-field="attend" ${v.locked ? "disabled" : ""} aria-label="${esc(room)} ${esc(lead || "")} 能否出席座談">
       <option value="">${esc(empty)}</option>${Object.keys(ATTEND).map((k) => `<option value="${k}" ${now === k ? "selected" : ""}>${esc(attendText(lead, k))}</option>`).join("")}
     </select>`;
 }
@@ -147,7 +149,7 @@ function card(v, labs) {
         .map((s) => {
           const l = lab(s.room);
           const tone = esc(l.color || "#0f766e");
-          const attrs = `data-visit="${esc(v.visit_id)}" data-room="${esc(s.room)}" ${v.past ? "disabled" : ""}`;
+          const attrs = `data-visit="${esc(v.visit_id)}" data-room="${esc(s.room)}" ${v.locked ? "disabled" : ""}`;
           const mins = v.lab_minutes?.[s.room];
           // 座談的場次只問老師能否出席（老師是固定的；不問分鐘：座談不參觀研究室）
           if (v.forum)
@@ -157,7 +159,7 @@ function card(v, labs) {
             </div>`;
           return `<div class="rota-cell" style="--tone:${tone}">
               <div class="rota-lab" style="color:${tone}">${esc(s.room)} ${esc(l.name_zh)}</div>
-              <input class="rota-in" ${attrs} data-field="name" value="${esc(v.presenters?.[s.room] || "")}" placeholder="${v.past ? "" : "接待人員"}" aria-label="${esc(s.room)} 接待人員">
+              <input class="rota-in" ${attrs} data-field="name" value="${esc(v.presenters?.[s.room] || "")}" placeholder="${v.locked ? "" : "接待人員"}" aria-label="${esc(s.room)} 接待人員">
               <label class="rota-min"><span>共需</span><input class="rota-in" ${attrs} data-field="minutes" inputmode="numeric" maxlength="3" value="${esc(mins == null ? "" : String(mins))}" aria-label="${esc(s.room)} 共需幾分鐘"><span>分鐘</span></label>
             </div>`;
         })
@@ -187,20 +189,22 @@ const shortName = (l) => String(l?.name_zh || "").replace(/（[^）]*）$/, "").
 function tableCell(v, room, lead) {
   const on = (v.stops || []).some((s) => String(s.room) === room);
   if (!on) return `<td class="rota-td rota-na">免填</td>`;
+  // 已經結束的那幾列不標「未填」（不然整疊過去的場次永遠是一片黃），主辦端補得了的照樣給格子
+  const todo = (filled) => (filled || v.past ? "" : "rota-todo");
   if (v.forum) {
     const now = v.attendance?.[room] || "";
-    if (v.past) return `<td class="rota-td">${now ? esc(attendText(lead, now)) : `<span class="rota-muted">—</span>`}</td>`;
-    return `<td class="rota-td ${now ? "" : "rota-todo"}" style="--tone:var(--c${esc(room)})">${attendSelect(v, room, lead, "未填")}</td>`;
+    if (v.locked) return `<td class="rota-td">${now ? esc(attendText(lead, now)) : `<span class="rota-muted">—</span>`}</td>`;
+    return `<td class="rota-td ${todo(now)}" style="--tone:var(--c${esc(room)})">${attendSelect(v, room, lead, v.past ? "—" : "未填")}</td>`;
   }
   const name = v.presenters?.[room] || "";
   const mins = v.lab_minutes?.[room];
-  if (v.past) {
+  if (v.locked) {
     const text = name || mins != null ? `${esc(name || "—")}${mins != null ? `<span class="rota-muted">　${esc(String(mins))} 分</span>` : ""}` : `<span class="rota-muted">—</span>`;
     return `<td class="rota-td">${text}</td>`;
   }
   const attrs = `data-visit="${esc(v.visit_id)}" data-room="${esc(room)}"`;
-  return `<td class="rota-td ${name ? "" : "rota-todo"}" style="--tone:var(--c${esc(room)})">
-      <input class="rota-in" ${attrs} data-field="name" value="${esc(name)}" placeholder="未填" aria-label="${esc(room)} 接待人員">
+  return `<td class="rota-td ${todo(name)}" style="--tone:var(--c${esc(room)})">
+      <input class="rota-in" ${attrs} data-field="name" value="${esc(name)}" placeholder="${v.past ? "—" : "未填"}" aria-label="${esc(room)} 接待人員">
       <label class="rota-min"><input class="rota-in" ${attrs} data-field="minutes" inputmode="numeric" maxlength="3" value="${esc(mins == null ? "" : String(mins))}" aria-label="${esc(room)} 共需幾分鐘"> 分</label>
     </td>`;
 }
@@ -209,9 +213,9 @@ function tableCell(v, room, lead) {
  * 後台「設定」分頁用的**總表**（明確指示：要更簡單，還沒填的也要顯示出來才知道有填沒填）：
  * 一場一列、五間一間一欄，每一格就是那一間的接待人員與分鐘，**沒填的寫「未填」**。
  * 老師那一頁（`/rota`）還是一場一張卡片——老師只看自己那一格；主辦端要看的是整張表誰還沒回。
- * 已經結束的收在最底下摺起來，只給看、不給改。
+ * 已經結束的收在最底下摺起來；主辦端補得了（`can_edit_past`），研究室那一頁只給看。
  */
-function table(visits, labs) {
+function table(visits, labs, editPast) {
   const rooms = labs.length ? labs.map((l) => String(l.room)) : ["301", "302", "303", "304", "305"];
   const lab = (room) => labs.find((l) => String(l.room) === room);
   const head = `<thead><tr><th class="rota-th">場次</th>${rooms.map((room) => `<th class="rota-th" style="color:var(--c${esc(room)})">${esc(room)}<div class="rota-sub">${esc(shortName(lab(room)))}</div></th>`).join("")}</tr></thead>`;
@@ -226,7 +230,7 @@ function table(visits, labs) {
   const grid = (list) => `<div class="rota-scroll"><table class="rota-table">${head}<tbody>${list.map(row).join("")}</tbody></table></div>`;
   const upcoming = visits.filter((v) => !v.past);
   const past = visits.filter((v) => v.past);
-  return `${upcoming.length ? grid(upcoming) : ""}${past.length ? `<details class="rota-pastbox"><summary>已結束的 ${past.length} 場（點開來看）</summary>${grid(past)}</details>` : ""}`;
+  return `${upcoming.length ? grid(upcoming) : ""}${past.length ? `<details class="rota-pastbox"><summary>${editPast ? `已結束的 ${past.length} 場（點開來看，可以補改）` : `已結束的 ${past.length} 場（點開來看）`}</summary>${grid(past)}</details>` : ""}`;
 }
 
 /** 從通告的連結（`/rota?key=…#<visit_id>`）點進來：捲到那一場、亮一下。 */
@@ -255,8 +259,9 @@ export async function mountRota(root, { load, save, onStatus = () => {}, focus =
   const draw = (r) => {
     const labs = r.labs || [];
     for (const l of labs) if (l.color) document.documentElement.style.setProperty(`--c${l.room}`, l.color);
-    const visits = r.visits || [];
-    root.innerHTML = !visits.length ? `<p class="rota-muted">還沒有任何參訪。</p>` : layout === "table" ? table(visits, labs) : visits.map((v) => card(v, labs)).join("");
+    // 過去的那一場鎖不鎖由伺服器說了算（主辦端補得了，研究室那一頁只給看）
+    const visits = (r.visits || []).map((v) => ({ ...v, locked: !!v.past && !r.can_edit_past }));
+    root.innerHTML = !visits.length ? `<p class="rota-muted">還沒有任何參訪。</p>` : layout === "table" ? table(visits, labs, !!r.can_edit_past) : visits.map((v) => card(v, labs)).join("");
     return visits;
   };
   const r = await load();
@@ -289,7 +294,7 @@ export async function mountRota(root, { load, save, onStatus = () => {}, focus =
     }
     el.classList.remove("rota-saved");
     // 總表：人名一填上（座談：可否出席一選），那一格就不再是「未填」（清空又變回來）
-    if (el.dataset.field === "name" || el.dataset.field === "attend") el.closest(".rota-td")?.classList.toggle("rota-todo", !el.value.trim());
+    if ((el.dataset.field === "name" || el.dataset.field === "attend") && !el.closest(".rota-past")) el.closest(".rota-td")?.classList.toggle("rota-todo", !el.value.trim());
     clearTimeout(timers.get(el));
     pending.add(el);
     timers.set(

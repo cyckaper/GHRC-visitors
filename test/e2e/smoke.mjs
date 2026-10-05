@@ -448,6 +448,12 @@ try {
   await page.waitForFunction(() => /加了 \d+ 人/.test(document.getElementById("cardSaveInfo").textContent));
   await page.waitForFunction((n) => new RegExp(`名單目前 ${n + 1} 人`).test(document.getElementById("cardStatus").textContent), guestsBefore);
   check((await page.locator("#cardList img").count()) === 1, "the card photo is kept with the visit and the person is on the guest list");
+  // HEIC（iPhone、iPad 拍的）：Chrome 解不開，先在瀏覽器裡轉成 JPEG 再送（實際回報：名片選了 HEIC，讀出 0 個人）
+  const heicSent = page.waitForRequest((q) => q.method() === "POST" && new URL(q.url()).pathname === "/api/cards" && (q.postData() || "").includes('"image"'));
+  await page.setInputFiles("#cardFiles", "test/fixtures/card.heic");
+  check(JSON.parse((await heicSent).postData()).image.startsWith("data:image/jpeg;base64,"), "a HEIC card photo is turned into a JPEG in the browser before it is sent");
+  await page.waitForFunction(() => /讀出 \d+ 個人，請逐欄確認/.test(document.getElementById("cardStatus").textContent), null, { timeout: 60000 });
+  check(true, "…and the card is read like any other photo");
 
   // ── 資料分頁：訪客來自哪裡（世界地圖）──
   // 一個單位一個點，落在那個學校或公司所在的地方（明確指示：「點要能縮小到學校或公司，不要佔了整個國家」）。
@@ -828,9 +834,26 @@ try {
     await firstBare.fill("陳小華");
     check(!(await firstBare.evaluate((el) => el.closest("td").classList.contains("rota-todo"))), "typing a name into a 未填 cell clears the mark");
     await until(async () => Object.values((await visitOf(bare)).presenters || {}).includes("陳小華"), "the new name to save");
-    const pastLocked = await page.locator("#rotaTable .rota-past input").count();
-    check(pastLocked === 0, "…while visits that are over are folded away at the bottom, shown but not editable");
-    for (const v of [bare, only301]) await fetch(`${base}/api/visits?id=${encodeURIComponent(v)}`, { method: "DELETE", headers: auth });
+    // 已經結束的收在最底下；主辦端補得了（明確指示：老師臨時來了、或沒填表，過期的也要能改），研究室那一頁只給看
+    const over = await make({ org: { name: "Over Rota University" }, date: "2020-01-15", code: "overrota", start_time: "10:00", end_time: "11:30", programme: [{ kind: "briefing", start: "10:00", end: "10:20" }, { kind: "tour", start: "10:20", end: "10:40" }, { kind: "discussion", start: "10:40", end: "11:30" }], itinerary: [{ room: "briefing", minutes: 20 }, { room: "301", minutes: 20 }] });
+    await page.reload();
+    await page.waitForSelector("#authOk:not([hidden])");
+    await page.click('[data-tab="settings"]');
+    await page.waitForFunction((v) => !!document.querySelector(`#rotaTable tr[data-rota-visit="${v}"]`), over, { timeout: 30000 });
+    await page.click("#rotaTable .rota-pastbox > summary");
+    const late = page.locator(`#rotaTable tr.rota-past[data-rota-visit="${over}"] input[data-room="301"][data-field="name"]`);
+    check((await late.isEnabled()) && /可以補改/.test(await page.textContent("#rotaTable .rota-pastbox > summary")), "a visit that is over is folded away at the bottom, and the host can still fill it in");
+    check(!(await late.evaluate((el) => el.closest("td").classList.contains("rota-todo"))), "…without its empty cells shouting 未填");
+    await late.fill("臨時來的老師");
+    await until(async () => (await visitOf(over)).presenters?.["301"] === "臨時來的老師", "the late fill-in to save");
+    check(true, "…and what the host fills in afterwards is kept on that visit");
+    const labCtx = await browser.newContext(); // 沒有後台的登入：就是研究室老師從 LINE 點進來的那一頁
+    const lp = await labCtx.newPage();
+    await lp.goto(`${base}/rota?key=${key}`);
+    await lp.waitForSelector(`#rows section[data-rota-visit="${over}"]`, { timeout: 30000 });
+    check(await lp.locator(`#rows section[data-rota-visit="${over}"] input[data-field="name"]`).first().isDisabled(), "…while on the labs' page a visit that is over is shown but not editable");
+    await labCtx.close();
+    for (const v of [bare, only301, over]) await fetch(`${base}/api/visits?id=${encodeURIComponent(v)}`, { method: "DELETE", headers: auth });
   }
 
   // ── 通告卡片：換一場之後，不能拿上一場的收件人來畫 ──
