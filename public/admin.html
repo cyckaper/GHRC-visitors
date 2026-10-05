@@ -70,6 +70,14 @@
   .type-enterprise { background: #fef3c7; color: #92400e; } .type-school { background: #ede9fe; color: #5b21b6; }
   .type-ngo { background: #ffe4e6; color: #9f1239; }
   pre.wrap { white-space: pre-wrap; word-break: break-word; font-family: inherit; }
+  /* 一項一項的重點（分項次）：每一項一個框，前面是項次；框跟著字長高 */
+  ol.items { display: grid; gap: .35rem; list-style: none; margin: 0; padding: 0; }
+  ol.items li { display: flex; gap: .4rem; align-items: flex-start; }
+  ol.items .no { flex: none; min-width: 1.6rem; padding-top: .5rem; text-align: right; color: var(--tab); font-variant-numeric: tabular-nums; font-size: .9rem; }
+  ol.items textarea { box-sizing: border-box; font: inherit; line-height: 1.5; resize: none; overflow: hidden; min-height: 2.4rem; }
+  ol.items input { box-sizing: border-box; }
+  ol.items .del { flex: none; padding: .5rem .35rem; color: #a8a29e; }
+  ol.items .del:hover { color: #b91c1c; }
   [hidden] { display: none !important; }
   /* 訪客地圖本身的樣式在 public/lib/worldmap.mjs（首頁共用）；這裡只有上面那三顆鍵，點的顏色跟著後台的主色 */
   #worldMap { --wm-dot: var(--brand); }
@@ -367,33 +375,44 @@
     </div>
 
     <div class="card space-y-3">
-      <div class="flex flex-wrap items-baseline gap-2"><h2 class="font-semibold mr-auto">動作三｜三十秒口述</h2><label class="muted flex items-center gap-1" title="這一場本來就沒有這件事（沒有簽名簿、沒交換名片、沒錄口述都很正常）。標了就不算未完成，後續提醒也不會再為它寄信"><input type="checkbox" data-na="dictation"> 本次沒有</label></div>
-      <p class="muted">今天誰來、最想看哪一間、問了什麼、有沒有透露合作意願。</p>
+      <div class="flex flex-wrap items-baseline gap-2"><h2 class="font-semibold mr-auto">動作三｜三十秒口述與完整紀錄</h2><label class="muted flex items-center gap-1" title="這一場本來就沒有這件事（沒有簽名簿、沒交換名片、沒錄口述都很正常）。標了就不算未完成，後續提醒也不會再為它寄信"><input type="checkbox" data-na="dictation"> 本次沒有</label></div>
+      <p class="muted">講三十秒，或直接在下面<b>一項一項</b>打重點（幾個字就好，按 Enter 換下一項）。按「存入」之後 AI 照著寫成完整的參訪紀錄，寫好還可以再改。</p>
       <div class="flex flex-wrap gap-2 items-center">
         <button class="btn" id="recBtn" title="錄下你自己的三十秒口述：誰來、最想看哪一間、問了什麼、有沒有合作意願">● 開始錄音</button>
         <span id="recTimer" class="tabular-nums muted">0:00</span>
-        <button class="btn btn-soft" id="recUpload" title="把音檔存起來，轉成文字並抽出上面那幾項" disabled>上傳並轉文字</button>
+        <button class="btn btn-soft" id="recUpload" title="把音檔存起來，轉成文字，再分成下面一項一項的重點" disabled>上傳並轉文字</button>
         <span class="muted" id="recInfo"></span>
       </div>
       <audio id="recAudio" controls hidden></audio>
       <p class="muted" id="dictationDraftNote" hidden></p>
       <div>
-        <label class="f">逐字稿（沒錄音也可以直接打字，再按「抽取」）</label>
-        <textarea id="transcript" rows="4"></textarea>
-        <button class="btn btn-soft mt-2" id="extractDictationBtn" title="沒錄音也可以：把打好的逐字稿交給 AI 抽出那幾項">從逐字稿抽取</button>
+        <label class="f">逐字稿（錄音轉出來的；也可以貼一段文字，再按「從逐字稿抽取」分成一項一項）</label>
+        <textarea id="transcript" rows="3"></textarea>
+        <button class="btn btn-soft mt-2" id="extractDictationBtn" title="把逐字稿交給 AI，分成下面一項一項的重點">從逐字稿抽取</button>
       </div>
-      <div id="dictationFields" class="grid sm:grid-cols-2 gap-3" hidden>
-        <div><label class="f">誰來</label><input type="text" id="dWho"></div>
-        <div><label class="f">最想看哪幾間（逗號分隔房號）</label><input type="text" id="dRooms"></div>
-        <div class="sm:col-span-2"><label class="f">問了什麼（每行一題）</label><textarea id="dQuestions" rows="3"></textarea></div>
-        <div><label class="f">合作意願</label><input type="text" id="dCoop"></div>
-        <div><label class="f">後續事項（每行一項）</label><textarea id="dFollow" rows="2"></textarea></div>
-        <div class="sm:col-span-2"><button class="btn" id="dictationSave" title="把口述抽出來的內容寫進這一場的回饋紀錄">確認並存入回饋</button> <span class="muted" id="dictationInfo"></span></div>
+      <div id="dictationFields" class="grid sm:grid-cols-2 gap-3">
+        <div><label class="f" for="dWho">誰來</label><input type="text" id="dWho" placeholder="例如：院長與兩位教授、三位研究生"></div>
+        <div><label class="f" for="dRooms">最想看哪幾間（房號，用逗號隔開）</label><input type="text" id="dRooms" placeholder="例如：303, 304"></div>
+        <div class="sm:col-span-2"><label class="f">交流重點</label><textarea id="dNotes" data-items placeholder="例如：Homework：思考如何量測接觸不同野生物種"></textarea></div>
+        <div class="sm:col-span-2"><label class="f">來賓提問</label><textarea id="dQuestions" data-items placeholder="例如：這套能不能用在長照機構"></textarea></div>
+        <div class="sm:col-span-2"><label class="f">合作意願</label><textarea id="dCoop" data-items placeholder="例如：想派研究生來做 VR 實驗"></textarea></div>
+        <div class="sm:col-span-2"><label class="f">後續事項（含答應提供給對方的資料）</label><textarea id="dFollow" data-items placeholder="例如：在生態 app 中加入 ESG"></textarea></div>
+        <div class="sm:col-span-2 flex flex-wrap gap-2 items-center"><button class="btn" id="dictationSave" title="把上面一項一項的重點存進這一場，AI 照著寫成完整的參訪紀錄">存入，AI 寫成完整紀錄</button><span class="muted" id="dictationInfo"></span></div>
+      </div>
+      <div id="recordBox" class="space-y-2 border-t pt-3" hidden>
+        <div class="flex flex-wrap items-center gap-2">
+          <h3 class="font-medium mr-auto">完整紀錄 <span class="muted font-normal">AI 依上面的重點寫成；直接改，改完自己會存</span></h3>
+          <button class="btn btn-soft" id="recordCopy" type="button" title="複製整份紀錄，貼到 Word、公文或 LINE">複製</button>
+          <button class="btn btn-soft" id="recordRedo" type="button" title="照上面現在的重點，請 AI 再寫一份（手改過的會被換掉，會先問你）">照重點重寫</button>
+        </div>
+        <textarea id="recordText" rows="18"></textarea>
+        <p class="muted" id="recordDraftNote" hidden></p>
+        <p class="muted" id="recordInfo"></p>
       </div>
     </div>
     <div class="card space-y-3">
       <div class="flex flex-wrap items-baseline gap-2"><h2 class="font-semibold mr-auto">動作四｜當天資料放上專屬頁面</h2><label class="muted flex items-center gap-1" title="這一場本來就沒有這件事（沒有簽名簿、沒交換名片、沒錄口述都很正常）。標了就不算未完成，後續提醒也不會再為它寄信"><input type="checkbox" data-na="materials"> 本次沒有</label></div>
-      <p class="muted">感謝信只會承諾頁面上真的有的東西。先把簡報 PDF、合照、相關連結放上來，再草擬感謝信。專頁：<a id="materialsPageLink" class="underline break-all" target="_blank" rel="noopener"></a></p>
+      <p class="muted">感謝信只會承諾頁面上真的有的東西。先把簡報 PDF、合照放上來，再草擬感謝信（答應提供給對方的檔案與連結在下面的感謝信那一張）。專頁：<a id="materialsPageLink" class="underline break-all" target="_blank" rel="noopener"></a></p>
       <p class="text-sm" id="materialsStatus"></p>
       <div class="grid sm:grid-cols-2 gap-4">
         <div class="space-y-2">
@@ -408,11 +427,6 @@
           <div class="flex flex-wrap gap-2" id="photoList"></div>
         </div>
       </div>
-      <div class="space-y-2">
-        <div class="flex items-center justify-between"><label class="f">相關連結（論文、雲端資料夾、影片……）</label><button class="btn btn-soft" id="linkAdd" title="多加一筆要給來賓的連結（論文、雲端資料夾、影片）" type="button">＋ 一筆</button></div>
-        <table id="linkTable"><thead><tr><th>標題</th><th>網址</th><th></th></tr></thead><tbody></tbody></table>
-        <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="materialsSave" title="把上面這些連結放上來賓專頁——感謝信只會承諾頁面上真的有的東西">儲存相關連結</button><span class="muted" id="materialsInfo"></span></div>
-      </div>
     </div>
   
     <div class="card space-y-3" id="thanksCard">
@@ -420,14 +434,23 @@
         <h2 class="font-semibold mr-auto">動作五｜感謝信 <span class="muted font-normal">寄給名單上每一個人</span></h2>
         <span class="text-sm px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-900" id="thanksDue" hidden>現在該寄這一封</span>
       </div>
-      <p class="muted">附上當天資料，並請他們回三個問題。<b>上面那四件事先做完</b>——信只會承諾頁面上真的有的東西。</p>
+      <p class="muted">附上當天資料與答應提供的資料，並請他們回三個問題。<b>上面那四件事先做完</b>——信只會承諾頁面上真的有的東西。</p>
+      <div class="border rounded-xl p-3 space-y-2" id="promisedBox">
+        <h3 class="font-medium">答應提供給對方的資料 <span class="muted font-normal">檔案、圖片或連結都可以；信裡會逐項列出，來賓專頁上也有</span></h3>
+        <ol id="promisedList" class="items"></ol>
+        <div class="flex flex-wrap gap-2 items-center">
+          <button class="btn btn-soft" id="promisedAddLink" type="button" title="貼一個網址：網頁、雲端資料夾、影片、論文頁面">＋ 連結</button>
+          <label class="btn btn-soft cursor-pointer" title="PDF、Word、PowerPoint、Excel、圖片、壓縮檔都可以，一個 4.5 MB 以內；更大的放雲端再貼連結">＋ 上傳檔案或圖片<input type="file" id="promisedFiles" multiple hidden></label>
+          <span class="text-sm" id="promisedInfo"></span>
+        </div>
+      </div>
       <div class="flex flex-wrap gap-2 items-center">
         <div><select id="sender" title="感謝信的署名"><option value="director">中心主任 張俊彥</option><option value="contact">對口老師</option></select></div>
         <button class="btn" id="thanksBtn" title="草擬感謝信：附上當天資料，並把三個回應項目的連結放進去">AI 草擬感謝信</button>
         <span class="muted" id="thanksInfo"></span>
       </div>
       <input type="text" id="thanksSubject" placeholder="主旨">
-      <textarea id="thanksBody" rows="16" placeholder="感謝信草稿：專頁連結（只提頁面上真的有的東西：PDF、合照、連結要先在動作四放上去）、三個回應項目（含請益語氣的開放建議欄位、可不具名）"></textarea>
+      <textarea id="thanksBody" rows="16" placeholder="感謝信草稿：專頁連結（只提頁面上真的有的東西：PDF、合照要先在動作四放上去）、答應提供的資料（逐項列出）、三個回應項目（含請益語氣的開放建議欄位、可不具名）"></textarea>
       <p class="muted" id="thanksDraftNote" hidden></p>
       <p class="muted">三個回應項目的措辭固定為請益語氣，且回覆頁支援真匿名；請保留信裡的那一段。</p>
       <div class="flex items-center justify-between">
@@ -502,6 +525,7 @@
         </div>
         <p class="text-sm muted" id="pubInfo"></p>
       </div>
+      <details id="recordDetail" hidden><summary class="font-medium cursor-pointer">參訪紀錄 <span class="muted font-normal">主持人一項一項的重點，AI 寫成；要改到「後續」分頁的動作三</span></summary><pre class="wrap text-sm mt-2" id="detailRecord"></pre></details>
       <pre class="wrap text-sm" id="summary"></pre>
       <h3 class="font-medium">來賓回覆</h3>
       <table id="responsesTable"><thead><tr><th>來源</th><th>姓名</th><th>email</th><th>最想看</th><th>想合作</th><th>希望我們</th><th>簽名簿／建議／備註</th><th>時間</th></tr></thead><tbody></tbody></table>
@@ -1547,14 +1571,15 @@
    * 存兩份：這台瀏覽器（立刻，關掉網頁也還在）＋站台 /api/draft（換台機器打開接得回來）。
    */
   const LETTER_FIELDS = ["confirmSubject", "confirmBody", "thanksSubject", "thanksBody", "noticeSubject", "noticeBody", "rundownSubject", "rundownBody"];
-  const DICT_FIELDS = ["transcript", "dWho", "dRooms", "dQuestions", "dCoop", "dFollow"];
+  const DICT_FIELDS = ["transcript", "dWho", "dRooms", "dNotes", "dQuestions", "dCoop", "dFollow"];
   const DRAFT_GROUPS = [
     { note: "emailDraftNote", fields: ["emailText"], text: "上次貼進來、還沒抽取的內容留著。不要的話整段刪掉就好。" },
     { note: "confirmDraftNote", fields: ["confirmSubject", "confirmBody"], text: "手改過、還沒寄出的確認信帶回來了。按「AI 草擬」會換成新的一份。" },
     { note: "thanksDraftNote", fields: ["thanksSubject", "thanksBody"], text: "手改過、還沒寄出的感謝信帶回來了。按「AI 草擬」會換成新的一份。" },
     { note: "noticeDraftNote", fields: ["noticeSubject", "noticeBody"], text: "手改過、還沒發出的通告帶回來了。按「AI 擬通告」會換成新的一份。" },
     { note: "rundownDraftNote", fields: ["rundownSubject", "rundownBody"], text: "手改過、還沒發出的回報帶回來了。按「AI 擬回報」會換成新的一份。" },
-    { note: "dictationDraftNote", fields: DICT_FIELDS, text: "上次打的口述內容留著；按「確認並存入回饋」才算收進紀錄。" },
+    { note: "dictationDraftNote", fields: DICT_FIELDS, text: "上次打的重點留著；按「存入」才算收進這一場。" },
+    { note: "recordDraftNote", fields: ["recordText"], text: "上次改到一半的完整紀錄帶回來了（還沒存到站台，等一下會自己存）。" },
   ];
   const DRAFT_FIELDS = DRAFT_GROUPS.flatMap((g) => g.fields);
   const DRAFT_DELAY = 1500;
@@ -1636,7 +1661,7 @@
       const note = $(g.note);
       if (note) { note.hidden = !g.fields.some((id) => fields[id]); note.textContent = note.hidden ? "" : g.text; }
     }
-    if (DICT_FIELDS.slice(1).some((id) => fields[id])) $("dictationFields").hidden = false; // 抽出來的那幾格要看得到才改得動
+    if (fields.recordText) $("recordBox").hidden = false; // 改到一半的完整紀錄要看得到才改得動
     $("draftDiscard").hidden = state.saved || !fields.form;
   }
   async function clearDraft(id) {
@@ -1745,12 +1770,12 @@
       ["當天", [
         wrap("signbook", "簽名簿", !!v.signbook?.photo_key, "實體本子拍一張，AI 讀成留言"),
         wrap("cards", (v.cards || []).length ? `名片 ${v.cards.length} 張` : "名片", (v.cards || []).length > 0, "現場拿到的名片變成名單上的人——訪後信才寄得到他"),
-        wrap("dictation", "口述", !!v.dictation?.transcript, "主持人三十秒：誰來、最想看哪一間、問了什麼"),
-        wrap("materials", "當天資料", !!(m.deck_pdf || (m.photos || []).length || (m.links || []).length), "PDF、合照、連結放上來賓專頁——感謝信只能承諾頁面上真的有的東西"),
+        wrap("dictation", v.dictation?.record?.text ? "完整紀錄" : "口述", dictationDone(v.dictation), "主持人三十秒口述，或一項一項打重點；AI 寫成完整的參訪紀錄"),
+        wrap("materials", "當天資料", !!(m.deck_pdf || (m.photos || []).length || (m.links || []).length), "PDF、合照放上來賓專頁——感謝信只能承諾頁面上真的有的東西"),
       ]],
       ["訪後", [
         ["wrapup", v.letters?.thanks?.sent_at ? `感謝信 ${v.letters.thanks.sent_to?.length || 0} 人` : "感謝信", !!v.letters?.thanks?.sent_at, "寄給名單上每一個人，並請他們回三個問題"],
-        ["data", n ? `回覆 ${n}` : "回覆", n > 0, "來賓回的三個問題、簽名簿留言、口述抽出來的內容"],
+        ["data", n ? `回覆 ${n}` : "回覆", n > 0, "來賓回的三個問題、簽名簿留言"],
         ["data", "一頁摘要", !!v.summary, "這一場的結論；也是 Drive 備份與跨場次彙整的來源。有回覆之後每天凌晨自己產，不必記得按"],
       ]],
     ];
@@ -2088,13 +2113,14 @@
     $("signbookEntries").hidden = !state.signbookEntries.length;
     renderSignbook();
   }
-  /** 同理：已經轉好的逐字稿與抽出來的那幾格。 */
+  /** 同理：已經轉好的逐字稿、存好的重點與完整紀錄。 */
   function renderSavedDictation(d = {}) {
     setField("transcript", d.transcript || "");
-    if (d.extracted) { $("dictationFields").hidden = false; for (const [id, v] of dictationPairs(d.extracted)) setField(id, v); }
-    else if (!fieldVal("transcript")) { $("dictationFields").hidden = true; for (const id of DICT_FIELDS.slice(1)) setField(id, ""); }
+    for (const [id, v] of dictationPairs(d.extracted || {})) setField(id, v);
     $("recInfo").textContent = d.audio_key ? `音檔已存：${d.audio_key}` : "";
+    $("dictationInfo").textContent = d.saved_at ? `重點已存（${fmtStamp(d.saved_at)}）` : "";
     rebase(DICT_FIELDS);
+    renderRecord(d.record || null);
   }
 
   // ── 後續：簽名簿 ──
@@ -2194,16 +2220,189 @@
     rebase(DICT_FIELDS); queueDraft(); applyDraft();
     if (r.warning) flash(r.warning, "err");
   });
-  const dictationPairs = (x) => [["dWho", x.who_came || ""], ["dRooms", (x.most_wanted_rooms || []).join(", ")], ["dQuestions", (x.questions || []).join("\n")], ["dCoop", x.cooperation || ""], ["dFollow", (x.follow_ups || []).join("\n")]];
+  /**
+   * 存好的重點 → 畫面上那幾格（一項一行；那幾格是一項一項的框，見 itemList）。
+   * 舊資料的合作意願是一句話、「其他」是一格字串：合作意願照一行一項拆，「其他」歸到交流重點。
+   */
+  const dictationPairs = (x) => {
+    const lines = (a) => (Array.isArray(a) ? a : String(a || "").split("\n")).map((t) => String(t).trim()).filter(Boolean).join("\n");
+    const other = typeof x.other === "string" && x.other.trim() !== "（AI_MOCK）" ? x.other : "";
+    return [["dWho", x.who_came || ""], ["dRooms", (x.most_wanted_rooms || []).join(", ")], ["dNotes", lines([...(Array.isArray(x.notes) ? x.notes : []), ...(other ? [other] : [])])], ["dQuestions", lines(x.questions)], ["dCoop", lines(x.cooperation)], ["dFollow", lines(x.follow_ups)]];
+  };
   /** AI 剛跑完，結果就是要蓋上去。 */
-  function fillDictation(x) { $("dictationFields").hidden = false; for (const [id, v] of dictationPairs(x)) $(id).value = v; }
+  function fillDictation(x) { for (const [id, v] of dictationPairs(x)) $(id).value = v; }
+  /** 畫面上那幾格 → 要存的重點（一項一項；自己打的「1.」「(2)」拿掉，項次由紀錄自己排）。 */
+  function readDictation() {
+    return { who_came: $("dWho").value.trim(), most_wanted_rooms: $("dRooms").value.split(/[,，、\s]+/).filter((r) => ROOMS.includes(r)), notes: itemLines($("dNotes").value), questions: itemLines($("dQuestions").value), cooperation: itemLines($("dCoop").value), follow_ups: itemLines($("dFollow").value) };
+  }
+  /** 訪後紀錄做了沒（跟 lib/visit.mjs hasDictation 同一套）：錄過音、打過重點、或已經有完整紀錄。進度線用。 */
+  function dictationDone(d) {
+    return !!(d && (String(d.transcript || "").trim() || String(d.record?.text || "").trim() || (d.extracted && Object.values(d.extracted).some((x) => (Array.isArray(x) ? x.length : String(x || "").trim())))));
+  }
+  function fmtStamp(iso) { return new Date(iso).toLocaleString("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }); }
+
+  /**
+   * 「存入」＝重點存進這一場 → AI 照著寫完整紀錄（明確指示：「輸入簡要說明要分項次，之後由 AI 產生出完整紀錄」）。
+   * 完整紀錄手改過的話先問一聲再重寫——不然存一次重點，手改的那一份就被換掉了。
+   */
   $("dictationSave").onclick = () => busy($("dictationSave"), async () => {
-    const extracted = { who_came: $("dWho").value.trim(), most_wanted_rooms: $("dRooms").value.split(/[,，\s]+/).filter((r) => ROOMS.includes(r)), questions: $("dQuestions").value.split("\n").map((s) => s.trim()).filter(Boolean), cooperation: $("dCoop").value.trim(), follow_ups: $("dFollow").value.split("\n").map((s) => s.trim()).filter(Boolean), other: "" };
-    const r = await api("/api/transcribe", { method: "POST", body: { visit_id: $("visitSelect").value, action: "save", extracted } });
+    const id = $("visitSelect").value;
+    if (!id) return flash("請先在上面選一場參訪", "err");
+    const extracted = readDictation();
+    if (!Object.values(extracted).some((x) => (Array.isArray(x) ? x.length : x))) return flash("還沒有任何重點：先錄音、貼逐字稿，或在下面一項一項打", "err");
+    const r = await api("/api/transcribe", { method: "POST", body: { visit_id: id, action: "save", extracted } });
     if (!r.ok) return flash(r.error, "err");
+    for (const [k, v] of dictationPairs(r.dictation?.extracted || extracted)) if ($(k).value !== v && !$(k).matches(":focus")) $(k).value = v; // 伺服器整理過的（拿掉自己打的編號）
     rebase(DICT_FIELDS); queueDraft(); applyDraft();
-    $("dictationInfo").textContent = "已存入"; flash("口述已存入回饋");
+    if (state.wrapVisit?.visit_id === id) state.wrapVisit.dictation = r.dictation || state.wrapVisit.dictation;
+    $("dictationInfo").textContent = `重點已存（${fmtStamp(r.dictation?.saved_at || new Date().toISOString())}）`;
+    if (state.record?.edited && fieldVal("recordText").trim() && !confirm(t("完整紀錄你手改過了。要照現在的重點請 AI 重寫一份嗎？（手改的會被換掉）"))) return flash("重點已存；完整紀錄沒動");
+    await writeRecord(id);
   });
+  $("recordRedo").onclick = () => busy($("recordRedo"), async () => {
+    const id = $("visitSelect").value;
+    if (!id) return flash("請先在上面選一場參訪", "err");
+    if (state.record?.edited && !confirm(t("完整紀錄你手改過了。要照現在的重點請 AI 重寫一份嗎？（手改的會被換掉）"))) return;
+    await writeRecord(id);
+  });
+  async function writeRecord(id) {
+    clearTimeout(saveRecord.t); // 還沒存的手改（等一下要被換掉）不必再存
+    const r = await runJob("/api/transcribe", { visit_id: id, action: "record" }, noteInto("recordInfo"), "AI 寫完整紀錄中……大約一分鐘。");
+    $("recordBox").hidden = false;
+    if (!r) return;
+    $("recordText").value = r.record.text;
+    renderRecord(r.record);
+    rebase(["recordText"]); queueDraft(); applyDraft();
+    if (r.warning) flash(r.warning, "err");
+    else flash("完整紀錄寫好了，可以直接改");
+    if (state.wrapVisit?.visit_id === id) { state.wrapVisit.dictation = { ...(state.wrapVisit.dictation || {}), record: r.record }; }
+    if (state.visit?.visit_id === id) { state.visit.dictation = { ...(state.visit.dictation || {}), record: r.record }; renderProgress(state.visit); }
+  }
+  /** 完整紀錄：有就打開那一塊，旁邊一行說是 AI 寫的還是手改過的。 */
+  function renderRecord(rec) {
+    state.record = rec || null;
+    setField("recordText", rec?.text || "");
+    $("recordBox").hidden = !rec?.text && !fieldVal("recordText").trim();
+    $("recordInfo").textContent = !rec?.text ? "" : rec.edited ? `手改過，已存（${fmtStamp(rec.edited_at || rec.at)}）` : `AI 寫的（${fmtStamp(rec.at)}），可以直接改`;
+  }
+  // 手改完整紀錄：停一秒半自己存（跟訪前分頁一樣，沒有「存檔」這個動作）
+  $("recordText").addEventListener("input", () => {
+    clearTimeout(saveRecord.t);
+    const id = $("visitSelect").value;
+    const text = $("recordText").value;
+    $("recordInfo").textContent = "改了，等一下自己存……";
+    saveRecord.t = setTimeout(() => saveRecord(id, text), 1500);
+  });
+  async function saveRecord(id, text) {
+    if (!id) return;
+    const r = await api("/api/transcribe", { method: "POST", body: { visit_id: id, action: "record_save", text } });
+    if ($("visitSelect").value !== id) return;
+    if (!r.ok) { $("recordInfo").textContent = `沒有存到：${r.error}`; return flash(r.error, "err"); }
+    state.record = r.record;
+    if (state.wrapVisit?.visit_id === id) state.wrapVisit.dictation = { ...(state.wrapVisit.dictation || {}), record: r.record || undefined };
+    if ($("recordText").value === text) { rebase(["recordText"]); queueDraft(); applyDraft(); }
+    $("recordInfo").textContent = r.record ? `手改過，已存（${fmtStamp(r.record.edited_at || new Date().toISOString())}）` : "已清空";
+  }
+  $("recordCopy").onclick = () => copy($("recordText").value);
+
+  /**
+   * 一項一項的重點（明確指示：「輸入簡要說明要分項次」）：每一項一個框、前面是項次，框跟著字長高。
+   * Enter 換下一項；在一項的最前面按退格，空的就刪掉、有字就併到上一項；貼上好幾行就拆成好幾項（自己打的「1.」「(2)」「一、」會拿掉）。
+   * **值仍然存在原本那一個 textarea（一行一項）**，所以暫存、setField、AI 抽取填值都照舊——程式改那一個 textarea 的值時，這裡跟著重畫。
+   */
+  const ITEM_NO = /^\s*(?:[(（]?\s*(?:\d{1,3}|[一二三四五六七八九十]{1,3})\s*[)）.．、:：](?!\d)|[-–—•‧·*＊])\s*/;
+  const itemLines = (text) => String(text || "").split(/\r?\n/).map((x) => x.replace(ITEM_NO, "").trim()).filter(Boolean);
+  function itemList(ta) {
+    const box = document.createElement("ol");
+    box.className = "items";
+    box.dataset.for = ta.id;
+    const add = document.createElement("button");
+    add.type = "button"; add.className = "btn btn-soft mt-1"; add.textContent = t("＋ 一項"); add.title = t("在最後面加一項");
+    ta.hidden = true;
+    ta.before(box);
+    ta.after(add);
+    const native = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value");
+    let quiet = false;
+    Object.defineProperty(ta, "value", { configurable: true, get() { return native.get.call(ta); }, set(v) { native.set.call(ta, v); if (!quiet) draw(); } });
+    const rows = () => [...box.querySelectorAll("textarea")];
+    const grow = (el) => { if (!el.scrollHeight) return; el.style.height = "auto"; el.style.height = `${el.scrollHeight + 2}px`; };
+    function sync() {
+      quiet = true;
+      ta.value = rows().map((r) => r.value.replace(/\n/g, " ")).join("\n");
+      quiet = false;
+      ta.dispatchEvent(new Event("input", { bubbles: true })); // 暫存跟著走
+    }
+    function row(text) {
+      const li = document.createElement("li");
+      li.innerHTML = `<span class="no"></span><textarea rows="1" enterkeyhint="next"></textarea><button type="button" class="del" title="${esc(t("刪掉這一項"))}">✕</button>`;
+      li.querySelector("textarea").value = text;
+      return li;
+    }
+    function number() { rows().forEach((r, i) => { r.previousElementSibling.textContent = `${i + 1}.`; r.placeholder = i === 0 ? ta.placeholder || "" : ""; }); }
+    function draw() {
+      const lines = String(native.get.call(ta)).split("\n");
+      box.replaceChildren(...lines.map(row));
+      number();
+      rows().forEach(grow);
+    }
+    function insertAfter(li, text = "") {
+      const n = row(text);
+      li.after(n);
+      number();
+      const el = n.querySelector("textarea");
+      grow(el); el.focus(); el.setSelectionRange(0, 0);
+      return n;
+    }
+    box.addEventListener("input", (e) => { if (e.target.tagName === "TEXTAREA") { grow(e.target); sync(); } });
+    box.addEventListener("keydown", (e) => {
+      const el = e.target;
+      if (el.tagName !== "TEXTAREA" || e.isComposing || e.keyCode === 229) return; // 中文輸入法選字時的 Enter 不算
+      const li = el.closest("li");
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        const rest = el.value.slice(el.selectionEnd);
+        el.value = el.value.slice(0, el.selectionStart); grow(el);
+        insertAfter(li, rest.trimStart());
+        sync();
+      } else if (e.key === "Backspace" && el.selectionStart === 0 && el.selectionEnd === 0 && rows().length > 1) {
+        const prev = li.previousElementSibling?.querySelector("textarea");
+        if (!el.value) { e.preventDefault(); li.remove(); number(); sync(); const to = prev || rows()[0]; to.focus(); to.setSelectionRange(to.value.length, to.value.length); }
+        else if (prev) { e.preventDefault(); const at = prev.value.length; prev.value += el.value; li.remove(); number(); grow(prev); sync(); prev.focus(); prev.setSelectionRange(at, at); }
+      } else if (e.key === "ArrowUp" && el.selectionStart === 0) { const p = li.previousElementSibling?.querySelector("textarea"); if (p) { e.preventDefault(); p.focus(); } }
+      else if (e.key === "ArrowDown" && el.selectionEnd === el.value.length) { const n = li.nextElementSibling?.querySelector("textarea"); if (n) { e.preventDefault(); n.focus(); } }
+    });
+    box.addEventListener("paste", (e) => {
+      const el = e.target;
+      const text = e.clipboardData?.getData("text/plain") || "";
+      if (el.tagName !== "TEXTAREA" || !/\n/.test(text.trim())) return; // 一行的照瀏覽器自己貼
+      e.preventDefault();
+      const parts = itemLines(text);
+      const tail = el.value.slice(el.selectionEnd);
+      el.value = el.value.slice(0, el.selectionStart) + (parts.shift() || ""); grow(el);
+      let li = el.closest("li");
+      for (const part of parts) li = insertAfter(li, part);
+      const last = li.querySelector("textarea");
+      last.value += tail; grow(last);
+      sync();
+    });
+    box.addEventListener("click", (e) => {
+      const b = e.target.closest(".del");
+      if (!b) return;
+      const li = b.closest("li");
+      if (rows().length > 1) li.remove(); else li.querySelector("textarea").value = "";
+      number(); sync();
+    });
+    add.onclick = () => {
+      const last = rows().pop();
+      if (last && !last.value.trim()) return last.focus();
+      insertAfter(last.closest("li"));
+      sync();
+    };
+    // 分頁一開始是藏起來的（量不到高度）：看得到的那一刻再把每一項撐開
+    if (window.ResizeObserver) new ResizeObserver(() => rows().forEach(grow)).observe(box);
+    draw();
+  }
+  document.querySelectorAll("textarea[data-items]").forEach(itemList);
 
   // ── 後續：當天資料（專屬頁面的 PDF、合照、連結） ──
   $("wrapLinks").addEventListener("click", (e) => { const b = e.target.closest("[data-copy]"); if (b) copy(b.dataset.copy); });
@@ -2231,6 +2430,7 @@
     flash(box.checked ? "這一場沒有這件事，不會再提醒" : "改回「還要做」");
   });
   async function loadMaterials() {
+    if (state.promisedFor) await savePromised(); // 換場之前：上一場改到一半的答應提供資料先存掉
     let id = $("visitSelect").value;
     if (!id && !(state.visits || []).length) { await loadVisits(); id = $("visitSelect").value; }
     if (!id) return mnote(state.authed ? "請先在上面選一場參訪（還沒有任何參訪就先到「訪前」建一場）。" : "這台裝置還沒登入：請到頁面最上方貼 ADMIN_TOKEN 登入。", "err");
@@ -2262,28 +2462,127 @@
       })
       .join("");
     renderMaterials(r.visit.materials || { deck_pdf: "", photos: [], links: [] });
+    renderPromised(state.materials.links);
   }
   function renderMaterials(m) {
     state.materials = { deck_pdf: m.deck_pdf || "", photos: m.photos || [], links: m.links || [] };
     $("pdfInfo").innerHTML = state.materials.deck_pdf ? `<span class="ok">已放上：</span><a class="underline break-all" target="_blank" rel="noopener" href="${esc(mediaUrl(state.materials.deck_pdf))}">${esc(state.materials.deck_pdf.replace(/^materials\/[^/]+\//, ""))}</a> <button type="button" class="muted underline" data-remove-pdf>移除</button>` : `<span class="muted">尚未放上簡報 PDF</span>`;
     $("pdfLink").value = /^https?:\/\//i.test(state.materials.deck_pdf) ? state.materials.deck_pdf : "";
     $("photoList").innerHTML = state.materials.photos.map((p) => `<span class="relative inline-block"><img src="${esc(mediaUrl(p))}" alt="" class="h-20 rounded-lg object-cover"><button type="button" class="absolute -top-2 -right-2 bg-white rounded-full border px-1.5 text-xs" data-remove-photo="${esc(p)}">✕</button></span>`).join("") || `<span class="muted">尚無合照</span>`;
-    $("linkTable").tBodies[0].innerHTML = state.materials.links.map(linkRow).join("");
   }
-  const linkRow = (l = {}) => `<tr><td><input type="text" value="${esc(l.title)}" placeholder="例如：Lab 303 近期論文"></td><td><input type="text" value="${esc(l.url)}" placeholder="https://…"></td><td><button type="button" class="muted" data-del-row title="刪掉這一列">✕</button></td></tr>`;
-  $("linkAdd").onclick = () => $("linkTable").tBodies[0].insertAdjacentHTML("beforeend", linkRow());
-  const readLinks = () => [...$("linkTable").tBodies[0].rows].map((tr) => ({ title: tr.cells[0].firstChild.value.trim(), url: tr.cells[1].firstChild.value.trim() })).filter((l) => l.url);
-  async function saveMaterials(next) {
+  /** 當天資料（PDF、合照）與答應提供的資料各存各的：**只送改了的那一格**，伺服器也只換那一格，兩張卡片不會互相蓋掉。 */
+  async function saveMaterials(patch) {
     const id = $("visitSelect").value;
     if (!id) { mnote("請先在上面選一場參訪。", "err"); return flash("請先選一場參訪", "err"); }
-    const r = await api("/api/materials", { method: "POST", body: { visit_id: id, action: "save", materials: next } });
+    const r = await api("/api/materials", { method: "POST", body: { visit_id: id, action: "save", materials: patch } });
     if (!r.ok) { mnote(r.error, "err"); return flash(r.error, "err"); }
-    renderMaterials(r.materials); $("materialsInfo").textContent = "已儲存"; mnote("已更新到專頁。", "ok"); flash("當天資料已更新到專頁");
+    renderMaterials(r.materials); mnote("已更新到專頁。", "ok"); flash("當天資料已更新到專頁");
   }
-  $("materialsSave").onclick = () => busy($("materialsSave"), () => saveMaterials({ ...state.materials, links: readLinks() }));
-  $("pdfLinkSave").onclick = () => busy($("pdfLinkSave"), async () => { const url = $("pdfLink").value.trim(); if (!/^https?:\/\//i.test(url)) return flash("請貼完整的 https:// 連結", "err"); await saveMaterials({ ...state.materials, links: readLinks(), deck_pdf: url }); });
-  $("pdfInfo").addEventListener("click", async (e) => { if (!e.target.closest("[data-remove-pdf]")) return; await saveMaterials({ ...state.materials, links: readLinks(), deck_pdf: "" }); });
-  $("photoList").addEventListener("click", async (e) => { const b = e.target.closest("[data-remove-photo]"); if (!b) return; await saveMaterials({ ...state.materials, links: readLinks(), photos: state.materials.photos.filter((p) => p !== b.dataset.removePhoto) }); });
+  $("pdfLinkSave").onclick = () => busy($("pdfLinkSave"), async () => { const url = $("pdfLink").value.trim(); if (!/^https?:\/\//i.test(url)) return flash("請貼完整的 https:// 連結", "err"); await saveMaterials({ deck_pdf: url }); });
+  $("pdfInfo").addEventListener("click", async (e) => { if (!e.target.closest("[data-remove-pdf]")) return; await saveMaterials({ deck_pdf: "" }); });
+  $("photoList").addEventListener("click", async (e) => { const b = e.target.closest("[data-remove-photo]"); if (!b) return; await saveMaterials({ photos: state.materials.photos.filter((p) => p !== b.dataset.removePhoto) }); });
+
+  /**
+   * **答應提供給對方的資料**（明確指示：「要加入答應提供給對方的資料，如檔案網頁等等」「能夠接受不同格式的檔案圖片或是檔案連結」）：
+   * 一項一行，網址或上傳的檔案（PDF、Word、PowerPoint、Excel、圖片、壓縮檔……，一個 4.5 MB 以內）。
+   * 存在 materials.links——感謝信逐項列出（名稱＋網址），來賓專頁上也有。
+   * **畫面上這一張就是正本**：名稱與網址改完一秒多自己存，存的時候不重畫（游標還在框裡、還沒填網址的那一列都不能不見）；
+   * 只有打開這一場的時候照伺服器上的畫一次，上傳完把那一個檔案接在最後面。
+   */
+  const promisedRows = () => [...$("promisedList").children];
+  function promisedRow(l = {}) {
+    const isFile = !!l.url && !/^https?:\/\//i.test(l.url);
+    const name = l.name || (isFile ? l.url.split("/").pop().replace(/^\d{10,}-/, "") : "");
+    return `<li data-key="${isFile ? esc(l.url) : ""}" data-name="${esc(name)}"><span class="no"></span>
+      <div class="flex-1 grid sm:grid-cols-2 gap-2">
+        <input type="text" class="p-title" value="${esc(l.title || "")}" placeholder="${esc(t("名稱（例如：生態 app、論文）"))}">
+        ${isFile ? `<a class="p-file underline break-all text-sm self-center" target="_blank" rel="noopener" href="${esc(mediaUrl(l.url))}">📎 ${esc(name)}</a>` : `<input type="text" class="p-url" value="${esc(l.url || "")}" placeholder="https://…" inputmode="url" autocapitalize="off" spellcheck="false">`}
+      </div><button type="button" class="del" title="${esc(t("刪掉這一項"))}">✕</button></li>`;
+  }
+  function numberPromised() { promisedRows().forEach((li, i) => { li.querySelector(".no").textContent = `${i + 1}.`; }); }
+  function renderPromised(links) {
+    $("promisedList").innerHTML = (links || []).map(promisedRow).join("");
+    numberPromised();
+    $("promisedInfo").textContent = "";
+  }
+  /** 「www.example.org」這種沒寫 https:// 的，幫他補上（不然存不進去，信裡也點不開）。 */
+  const fixUrl = (u) => { const x = String(u || "").trim(); return !x || /^https?:\/\//i.test(x) ? x : /^[\w-]+(\.[\w-]+)+(\/|$)/.test(x) ? `https://${x}` : x; };
+  const okUrl = (u) => /^https?:\/\/\S+$/i.test(u);
+  function readPromised() {
+    return promisedRows()
+      .map((li) => {
+        const title = li.querySelector(".p-title").value.trim();
+        if (li.dataset.key) return { title, url: li.dataset.key, name: li.dataset.name || "" };
+        return { title, url: fixUrl(li.querySelector(".p-url").value) };
+      })
+      .filter((l) => okUrl(l.url) || /^materials\//.test(l.url));
+  }
+  /** 存（只送 links 這一格）。`state.promisedFor`＝改的是哪一場：換場之前先把那一場的存掉，不會存錯場。 */
+  async function savePromised() {
+    clearTimeout(savePromised.t);
+    const id = state.promisedFor || $("visitSelect").value;
+    if (!id) return;
+    const ver = state.promisedVer; // 存的這一段時間裡又改了的話，那一次還要再存
+    const bad = promisedRows().filter((li) => !li.dataset.key && li.querySelector(".p-url").value.trim() && !okUrl(fixUrl(li.querySelector(".p-url").value)));
+    const r = await api("/api/materials", { method: "POST", body: { visit_id: id, action: "save", materials: { links: readPromised() } } });
+    if (state.promisedFor === id && state.promisedVer === ver) state.promisedFor = "";
+    if ($("visitSelect").value !== id) return;
+    if (!r.ok) { $("promisedInfo").innerHTML = `<span class="err">${esc(r.error)}</span>`; return; }
+    state.materials = { ...state.materials, links: r.materials.links };
+    $("promisedInfo").innerHTML = bad.length ? `<span class="err">${esc(t("有一項的網址看不懂（要像 https://… 這樣），那一項還沒存"))}</span>` : `<span class="ok">${esc(t("已存"))} ${new Date().toTimeString().slice(0, 5)}</span>`;
+  }
+  $("promisedList").addEventListener("input", () => {
+    state.promisedFor = $("visitSelect").value;
+    state.promisedVer = (state.promisedVer || 0) + 1;
+    $("promisedInfo").textContent = t("改了，等一下自己存……");
+    clearTimeout(savePromised.t);
+    savePromised.t = setTimeout(savePromised, 1200);
+  });
+  $("promisedList").addEventListener("click", async (e) => {
+    const b = e.target.closest(".del");
+    if (!b) return;
+    state.promisedFor = state.promisedFor || $("visitSelect").value;
+    state.promisedVer = (state.promisedVer || 0) + 1;
+    b.closest("li").remove();
+    numberPromised();
+    await savePromised(); // 上傳的檔案拿掉就一起刪掉
+  });
+  $("promisedAddLink").onclick = () => {
+    $("promisedList").insertAdjacentHTML("beforeend", promisedRow());
+    numberPromised();
+    promisedRows().pop().querySelector(".p-title").focus();
+  };
+  $("promisedFiles").onchange = async () => {
+    const files = [...$("promisedFiles").files];
+    $("promisedFiles").value = "";
+    const id = $("visitSelect").value;
+    if (!files.length) return;
+    if (!id) return flash("請先在上面選一場參訪", "err");
+    if (state.promisedFor) await savePromised(); // 先把改到一半的存起來：上傳那一支會接在伺服器那一份後面
+    const failed = [];
+    let done = 0;
+    for (const [i, f0] of files.entries()) {
+      $("promisedInfo").textContent = `${t("上傳中")} ${i + 1}／${files.length}：${f0.name}…`;
+      try {
+        let f = f0;
+        if (isHeic(f)) f = await decodableImage(f); // iPhone 的 HEIC：對方多半打不開，轉成 JPEG
+        if (f.size > 4.5 * 1024 * 1024 && /^image\/(jpeg|png|webp)/.test(f.type)) { const data = await downscale(f, 2400, 0.88); f = new File([await (await fetch(data)).blob()], f.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" }); }
+        if (f.size > 4.5 * 1024 * 1024) throw new Error(t("超過 4.5 MB：請放到雲端（Drive／OneDrive）再貼連結"));
+        const fd = new FormData();
+        fd.append("visit_id", id); fd.append("action", "upload"); fd.append("kind", "file"); fd.append("file", f, f.name);
+        const r = await api("/api/materials", { method: "POST", body: fd });
+        if (!r.ok) throw new Error(r.error || "上傳失敗");
+        if ($("visitSelect").value === id) {
+          state.materials = { ...state.materials, links: r.materials.links };
+          const added = r.materials.links.find((l) => l.url === r.key);
+          if (added) { $("promisedList").insertAdjacentHTML("beforeend", promisedRow(added)); numberPromised(); }
+        }
+        done += 1;
+      } catch (e) { failed.push(`${f0.name}：${e.message || e}`); }
+    }
+    $("promisedInfo").innerHTML = failed.length ? `<span class="err">${esc(`放上 ${done} 個，${failed.length} 個沒有上去 — ${failed.join("；")}`)}</span>` : `<span class="ok">${esc(`已放上 ${done} 個：感謝信會逐項列出，來賓專頁上也有`)}</span>`;
+    if (failed.length) flash(failed[0], "err");
+  };
   async function uploadMaterial(kind, name, data) {
     const visit_id = $("visitSelect").value;
     if (!visit_id) throw new Error("請先在上面選一場參訪");
@@ -2448,6 +2747,7 @@
   }
   const checkedRecipients = (boxId) => [...document.querySelectorAll(`#${boxId} input[type="checkbox"]:checked`)].map((i) => state.thanksRecipients[Number(i.dataset.i)]).filter(Boolean);
   $("thanksBtn").onclick = () => busy($("thanksBtn"), async () => {
+    if (state.promisedFor) await savePromised(); // 剛加的那一項要先存到，信裡才列得出來
     const r = await runJob("/api/letter", { visit_id: $("visitSelect").value, kind: "thanks", sender: $("sender").value }, noteInto("thanksInfo"), "AI 草擬中……大約一分鐘。");
     if (!r) return;
     $("thanksSubject").value = r.draft.subject; $("thanksBody").value = r.draft.body; state.thanksRecipients = r.recipients; renderRecipients();
@@ -3134,6 +3434,8 @@
   async function showDetail(id) {
     const v = await api(`/api/visits?id=${encodeURIComponent(id)}`);
     if (!v.ok) return flash(v.error, "err");
+    const rec = v.visit.dictation?.record?.text || "";
+    $("recordDetail").hidden = !rec; $("detailRecord").textContent = rec;
     state.detailId = id; $("visitDetail").hidden = false; $("detailTitle").textContent = `${v.visit.date} ${v.visit.org?.name}`; $("summary").textContent = v.visit.summary || importedNote(v.visit) || "（還沒有摘要。參訪過完、有來賓回覆之後，系統會在每天凌晨自己產一份；想現在就要就按上面那顆按鈕。）";
     const d = v.visit.drive;
 $("driveInfo").innerHTML = d?.backed_up_at

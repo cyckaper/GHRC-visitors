@@ -22,7 +22,9 @@ export default backgroundHandler<{ visit_id?: string; digest?: boolean }>("摘�
 
   const visit = await store.getVisit(String(input.visit_id || ""));
   if (!visit) throw new Error("找不到這次參訪");
-  const [responses, slidesIndex] = await Promise.all([store.listResponses(visit.visit_id), loadPublicData("slides")]);
+  const [all, slidesIndex] = await Promise.all([store.listResponses(visit.visit_id), loadPublicData("slides")]);
+  // 以前存口述時另外寫了一筆「回覆」（來源 dictation）：那是主持人記的，不是來賓說的，口述本身在 visit.dictation
+  const responses = all.filter((r) => r.source !== "dictation");
   const summary = await summarizeVisit(visit, responses);
   // AI 寫摘要要一兩分鐘：寫回去的時候只動摘要那兩格，而且寫進最新的那一份
   await store.updateVisit(visit.visit_id, (v) => {

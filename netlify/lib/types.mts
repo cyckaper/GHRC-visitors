@@ -40,7 +40,8 @@ export interface ItineraryStep {
 export interface Materials {
   deck_pdf: string;
   photos: string[];
-  links: { title: string; url: string }[];
+  /** 答應提供給對方的資料：網址，或上傳的檔案（媒體庫 key；name 是原本的檔名）。 */
+  links: { title: string; url: string; name?: string }[];
 }
 
 export interface TextEdit {
@@ -95,7 +96,18 @@ export interface Visit {
   // skip=true：這場不用簡報；fingerprint＝產檔那一刻的行程指紋（行程之後改了就知道這份 .pptx 是舊的）
   deck: { skip?: boolean; slides?: number; spec_path?: string; pptx_url?: string; pdf_url?: string; generated_at?: string; fingerprint?: string };
   signbook: { photo_key?: string; transcript?: string; entries?: SignbookEntry[]; read_at?: string };
-  dictation: { audio_key?: string; transcript?: string; extracted?: DictationExtract; recorded_at?: string };
+  /**
+   * 訪後紀錄：三十秒口述（音檔、逐字稿）或直接一項一項打的重點（extracted），存入的時間（saved_at，一頁摘要靠它判斷要不要重寫），
+   * 與 AI 依重點寫成的完整紀錄（record：edited＝主持人手改過，重寫之前要先問）。
+   */
+  dictation: {
+    audio_key?: string;
+    transcript?: string;
+    extracted?: DictationExtract;
+    recorded_at?: string;
+    saved_at?: string;
+    record?: { text: string; at: string; edited?: boolean; edited_at?: string };
+  };
   letters: {
     // fingerprint＝寄出那一刻的行程指紋：寄出去的信不會跟著網頁更新，行程改了要說一聲
     confirmation?: { subject: string; body: string; sender?: string; drafted_at: string; sent_to?: { name: string; email: string }[]; sent_at?: string; fingerprint?: string };
@@ -144,13 +156,15 @@ export interface SignbookEntry {
   language: string;
 }
 
+/** 主持人的重點：一項一項（lib/visit.mjs sanitizeDictation；舊資料的 cooperation 是一句、other 是一格字串，讀的時候轉過來）。 */
 export interface DictationExtract {
   who_came: string;
   most_wanted_rooms: string[];
+  /** 交流重點（談了什麼、其他值得留下的話） */
+  notes: string[];
   questions: string[];
-  cooperation: string;
+  cooperation: string[];
   follow_ups: string[];
-  other: string;
 }
 
 export interface ResponseRow {

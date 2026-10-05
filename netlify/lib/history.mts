@@ -58,6 +58,8 @@ export async function slideHistory(store: Store, orgType: string, excludeVisitId
   };
   for (const r of responses as ResponseRow[]) {
     if (r.visit_id === excludeVisitId) continue;
+    // 以前存口述時另外寫的那一筆（來源 dictation）是主持人聽到的，下面另外算成 host_noted，不能再算一次「來賓自己說」
+    if (r.source === "dictation") continue;
     for (const room of r.most_wanted_rooms || []) bump(room, "wanted");
     for (const room of r.cooperate_rooms || []) bump(room, "cooperate");
   }
