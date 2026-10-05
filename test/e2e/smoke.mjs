@@ -246,8 +246,9 @@ try {
     const storedMb = parseFloat((/([\d.]+) MB/.exec(await page.textContent("#masterRow")) || [])[1] || "99");
     check(storedMb < 3, `master was slimmed in the browser before storing (${storedMb} MB, fixture is 11.3 MB with a video)`);
     // 瘦身改成「存到站台時才做」：產出來的那一份影片還在（現場播得動），站台上那一份才抽掉
-    await page.waitForFunction(() => /瘦身：抽掉 1 個影片/.test(document.getElementById("deckInfo").textContent), null, { timeout: 30000 });
-    check(true, "the copy saved to the site is slimmed: 1 video stripped");
+    await page.waitForFunction(() => /瘦身：1 支影片另外存在站台上/.test(document.getElementById("deckInfo").textContent), null, { timeout: 30000 });
+    check(true, "the copy saved to the site is slimmed: its 1 video is stored on the site separately");
+    check(/影片 1 支另外存著/.test(await page.textContent("#masterRow")), "the settings row says the master's video is stored too");
     check((await built.files()).some((f) => /\.mp4$/i.test(f)) === false, "…while this visit's deck has no video because no video slide was picked");
     check((await page.locator("#subLinks").count()) === 0, "the pre-visit block does not carry the two interaction links");
     await page.reload();
@@ -272,6 +273,16 @@ try {
     await download2.saveAs(pptxPath2);
     const v2 = await (await Deck.load(await readFile(pptxPath2))).validate();
     check(v2.errors.length === 0 && v2.slideCount === 8, "deck built from the master stored on the site (chunked download, no file picker)");
+    // 影片：站台上那一份是瘦過的，選到影片頁時把另外存的影片放回去（實際回報：「影片都不能跑」）
+    await page.check('#slideGrid [data-block="lab301"]');
+    const [download3] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), page.click("#deckBtn")]);
+    const pptxPath3 = path.join(tmp, "browser3.pptx");
+    await download3.saveAs(pptxPath3);
+    const built3 = await Deck.load(await readFile(pptxPath3));
+    const v3 = await built3.validate();
+    check(built3.files().some((f) => /\.mp4$/i.test(f)) && v3.errors.length === 0, `a deck built from the site's master with the video slide picked carries the video again${v3.errors.length ? ": " + v3.errors.join("; ") : ""}`);
+    await page.waitForFunction(() => /影片放回去了 1 支影片/.test(document.getElementById("deckReport").textContent));
+    await page.uncheck('#slideGrid [data-block="lab301"]');
   } else console.log("skip - browser deck build (python-pptx fixture unavailable)");
   await page.click('[data-tab="pre"]');
   await page.selectOption("#visitSelect", "2026-10-07-uwa");

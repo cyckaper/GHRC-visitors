@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { buildDeck, inspectDeck } from "../cli/deck.mjs";
-import { Deck, slimDeck, hasEmbeddedMedia, imageInfo, coverLines, slideBlock } from "../cli/lib/pptx.mjs";
+import { Deck, slimDeck, hasEmbeddedMedia, imageInfo, coverLines, slideBlock, englishPart } from "../cli/lib/pptx.mjs";
 import zlib from "node:zlib";
 
 /** 一張真的 PNG（全黑）：寬、高、色彩型態（2＝RGB，6＝RGBA 有透明）。 */
@@ -121,6 +121,73 @@ test("build: English-only variant strips every Chinese run", { skip: !available 
     assert.ok(!/<a:t>[^<]*\p{Script=Han}/u.test(xml), `Han text left on ${s.path}`);
   }
   assert.equal((await deck.paragraphs((await deck.slides())[6].path))[0], "Which part would you most like to see?");
+});
+
+test("英文版：中英寫在同一行的只拿掉中文那一半（母簡報實際的寫法）", () => {
+  // 實際回報「幾頁字不見」：303 器材清單整行空白——以前有漢字的 run 整個刪掉，同一行的英文跟著不見
+  const cases = [
+    ["VIVE Focus 3 headsets ×4 （含 HTC VIVE 移動定位器 3.0 共 4 組）", "VIVE Focus 3 headsets ×4"],
+    ["VIVE Pro Eye headset ×1 with eye tracking （含腳架雲台 1 組、VIVE Focus 3 表情偵測套件 1 組）", "VIVE Pro Eye headset ×1 with eye tracking"],
+    ["VIVE Flow headsets ×4 VIVE Flow 頭戴式顯示器組 4 組", "VIVE Flow headsets ×4"],
+    ["VR omnidirectional treadmill ×1 VR 虛擬萬向跑步機 1 組", "VR omnidirectional treadmill ×1"],
+    ["360-degree camera kit ×1 360 攝影機套組 1 組", "360-degree camera kit ×1"],
+    ["BrainLink Pro research EEG 旗艦科研腦波儀", "BrainLink Pro research EEG"],
+    ["Funded by the College in 2024; opened 17 February 2025. 2024 年生農學院補助建置，2025 年 2 月 17 日啟用。", "Funded by the College in 2024; opened 17 February 2025."],
+    ["Pei-Ching Cho (2024), master's thesis 卓沛璟（2024）不同因子對擁擠感知與可接受度的影響，國立臺灣大學園藝暨景觀學系。", "Pei-Ching Cho (2024), master's thesis"],
+    ["Pei-Ching Cho (2024) 卓沛璟（2024）碩士論文", "Pei-Ching Cho (2024)"],
+    ["301 健康景觀智能室 · 負責人 張俊彥 Lead: Chun-Yen Chang", "Lead: Chun-Yen Chang"],
+    ["303 景觀環境模擬室 · 負責人 陳惠美 · 鄭佳昆 Lead: Hui-Mei Chen · Chia-Kuen Cheng", "Lead: Hui-Mei Chen · Chia-Kuen Cheng"],
+    ["03 · FOUR LABORATORIES · 03 VALIDATE · 驗證 · IVR STUDY 01", "03 · FOUR LABORATORIES · 03 VALIDATE · IVR STUDY 01"],
+    ["7 September 2026 · 2026 年 9 月 7 日", "7 September 2026"],
+    ["▶ Video · 影片（另附連結）", "▶ Video"],
+    ["Eye tracking 眼動", "Eye tracking"], ["4 units 四組", "4 units"], ["EEG 腦波", "EEG"], ["Research 研究", "Research"],
+    ["Five Laboratories 5 間研究室", "Five Laboratories"], ["5 間研究室 Five Laboratories", "Five Laboratories"], ["Lab 303 景觀環境模擬室", "Lab 303"],
+    ["VR CAVE 超慢跑對慢性下背痛之效益 · NTU × NTU Hospital", "NTU × NTU Hospital"],
+    ["三項承諾 · 從成果盤點走向可查核的目標 · From an inventory of results to verifiable targets", "From an inventory of results to verifiable targets"],
+    // 中文那一句裡夾著英文的詞：那是中文句子，英文版整句不要
+    ["VR 萬向跑步機", ""], ["IVR 能否替代實地造訪", ""], ["心率變異 HRV", ""], ["全景劇院 CAVE VR", ""],
+    ["ENVI-met 是目前全球應用最廣泛的都市微氣候模擬研究工具，結合氣候學、農業科學等參數。", ""],
+    ["以 SketchUp 建模、Enscape 渲染重建展場，受試者透過 HTC Vive 自由移動。", ""],
+    ["2026 遠見 USR 大學社會責任獎 · 福祉共生組 首獎", ""], ["一、VR GIS 系統", ""], ["2025 臺大未來大學 XR 展", ""],
+    ["Lab 301 — Health Landscape Intelligence Lab", "Lab 301 — Health Landscape Intelligence Lab"],
+  ];
+  for (const [text, want] of cases) assert.equal(englishPart(text), want, text);
+});
+
+test("英文版的一頁：同一行的英文留著、上一段講過的中文對照整段拿掉、圓圈裡的單字留著", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
+  const deck = await Deck.load(await readFile(FIXTURE));
+  const run = (t) => (t === "\n" ? "<a:br><a:rPr lang=\"en-US\"/></a:br>" : `<a:r><a:rPr lang="zh-TW" sz="1400" dirty="0"/><a:t>${t}</a:t></a:r>`);
+  let id = 1;
+  const shape = (...paras) => `<p:sp><p:nvSpPr><p:cNvPr id="${++id}" name="S${id}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="${id * 300000}"/><a:ext cx="6000000" cy="300000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/>${paras.map((p) => `<a:p>${[].concat(p).map(run).join("")}</a:p>`).join("")}</p:txBody></p:sp>`;
+  const slide = "ppt/slides/slide4.xml";
+  deck.set(slide, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>${[
+    shape(["03 · FOUR LABORATORIES · 01 MEASURE · ", "方法論"]),
+    shape("Lab 303 — Equipment Inventory", "療癒環境規劃模擬系統—硬體設備"),
+    shape("VIVE Flow headsets ×4 VIVE Flow 頭戴式顯示器組 4 組", "360-degree camera kit ×1 360 攝影機套組 1 組"),
+    shape("ENVI-met microclimate simulation"), shape("ENVI-met 微氣候模擬"),
+    shape("VIVE Pro Eye"), shape("Eye tracking 眼動"),
+    shape("A head-mounted display measures one person at a time, and sample accumulation is the biggest bottleneck in intervention research."), shape("Research 研究"),
+    shape("基"), shape("Site Reading"), shape("讀地"),
+    shape("四項研究", "以沉浸式虛擬實境為共同方法平台"),
+    shape(["Two lines in one paragraph", "\n", "同一段的第二行"]),
+  ].join("")}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`);
+  await deck.swapCjk(slide, null, "en");
+  const xml = await deck.text(slide);
+  const bodies = [...xml.matchAll(/<p:txBody>[\s\S]*?<\/p:txBody>/g)].map((m) => [...m[0].matchAll(/<a:p\b[^>]*>[\s\S]*?<\/a:p>|<a:p\/>/g)].map((p) => [...p[0].matchAll(/<a:t>([^<]*)<\/a:t>/g)].map((t) => t[1]).join("")));
+  assert.deepEqual(bodies, [
+    ["03 · FOUR LABORATORIES · 01 MEASURE"],
+    ["Lab 303 — Equipment Inventory"],
+    ["VIVE Flow headsets ×4", "360-degree camera kit ×1"],
+    ["ENVI-met microclimate simulation"], [""],
+    ["VIVE Pro Eye"], ["Eye tracking"],
+    ["A head-mounted display measures one person at a time, and sample accumulation is the biggest bottleneck in intervention research."], ["Research"],
+    ["基"], ["Site Reading"], [""],
+    [""],
+    ["Two lines in one paragraph"],
+  ]);
+  assert.ok(!/<a:br\b/.test(xml), "同一段裡第二行（中文）拿掉時，換行也一起拿掉");
+  assert.ok(/<a:rPr lang="zh-TW" sz="1400" dirty="0"\/><a:t>VIVE Flow headsets ×4<\/a:t>/.test(xml), "留下來的英文沿用原本那一個 run 的格式");
+  assert.deepEqual((await deck.validate()).errors, []);
 });
 
 test("build: page 2's slide-number column fills itself when nobody typed one (the admin no longer asks for it)", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
@@ -248,6 +315,81 @@ test("選到影片頁時，影片要留在產出的簡報裡——現場才播�
   // 沒選到影片頁的那一場不會平白多一支
   const without = await buildDeck({ ...withVideo, slides: [1, 2, 10] }, await readFile(FIXTURE), { slidesIndex, lang: "zh" });
   assert.equal(without.report.videos, 0);
+});
+
+/** zip 的中央目錄：每一個檔用哪一種壓縮（0＝不壓縮，8＝DEFLATE）。 */
+function zipMethods(buf) {
+  const b = Buffer.from(buf), out = {};
+  for (let i = b.length - 46; i >= 0; i--) {
+    if (b.readUInt32LE(i) !== 0x02014b50) continue;
+    const nameLen = b.readUInt16LE(i + 28);
+    out[b.toString("utf8", i + 46, i + 46 + nameLen)] = b.readUInt16LE(i + 10);
+  }
+  return out;
+}
+
+test("放上站台時影片另外存，產簡報時放回選到的那幾頁（實際回報：「影片都不能跑」）", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {
+  // 站台上那一份母簡報是瘦過的（五支影片就三百多 MB），以前影片抽掉就沒了，產出來的簡報那幾頁只剩海報
+  const slim = await slimDeck(await readFile(FIXTURE), { keepVideos: true });
+  assert.equal(slim.report.videos_removed, 1);
+  assert.equal(await hasEmbeddedMedia(slim.pptx), false, "the copy for the site has no video in it");
+  assert.equal(slim.videos.slides.length, 1);
+  const kept = slim.videos.slides[0];
+  assert.equal(kept.path, "ppt/slides/slide7.xml");
+  assert.match(kept.xml, /<a:videoFile\b/, "the slide as it was before the video came out");
+  assert.deepEqual(kept.rels.map((r) => r.target), ["../media/media1.mp4", "../media/media1.mp4"]);
+  assert.deepEqual(slim.videos.media.map((m) => [m.part, m.content_type]), [["ppt/media/media1.mp4", "video/mp4"]], "the content type comes from the master (an Override, like the real one)");
+  const clip = await slim.videos.media[0].read();
+  assert.ok(clip.length > 1000, "the video can still be read after the slim copy was cleaned");
+  const stored = new Map([["ppt/media/media1.mp4", { bytes: clip, content_type: "video/mp4" }]]);
+  const fetched = [];
+  const videos = { slides: slim.videos.slides, media: async (part) => { fetched.push(part); return stored.get(part); } };
+  const withVideo = { ...spec, language: "zh", slides: [1, 2, 7, 10], text_edits: [] };
+
+  const { pptx, report } = await buildDeck(withVideo, slim.pptx, { slidesIndex, lang: "zh", videos });
+  assert.equal(report.videos, 1);
+  assert.equal(report.videos_restored, 1);
+  assert.equal(report.videos_missing, undefined);
+  assert.deepEqual(report.validation.errors, []);
+  const out = await Deck.load(pptx);
+  const s7 = (await out.slides()).find((x) => x.path === "ppt/slides/slide7.xml");
+  const xml7 = await out.text(s7.path);
+  assert.match(xml7, /<a:videoFile r:link="rId3"\/>/);
+  assert.ok(!/▶ Video/.test(xml7), "the 「▶ Video」 line from the slim copy is gone with it");
+  const rels7 = await out.rels(s7.path);
+  assert.deepEqual(rels7.filter((r) => r.part === "ppt/media/media1.mp4").map((r) => r.id).sort(), ["rId2", "rId3"]);
+  assert.deepEqual([...(await out.bytes("ppt/media/media1.mp4"))].slice(0, 16), [...clip].slice(0, 16));
+  assert.match(await out.text("[Content_Types].xml"), /<Override PartName="\/ppt\/media\/media1\.mp4" ContentType="video\/mp4"\/>/);
+  assert.equal(zipMethods(pptx)["ppt/media/media1.mp4"], 0, "the video is stored as is (compressing it again only costs time)");
+
+  // 沒選到影片頁：影片不下載
+  fetched.length = 0;
+  const none = await buildDeck({ ...withVideo, slides: [1, 2, 10] }, slim.pptx, { slidesIndex, lang: "zh", videos });
+  assert.deepEqual(fetched, [], "videos are fetched only for the chosen slides");
+  assert.equal(none.report.videos, 0);
+
+  // 站台上沒有存影片（舊版上傳的）：報告說那幾頁只有海報
+  const bare = await buildDeck(withVideo, slim.pptx, { slidesIndex, lang: "zh" });
+  assert.equal(bare.report.videos, 0);
+  assert.equal(bare.report.videos_missing, 1);
+
+  // 母簡報換過了（那一頁跟存影片時對不上）：不硬塞，說一聲
+  const other = { slides: [{ ...kept, xml: kept.xml.replace(/<p:cNvPr id="(\d+)"/g, (_, id) => `<p:cNvPr id="${+id + 100}"`) }], media: videos.media };
+  const mismatch = await buildDeck(withVideo, slim.pptx, { slidesIndex, lang: "zh", videos: other });
+  assert.equal(mismatch.report.videos, 0);
+  assert.ok(mismatch.report.warnings.some((w) => /第 7 頁的影片沒有放回去：.*對不上/.test(w)), mismatch.report.warnings.join(" | "));
+  assert.deepEqual(mismatch.report.validation.errors, []);
+
+  // 下載失敗：那一頁維持海報，其他照樣產
+  const broken = await buildDeck(withVideo, slim.pptx, { slidesIndex, lang: "zh", videos: { slides: videos.slides, media: async () => { throw new Error("影片第 1 塊抓不到（502）"); } } });
+  assert.ok(broken.report.warnings.some((w) => /第 7 頁的影片沒有放回去：影片第 1 塊抓不到/.test(w)), broken.report.warnings.join(" | "));
+  assert.equal(broken.report.videos_missing, 1);
+  assert.deepEqual(broken.report.validation.errors, []);
+
+  // 英文版也一樣放得回去
+  const en = await buildDeck({ ...withVideo, language: "en" }, slim.pptx, { slidesIndex, lang: "en", videos });
+  assert.equal(en.report.videos, 1);
+  assert.deepEqual(en.report.validation.errors, []);
 });
 
 test("imageInfo：只讀檔頭就知道寬高、有沒有透明、拍照時的轉向", () => {

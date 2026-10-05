@@ -54,6 +54,8 @@ const ORG_TITLE = /^(?:Organisation|Organization|組織架構)$/i;
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const unesc = (s) => String(s).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d)).replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&amp;/g, "&");
 
+/** 放進正規表示式的字面字串。 */
+const escRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** 只換第一處、不吃 `$` 特殊字（String.replace 的替換字串會把 `$&` 之類的當成特殊字）。 */
 const swapOnce = (str, find, rep) => {
   const i = str.indexOf(find);
@@ -63,6 +65,12 @@ const swapOnce = (str, find, rep) => {
 const attrsOf = (tag) => Object.fromEntries([...tag.matchAll(/\s([\w:]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
 /** 改一個標籤裡幾個屬性的值（屬性本來就在才改）。 */
 const withAttrs = (tag, values) => Object.entries(values).reduce((t, [k, v]) => t.replace(new RegExp(`(\\s${k}=")[^"]*(")`), (_, a, b) => `${a}${v}${b}`), tag);
+/** 一個文字 run（`<a:r>`；不會吃到 `<a:rPr>`）。 */
+const RUN_RE = /<a:r\b[^>]*>[\s\S]*?<\/a:r>/g;
+/** 一個文字框（形狀的 p:txBody、表格儲存格的 a:txBody）。 */
+const TXBODY_RE = /<(p|a):txBody\b[^>]*>[\s\S]*?<\/\1:txBody>/g;
+/** 一段（a:p）；`<a:p/>` 也算一段，不會一路吃到下一段的結尾。 */
+const PARA_RE = /<a:p\b(?:[^>]*\/>|[^>]*>[\s\S]*?<\/a:p>)/g;
 /** 一段（a:p）的文字，run 合併。 */
 const paraText = (p) => [...p.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map((m) => unesc(m[1])).join("");
 /** 一個元素裡每一段的文字（空的不算）。 */
@@ -308,6 +316,68 @@ export class Deck {
   remove(path) {
     this.dirty.delete(path);
     this.zip.remove(path);
+  }
+  /** 放一個存檔時不再壓縮的檔：影片本身就壓過了，再壓一次只是白花時間（一百多 MB 在 iPad 上要好幾十秒）。 */
+  setStored(path, bytes) {
+    this.dirty.set(path, bytes);
+    this.zip.file(path, bytes, { createFolders: false, compression: "STORE" });
+  }
+
+  /**
+   * 把影片放回這一頁。站台上那一份母簡報的影片在放上站台時抽掉了、另外存著（slimDeck 的 keepVideos）：
+   * entry＝{ path, xml（抽掉之前的那一頁）, rels（抽掉的那幾條關聯） }，media(part) 回那一支影片 { bytes, content_type }。
+   * placed：這一份裡已經放進去的影片（同一支影片用在兩頁也只放一份）。
+   * 回傳放進去幾支（這一頁本來就有影片回 0）；這一頁跟存影片時那一頁對不起來（母簡報換過了）回 -1，什麼都不動。
+   */
+  async restoreMedia(path, entry, media, placed = new Map()) {
+    const now = await this.text(path);
+    if (/<a:videoFile\b|<a:audioFile\b|p14:media\b/.test(now)) return 0;
+    // 對得起來＝存影片時那一頁的每一個形狀這一頁都還在（瘦身只多加了一個「▶ Video」文字框）
+    const ids = (x) => [...x.matchAll(/<p:cNvPr\b[^>]*\bid="(\d+)"/g)].map((m) => m[1]);
+    const have = new Set(ids(now));
+    if (!entry || typeof entry.xml !== "string" || !Array.isArray(entry.rels) || !ids(entry.xml).every((id) => have.has(id))) return -1;
+    // 先把要放的影片都拿到手，再動檔案：拿到一半失敗不會留下一頁指到不存在的檔
+    const fetched = new Map();
+    for (const r of entry.rels) {
+      if (r.external) continue;
+      const part = resolveTarget(path, r.target);
+      if (placed.has(part) || fetched.has(part)) continue;
+      const got = await media(part);
+      if (!got || !got.bytes) throw new Error(`站台上找不到 ${part.split("/").pop()}`);
+      fetched.set(part, got);
+    }
+    for (const [part, got] of fetched) {
+      let dest = part;
+      for (let k = 2; this.has(dest); k++) dest = part.replace(/(\.[^./]+)?$/, `-${k}$1`);
+      this.setStored(dest, got.bytes);
+      await this.addOverride(`/${dest}`, got.content_type || "video/mp4");
+      placed.set(part, dest);
+    }
+    const rp = relsPath(path);
+    let rels = this.has(rp) ? await this.text(rp) : `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="${REL_NS}"></Relationships>`;
+    const taken = new Set([...rels.matchAll(/\bId="([^"]+)"/g)].map((m) => m[1]).concat(entry.rels.map((r) => r.id)));
+    let xml = entry.xml;
+    for (const r of entry.rels) {
+      let id = r.id;
+      // 這個編號這一頁已經有人用了：換一個沒人用的，頁面裡引用它的地方跟著換
+      if (new RegExp(`\\bId="${escRe(id)}"`).test(rels)) {
+        let k = 1;
+        while (taken.has(`rId${k}`)) k++;
+        taken.add(`rId${k}`);
+        xml = xml.replace(new RegExp(`(\\br:(?:link|embed|id)=")${escRe(id)}"`, "g"), `$1rId${k}"`);
+        id = `rId${k}`;
+      }
+      let target = r.target;
+      if (!r.external) {
+        const dest = placed.get(resolveTarget(path, r.target));
+        if (dest) target = target.replace(/[^/]+$/, dest.split("/").pop());
+      }
+      const rel = `<Relationship Id="${esc(id)}" Type="${esc(r.type)}" Target="${esc(target)}"${r.external ? ' TargetMode="External"' : ""}/>`;
+      rels = rels.replace(/<\/Relationships>\s*$/, () => `${rel}</Relationships>`);
+    }
+    this.set(rp, rels);
+    this.set(path, xml);
+    return fetched.size;
   }
 
   // ── rels / content types ──
@@ -660,30 +730,23 @@ export class Deck {
 
   /**
    * 換第二語言：含漢字的 run → map.get(text)（沒有對應就不動），並設 lang 與 <a:ea> 字型。
-   * map 為 null 時 = 純英文版：整個 run 刪掉；整段都被刪掉且不是唯一段落時，連段落一起刪。
+   * map 為 null 時 = 純英文版：每一段只留英文的部分（`englishOnly`）。
    */
   async swapCjk(path, map, lang) {
-    let xml = await this.text(path);
+    const xml = await this.text(path);
+    if (map === null) {
+      this.set(path, englishOnly(xml));
+      return;
+    }
     const ea = EA_FONT[lang] || "";
     const tag = LANG_TAG[lang] || "en-US";
-    xml = xml.replace(/<p:txBody>([\s\S]*?)<\/p:txBody>|<a:txBody>([\s\S]*?)<\/a:txBody>/g, (bodyXml) => {
-      const paras = [...bodyXml.matchAll(/<a:p\b[^>]*>[\s\S]*?<\/a:p>/g)].map((m) => m[0]);
-      let out = bodyXml;
-      for (const para of paras) {
-        let np = para.replace(/<a:r\b[^>]*>[\s\S]*?<\/a:r>/g, (run) => {
-          const t = unesc(/<a:t>([\s\S]*?)<\/a:t>/.exec(run)?.[1] ?? "");
-          if (!HAN.test(t)) return run;
-          if (map === null) return "";
-          const rep = map.get(t);
-          if (rep == null) return run;
-          return setRunFont(setRunText(run, rep), tag, ea);
-        });
-        if (map === null && !/<a:r\b/.test(np) && paras.length > 1 && /<a:r\b/.test(para)) np = "";
-        out = out.replace(para, np);
-      }
-      return out;
-    });
-    this.set(path, xml);
+    this.set(path, xml.replace(RUN_RE, (run) => {
+      const t = unesc(/<a:t>([\s\S]*?)<\/a:t>/.exec(run)?.[1] ?? "");
+      if (!HAN.test(t)) return run;
+      const rep = map.get(t);
+      if (rep == null) return run;
+      return setRunFont(setRunText(run, rep), tag, ea);
+    }));
   }
 
   // ── pictures / text boxes ──
@@ -985,13 +1048,19 @@ async function retarget(deck, oldPart, newPart) {
  *   1. 抽掉內嵌影片／音訊：留海報影格當靜態圖，加一行「▶ Video」文字（videoLinks[頁次] 有給連結就做成超連結）
  *   2. 超過 imageThreshold 的點陣圖交給 resizeImage(bytes, ext, maxEdge) → {bytes, ext}（瀏覽器用 canvas；回 null 表示不動）
  *   3. 清掉沒被引用的 media、驗證、重新壓縮
- * @returns {Promise<{ pptx: Uint8Array, report: { before, after, slides, videos_removed, images_resized, removed_parts, warnings } }>}
+ * keepVideos：抽掉的影片另外交回來（videos），由呼叫的人另外存——放上站台時用，產檔時再放回選到的那幾頁
+ * （Deck.restoreMedia；實際回報：「影片都不能跑」——站台上那一份抽掉了影片，產出來的簡報那幾頁只剩海報）。
+ * videos＝{ slides: [{ path, n, xml（抽掉之前的那一頁）, rels（抽掉的關聯） }], media: [{ part, content_type, read() }] }，
+ * read() 才真的解出那一支影片（一次一支，幾百 MB 不會同時放在記憶體裡）。
+ * @returns {Promise<{ pptx: Uint8Array, report: { before, after, slides, videos_removed, images_resized, removed_parts, warnings }, videos?: object }>}
  */
-export async function slimDeck(buf, { maxEdge = 2000, imageThreshold = 3_000_000, resizeImage = null, videoLinks = {}, log = () => {} } = {}) {
+export async function slimDeck(buf, { maxEdge = 2000, imageThreshold = 3_000_000, resizeImage = null, videoLinks = {}, keepVideos = false, log = () => {} } = {}) {
   const deck = await Deck.load(buf);
   const report = { before: buf.byteLength ?? buf.length, after: 0, slides: 0, videos_removed: 0, images_resized: 0, removed_parts: 0, warnings: [] };
   const slides = await deck.slides();
   report.slides = slides.length;
+  const videos = keepVideos ? { slides: [], media: [] } : null;
+  const types = keepVideos ? await deck.contentTypes() : null;
 
   // 1. 影片／音訊
   for (const s of slides) {
@@ -1004,6 +1073,16 @@ export async function slimDeck(buf, { maxEdge = 2000, imageThreshold = 3_000_000
     if (!media.length) continue;
     log(`第 ${s.n} 頁：抽掉 ${media.length} 個影片／音訊物件`);
     let xml = await deck.text(s.path);
+    if (videos) {
+      videos.slides.push({ path: s.path, n: s.n, xml, rels: media.map((r) => ({ id: r.id, type: r.type, target: r.target, external: !!r.external })) });
+      for (const r of media) {
+        if (!r.part || !deck.has(r.part) || videos.media.some((m) => m.part === r.part)) continue;
+        // 留著 zip 裡那一筆的參照：清孤兒把檔案從 zip 拿掉之後照樣解得出來
+        const entry = deck.zip.file(r.part);
+        const ext = (r.part.split(".").pop() || "").toLowerCase();
+        videos.media.push({ part: r.part, content_type: types.overrides.get(`/${r.part}`) || types.defaults.get(ext) || "video/mp4", read: () => entry.async("uint8array") });
+      }
+    }
     const labels = [];
     xml = xml.replace(/<p:pic>[\s\S]*?<\/p:pic>/g, (pic) => {
       if (!/<a:videoFile\b|<a:audioFile\b|p14:media\b|ppaction:\/\/media/.test(pic)) return pic;
@@ -1083,7 +1162,7 @@ export async function slimDeck(buf, { maxEdge = 2000, imageThreshold = 3_000_000
   log("重新壓縮…");
   const pptx = await deck.save((pct) => log(`重新壓縮 ${Math.round(pct)}%`));
   report.after = pptx.length;
-  return { pptx, report };
+  return videos ? { pptx, report, videos } : { pptx, report };
 }
 
 function roleN(slidesIndex, role) {
@@ -1232,6 +1311,28 @@ export async function buildDeck(spec, masterBuf, opts = {}) {
   }
   if (!chosen.length) throw new Error("沒有任何可用的頁");
   report.chosen = chosen;
+
+  // 1.5 影片放回去：站台上那一份母簡報的影片在放上站台時抽掉了、另外存在站台上（slimDeck 的 keepVideos）。
+  // 選到的影片頁把影片放回原處——不然那幾頁只剩一張海報，現場按了沒反應（實際回報：「影片都不能跑」）。
+  // 要在任何修改之前放：放回去的是抽掉之前的那一頁，後面的更正、換語言、照片比例照樣套在它上面
+  const vids = opts.videos;
+  if (vids && Array.isArray(vids.slides) && vids.slides.length && typeof vids.media === "function") {
+    const picked = new Set(chosen.map((n) => byN.get(n)));
+    const placed = new Map();
+    let restored = 0;
+    for (const e of vids.slides) {
+      if (!picked.has(e.path)) continue;
+      const n = all.find((x) => x.path === e.path)?.n;
+      try {
+        const k = await deck.restoreMedia(e.path, e, vids.media, placed);
+        if (k < 0) report.warnings.push(`第 ${n} 頁的影片沒有放回去：站台上存的影片跟這一份母簡報對不上（到「設定」把原始的母簡報重新上傳一次）`);
+        else restored += k;
+      } catch (err) {
+        report.warnings.push(`第 ${n} 頁的影片沒有放回去：${err.message || err}`);
+      }
+    }
+    if (restored) report.videos_restored = restored;
+  }
 
   // 2. 複製「您最想看哪一部分」頁（從組織架構頁複製：五位老師並列）與 QR 頁（從謝謝頁複製）。
   // 照內容對頁時這兩頁也照內容找：以前照索引的第 5 頁複製，拿到的是政策線那一頁
@@ -1411,6 +1512,13 @@ export async function buildDeck(spec, masterBuf, opts = {}) {
   // 留在輸出裡的影片／音訊：現場播得動的那幾支。母簡報是瘦過的（影片抽掉了）就會是 0，
   // 這時海報那一頁靠「設定」填的影片連結。
   report.videos = deck.files().filter((f) => f.startsWith("ppt/media/") && MEDIA_EXT.has((f.split(".").pop() || "").toLowerCase())).length;
+  // 還是只有海報的影片頁（瘦身時留下「▶ Video」那一行、影片沒有放回去）：報告說一聲怎麼補
+  let posterOnly = 0;
+  for (const p of order) {
+    const x = await deck.text(p);
+    if (/<a:t>▶ Video\b/.test(x) && !/<a:videoFile\b|p14:media\b/.test(x)) posterOnly++;
+  }
+  if (posterOnly) report.videos_missing = posterOnly;
   const v = await deck.validate();
   report.validation = v;
   if (v.errors.length) throw new Error(`產出的檔案沒過驗證：\n- ${v.errors.join("\n- ")}`);
@@ -1447,6 +1555,188 @@ function setParaText(para, text, fix = null) {
   for (let i = runs.length - 1; i > 0; i--) out = swapOnce(out, runs[i], "");
   const run = setRunText(runs[0], text);
   return swapOnce(out, runs[0], fix ? fix(run) : run);
+}
+
+// ── 英文版：每一段只留英文 ──
+//
+// 母簡報的排法：一段英文，下一段是它的中文對照（中文那一段常夾著英文的產品名，「ENVI-met 微氣候模擬」）；
+// 標籤與清單則是中英寫在同一行（「Eye tracking 眼動」「VIVE Flow headsets ×4 VIVE Flow 頭戴式顯示器組 4 組」）。
+// 以前英文版把有漢字的 run 整個刪掉，同一行的英文跟著不見（實際回報「幾頁字不見」：303 器材清單整行空白）。
+
+/** 中英之間的分隔：· • ・ ‧ ｜、前後有空白的 | 與 /、全形／、換行（`<a:br/>` 在段落文字裡記成 \n）。 */
+const EN_SEP = /\s*(?:[·•・‧｜／\n]|\s\|\s|\s\/\s)\s*/g;
+/** 括號裡有漢字的整個括號拿掉（「（含 HTC VIVE 移動定位器 3.0 共 4 組）」）。 */
+const EN_BRACKET = /[（(【「《〈[][^（）()【】「」《》〈〉[\]]*[）)】」》〉\]]/g;
+const HAN_ALL = /\p{Script=Han}/gu;
+const LATIN = /[A-Za-z]/;
+/** 數字後面接這些字＝那個數字是中文那一半的（「2024 年」「4 組」「5 間」）。 */
+const CJK_UNIT = /^[年月日時點分秒週周天間台臺位個名人次場件支頁歲所校種項篇張部座處組套式款隻層樓]/u;
+/** 只有縮寫（VR、CAVE、HRV、360VR）：配上一長串中文時，那是中文句子裡的詞，不是英文。 */
+const ACRONYM = /^[0-9]*[A-Z]{2,6}[0-9]*$/;
+const PURE_NUMBER = /^\d[\d,]*(?:\.\d+)?$/;
+
+const latinCount = (s) => (String(s).match(/[A-Za-z]/g) || []).length;
+const hanCount = (s) => (String(s).match(HAN_ALL) || []).length;
+const wordTokens = (s) => (String(s).match(/\S+/g) || []).map((t) => t.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")).filter((t) => LATIN.test(t));
+const onlyAcronyms = (s) => { const w = wordTokens(s); return w.length > 0 && w.every((t) => ACRONYM.test(t)); };
+const normWord = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+
+/** 一個分段（分隔符之間）裡英文的那一截：[開始, 結束)，沒有就 null。v 是括號已經換成空白的文字。 */
+function englishSpan(v, s, e) {
+  while (s < e && /\s/.test(v[s])) s++;
+  while (e > s && /\s/.test(v[e - 1])) e--;
+  if (s >= e) return null;
+  const seg = v.slice(s, e);
+  if (!HAN.test(seg)) return [s, e];
+  const han = hanCount(seg);
+  const first = s + seg.search(HAN);
+  if (!LATIN.test(v.slice(s, first))) {
+    // 中文在前：留最後一個漢字後面的英文（「負責人 張俊彥 Lead: Chun-Yen Chang」）
+    let ts = s;
+    for (const m of seg.matchAll(HAN_ALL)) ts = s + m.index + m[0].length;
+    while (ts < e && /[\s、，。：:；;！!？?）)」』》〉】·・—–-]/.test(v[ts])) ts++;
+    const tail = v.slice(ts, e);
+    if (!LATIN.test(tail) || (onlyAcronyms(tail) && han >= 4)) return null;
+    return [ts, e];
+  }
+  // 英文在前：留到第一個漢字之前，再把其實屬於中文那一半的尾巴拿掉
+  const tokens = [...v.slice(s, first).matchAll(/\S+/g)].map((m) => ({ t: m[0], s: s + m.index, e: s + m.index + m[0].length }));
+  let k = tokens.length;
+  // 「360-degree camera kit ×1 360 攝影機套組 1 組」：×N 後面只剩數字與前面出現過的字，就切在 ×N
+  let xi = -1;
+  tokens.forEach((t, i) => { if (/^[×✕]\d+$/.test(t.t)) xi = i; });
+  if (xi >= 0 && xi < k - 1) {
+    const seen = tokens.slice(0, xi).map((t) => normWord(t.t)).filter(Boolean);
+    if (tokens.slice(xi + 1).every((t) => PURE_NUMBER.test(t.t) || seen.some((w) => w.startsWith(normWord(t.t))))) k = xi + 1;
+  }
+  // 「VIVE Flow headsets ×4 VIVE Flow 頭戴式…」：中文那一半的開頭重複英文的開頭
+  if (k === tokens.length) {
+    for (let r = Math.floor(k / 2); r >= 1; r--) {
+      if (tokens.slice(k - r, k).every((t, i) => normWord(t.t) === normWord(tokens[i].t))) { k -= r; break; }
+    }
+  }
+  // 「… 17 February 2025. 2024 年生農學院…」：最後一個數字接著中文的單位
+  if (k === tokens.length && k > 1 && PURE_NUMBER.test(tokens[k - 1].t) && CJK_UNIT.test(v.slice(first, first + 1))) k--;
+  const lead = tokens.slice(0, k);
+  const words = lead.map((t) => t.t).filter((t) => LATIN.test(t));
+  if (!words.length) return null;
+  // 「VR 萬向跑步機」「IVR 能否替代實地造訪」：只有縮寫配一長串中文
+  if (onlyAcronyms(words.join(" ")) && han >= 4) return null;
+  // 「ENVI-met 是目前全球應用最廣泛的…。」：一兩個專有名詞開頭的中文句子
+  if (wordTokens(words.join(" ")).length <= 2 && words.every((w) => /[A-Z0-9]/.test(w)) && /[，。；！？]/.test(seg)) return null;
+  let end = lead[lead.length - 1].e;
+  while (end > s && /[\s,，、:：;；—–(（-]/.test(v[end - 1])) end--;
+  return end > s ? [s, end] : null;
+}
+
+/** 一段文字裡要留下來的字（Uint8Array，1＝留）：英文的部分、英文之間原本的分隔，空白收成一個。 */
+function englishMask(text) {
+  const n = text.length;
+  const keep = new Uint8Array(n);
+  if (!HAN.test(text)) return keep.fill(1);
+  const v = text.replace(EN_BRACKET, (m) => (HAN.test(m) ? " ".repeat(m.length) : m));
+  const segs = [];
+  let s = 0;
+  for (const m of v.matchAll(EN_SEP)) {
+    segs.push({ s, e: m.index, sepS: m.index, sepE: m.index + m[0].length });
+    s = m.index + m[0].length;
+  }
+  segs.push({ s, e: n, sepS: n, sepE: n });
+  const kept = segs.map((seg) => ({ ...seg, span: englishSpan(v, seg.s, seg.e) })).filter((seg) => seg.span);
+  kept.forEach((seg, k) => {
+    for (let i = seg.span[0]; i < seg.span[1]; i++) if (v[i] === text[i]) keep[i] = 1;
+    if (k === kept.length - 1) return;
+    // 兩段英文之間留原本的分隔；分隔裡有換行就只留換行
+    const sep = text.slice(seg.sepS, seg.sepE);
+    for (let i = seg.sepS; i < seg.sepE; i++) if (!sep.includes("\n") || text[i] === "\n") keep[i] = 1;
+  });
+  let ws = true;
+  for (let i = 0; i < n; i++) {
+    if (!keep[i]) continue;
+    if (text[i] === "\n") { ws = true; continue; }
+    const isWs = /\s/.test(text[i]);
+    if (isWs && ws) keep[i] = 0;
+    else ws = isWs;
+  }
+  for (let i = n - 1; i >= 0 && (!keep[i] || /[^\S\n]/.test(text[i])); i--) keep[i] = 0;
+  return keep;
+}
+
+/** 一段中英混排的文字只留英文（「VIVE Flow headsets ×4 VIVE Flow 頭戴式顯示器組 4 組」→「VIVE Flow headsets ×4」）；留不到三個英文字母就是空字串。 */
+export function englishPart(text) {
+  const t = String(text ?? "");
+  const keep = englishMask(t);
+  let out = "";
+  for (let i = 0; i < t.length; i++) if (keep[i]) out += t[i];
+  return latinCount(out) >= 3 ? out : "";
+}
+
+/** 這一段的英文，上一段（英文那一段）已經講過了：「ENVI-met microclimate simulation」底下的「ENVI-met 微氣候模擬」。 */
+function saidBefore(rem, prev) {
+  const rw = (rem.toLowerCase().match(/[a-z0-9]+/g) || []);
+  const pw = (prev.toLowerCase().match(/[a-z0-9]+/g) || []);
+  // 上一段是一整句話（超過 12 個字）時不算：標籤「Research 研究」前面剛好有一句提到 research，不是它的英文對照
+  if (!rw.length || !pw.length || pw.length > 12) return false;
+  const set = new Set(pw);
+  if (rw.every((w) => set.has(w))) return true;
+  // 「Health Cloud」對「HealthCloud analytics」：拼在一起比，但要對齊字的開頭與結尾（「Asia」不算在「Malaysia」裡）
+  const want = rw.join("");
+  for (let i = 0; i < pw.length; i++) {
+    let acc = "";
+    for (let j = i; j < pw.length && acc.length < want.length; j++) acc += pw[j];
+    if (acc === want) return true;
+  }
+  return false;
+}
+
+/** 一段（a:p）只留英文：回傳 { xml, text }（text＝留下來的英文；整段都不留時 xml 裡沒有 run）。 */
+function englishPara(para, prev) {
+  const pieces = [];
+  let text = "";
+  for (const m of para.matchAll(/<a:r\b[^>]*>[\s\S]*?<\/a:r>|<a:br\b[^>]*\/>|<a:br\b[^>]*>[\s\S]*?<\/a:br>/g)) {
+    const br = m[0].startsWith("<a:br");
+    const t = br ? "\n" : unesc(/<a:t>([\s\S]*?)<\/a:t>/.exec(m[0])?.[1] ?? "");
+    pieces.push({ xml: m[0], at: m.index, s: text.length, e: text.length + t.length, br, t });
+    text += t;
+  }
+  const keep = englishMask(text);
+  let rem = "";
+  for (let i = 0; i < text.length; i++) if (keep[i]) rem += text[i];
+  if (latinCount(rem) < 3 || saidBefore(rem, prev)) { keep.fill(0); rem = ""; }
+  let out = "", last = 0;
+  for (const p of pieces) {
+    out += para.slice(last, p.at);
+    last = p.at + p.xml.length;
+    let nt = "";
+    for (let i = p.s; i < p.e; i++) if (keep[i]) nt += text[i];
+    if (!nt) continue;
+    out += p.br || nt === p.t ? p.xml : setRunText(p.xml, nt);
+  }
+  return { xml: out + para.slice(last), text: rem.trim() };
+}
+
+/**
+ * 英文版的一頁：每一段只留英文（`englishPara`）；整段都是中文、或英文的部分上一段已經講過的，整段拿掉
+ * （一個文字框至少留一段，不然檔案不合格式）。整個形狀只寫一個漢字的是圖示（七站那一頁圓圈裡的「基、人、檢…」），
+ * 英文版也留著——刪掉就只剩一個空圓圈。
+ */
+function englishOnly(xml) {
+  let prev = "";
+  return xml.replace(TXBODY_RE, (body) => {
+    const paras = [...body.matchAll(PARA_RE)].map((m) => m[0]);
+    if (/^\p{Script=Han}$/u.test(paras.map(paraText).join("").trim())) return body;
+    const done = paras.map((para) => {
+      const t = paraText(para);
+      if (!t.trim()) return { para, xml: para, gone: false };
+      if (!HAN.test(t)) { prev = t; return { para, xml: para, gone: false }; }
+      const r = englishPara(para, prev);
+      prev = r.text;
+      return { para, xml: r.xml, gone: !/<a:r\b/.test(r.xml) && /<a:r\b/.test(para) };
+    });
+    if (done.length && done.every((d) => d.gone)) done[done.length - 1].gone = false;
+    let i = 0;
+    return body.replace(PARA_RE, () => { const d = done[i++]; return d.gone ? "" : d.xml; });
+  });
 }
 
 function setRunText(run, text) {
