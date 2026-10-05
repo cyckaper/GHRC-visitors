@@ -4,17 +4,26 @@
  *   node test/e2e/smoke.mjs
  */
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { execSync, spawnSync } from "node:child_process";
+import { execSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { Deck } from "../../cli/lib/pptx.mjs";
 
-// 瀏覽器產檔用的合成母簡報（同 deck 測試；沒有 python-pptx 就跳過那一段）
-const FIXTURE = "test/fixtures/generated/master-fixture.pptx";
-if (!existsSync(FIXTURE)) spawnSync("python3", ["scripts/make-fixture.py", FIXTURE], { stdio: "inherit" });
-const fixtureAvailable = existsSync(FIXTURE);
+// 網頁版簡報（/deck，每一場同一份）：測試用一份假的 deck.json——跟 repo 裡現在放的是哪一版無關
+const FAKE_DECK = {
+  version: "test", source: { title: "Test master", slides: 4 }, built_at: "2026-10-05T00:00:00.000Z", width: 1920, height: 1080,
+  slides: [
+    { n: 1, src: 1, img: "assets/deck/test/s01.webp", thumb: "assets/deck/test/t01.webp", title: "Welcome", text: "Welcome" },
+    { n: 2, src: 3, img: "assets/deck/test/s02.webp", thumb: "assets/deck/test/t02.webp", title: "Lab 301", text: "Lab 301", media: [{ type: "video", x: 0.25, y: 0.3, w: 0.5, h: 0.5, src: "assets/deck/test/v1.mp4", poster: "assets/deck/test/p02-0.webp" }] },
+    { n: 3, src: 4, img: "assets/deck/test/s03.webp", thumb: "assets/deck/test/t03.webp", title: "Thank you", text: "Thank you" },
+  ],
+  excluded: [{ src: 2, reason: "今日流程（每一場不一樣，來賓專頁上有）" }],
+};
+const PNG_1PX = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+async function fakeDeck(target) {
+  await target.route((u) => u.pathname === "/data/deck.json", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(FAKE_DECK) }));
+  await target.route((u) => u.pathname.startsWith("/assets/deck/test/"), (route) => (/\.mp4$/.test(route.request().url()) ? route.fulfill({ status: 404, body: "" }) : route.fulfill({ contentType: "image/png", body: PNG_1PX })));
+}
 
 async function loadPlaywright() {
   try {
@@ -46,18 +55,21 @@ page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
 page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource/i.test(m.text())) errors.push(`console: ${m.text()}`); });
 // CDN 資源在沙箱裡可能抓不到：擋掉外部請求，頁面仍須正常運作
 await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
-// 只有產簡報用的 JSZip 改由本機 node_modules 供應（後註冊的 route 先比對）
-await page.route(/cdnjs\.cloudflare\.com\/ajax\/libs\/jszip\//, (route) => route.fulfill({ path: "node_modules/jszip/dist/jszip.min.js", contentType: "text/javascript" }));
+await fakeDeck(page);
 
 const check = (cond, msg) => { if (!cond) throw new Error(`FAIL: ${msg}`); console.log(`ok - ${msg}`); };
 
 try {
   // ── 主辦端 ──
   await page.goto(`${base}/admin.html`);
-  // 還沒登入就先點「簡報」：要說是沒登入，不要怪到「還沒有參訪」頭上（登入是綁裝置的，換手機就會遇到）
+  // 簡報分頁＝網頁版簡報（每一場同一份）：跟「這一場」無關，還沒登入、還沒有任何參訪也看得到
   await page.click('[data-tab="deck"]');
-  await page.waitForFunction(() => /登入/.test(document.getElementById("deckStatus").textContent));
-  check(!(await page.textContent("#deckStatus")).includes("還沒有任何參訪"), "not signed in: the deck tab says so instead of blaming missing visits");
+  await page.waitForFunction(() => document.querySelectorAll("#deckThumbs a").length === 3);
+  check(/3 頁/.test(await page.textContent("#deckMeta")) && /1 支影片/.test(await page.textContent("#deckMeta")) && /Test master/.test(await page.textContent("#deckMeta")), "the deck tab shows the one web deck: how many slides and videos, and which master it came from");
+  check((await page.getAttribute("#deckOpen", "href")) === "/deck" && (await page.textContent("#deckUrl")) === `${base}/deck`, "…with the link to open it, the same for every visit");
+  check((await page.getAttribute("#deckThumbs a:nth-child(2)", "href")) === "/deck#2" && /▶/.test(await page.textContent("#deckThumbs a:nth-child(2)")), "a thumbnail opens the deck at that slide, and the video slide is marked");
+  check(/原第 2 頁/.test(await page.textContent("#deckExcluded")) && /今日流程/.test(await page.textContent("#deckExcluded")), "…and it lists the master's slides that were left out, and why");
+  check((await page.locator("#slideGrid, #pickBtn, #deckBtn, #noDeck, #masterFile").count()) === 0, "no per-visit slide picking or .pptx building any more");
   await page.click('[data-tab="pre"]');
   await page.fill("#token", "e2e-token");
   await page.click("#tokenSave");
@@ -69,14 +81,6 @@ try {
   await page.waitForFunction(() => /場參訪/.test(document.getElementById("backendInfo").textContent));
   check(await page.isHidden("#token") && await page.isVisible("#authOk"), "still signed in after a reload — nothing to paste again");
 
-  // 一場參訪都還沒有的時候，簡報分頁仍要列出母簡報的頁次（只是不能存、不能產檔）
-  await page.click('[data-tab="deck"]');
-  await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]").length > 0);
-  // 15 個區塊：研究成果 39–42 併進了 Lab 303（明確指示），所以比以前少一個
-  check((await page.locator("#slideGrid input[data-block]").count()) === 15, "the master deck's blocks are listed even with no visit yet");
-  check((await page.locator("#slideGrid input[data-slide]").count()) === 0, "…and there is no per-page checkbox to wade through");
-  check((await page.$("#slidesSave")) === null, "there is no save-slides button — picking pages saves itself");
-  check(await page.isDisabled("#deckBtn") && (await page.isVisible("#deckNeedsVisit")), "…but building is held back until a visit exists, and it says why");
   await page.click('[data-tab="pre"]');
   await page.fill("#emailText", `Dear Prof. Chang,\n\nWe would like to visit on 2026-10-07 at 10:00. My colleague Jane Doe <jane@uwa.edu.au> joins me.\n\nSimon Kilbane, University of Western Australia\nsimon@uwa.edu.au`);
   await page.click("#extractBtn");
@@ -118,7 +122,7 @@ try {
   // 今日流程是自動排的（各研究室在支援人力表上填的分鐘會自己排進來）：訪前不再有「AI 排行程」，
   // 平常只看一份排好的流程；可以改的那張表收在「要改再點開」裡
   check((await page.$("#planBtn")) === null, "the pre-visit tab has no AI scheduling button any more — the labs' own minutes fill the schedule");
-  check((await page.locator("#tab-pre #slideGrid").count()) === 0, "the pre-visit tab no longer carries the slide picker");
+  check((await page.locator("#slideGrid").count()) === 0, "there is no slide picker anywhere — every visit uses the same web deck");
   check(/綜合討論/.test(await page.textContent("#programmeView")) && (await page.locator("#programmeView .room").count()) === 5, "the schedule is already laid out to look at: 綜合討論 included, a line per lab under the tour");
   check(!(await page.$eval("#programmeEdit", (d) => d.open)) && !(await page.isVisible("#programmeTable")), "the editable table stays folded away until it is needed");
   await page.click("#programmeEdit summary");
@@ -154,7 +158,7 @@ try {
 
   const link = await page.textContent("#pageLink");
   check(link === `${base}/2026-10-07-uwa`, `saved visit has page url ${link}`);
-  check((await page.$("#deckState")) === null && /選了 \d+ 頁/.test(await page.textContent("#progress")), "the pre-visit tab does not repeat the deck state — the progress line already has it");
+  check((await page.$("#deckState")) === null && (await page.locator('#progress [data-go="deck"]').count()) === 0, "the progress line has no deck step: every visit uses the same web deck");
 
   // 訪前功課：查網路跑在背景（一般函式 10 秒不夠），觸發後輪詢，查完自己出現，不必再按一次
   await page.click("#researchBtn");
@@ -164,132 +168,11 @@ try {
   check((await page.textContent("#background")).includes("可能的參訪目的"), "the background card lists the likely purposes of the visit once it finishes");
   check(!/跑在背景|背景函式/.test(await page.textContent("#tab-pre")), "the pre-visit tab explains waits in plain words, not in terms of how the server is built");
 
-  // ── 簡報分頁：選頁、不用簡報、產檔（從進度線那一格跳過去——訪前不再放跳分頁的按鈕）──
-  await page.click('#progress [data-go="deck"]');
-  await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]").length > 0);
-  check((await page.inputValue("#visitSelect")) === "2026-10-07-uwa", "the progress line's 簡報 cell opens the deck tab on this visit");
-  // 挑頁搬來這裡（以前是訪前「AI 排行程」順便挑）：跑在背景，挑完勾好區塊、寫一句為什麼、自己存——行程不動
-  const routeBefore = JSON.stringify((await (await fetch(`${base}/api/visits?id=2026-10-07-uwa`, { headers: { authorization: "Bearer e2e-token" } })).json()).visit.itinerary);
-  await page.click("#pickBtn");
-  await page.waitForFunction(() => /AI 挑頁中/.test(document.getElementById("pickInfo").textContent));
-  await page.waitForFunction(() => /挑了 \d+ 頁/.test(document.getElementById("pickInfo").textContent), null, { timeout: 90000 });
-  check((await page.locator("#slideGrid input[data-block]:checked").count()) > 2 && (await page.textContent("#pickRationale")).trim().length > 0, "AI 挑頁 ticks blocks beyond the mandatory two, and says why");
-  await page.waitForFunction(() => /已存 \d+ 頁/.test(document.getElementById("slidesInfo").textContent), null, { timeout: 30000 });
-  const picked = (await (await fetch(`${base}/api/visits?id=2026-10-07-uwa`, { headers: { authorization: "Bearer e2e-token" } })).json()).visit;
-  check(picked.slides.length > 5 && !!picked.plan_rationale && JSON.stringify(picked.itinerary) === routeBefore, "…saves the pick by itself, and leaves the schedule the labs filled in alone");
-  // 顏色：研究室的區塊用那一間的顏色，值來自 public/data/labs.json（不是抄在頁面裡的第二份）
+  // 顏色：研究室用那一間的顏色，值來自 public/data/labs.json（不是抄在頁面裡的第二份）
   const hexToRgb = (h) => `rgb(${parseInt(h.slice(1, 3), 16)}, ${parseInt(h.slice(3, 5), 16)}, ${parseInt(h.slice(5, 7), 16)})`;
   const labColor = Object.fromEntries(JSON.parse(await readFile("public/data/labs.json", "utf8")).labs.map((l) => [l.room, hexToRgb(l.color)]));
   const leftEdge = (sel) => page.$eval(sel, (el) => getComputedStyle(el).borderLeftColor);
-  // 選頁是「一個區塊一個勾」：必選的兩區鎖住，其他的整區進出
-  const slideCount = async () => Number(/、(\d+) 頁/.exec(await page.textContent("#slideCount"))[1]);
-  check((await page.locator("#slideGrid input[data-block][disabled]").count()) === 2, "the two mandatory blocks are locked on");
-  await page.click("#slidesNone");
-  check((await slideCount()) === 5, "全不選 keeps only the five always-slides");
-  await page.click('#slideGrid [data-group-only="lab302"]');
-  check((await page.isChecked('#slideGrid [data-block="lab302"]')) && (await slideCount()) === 13, "只選這區 takes the whole block plus the always-slides");
-  check((await leftEdge('#slideGrid [data-group="lab302"]')) === labColor["302"], "a ticked lab block wears that lab's colour, straight from labs.json");
-  await page.check('#slideGrid [data-block="ch06"]');
-  check((await slideCount()) === 19, "ticking a block adds all of its pages at once");
-  await page.click("#slidesAll");
-  check((await slideCount()) === 72, "全選 selects every block");
-  // 按了全選，那一顆變成實心的顏色、前面打 ✓（明確指示：要變顏色才知道有選到）；全不選那一顆回到淡色
-  const pressed = (sel) => page.$eval(sel, (b) => ({ on: b.getAttribute("aria-pressed") === "true", soft: b.classList.contains("btn-soft"), bg: getComputedStyle(b).backgroundColor, text: b.textContent.trim() }));
-  const allOn = await pressed("#slidesAll"), noneOff = await pressed("#slidesNone");
-  check(allOn.on && !allOn.soft && allOn.text.startsWith("✓") && !noneOff.on && noneOff.soft && allOn.bg !== noneOff.bg, `after 全選 the button turns solid and ticked (${allOn.bg} vs ${noneOff.bg}, “${allOn.text}”)`);
-  await page.click("#slidesNone");
-  const allOff = await pressed("#slidesAll"), noneOn = await pressed("#slidesNone");
-  check(!allOff.on && allOff.soft && noneOn.on && !noneOn.soft && noneOn.text.startsWith("✓"), "…and 全不選 lights up instead once everything is cleared");
-  await page.click('#slideGrid [data-group-only="lab303"]');
-  await page.waitForFunction(() => /已存 \d+ 頁/.test(document.getElementById("slidesInfo").textContent), null, { timeout: 30000 });
-  check(true, "picking pages saves itself, no button to press");
-
-  // 有些參訪只口頭介紹：勾「這場不用簡報」就收起選頁與產檔，而且存得住
-  await page.check("#noDeck");
-  await page.waitForFunction(() => document.getElementById("deckWork").hidden);
-  await page.waitForFunction(() => /只口頭介紹/.test(document.getElementById("flash").textContent));
-  await page.click('[data-tab="pre"]');
-  check(/不用簡報/.test(await page.textContent("#progress")), "the progress line says this visit has no deck");
-  await page.click('[data-tab="deck"]');
-  await page.waitForFunction(() => document.getElementById("deckStatus").textContent.includes("2026-10-07") || document.getElementById("deckStatus").textContent.includes("Western"));
-  check(await page.isChecked("#noDeck"), "「不用簡報」survives a reload of the tab (stored on the visit)");
-  await page.uncheck("#noDeck");
-  await page.waitForSelector("#deckWork:not([hidden])");
-  await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]:checked").length > 0);
-  // 等「要做簡報」真的存到伺服器才重新整理：不然重新整理之後讀到的還是「不用簡報」，產檔那一區是收起來的（CI 踩過）
-  await page.waitForFunction(() => /這場要做簡報/.test(document.getElementById("flash").textContent));
-
-  // 一載入就直接點「簡報」分頁（boot 可能還沒跑完）也要看得到選項，不能一片空白
-  await page.reload();
-  await page.click('[data-tab="deck"]');
-  await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]").length > 0, null, { timeout: 20000 });
-  check(true, "the slide options are there even when the deck tab is opened before the page finished booting");
-
-  // 直接在瀏覽器產 .pptx：站台沒有母簡報 → 按「產生簡報」直接跳選檔（這裡用合成母簡報）→ 下載 → 結構驗證
-  if (fixtureAvailable) {
-    await page.waitForFunction(() => /還沒放上站台/.test(document.getElementById("masterRow").textContent));
-    const [chooser] = await Promise.all([page.waitForEvent("filechooser"), page.click("#deckBtn")]);
-    const [download] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), chooser.setFiles(FIXTURE)]);
-    check(download.suggestedFilename() === "GHRC_2026-10-07-uwa.pptx", `one click → file picker → ${download.suggestedFilename()} downloaded`);
-    const pptxPath = path.join(tmp, "browser.pptx");
-    await download.saveAs(pptxPath);
-    const built = await Deck.load(await readFile(pptxPath));
-    const v = await built.validate();
-    // 照內容對頁：「只選 303」拿到的是合成簡報裡內容屬於 303 的那一頁（第 9 頁），謝謝那一頁也照內容找到（索引寫第 72 頁）
-    check(v.errors.length === 0 && v.slideCount === 8, `browser-built deck is valid with ${v.slideCount} slides (4 front slides + Lab 303 + thank-you, matched by content, + ask + QR)${v.errors.length ? ": " + v.errors.join("; ") : ""}`);
-    // 封面換成這一場（明確指示：「首頁的部分應該要根據本次參訪者，更改首頁的內容」），母簡報封面上的字不留
-    const coverParas = await built.paragraphs((await built.slides())[0].path);
-    check(coverParas.some((p) => /Western Australia/.test(p)) && coverParas.some((p) => /October 2026/.test(p)) && !coverParas.some((p) => /Guest Name|Visiting Organisation Name|January 2026/.test(p)), `the cover names this visit's organisation and date, not the master's (${coverParas.join(" | ")})`);
-    await page.waitForFunction(() => /封面換成這一場/.test(document.getElementById("deckReport").textContent));
-    await page.waitForFunction(() => /已下載/.test(document.getElementById("deckInfo").textContent));
-    // 把這份母簡報存到站台（分塊上傳），重新載入後不必選檔就能產
-    await page.click("#saveMasterBtn");
-    await page.waitForFunction(() => /移除/.test(document.getElementById("masterRow").textContent), null, { timeout: 60000 });
-    const storedMb = parseFloat((/([\d.]+) MB/.exec(await page.textContent("#masterRow")) || [])[1] || "99");
-    check(storedMb < 3, `master was slimmed in the browser before storing (${storedMb} MB, fixture is 11.3 MB with a video)`);
-    // 瘦身改成「存到站台時才做」：產出來的那一份影片還在（現場播得動），站台上那一份才抽掉
-    await page.waitForFunction(() => /瘦身：1 支影片另外存在站台上/.test(document.getElementById("deckInfo").textContent), null, { timeout: 30000 });
-    check(true, "the copy saved to the site is slimmed: its 1 video is stored on the site separately");
-    check(/影片 1 支另外存著/.test(await page.textContent("#masterRow")), "the settings row says the master's video is stored too");
-    check((await built.files()).some((f) => /\.mp4$/i.test(f)) === false, "…while this visit's deck has no video because no video slide was picked");
-    check((await page.locator("#subLinks").count()) === 0, "the pre-visit block does not carry the two interaction links");
-    await page.reload();
-    await page.waitForFunction(() => /場參訪/.test(document.getElementById("backendInfo").textContent));
-    await page.click('[data-tab="deck"]');
-    await page.selectOption("#visitSelect", "2026-10-07-uwa");
-    await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]").length > 0);
-    await page.waitForFunction(() => /移除/.test(document.getElementById("masterRow").textContent));
-    // 換一場、切分頁都會再問一次站台上有沒有母簡報。以前一問就先清成「沒有」，這時候按「產生簡報」
-    // 就跳出選檔視窗（站台上明明有一份；這支測試偶爾就卡在這裡）。讓那一問慢一點，問的時候按下去
-    let picked = false;
-    page.on("filechooser", () => { picked = true; });
-    const masterCheck = (u) => u.pathname === "/api/master" && !u.search;
-    await page.route(masterCheck, async (route) => { await new Promise((r) => setTimeout(r, 1500)); await route.continue(); });
-    const asked = page.waitForRequest((q) => masterCheck(new URL(q.url())));
-    await page.selectOption("#visitSelect", "2026-10-07-uwa");
-    await asked;
-    const [download2] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), page.click("#deckBtn")]);
-    check(!picked, "pressing 產生簡報 while the site is being asked about the master again builds from the stored one — no file picker");
-    await page.unroute(masterCheck);
-    const pptxPath2 = path.join(tmp, "browser2.pptx");
-    await download2.saveAs(pptxPath2);
-    const v2 = await (await Deck.load(await readFile(pptxPath2))).validate();
-    check(v2.errors.length === 0 && v2.slideCount === 8, "deck built from the master stored on the site (chunked download, no file picker)");
-    // 影片：站台上那一份是瘦過的，選到影片頁時把另外存的影片放回去（實際回報：「影片都不能跑」）
-    await page.check('#slideGrid [data-block="lab301"]');
-    const [download3] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), page.click("#deckBtn")]);
-    const pptxPath3 = path.join(tmp, "browser3.pptx");
-    await download3.saveAs(pptxPath3);
-    const built3 = await Deck.load(await readFile(pptxPath3));
-    const v3 = await built3.validate();
-    check(built3.files().some((f) => /\.mp4$/i.test(f)) && v3.errors.length === 0, `a deck built from the site's master with the video slide picked carries the video again${v3.errors.length ? ": " + v3.errors.join("; ") : ""}`);
-    await page.waitForFunction(() => /影片放回去了 1 支影片/.test(document.getElementById("deckReport").textContent));
-    await page.uncheck('#slideGrid [data-block="lab301"]');
-  } else console.log("skip - browser deck build (python-pptx fixture unavailable)");
-  await page.click('[data-tab="pre"]');
-  await page.selectOption("#visitSelect", "2026-10-07-uwa");
-  await page.waitForSelector("#afterSave:not([hidden])");
-  check(/簡報已產|選了 \d+ 頁/.test(await page.textContent("#progress")), "the progress line reports the deck state after a reload");
+  check((await page.locator("#subLinks").count()) === 0, "the pre-visit block does not carry the two interaction links");
   // 確認信在「訪前」（寄出去的那封信裡就有來賓專頁網址），感謝信在「後續」；沒有單獨的「信件」分頁
   check((await page.locator("#tab-pre #confirmLetterBtn").count()) === 1, "the confirmation letter lives on the pre-visit tab");
   check((await page.locator("#tab-wrapup #thanksBtn").count()) === 1, "the thank-you letter lives on the wrap-up tab");
@@ -670,7 +553,7 @@ try {
   await page.waitForFunction(() => /已存/.test(document.getElementById("reminderInfo").textContent), null, { timeout: 15000 });
   check(true, "…and the address saves itself like every other setting");
   check(!(await page.textContent("#statusList")).includes("e2e-signal"), "…without ever showing the keys themselves");
-  check(await page.isVisible("#masterRow"), "the master deck lives in settings now, not at the bottom of the deck tab");
+  check((await page.$("#masterRow")) === null && !/母簡報/.test(await page.textContent("#statusList")), "settings no longer asks for a master deck — the web deck is built from the one on Drive");
 
   // 建錯的那一場：直接刪掉（不必先想「要不要存」）
   await page.click('[data-tab="pre"]');
@@ -687,7 +570,7 @@ try {
   // 「以前做過的參訪」：列在訪前分頁底下，點一列就把全站的「這一場」切過去
   await page.waitForFunction(() => document.querySelectorAll('#pastVisits [data-past]').length > 0);
   check((await page.locator('#pastVisits [data-past="2026-10-07-uwa"]').count()) === 1, "past visits are listed at the bottom of the pre-visit tab");
-  check(/選了 \d+ 頁/.test(await page.textContent("#pastVisits")), "…saying what that visit picked, so the next deck has something to go on");
+  check(!/選了 \d+ 頁|沒選頁/.test(await page.textContent("#pastVisits")), "…without a slide count: every visit uses the same web deck");
   check(/同類/.test(await page.textContent("#pastVisits")), "…and marking the ones of the same organisation type");
   // 等的是「畫面真的換過去了」（#preStatus 由 fillForm 寫），不是下拉的值——切換是非同步的
   await page.click('#pastVisits [data-past="2026-10-07-uwa"]');
@@ -1057,6 +940,53 @@ try {
     await phone.close();
   }
 
+  // ── 網頁版簡報 /deck：簡報遙控器（PageDown）、方向鍵、#頁碼、打頁碼＋Enter、影片疊在原本的位置、總覽、黑幕 ──
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 760 } });
+    const dp = await ctx.newPage();
+    const deckErrors = [];
+    dp.on("pageerror", (e) => deckErrors.push(e.message));
+    const external = [];
+    dp.on("request", (r) => { if (!r.url().startsWith(base)) external.push(r.url()); });
+    await fakeDeck(dp);
+    await dp.goto(`${base}/deck`);
+    const at = () => dp.evaluate(() => ({ hash: location.hash, src: document.getElementById("slide").getAttribute("src"), count: document.getElementById("count").textContent }));
+    await dp.waitForFunction(() => /s01\.webp$/.test(document.getElementById("slide").getAttribute("src") || ""));
+    check((await at()).count === "1 / 3" && (await dp.getAttribute("#slide", "alt")) === "Welcome", "/deck opens on the first slide");
+    await dp.keyboard.press("PageDown");
+    await dp.waitForFunction(() => location.hash === "#2");
+    check(/s02\.webp$/.test((await at()).src), "a clicker's PageDown turns to the next slide, and the address says which one");
+    const video = await dp.$eval("#media video", (v) => ({ src: v.getAttribute("src"), poster: v.getAttribute("poster"), style: v.getAttribute("style"), controls: v.controls }));
+    check(video.src === "/assets/deck/test/v1.mp4" && video.poster === "/assets/deck/test/p02-0.webp" && /left:\s*25%/.test(video.style) && /width:\s*50%/.test(video.style) && video.controls, "the video plays where it sat on the slide, with its poster frame");
+    await dp.keyboard.press("ArrowLeft");
+    await dp.waitForFunction(() => location.hash === "#1");
+    check(await dp.$("#media video") === null, "going back leaves the video slide behind");
+    await dp.keyboard.press("3");
+    await dp.keyboard.press("Enter");
+    await dp.waitForFunction(() => location.hash === "#3");
+    check(await dp.isDisabled("#next"), "typing a slide number and Enter jumps there; the last slide has nowhere further to go");
+    await dp.keyboard.press("b");
+    check(await dp.isVisible("#black"), "B blanks the screen (a clicker's black-screen button)");
+    await dp.keyboard.press("b");
+    await dp.keyboard.press("g");
+    await dp.waitForSelector("#overview:not([hidden])");
+    check((await dp.locator("#thumbs button").count()) === 3 && (await dp.getAttribute("#thumbs button:nth-child(3)", "aria-current")) === "true", "G shows every slide, the current one marked");
+    await dp.click("#thumbs button:nth-child(2)");
+    await dp.waitForFunction(() => location.hash === "#2" && document.getElementById("overview").hidden);
+    check(true, "picking a slide in the overview goes there");
+    await dp.goto(`${base}/deck#3`);
+    await dp.waitForFunction(() => /s03\.webp$/.test(document.getElementById("slide").getAttribute("src") || ""));
+    check(true, "a link to /deck#3 opens on slide 3");
+    check(!external.length && !deckErrors.length, `…and the viewer loads nothing from other servers, without errors (${[...external, ...deckErrors].join(" ")})`);
+    // 還沒建好：說一句，不是一片黑
+    await dp.unroute((u) => u.pathname === "/data/deck.json");
+    await dp.route((u) => u.pathname === "/data/deck.json", (route) => route.fulfill({ status: 404, contentType: "text/html", body: "<!doctype html>" }));
+    await dp.goto(`${base}/deck`);
+    await dp.waitForSelector("#empty:not([hidden])");
+    check(/not ready yet/.test(await dp.textContent("#empty")) && (await dp.isHidden("#bar")), "with no web deck built yet, /deck says so instead of showing a black screen");
+    await ctx.close();
+  }
+
   // ── 來賓端：沒有參訪代碼（/index.html、打錯的網址）一律從訪前開始 ──
   await page.goto(`${base}/index.html`);
   await page.waitForSelector("#lab-303");
@@ -1146,6 +1076,7 @@ try {
   check((await page.locator("#photoGrid img").count()) === 1 && (await page.textContent("#linkList")).includes("Lab 303 papers"), "visit page shows the uploaded photo and the link");
   check(/療癒景觀報告\s*DOCX/.test(await page.textContent("#linkList")) && (await page.getAttribute("#linkList li:last-child a", "href")).startsWith("/api/media?key=materials%2F"), "…and the promised file, marked with its type");
   check((await page.getAttribute("#photoGrid img", "src")).startsWith("/api/media?key=materials%2F"), "photo comes from the public media endpoint");
+  check(await page.isHidden("#deckLink"), "before the visit the web slides are not offered yet — that is what the visit is for");
   await page.locator("#lab-303").scrollIntoViewIfNeeded();
   await page.waitForFunction(() => document.querySelector("#lab-303").classList.contains("in"));
   check(await page.isVisible("#lab-303"), "reveal animation runs when a card scrolls into view and leaves it visible");
@@ -1155,6 +1086,8 @@ try {
   // #emailSec 在 HTML 裡本來就沒有 hidden，要等腳本把標題填好才算渲染完
   await page.waitForFunction(() => document.getElementById("labsTitle").textContent.length > 0);
   check((await page.textContent("#labsTitle")).includes("Today") && (await page.isVisible("#emailSec")), "on the day: today's laboratories, on-site email box shown");
+  await page.waitForSelector("#deckLink:not([hidden])");
+  check((await page.getAttribute("#deckLink", "href")) === "/deck" && /Presentation slides/.test(await page.textContent("#deckLink")), "on the day the visit page links to the web slides (the same deck for every visit)");
   await page.fill("#emailEmail", "walkin@example.org");
   await page.click("#emailSend");
   await page.waitForSelector("#emailDone:not([hidden])");
@@ -1178,6 +1111,8 @@ try {
   // ── 來賓端：中文為主（右上角那顆鍵，或網址帶 ?ui=zh）──
   await page.goto(`${base}/2026-10-07-uwa?phase=today&ui=zh`);
   await page.waitForSelector("#lab-303");
+  await page.waitForSelector("#deckLink:not([hidden])");
+  check((await page.getAttribute("#deckLink", "href")) === "/deck?ui=zh" && /簡報（網頁版）/.test(await page.textContent("#deckLink")), "the Chinese page links to the slides with Chinese controls");
   check((await page.textContent("#welcome")).includes("歡迎"), "?ui=zh makes the guest page a Chinese page");
   check(!(await page.textContent("#welcome")).includes("Welcome"), "…and the English is gone: the two languages are one switch, not two lines");
   check((await page.textContent("#programme li:first-child")).includes("總體介紹"), "the Chinese page gets the Chinese programme labels");
@@ -1198,8 +1133,8 @@ try {
   check(/Check the visitor details/.test(await page.textContent("#tab-pre")), "…and so are the headings inside the tab");
   await page.click('[data-tab="deck"]');
   await page.waitForTimeout(500);
-  check(/Slides to use/.test(await page.textContent("#tab-deck")), "the deck tab too");
-  check(/Lab 301 Health Landscape Intelligence Lab/.test(await page.textContent("#slideGrid")), "the master deck's block names come from slides.json in English");
+  await page.waitForFunction(() => document.querySelectorAll("#deckThumbs a").length === 3);
+  check(/Web slides/.test(await page.textContent("#tab-deck")) && /3 slides/.test(await page.textContent("#deckMeta")), "the deck tab too");
   const cjkLeft = await page.evaluate(() => {
     const out = [];
     const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);

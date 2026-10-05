@@ -2,7 +2,8 @@
 # 觸發：scripts/web-deck/source.json 有改（換母簡報、改 exclude、或把 run 加一重跑）。
 # 為什麼在這裡跑：要 LibreOffice（pptx → PDF）與 ffmpeg；開發用的雲端環境裡 LibreOffice 開不了 pptx，
 # 也連不到 Google Drive 的下載網址（Drive 的連接一次只能下載 10 MB，母簡報 398 MB）。
-# source 是 "drive" 時，母簡報要暫時開成「知道連結的任何人都能檢視」，下載完就關掉（這個 repo 是公開的）。
+# source 是 "drive" 時，drive_id 是母簡報的**複本**（開成「知道連結的任何人都能檢視」），建好就把複本丟到垃圾桶。
+# 原始的母簡報不要開分享：講稿裡有上一場來賓的名字，而 drive_id 會寫進這個公開的 repo（見 CLAUDE.md「網頁版簡報」）。
 name: Web deck
 
 on:
@@ -39,7 +40,9 @@ jobs:
           SRC=$(python3 -c "import json;print(json.load(open('scripts/web-deck/source.json'))['source'])")
           if [ "$SRC" = "drive" ]; then
             ID=$(python3 -c "import json;print(json.load(open('scripts/web-deck/source.json'))['drive_id'])")
+            # gdown 處理大檔的「無法掃毒」確認頁；它不行就直接打 Drive 的下載網址再試一次
             gdown --quiet --fuzzy "https://drive.google.com/file/d/${ID}/view" -O "$RUNNER_TEMP/master.pptx" \
+              || curl -sSL --fail -o "$RUNNER_TEMP/master.pptx" "https://drive.usercontent.google.com/download?id=${ID}&export=download&confirm=t" \
               || { echo "::error::母簡報下載不到：Drive 上那個檔要先開成「知道連結的任何人都能檢視」"; exit 1; }
           else
             sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg > /dev/null

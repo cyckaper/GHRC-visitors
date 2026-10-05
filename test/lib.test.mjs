@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
 import { weekdayOf } from "../public/lib/rota.mjs";
-import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION, toForumProgramme, labRecipients, labStops, FORUM_TITLES, splitItems, sanitizeDictation, hasDictation, visitRecord, zhNumber, zhDate, promisedItems } from "../lib/visit.mjs";
+import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, salutationLine, salutationPeople, settleSalutation, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION, toForumProgramme, labRecipients, labStops, FORUM_TITLES, splitItems, sanitizeDictation, hasDictation, visitRecord, zhNumber, zhDate, promisedItems } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -58,7 +58,7 @@ test("the briefing is in 302 unless the organiser says otherwise", () => {
   assert.equal(ensureBriefingFirst([{ room: "briefing", minutes: 20, location: "304" }])[0].location, "304", "an explicit location is kept");
 });
 
-test("materials: only media keys or https links survive; the page-contents list only names what is really there", () => {
+test("materials: only media keys or https links survive", () => {
   const m = sanitizeMaterials({ deck_pdf: "materials/2026-11-17-new/1-slides.pdf", photos: ["javascript:alert(1)", "https://drive.example/photo.jpg", "materials/2026-11-17-new/2-photo.jpg"], links: [{ title: "", url: "https://x.example/paper" }, { title: "ftp", url: "ftp://no" }, { title: "Lab 303 papers", url: "https://x.example/303" }] });
   assert.equal(m.deck_pdf, "materials/2026-11-17-new/1-slides.pdf");
   assert.deepEqual(m.photos, ["https://drive.example/photo.jpg", "materials/2026-11-17-new/2-photo.jpg"]);
@@ -67,13 +67,29 @@ test("materials: only media keys or https links survive; the page-contents list 
   assert.equal(sanitizeMaterials({ deck_pdf: "http://insecure.example/x.pdf" }).deck_pdf, "http://insecure.example/x.pdf");
   assert.equal(sanitizeMaterials({ deck_pdf: "../etc/passwd" }).deck_pdf, "");
 
-  const labs = { labs: [{ room: "301", lead: { email: "" }, papers: [] }, { room: "303", lead: { email: "hm@ntu.example" }, papers: [{ title: "p", url: "https://x" }] }] };
-  const bare = pageContents({ itinerary: [{ room: "briefing" }, { room: "301" }] }, labs).map((c) => c.key);
-  assert.deepEqual(bare, ["programme", "respond"], "301 only: no papers, no contacts, nothing uploaded");
-  const full = pageContents({ materials: m, itinerary: [{ room: "briefing" }, { room: "301" }, { room: "303" }] }, labs).map((c) => c.key);
-  assert.deepEqual(full, ["programme", "deck_pdf", "photos", "links", "papers", "contacts", "respond"]);
   const p = publicVisit({ ...visit, materials: { deck_pdf: "materials/2026-10-07-uwa/a.pdf", photos: ["bad"], links: [] } });
   assert.deepEqual(p.materials, { deck_pdf: "materials/2026-10-07-uwa/a.pdf", photos: [], links: [] });
+});
+
+test("感謝信的稱呼：每一位來賓的姓名與頭銜，主賓排第一；AI 漏了名字就換成照名單排的那一行", () => {
+  const v = { guests: [{ name: "Jane Doe", title: "Lecturer" }, { name: "Simon Kilbane", title: "Head of School", role: "lead" }, { name: "", email: "only@mail.example" }, { name: "王大明", title: "院長" }] };
+  assert.deepEqual(salutationPeople(v), { people: [{ name: "Simon Kilbane", title: "Head of School" }, { name: "Jane Doe", title: "Lecturer" }, { name: "王大明", title: "院長" }], more: 0 }, "主賓排第一；沒有名字的不列");
+  assert.equal(salutationLine(v, "en"), "Dear Simon Kilbane (Head of School), Jane Doe (Lecturer) and 王大明 (院長),");
+  assert.equal(salutationLine(v, "zh"), "Simon Kilbane（Head of School）、Jane Doe（Lecturer）、王大明 院長　您好：");
+  // 人多：列六位，其餘「and colleagues」——信是寄給每一個人的，點得出名字就好，不排成一長串
+  const big = { guests: Array.from({ length: 9 }, (_, i) => ({ name: `Guest ${i + 1}`, title: "Professor" })) };
+  assert.equal(salutationPeople(big).people.length, 6);
+  assert.equal(salutationPeople(big).more, 3);
+  assert.ok(salutationLine(big, "en").endsWith("Guest 6 (Professor) and colleagues,"));
+  assert.ok(salutationLine(big, "zh").endsWith("及各位貴賓　您好："));
+  assert.equal(salutationLine({ guests: [] }, "en"), "Dear colleagues,", "名單上沒有人：通用的稱呼");
+  // AI 寫了通用的稱呼（沒有名字）：換掉第一行；名字都在就不動
+  assert.ok(settleSalutation("Dear colleagues,\n\nThank you.", v, "en").startsWith("Dear Simon Kilbane (Head of School)"));
+  assert.ok(!settleSalutation("Dear colleagues,\n\nThank you.", v, "en").includes("Dear colleagues"));
+  assert.equal(settleSalutation("各位貴賓您好：\n\n感謝蒞臨。", v, "zh").split("\n")[0], "Simon Kilbane（Head of School）、Jane Doe（Lecturer）、王大明 院長　您好：");
+  const ok = "Dear Professor Simon Kilbane, Dr Jane Doe and Dean 王大明,\n\nThank you.";
+  assert.equal(settleSalutation(ok, v, "en"), ok, "名字都寫到了：AI 的稱呼照用");
+  assert.ok(settleSalutation("Thank you for visiting.", v, "en").startsWith("Dear Simon Kilbane"), "沒有稱呼那一行：加在最前面");
 });
 
 test("AI 排的分鐘數一律照預設重算：每間研究室 20 分，流程時間跟著串回去", () => {
@@ -517,12 +533,11 @@ test("已經交出去的東西會不會過期：行程指紋對不上就說一�
   const base = { ...visit, slides: [1, 2, 3] };
   const sent = { ...base, letters: { confirmation: { subject: "s", body: "b", drafted_at: "", sent_at: "2026-09-01T00:00:00.000Z", fingerprint: scheduleFingerprint(base) } }, deck: { generated_at: "2026-09-01T00:00:00.000Z", fingerprint: deckFingerprint(base) } };
   assert.deepEqual(staleOutputs(sent), [], "什麼都沒改 → 沒有過期的東西");
-  // 行程改了：簡報與確認信都舊了
+  // 行程改了：確認信舊了。簡報不算——現在是每一場同一份的網頁版，以前產過 .pptx 的紀錄也不再報
   const moved = { ...sent, programme: [{ kind: "briefing", start: "11:00", end: "11:20" }] };
-  assert.deepEqual(staleOutputs(moved).map((x) => x.key), ["deck", "confirmation"]);
-  // 只改選頁：簡報舊了，信沒問題（信裡沒有頁次）
+  assert.deepEqual(staleOutputs(moved).map((x) => x.key), ["confirmation"]);
   const reslide = { ...sent, slides: [1, 2, 3, 4] };
-  assert.deepEqual(staleOutputs(reslide).map((x) => x.key), ["deck"]);
+  assert.deepEqual(staleOutputs(reslide), []);
   // 沒產過、沒寄過的不會被說舊
   assert.deepEqual(staleOutputs(visit), []);
   // 舊資料沒有指紋（這個功能之前寄的信）也不要亂報
@@ -776,7 +791,6 @@ test("答應提供的資料：網址或上傳的檔案；信裡用完整的網�
     { title: "療癒報告", url: "https://visit.healsdesign.org/api/media?key=materials/2026-10-05-x/123-file.pdf", file: true },
     { title: "app", url: "https://example.org/app", file: false },
   ]);
-  assert.ok(pageContents({ materials: m }, LABS).some((c) => c.key === "links" && c.zh.includes("答應提供的資料")));
   // 一頁摘要：主持人存重點的時間比摘要新，就照新的重點重寫
   const past = { visit_id: "v", date: "2026-01-01", start_time: "10:00", duration_minutes: 60, summary: "舊的", summary_at: "2026-01-02T00:00:00Z", dictation: { extracted: { notes: ["a"] }, saved_at: "2026-01-03T00:00:00Z" } };
   assert.equal(needsSummary(past, [], new Date("2026-02-01")), true);

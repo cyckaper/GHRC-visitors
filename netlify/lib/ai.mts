@@ -5,7 +5,7 @@ import { env } from "./http.mts";
 import { isMock } from "./data.mts";
 import type { DictationExtract, ResponseRow, SignbookEntry, Visit } from "./types.mts";
 import type { Extracted } from "./files.mts";
-import { allocateProgramme, briefingBlockMinutes, endTimeOf, FORUM_TITLES, isForum, labStops, pageContents, promisedItems, sanitizeDictation, zhDate } from "../../lib/visit.mjs";
+import { allocateProgramme, briefingBlockMinutes, endTimeOf, FORUM_TITLES, isForum, labStops, promisedItems, salutationLine, salutationPeople, sanitizeDictation, settleSalutation, zhDate } from "../../lib/visit.mjs";
 import { parseVisitTable } from "../../lib/import.mjs";
 
 /**
@@ -321,7 +321,6 @@ export interface LetterContext {
   siteUrl: string;
   /** 支援人力表的網址（`/rota?key=…`，自動產生，通告一定有）。通告裡會再接上 `#<visit_id>`，點進去直接跳到那一場。 */
   rotaUrl?: string;
-  mostWantedRooms: string[];
 }
 
 function senderBlock(ctx: LetterContext): string {
@@ -374,13 +373,11 @@ export async function draftLetter(ctx: LetterContext): Promise<{ subject: string
   const v = ctx.visit;
   const pageUrl = v.page_url || `${ctx.siteUrl}/${v.visit_id}`;
   const respondUrl = `${pageUrl}#respond`;
-  const wanted = (ctx.labs.labs || []).filter((l: any) => ctx.mostWantedRooms.includes(l.room));
-  const contents = pageContents(v, ctx.labs);
   // 答應提供給對方的資料（檔案、圖片、網址）：感謝信裡逐項列出，網址一個字都不能改
   const promised = ctx.kind === "thanks" ? (promisedItems(v, ctx.siteUrl) as { title: string; url: string; file: boolean }[]) : [];
   const internal = ctx.kind === "notice" || ctx.kind === "rundown"; // 寄給中心自己的研究室，不是來賓
   const briefingLocation = v.itinerary?.find((s) => s.room === "briefing")?.location || "302";
-  if (isMock()) return mockLetter(ctx, pageUrl, respondUrl, contents, promised);
+  if (isMock()) return mockLetter(ctx, pageUrl, respondUrl, promised);
   const system =
     ctx.kind === "rundown"
       ? `你替 GHRC 草擬一則**回報給中心自己五間研究室**的訊息：通告發出去、各室回覆簡報人員之後，把定案的安排再送回去一次。收信的是同事，**一律用繁體中文**。
@@ -411,22 +408,32 @@ ${CENTER_FACTS}`
 不要問來賓任何問題；不要加交通、步行、穿著、天氣之類的提醒；不要提到中心以外的地點或單位。署名用提供的 sender。回傳 subject 與純文字 body。
 
 ${CENTER_FACTS}`
-      : `你替 GHRC 草擬參訪後的感謝信。語氣：同行學者之間的請益與感謝，不是滿意度調查。用來賓的語言寫（language=zh 用繁體中文；en 用英文；ko／ja 用英文為主並在開頭與結尾附一句該語言問候）。
-內容順序：1) 感謝來訪，點到當天他們最感興趣的研究室（most_wanted_labs；沒有就不點名）；2) 專屬網頁連結，**只能說頁面上實際有的東西**——逐項對應 page_contents，清單以外的一律不要承諾（例如清單沒有「簡報 PDF」就不要提 PDF，沒有「合照」就不要提照片，沒有「老師的聯絡方式」就不要說裡面有聯絡方式）；2.5) 有 promised_materials（當天答應提供給對方的資料：檔案、圖片或網頁）就**逐項列出**：先一句引言（例如「如當天所提，附上答應提供的資料」），然後一項一行「名稱：網址」——**網址原封不動照抄，一個字都不能改、不能縮短**，名稱可以照信的語言寫；沒有 promised_materials 就不要提；3) 然後**原封不動**放入提供的 response_block（三個回應項目，含連結），不要改寫其中任何一句；4) 一兩句收尾；5) 署名 sender。
-寄給名單上每一個人，所以不要用只對主要來賓說話的口吻；稱呼用通用的「各位」／"Dear colleagues"，或以單位為對象。不要感謝中心自己的老師或同仁。回傳 subject 與純文字 body。
+      : `你替 GHRC 草擬參訪後的感謝信。語氣：同行學者之間的感謝與請益，不是滿意度調查。用來賓的語言寫（language=zh 用繁體中文；en 用英文；ko／ja 用英文為主並在開頭與結尾附一句該語言問候）。
+**精簡**（明確指示：「不重要的事不用再提，精簡就好」）。照這個順序，只寫這幾段：
+1) 稱呼：照 salutation 寫出**每一位來賓的姓名與頭銜**（明確指示：「要把參訪者名字頭銜加進去」）——主賓排第一，姓名一個字都不要改；頭銜照 title，太長就取最主要的那一個，title 空的就只寫姓名；寫成該語言自然的正式稱呼（例："Dear Professor Simon Kilbane and Dr Jane Doe,"；「Simon Kilbane 教授、王大明院長　您好：」）。more 大於 0 就在最後加 "and colleagues"／「及各位貴賓」。**不要用 "Dear colleagues"／「各位」這種通用稱呼取代名字**。
+2) 一兩句感謝來訪（可以提單位與日期）。**不要回顧當天簡報或參觀講過的內容**，也**不要介紹專頁上有什麼**（老師們的介紹網頁、論文、聯絡方式、照片、簡報一律不提）。
+3) 有 promised_materials（當天答應提供給對方的資料：檔案、圖片或網頁）就**逐項列出**：先一句引言（例如「如當天所提，附上答應提供的資料」），然後一項一行「名稱：網址」——**網址原封不動照抄，一個字都不能改、不能縮短**，名稱可以照信的語言寫；沒有就整段省略。
+4) **原封不動**放入提供的 response_block（三個回應項目，含連結），不要改寫其中任何一句。
+5) 一句收尾。
+6) 署名 sender。
+subject 一句就好（例如 "Thank you for visiting the Green Health Research Center"／「感謝蒞臨綠色健康研究中心」），不要再加別的。不要感謝中心自己的老師或同仁。回傳 subject 與純文字 body。
 
 ${CENTER_FACTS}`;
+  const thanks = ctx.kind === "thanks";
   const payload = {
-    visit: { org: v.org, guests: v.guests.map((g) => ({ name: g.name, title: g.title })), date: v.date, start_time: v.start_time, programme: v.programme, itinerary: v.itinerary, language: v.language, contact_teacher: v.contact_teacher, purpose: v.purpose },
+    // 感謝信不回顧當天的內容（明確指示：精簡），所以不給流程、動線與來訪目的——給了就會被寫進去
+    visit: thanks
+      ? { org: v.org, date: v.date, language: v.language }
+      : { org: v.org, guests: v.guests.map((g) => ({ name: g.name, title: g.title })), date: v.date, start_time: v.start_time, programme: v.programme, itinerary: v.itinerary, language: v.language, contact_teacher: v.contact_teacher, purpose: v.purpose },
+    // 感謝信的稱呼：每一位來賓的姓名與頭銜，主賓排第一（最多六位，more＝還有幾位沒列）
+    salutation: thanks ? salutationPeople(v) : undefined,
     // forum＝座談的場次（跟中心老師們座談，不參觀研究室）
     format: isForum(v) ? "forum" : "tour",
     // 座談：五間的老師能否出席（支援人力表上選的）
     attendees: internal && isForum(v) ? forumAttendees(v, ctx.labs) : undefined,
     briefing_location: briefingLocation,
-    page_url: pageUrl,
-    page_contents: ctx.kind === "thanks" ? contents.map((c) => c.zh) : undefined,
+    page_url: thanks ? undefined : pageUrl,
     promised_materials: promised.length ? promised.map((p) => ({ title: p.title, url: p.url, kind: p.file ? "file" : "link" })) : undefined,
-    most_wanted_labs: wanted.map((l: any) => ({ room: l.room, name_en: l.name_en, lead: `${l.lead.name_zh} ${l.lead.name_en}` })),
     // 行前通告：當天幾點走到哪一間、各幾分鐘、誰負責（通告的主體就是這一份）
     // 行前通告／回報：當天幾點走到哪一間、各幾分鐘、誰負責、各室回覆的簡報人員
     lab_stops: internal
@@ -445,7 +452,7 @@ ${CENTER_FACTS}`;
   if (ctx.kind === "thanks" && !out.body.includes(respondUrl)) {
     out.body = `${out.body.trim()}\n\n${responseBlock(v.language, ctx.i18n, respondUrl)}`;
   }
-  if (ctx.kind === "thanks") out.body = settlePromised(out.body, v.language, promised);
+  if (ctx.kind === "thanks") out.body = settleSalutation(settlePromised(out.body, v.language, promised), v, v.language);
   return out;
 }
 
@@ -947,7 +954,7 @@ function settleNotice(body: string, route: string, roll: string): string {
   return `${head}\n\n${roll}`;
 }
 
-function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, contents: { key: string; zh: string }[], promised: { title: string; url: string }[] = []): { subject: string; body: string } {
+function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, promised: { title: string; url: string }[] = []): { subject: string; body: string } {
   const v = ctx.visit;
   const location = v.itinerary?.find((s) => s.room === "briefing")?.location || "302";
   if (ctx.kind === "notice" || ctx.kind === "rundown") {
@@ -974,14 +981,11 @@ function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, con
       body: `Dear colleagues,\n\nWe look forward to welcoming ${v.org?.name || "you"} on ${v.date} at ${v.start_time}. We begin with a short overview in Room ${location}, Landscape Building, 3rd floor, ${isForum(v) ? "followed by a roundtable with the faculty" : "and then walk through the laboratories next door"}.\n\n${isForum(v) ? "Programme and the faculty you will meet" : "Programme and the laboratories you will see"}: ${pageUrl}\n\n${senderBlock(ctx)}`,
     };
   }
-  // 只提頁面上真的有的東西（page_contents），跟真提示詞同一條規則
-  const keys = new Set(contents.map((c) => c.key));
-  const items = [keys.has("deck_pdf") && "the slides (PDF)", keys.has("photos") && "the photos from the day", keys.has("links") && "the materials we promised", keys.has("papers") && "the papers of the laboratories", keys.has("contacts") && "the contact details of the laboratory leads"].filter(Boolean) as string[];
-  const pageLine = items.length ? `${items.join(", ").replace(/^./, (c) => c.toUpperCase())} are on your visit page: ${pageUrl}` : `The programme and the laboratories you saw, with their leads, are on your visit page: ${pageUrl}`;
+  // 跟真提示詞同一個結構：稱呼（每一位來賓的姓名與頭銜）、一句感謝、答應提供的資料、三個回應項目、署名——別的不提
   const block = promisedBlock(v.language, promised);
   return {
     subject: `(AI_MOCK) Thank you for visiting the Green Health Research Center`,
-    body: `Dear colleagues,\n\nThank you for visiting us on ${v.date}. ${pageLine}\n\n${block ? `${block}\n\n` : ""}${responseBlock(v.language, ctx.i18n, respondUrl)}\n\nWith thanks,\n${senderBlock(ctx)}`,
+    body: `${salutationLine(v, v.language === "zh" ? "zh" : "en")}\n\nThank you for visiting us on ${v.date}.\n\n${block ? `${block}\n\n` : ""}${responseBlock(v.language, ctx.i18n, respondUrl)}\n\nWith thanks,\n${senderBlock(ctx)}`,
   };
 }
 

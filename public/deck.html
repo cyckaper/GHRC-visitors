@@ -174,7 +174,7 @@
   $("full").onclick = toggleFull;
 
   // 鍵盤與簡報遙控器（大多送 PageDown／PageUp，有的送方向鍵；「開始放映」那顆送 F5 或 Esc，「黑幕」那顆送 B 或句點）
-  let typed = "";
+  let typed = "", typedTimer = 0; // 打頁碼再按 Enter：一秒半沒接著打就作廢
   document.addEventListener("keydown", (e) => {
     if (!deck || e.altKey || e.ctrlKey || e.metaKey) return;
     if (e.target.closest?.("video, audio")) return; // 影片的空白鍵是播放／暫停
@@ -189,7 +189,7 @@
     else if (k === "f" || k === "F" || k === "F5") { e.preventDefault(); toggleFull(); }
     else if (k === "g" || k === "G") { e.preventDefault(); openOverview(); }
     else if (k === "b" || k === "B" || k === ".") { e.preventDefault(); $("black").hidden = !$("black").hidden; }
-    else if (/^\d$/.test(k)) { typed = (typed + k).slice(-3); clearTimeout(typed.t); setTimeout(() => (typed = ""), 1500); }
+    else if (/^\d$/.test(k)) { typed = (typed + k).slice(-3); clearTimeout(typedTimer); typedTimer = setTimeout(() => (typed = ""), 1500); }
   });
 
   // 手指：左右滑翻頁；點右邊三分之二下一頁、左邊三分之一上一頁（點在影片上不算）

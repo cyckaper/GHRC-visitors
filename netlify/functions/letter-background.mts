@@ -69,11 +69,10 @@ export default backgroundHandler<Input>("信件", async (input, req) => {
 
   const sender = input.sender === "contact" ? "contact" : "director";
   const [labs, i18n] = await Promise.all([loadPublicData("labs"), loadPublicData("i18n")]);
-  const mostWanted = [...new Set([...(visit.dictation?.extracted?.most_wanted_rooms || []), ...responses.flatMap((r) => r.most_wanted_rooms || [])])];
   // 通告裡一定帶著支援人力表的連結（**自動產生**，主辦端不必先去設定按什麼）；
   // 只有通告要，回報與來賓信用不到——不為了它們去產一個連結
   const rotaUrl = kind === "notice" ? `${siteUrl(req)}/rota?key=${await ensureRotaKey()}` : "";
-  const draft = await draftLetter({ kind, visit, labs, i18n, sender, siteUrl: siteUrl(req), rotaUrl, mostWantedRooms: mostWanted });
+  const draft = await draftLetter({ kind, visit, labs, i18n, sender, siteUrl: siteUrl(req), rotaUrl });
   // AI 草擬要一兩分鐘：寫回去的時候只動 letters 這一格，而且寫進最新的那一份
   await store.updateVisit(visit.visit_id, (v) => {
     v.letters = v.letters || ({} as Visit["letters"]);

@@ -294,45 +294,36 @@
         <h2 class="font-semibold mr-auto">以前做過的參訪 <span class="muted font-normal">點一列就叫出來</span></h2>
         <button class="btn btn-soft" id="pastMore" title="到「資料」分頁看全部歷次參訪、來賓回覆、動線與一頁摘要" type="button">全部歷次參訪</button>
       </div>
-      <p class="muted">排新的一場之前先看一眼：<b>同類單位上次怎麼排、選了哪幾頁</b>。點開只是切換到那一場，手上這一場不會掉——沒填完的都先暫存著。</p>
+      <p class="muted">排新的一場之前先看一眼：<b>同類單位上次怎麼排</b>。點開只是切換到那一場，手上這一場不會掉——沒填完的都先暫存著。</p>
       <div id="pastVisits" class="text-sm"></div>
     </div>
   </section>
 
   <!-- ───────── 簡報 ───────── -->
   <section id="tab-deck" class="space-y-5" hidden>
-    <p class="lede text-sm"><b>這一頁：挑這一場要講哪幾頁，產出這一場專屬的 .pptx</b>——母簡報 72 頁不可能全講，這裡從中挑選並重排，第 1–3 頁（封面、今日流程、架構）會照這一場自動改寫。有些參訪只口頭介紹，勾「這場不用簡報」就整頁關掉。</p>
+    <p class="lede text-sm"><b>這一頁：網頁版簡報</b>——每一場都用同一份，打開連結就能講，不必再挑頁、產 .pptx。當天與訪後，來賓專頁的「當天資料」也有這個連結。</p>
     <div class="card space-y-3">
       <div class="flex flex-wrap items-center gap-2">
-        <span class="text-sm muted" id="deckStatus"></span>
+        <h2 class="font-semibold mr-auto">網頁版簡報</h2>
+        <a class="btn" id="deckOpen" href="/deck" target="_blank" rel="noopener" title="在新的分頁打開；按 F 全螢幕，簡報遙控器可以直接翻頁">打開簡報</a>
+        <button type="button" class="btn btn-soft" id="deckCopy" title="複製簡報的網址：每一場都是同一個，可以貼給來賓或同事">複製連結</button>
       </div>
-      <label class="flex items-start gap-2">
-        <input type="checkbox" id="noDeck" class="mt-1">
-        <span><span class="font-medium">這場不用簡報，只口頭介紹</span><br><span class="muted">勾起來就不挑頁、不產檔。今日流程的總體介紹照常，只是不放投影片。</span></span>
-      </label>
-      <p class="muted" id="deckSkipNote" hidden>這場不做簡報。要改回來就把上面的勾取消。</p>
+      <p class="text-sm"><a class="underline break-all" id="deckUrl" href="/deck" target="_blank" rel="noopener" translate="no"></a></p>
+      <p class="text-sm" id="deckMeta"></p>
+      <p class="muted">講的時候：F 全螢幕 · ← → 或簡報遙控器翻頁 · G 看全部頁面 · B 黑幕 · 打頁碼再按 Enter 跳到那一頁 · 手機、平板左右滑。</p>
+      <p class="muted">連結是公開的（不用登入），來賓也看得到；母簡報的講稿、上一場來賓的名字、今日流程那一頁都不在裡面。</p>
     </div>
 
-    <div id="deckWork" class="space-y-5">
-      <div class="card space-y-3">
-        <div class="flex flex-wrap items-center justify-between gap-2"><h2 class="font-semibold">選用頁次 <span id="slideCount" class="muted font-normal"></span></h2><span class="muted">一個區塊一個勾，整區一起進去——不必逐頁挑。「只選這區」會清掉其他區塊；必選頁（封面、流程、架構、核心宣稱、謝謝）永遠保留，畫面上是鎖住的。勾完自己會存</span></div>
-        <div class="flex flex-wrap gap-2 items-center"><button type="button" class="btn" id="pickBtn" title="依單位類型、來訪目的、興趣與今日流程上要去的那幾間挑區塊，也參考過去同類單位選過哪幾頁、哪幾頁被提問">AI 挑頁</button><button type="button" class="btn btn-soft" id="slidesAll" aria-pressed="false" title="把母簡報的每一個區塊都選上（很少這樣做，時間不夠）">全選</button><button type="button" class="btn btn-soft" id="slidesNone" aria-pressed="false" title="清掉所有勾選，只留封面、流程、架構、核心宣稱、謝謝這幾頁">全不選（保留必選頁）</button><span class="muted" id="pickInfo"></span></div>
-        <p class="muted" id="pickRationale" translate="no" data-ai-text></p>
-        <div class="space-y-2" id="slideGrid"></div>
-        <p class="muted" id="deckNeedsVisit" hidden>這裡列的是母簡報的區塊，先看先勾都可以；但要記得住、產得出 .pptx，得先到「訪前」填一場參訪（填了單位名稱就會自己建一場）。</p>
-        <p class="muted" id="slidesInfo"></p>
-      </div>
+    <div class="card space-y-3" id="deckPagesCard" hidden>
+      <h2 class="font-semibold">每一頁 <span class="muted font-normal" id="deckPagesCount"></span></h2>
+      <p class="muted">點一頁就從那一頁打開。▶ 是有影片的頁。</p>
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2" id="deckThumbs" translate="no"></div>
+      <details id="deckExcludedBox" hidden><summary class="muted cursor-pointer">母簡報裡沒有放進來的頁</summary><ul class="muted list-disc pl-5 mt-1" id="deckExcluded"></ul></details>
+    </div>
 
-      <div class="card space-y-3">
-        <h2 class="font-semibold">產生簡報</h2>
-        <p class="muted">從母簡報挑出勾選的那幾頁，改好第 1–3 頁與第二語言，直接下載 .pptx。</p>
-        <p class="text-sm" id="deckStale" hidden></p>
-        <div class="flex flex-wrap gap-2 items-center"><button class="btn" id="deckBtn" title="用這一場的行程與勾選的頁次，從母簡報做出這一場專屬的 .pptx 並下載">產生簡報 .pptx</button></div>
-        <p class="text-sm" id="deckInfo" hidden></p>
-        <ul class="text-sm text-stone-600 list-disc pl-5" id="deckReport"></ul>
-        <p class="text-sm" id="deckMasterNote"></p>
-        <input type="file" id="masterFile" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" hidden>
-      </div>
+    <div class="card space-y-2">
+      <h2 class="font-semibold">母簡報改了</h2>
+      <p class="muted">網頁版是從 Google Drive 上的母簡報做出來的：每一頁轉成圖，影片壓縮後放在站台上。母簡報改版之後要重新產生一次（約十分鐘），網頁版不會自己跟著變——請維護系統的人處理。</p>
     </div>
   </section>
 
@@ -412,7 +403,7 @@
     </div>
     <div class="card space-y-3">
       <div class="flex flex-wrap items-baseline gap-2"><h2 class="font-semibold mr-auto">動作四｜當天資料放上專屬頁面</h2><label class="muted flex items-center gap-1" title="這一場本來就沒有這件事（沒有簽名簿、沒交換名片、沒錄口述都很正常）。標了就不算未完成，後續提醒也不會再為它寄信"><input type="checkbox" data-na="materials"> 本次沒有</label></div>
-      <p class="muted">感謝信只會承諾頁面上真的有的東西。先把簡報 PDF、合照放上來，再草擬感謝信（答應提供給對方的檔案與連結在下面的感謝信那一張）。專頁：<a id="materialsPageLink" class="underline break-all" target="_blank" rel="noopener"></a></p>
+      <p class="muted">簡報 PDF、合照放上來賓專頁，來賓自己點進去看（感謝信不另外介紹；答應提供給對方的檔案與連結在下面的感謝信那一張，信裡會逐項列出）。專頁：<a id="materialsPageLink" class="underline break-all" target="_blank" rel="noopener"></a></p>
       <p class="text-sm" id="materialsStatus"></p>
       <div class="grid sm:grid-cols-2 gap-4">
         <div class="space-y-2">
@@ -434,7 +425,7 @@
         <h2 class="font-semibold mr-auto">動作五｜感謝信 <span class="muted font-normal">寄給名單上每一個人</span></h2>
         <span class="text-sm px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-900" id="thanksDue" hidden>現在該寄這一封</span>
       </div>
-      <p class="muted">附上當天資料與答應提供的資料，並請他們回三個問題。<b>上面那四件事先做完</b>——信只會承諾頁面上真的有的東西。</p>
+      <p class="muted">稱呼寫出每一位來賓的姓名與頭銜，附上答應提供的資料，並請他們回三個問題——其他的不提，精簡。<b>名片先讀進名單</b>：稱呼與收件人都照名單。</p>
       <div class="border rounded-xl p-3 space-y-2" id="promisedBox">
         <h3 class="font-medium">答應提供給對方的資料 <span class="muted font-normal">檔案、圖片或連結都可以；信裡會逐項列出，來賓專頁上也有</span></h3>
         <ol id="promisedList" class="items"></ol>
@@ -446,11 +437,11 @@
       </div>
       <div class="flex flex-wrap gap-2 items-center">
         <div><select id="sender" title="感謝信的署名"><option value="director">中心主任 張俊彥</option><option value="contact">對口老師</option></select></div>
-        <button class="btn" id="thanksBtn" title="草擬感謝信：附上當天資料，並把三個回應項目的連結放進去">AI 草擬感謝信</button>
+        <button class="btn" id="thanksBtn" title="草擬感謝信：稱呼寫出每一位來賓的姓名與頭銜，列出答應提供的資料，放進三個回應項目的連結">AI 草擬感謝信</button>
         <span class="muted" id="thanksInfo"></span>
       </div>
       <input type="text" id="thanksSubject" placeholder="主旨">
-      <textarea id="thanksBody" rows="16" placeholder="感謝信草稿：專頁連結（只提頁面上真的有的東西：PDF、合照要先在動作四放上去）、答應提供的資料（逐項列出）、三個回應項目（含請益語氣的開放建議欄位、可不具名）"></textarea>
+      <textarea id="thanksBody" rows="16" placeholder="感謝信草稿：稱呼（每一位來賓的姓名與頭銜）、一兩句感謝、答應提供的資料（逐項列出）、三個回應項目（含請益語氣的開放建議欄位、可不具名）"></textarea>
       <p class="muted" id="thanksDraftNote" hidden></p>
       <p class="muted">三個回應項目的措辭固定為請益語氣，且回覆頁支援真匿名；請保留信裡的那一段。</p>
       <div class="flex items-center justify-between">
@@ -539,12 +530,6 @@
   <!-- ───────── 設定 ───────── -->
   <section id="tab-settings" class="space-y-5" hidden>
     <p class="lede text-sm"><b>這一頁：不屬於任何一場參訪的東西。</b></p>
-
-    <div class="card space-y-3">
-      <h2 class="font-semibold">母簡報</h2>
-      <p class="muted">站台存一份，之後每場產簡報就不必再選檔。可以直接選原始的母簡報（含影片、幾百 MB 都行）——會先在瀏覽器裡瘦身再上傳。</p>
-      <p class="text-sm flex flex-wrap items-center gap-2" id="masterRow"></p>
-    </div>
 
     <div class="card space-y-3">
       <h2 class="font-semibold">預設值</h2>
@@ -716,7 +701,7 @@
       }
     }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: I18N_ATTRS });
   }
-  const state = { visits: [], visit: null, slides: null, labs: null, thanksRecipients: [], signbookEntries: [], recBlob: null, saved: false, stale: [] };
+  const state = { visits: [], visit: null, labs: null, thanksRecipients: [], signbookEntries: [], recBlob: null, saved: false, stale: [] };
 
   // ── 登入：貼一次 ADMIN_TOKEN，伺服器發一個 HttpOnly cookie，這台裝置 180 天不用再登入 ──
   // （以前把 token 存 localStorage，iPad Safari 會當追蹤資料清掉，七天沒開就要重登；cookie 不受那條規則影響）
@@ -837,16 +822,11 @@
   }
 
   // ── boot ──
-  /** 頁次索引與老師資料：訪前與簡報兩個分頁都要用，誰先要就誰載（只載一次）。 */
+  /** 老師資料（研究室名稱、顏色、負責人）：好幾個分頁都要用，誰先要就誰載（只載一次）。 */
   function ensureIndexes() {
     if (!state.indexes) {
-      state.indexes = Promise.all([
-        fetch("/data/slides.json").then((r) => r.json()),
-        fetch("/data/labs.json").then((r) => r.json()),
-        // 母簡報內文的標準更正（「四間研究室」→「五間」、301-304 → 301-305）。抓不到就當沒有，不要害產檔停下來
-        fetch("/data/master-fixes.json").then((r) => r.json()).catch(() => ({ fixes: [] })),
-      ])
-        .then(([slides, labs, fixes]) => { state.slides = slides; state.labs = labs; state.masterFixes = fixes.fixes || []; applyLabColors(); })
+      state.indexes = fetch("/data/labs.json").then((r) => r.json())
+        .then((labs) => { state.labs = labs; applyLabColors(); })
         .catch((e) => { state.indexes = null; throw e; });
     }
     return state.indexes;
@@ -1188,214 +1168,44 @@
     return [{ room: "briefing", minutes: briefingMinutesFromProgramme() || 20, location: String(loc).trim() }, ...rooms];
   };
   const labRoute = () => readItinerary().filter((s) => s.room !== "briefing").map((s) => s.room);
-  // ── 簡報分頁：選頁與產檔（獨立一頁——有些參訪不用簡報，只口頭介紹） ──
-  const dnote = (msg, cls = "muted") => { const el = $("deckStatus"); el.textContent = msg || ""; el.className = "text-sm " + cls; };
+  // ── 簡報分頁：網頁版簡報（/deck，每一場同一份） ──
+  // 明確指示：「改為用網頁連結方式、簡報都用一樣的版本、用母 ppt 建這個網頁」。以前這裡每一場挑頁、
+  // 在瀏覽器裡產一份 .pptx；現在只有一份，從 Drive 上的母簡報做好放在站台上（scripts/web-deck/build.mjs），
+  // 所以這一頁跟上面選的「這一場」無關：打開、複製連結、看看有哪幾頁。
   async function loadDeckTab() {
-    try { await ensureIndexes(); } catch (e) { $("slideGrid").innerHTML = ""; return dnote(`頁次索引載入失敗（${e.message || e}），請重新整理頁面。`, "err"); }
-    let id = $("visitSelect").value;
-    if (!id && !(state.visits || []).length) { await loadVisits(); id = $("visitSelect").value; }
-    if (!id) {
-      // 沒有參訪也要看得到母簡報的頁次；只是還不能存、不能產檔
-      state.deckVisit = null;
-      $("pickInfo").textContent = ""; $("pickRationale").textContent = "";
-      $("noDeck").checked = false;
-      $("deckWork").hidden = false;
-      renderSlideGrid([]);
-      $("slidesInfo").textContent = "";
-      deckNeedsVisit(true);
-      $("deckStatus").className = "text-sm err";
-      $("deckStatus").innerHTML = state.authed
-        ? `還沒有任何參訪${isPreviewSite ? "（預覽站的資料是獨立的，正式站的參訪不會出現在這裡）" : ""}。 <button type="button" class="underline" id="deckGoPre" title="先到「訪前」填一場參訪，這裡才存得了選頁、產得出簡報">到「訪前」建一場</button>`
-        : `這台裝置還沒登入，所以看不到參訪，也不能儲存或產檔（登入是綁裝置的，換手機要再登入一次）。 <button type="button" class="underline" id="deckGoLogin" title="這台裝置還沒登入，回到最上面貼一次 ADMIN_TOKEN">到最上面登入</button>`;
-      const pre = $("deckGoPre"); if (pre) pre.onclick = () => showTab("pre");
-      const login = $("deckGoLogin"); if (login) login.onclick = goLogin;
-      checkMaster();
+    $("deckUrl").textContent = `${location.origin}/deck`;
+    let d = null;
+    try {
+      const r = await fetch("/data/deck.json", { cache: "no-cache" });
+      // 站台對不存在的檔案會回首頁（200），所以看型別不看狀態碼
+      if (r.ok && /json/i.test(r.headers.get("content-type") || "")) d = await r.json();
+    } catch (e) { d = null; }
+    const slides = d?.slides || [];
+    $("deckOpen").hidden = !slides.length;
+    $("deckCopy").hidden = !slides.length;
+    $("deckPagesCard").hidden = !slides.length;
+    if (!slides.length) {
+      $("deckMeta").innerHTML = `<span class="err">網頁版簡報還沒建好</span> <span class="muted">要先從 Drive 上的母簡報做一次（見下面「母簡報改了」）</span>`;
       return;
     }
-    const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
-    if (!r.ok) { state.deckVisit = null; $("deckWork").hidden = true; dnote(`讀不到這場參訪：${r.error}`, "err"); return flash(r.error, "err"); }
-    if (state.deckVisit?.visit_id !== r.visit.visit_id) $("pickInfo").textContent = ""; // 上一場「挑了幾頁」那一行不要掛在這一場
-    state.deckVisit = r.visit;
-    $("pickRationale").textContent = r.visit.plan_rationale || "";
-    state.deckStale = r.stale || [];
-    deckNeedsVisit(false);
-    $("noDeck").checked = !!r.visit.deck?.skip;
-    renderSlideGrid(r.visit.slides || []);
-    $("slidesInfo").textContent = "";
-    applyNoDeck();
-    renderDeckStale();
-    dnote(`${r.visit.date}　${r.visit.org?.name || r.visit.visit_id}`);
-    checkMaster();
+    const videos = slides.reduce((n, x) => n + (x.media || []).filter((m) => m.type === "video").length, 0);
+    $("deckMeta").innerHTML = [
+      `<span>${slides.length} 頁</span>`,
+      videos ? `<span>${videos} 支影片</span>` : "",
+      d.source?.title ? `<span>母簡報</span> <span translate="no">《${esc(d.source.title)}》</span>` : "",
+      d.built_at ? `<span>產生於</span> <span class="tabular-nums">${esc(String(d.built_at).slice(0, 10))}</span>` : "",
+    ].filter(Boolean).join(" · ");
+    $("deckPagesCount").textContent = `（共 ${slides.length} 頁）`;
+    const src = (p) => `/${String(p || "").replace(/^\/+/, "")}`;
+    $("deckThumbs").innerHTML = slides.map((x, k) => `<a href="/deck#${k + 1}" target="_blank" rel="noopener" class="block rounded-lg border border-stone-200 overflow-hidden hover:border-stone-400 bg-white" title="${esc(x.title || "")}">
+        <img src="${esc(src(x.thumb || x.img))}" alt="" loading="lazy" class="block w-full aspect-video object-contain bg-stone-100">
+        <span class="block px-2 py-1 text-xs truncate"><b class="tabular-nums">${k + 1}</b> ${(x.media || []).length ? "▶ " : ""}${esc(x.title || "")}</span>
+      </a>`).join("");
+    const ex = d.excluded || [];
+    $("deckExcludedBox").hidden = !ex.length;
+    $("deckExcluded").innerHTML = ex.map((x) => `<li><span>原第 ${esc(String(x.src))} 頁</span>：<span>${esc(x.reason || "")}</span></li>`).join("");
   }
-  /** 沒有參訪可以存的時候：頁次照樣列出來，但存檔與產檔關起來並說明原因。 */
-  function deckNeedsVisit(on) {
-    $("deckNeedsVisit").hidden = !on;
-    $("deckBtn").disabled = on;
-    $("pickBtn").disabled = on;
-    $("noDeck").disabled = on;
-  }
-  function applyNoDeck() {
-    const skip = $("noDeck").checked;
-    $("deckWork").hidden = skip;
-    $("deckSkipNote").hidden = !skip;
-  }
-  /**
-   * 產出來的 .pptx 是不是舊的。**網頁會跟著更新，已經下載的簡報不會**：行程或選頁在產檔之後改過，
-   * 手上那個檔案的第 2 頁流程就是錯的。指紋由伺服器比對（`/api/visits` 的 `stale`），這裡只負責說一句。
-   */
-  function renderDeckStale() {
-    const hit = (state.deckStale || []).find((x) => x.key === "deck");
-    const el = $("deckStale");
-    el.hidden = !hit;
-    el.className = "text-sm err";
-    if (hit) el.textContent = `${hit.why}——請再按一次「產生簡報 .pptx」，把新的那一份寄出去。`;
-  }
-  /** 存檔後把新的那一份同步回訪前分頁，免得訪前再按儲存時蓋掉。 */
-  function afterDeckSave(visit, stale) {
-    state.deckVisit = visit;
-    if (stale) state.deckStale = stale;
-    renderDeckStale();
-    // AI 挑頁寫的第 1–3 頁替換文字也要同步回去：訪前一自動存檔，送的是 state.visit 那一份
-    if (state.visit?.visit_id === visit.visit_id) { Object.assign(state.visit, { slides: visit.slides, deck: visit.deck, text_edits: visit.text_edits, cover_text: visit.cover_text, plan_rationale: visit.plan_rationale }); state.stale = state.deckStale || []; renderProgress(state.visit); }
-  }
-  $("noDeck").onchange = async () => {
-    applyNoDeck();
-    const v = state.deckVisit;
-    if (!v) return;
-    // deck 只送要改的那一格：伺服器照這幾格改，產檔紀錄與指紋不動（手上那一份的 deck 可能是舊的）
-    const r = await api("/api/visits", { method: "POST", body: { ...forSave(v), deck: { skip: $("noDeck").checked } } });
-    if (!r.ok) return flash(r.error, "err");
-    afterDeckSave(r.visit, r.stale);
-    flash($("noDeck").checked ? "這場不做簡報，只口頭介紹" : "這場要做簡報");
-  };
-  /** 選頁也自己存（跟訪前一樣，畫面上沒有存檔鍵）：勾完一秒多就寫回這一場。 */
-  function scheduleSlidesSave() {
-    if (!state.deckVisit) return;
-    clearTimeout(scheduleSlidesSave.t);
-    $("slidesInfo").textContent = "存檔中…";
-    scheduleSlidesSave.t = setTimeout(saveSlides, AUTOSAVE_DELAY);
-  }
-  async function saveSlides() {
-    clearTimeout(scheduleSlidesSave.t);
-    const v = state.deckVisit;
-    if (!v) return;
-    if (saveSlides.running) { scheduleSlidesSave.t = setTimeout(saveSlides, AUTOSAVE_DELAY); return; }
-    saveSlides.running = true;
-    try {
-      // **拿伺服器上最新的那一份當底**，只換上簡報分頁自己管的幾格（選頁、AI 挑頁寫的第 1–3 頁替換文字）。
-      // 存檔是整筆覆寫，手上這一份卻是打開分頁時讀的——AI 挑頁一等就是一兩分鐘，這中間訪前改的
-      // （或另一台電腦存的）若照手上的舊版整筆送回去，就被蓋回舊的了。
-      const fresh = await api(`/api/visits?id=${encodeURIComponent(v.visit_id)}`);
-      const base = fresh.ok && fresh.visit ? fresh.visit : v;
-      const r = await api("/api/visits", { method: "POST", body: { ...forSave(base), slides: chosenSlides(), text_edits: v.text_edits ?? base.text_edits, cover_text: v.cover_text ?? base.cover_text, plan_rationale: v.plan_rationale ?? base.plan_rationale } });
-      if (!r.ok) { $("slidesInfo").textContent = ""; return flash(`選頁存不起來：${r.error}`, "err"); }
-      afterDeckSave(r.visit, r.stale);
-      $("slidesInfo").textContent = `已存 ${r.visit.slides.length} 頁 ${(r.visit.updated_at || "").slice(11, 16)}`;
-    } finally {
-      saveSlides.running = false;
-    }
-  }
-  $("slideGrid").addEventListener("change", scheduleSlidesSave);
-
-  // 選用頁次：依區塊（章節／研究室）分組；區塊方框整區選、「只選這區」、全選／全不選；必選頁永遠保留
-  function slideGroups() {
-    const slides = state.slides?.slides || [];
-    const groups = state.slides?.groups?.length ? state.slides.groups : [{ id: "all", title: "全部頁次", slides: slides.map((s) => s.n) }];
-    const byN = new Map(slides.map((s) => [s.n, s]));
-    return groups.map((g) => ({ ...g, items: g.slides.map((n) => byN.get(n)).filter(Boolean) })).filter((g) => g.items.length);
-  }
-  /**
-   * 選用頁次：**一個區塊一個勾**（`public/data/slides.json` 的 groups），不勾單頁。
-   * 要決定的是「這一場要不要講 302 規劃室」，不是二十幾個核取方塊；母簡報改版時比對的也是區塊。
-   * required 的區塊（必選頁）鎖住、永遠在。裡面有哪幾頁點開來看，但那只是說明，不是可勾的東西。
-   */
-  function renderSlideGrid(selected = []) {
-    const set = new Set(selected);
-    const groups = slideGroups();
-    if (!groups.length) { $("slideGrid").innerHTML = `<p class="err text-sm">頁次索引還沒載入（/data/slides.json）。重新整理頁面再試一次。</p>`; updateSlideCount(); return; }
-    $("slideGrid").innerHTML = groups.map((g) => {
-      const ns = g.items.map((s) => s.n);
-      const range = ns.length > 1 ? `${String(ns[0]).padStart(2, "0")}–${String(ns[ns.length - 1]).padStart(2, "0")}` : String(ns[0]).padStart(2, "0");
-      const mins = Math.max(1, Math.round(g.items.reduce((n, x) => n + (x.minutes || 1), 0)));
-      const videos = g.items.filter((x) => x.video).length;
-      const on = g.required || g.items.some((s) => set.has(s.n));
-      const tone = /^lab(\d{3})$/.test(g.id) ? roomTone(g.id.slice(3)) : "var(--brand)";
-      return `<div class="card !p-3 !rounded-lg" data-group="${g.id}" style="--tone:${tone}">
-        <div class="flex flex-wrap items-start gap-2">
-          <label class="flex items-start gap-2 min-w-0 cursor-pointer">
-            <input type="checkbox" data-block="${g.id}" class="mt-1" ${on ? "checked" : ""} ${g.required ? "disabled" : ""}>
-            <span class="min-w-0"><span class="font-medium">${esc(slideTitle(g))}</span>
-            <span class="muted">　${range} · ${ns.length} 頁 · 約 ${mins} 分${videos ? ` · ${videos} 段影片` : ""}${g.required ? " · 必選" : ""}</span></span>
-          </label>
-          ${g.required ? "" : `<button type="button" class="muted underline ml-auto" data-group-only="${g.id}">只選這區</button>`}
-        </div>
-        <details class="mt-1 ml-6"><summary class="muted cursor-pointer">這一區有哪幾頁</summary><ul class="muted list-disc pl-5 mt-1">${g.items.map((x) => `<li>${String(x.n).padStart(2, "0")} ${esc(slideTitle(x))}${x.video ? " ▶" : ""}</li>`).join("")}</ul></details>
-      </div>`;
-    }).join("");
-    updateSlideCount();
-  }
-  /** 母簡報的頁名／區塊名：中英兩份都在 slides.json（title／title_en）。 */
-  const slideTitle = (x) => (uiLang() === "en" && x?.title_en ? x.title_en : x?.title || "");
-  const blockInputs = () => [...document.querySelectorAll("#slideGrid input[data-block]")];
-  /** 勾起來的區塊 → 實際頁次（必選頁永遠在，順序依母簡報頁序）。 */
-  function chosenSlides() {
-    const groups = slideGroups();
-    const picked = new Set(blockInputs().filter((i) => i.checked).map((i) => i.dataset.block));
-    const out = new Set((state.slides?.slides || []).filter((s) => s.always).map((s) => s.n));
-    for (const g of groups) if (g.required || picked.has(g.id)) for (const s of g.items) out.add(s.n);
-    return [...out].sort((a, b) => a - b);
-  }
-  const setBlocks = (on, only) => blockInputs().forEach((i) => { if (!i.disabled) i.checked = only ? i.dataset.block === only : on; });
-  $("slideGrid").addEventListener("change", (e) => { if (e.target.matches("[data-block]")) { updateSlideCount(); scheduleSlidesSave(); } });
-  $("slideGrid").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-group-only]");
-    if (!b) return;
-    setBlocks(false, b.dataset.groupOnly); updateSlideCount(); scheduleSlidesSave();
-  });
-  $("slidesAll").onclick = () => { setBlocks(true); updateSlideCount(); scheduleSlidesSave(); };
-  $("slidesNone").onclick = () => { setBlocks(false); updateSlideCount(); scheduleSlidesSave(); };
-  /**
-   * AI 挑頁（`/api/plan`）：依單位類型、來訪目的、興趣與今日流程上要去的那幾間挑區塊，
-   * 參考過去同類單位選過哪幾頁、哪幾頁被提問。以前這顆在訪前、叫「AI 排行程」順便挑頁；
-   * 行程交給各研究室在支援人力表上填之後，它只剩挑頁的用處，所以搬來這裡。
-   * **只拿挑頁那幾樣**（選頁、第 1–3 頁的替換文字、為什麼這樣挑）——今日流程與動線一律不動：
-   * 那是研究室填的，AI 排回來的那一份不該蓋掉。
-   */
-  $("pickBtn").onclick = () => busy($("pickBtn"), async () => {
-    const v = state.deckVisit;
-    if (!v) return;
-    // 同一場就送訪前表單上現在那一份（剛改、還沒存的也算）；動線照它挑——不去的那一間就不挑它的頁
-    const visit = state.visit?.visit_id === v.visit_id ? readForm() : v;
-    const out = await runJob("/api/plan", { visit }, noteInto("pickInfo"), "AI 挑頁中……大約一兩分鐘。");
-    if (!out?.visit || state.deckVisit?.visit_id !== v.visit_id) return;
-    const p = out.visit;
-    // 「這場不用簡報」那個勾不歸它管：等 AI 的那一分鐘裡勾起來的，照人的意思
-    state.deckVisit = { ...state.deckVisit, text_edits: p.text_edits || [], cover_text: p.cover_text, plan_rationale: p.plan_rationale || "" };
-    renderSlideGrid(p.slides || []);
-    // 訪前手上那一份也先換上：那邊的自動存檔送的是 state.visit，不先換的話會把剛挑好的頁蓋回去
-    if (state.visit?.visit_id === v.visit_id) Object.assign(state.visit, { slides: chosenSlides(), text_edits: state.deckVisit.text_edits, cover_text: state.deckVisit.cover_text, plan_rationale: state.deckVisit.plan_rationale });
-    $("pickRationale").textContent = p.plan_rationale || "";
-    const hist = out.history ? `；參考了過去 ${out.history.visits} 場（同類單位 ${out.history.same_type.visits} 場）哪幾頁被提問、被提到` : "";
-    $("pickInfo").textContent = `挑了 ${chosenSlides().length} 頁、約 ${out.estimated_briefing_minutes} 分鐘${hist}${out.master_text_available ? "" : "（尚無母簡報文字：第 1–3 頁的替換文字要在產檔時處理）"}`;
-    await saveSlides();
-  });
-  function updateSlideCount() {
-    const chosen = chosenSlides();
-    const blocks = blockInputs().filter((i) => i.checked).length;
-    const mins = chosen.reduce((s, n) => s + ((state.slides?.slides || []).find((x) => x.n === n)?.minutes || 1), 0);
-    $("slideCount").textContent = `（${blocks} 區、${chosen.length} 頁，約 ${Math.round(mins)} 分鐘）`;
-    // 全選／全不選：現在是哪一種，那一顆就變成實心的顏色（明確指示：「按全選，按鍵要變顏色才知道有選到」）。
-    // 前面另外打一個 ✓——只看得到灰階也分得出來（顏色不單獨講狀態）
-    const free = blockInputs().filter((i) => !i.disabled);
-    const showOn = (id, on, label) => {
-      const b = $(id);
-      b.classList.toggle("btn-soft", !on);
-      b.setAttribute("aria-pressed", String(on));
-      b.textContent = on ? `✓ ${label}` : label;
-    };
-    showOn("slidesAll", free.length > 0 && free.every((i) => i.checked), "全選");
-    showOn("slidesNone", free.length > 0 && free.every((i) => !i.checked), "全不選（保留必選頁）");
-  }
+  $("deckCopy").onclick = () => copy(`${location.origin}/deck`);
 
   // ── 訪前：訪客背景研判（訪前功課） ──
   const ROOM_LABEL = { 301: "301 智能室", 302: "302 規劃室", 303: "303 模擬室", 304: "304 全景影院", 305: "305 IVR" };
@@ -1700,7 +1510,7 @@
   });
 
   /**
-   * 「以前做過的參訪」：訪前分頁最底下。排新的一場之前最想看的就是同類單位上次怎麼排、選了哪幾頁，
+   * 「以前做過的參訪」：訪前分頁最底下。排新的一場之前最想看的就是同類單位上次怎麼排，
    * 以前得先跳到「資料」分頁才找得到。點一列就把全站共用的「這一場」切過去——手上這一場有暫存，不會掉。
    */
   const ORG_TYPE_LABEL = { government: "政府單位", university: "大學", enterprise: "企業", school: "中小學／學生團", ngo: "NGO", other: "其他" };
@@ -1714,8 +1524,8 @@
     if (!rows.length) { box.innerHTML = `<p class="muted">還沒有別的參訪。做完第一場之後，這裡就會列出來給下一場參考。</p>`; return; }
     const type = $("orgType").value;
     box.innerHTML = rows.slice(0, PAST_SHOW).map((v) => {
-      const bits = [v.country, v.headcount ? `${v.headcount} 人` : "", v.slides ? `選了 ${v.slides} 頁` : "沒選頁", v.summary ? "有摘要" : ""].filter(Boolean);
-      return `<button type="button" data-past="${esc(v.visit_id)}" title="切換到這一場：行程、選頁、信件、回覆都跟著換過去" class="w-full text-left border-b last:border-0 py-1.5 hover:bg-stone-50 flex flex-wrap items-baseline gap-x-2">
+      const bits = [v.country, v.headcount ? `${v.headcount} 人` : "", v.summary ? "有摘要" : ""].filter(Boolean);
+      return `<button type="button" data-past="${esc(v.visit_id)}" title="切換到這一場：行程、信件、回覆都跟著換過去" class="w-full text-left border-b last:border-0 py-1.5 hover:bg-stone-50 flex flex-wrap items-baseline gap-x-2">
         <span class="tabular-nums muted">${esc(v.date)}</span>
         <span class="font-medium">${esc(v.org || v.visit_id)}</span>
         ${typeTag(v.type)}
@@ -1764,14 +1574,13 @@
         ["pre", (v.guests || []).length ? `名單 ${v.guests.length} 人` : "名單", (v.guests || []).length > 0, "訪後信會寄給名單上每一個人，所以名單就是回饋的上限"],
         ["pre", "背景研判", v.background?.status === "done", "查過對方的公開資料，判斷可能的參訪目的"],
         ["pre", replied ? `通告 ${replied} 間已回` : "通告研究室", !!(v.letters?.notice?.body && replied), v.format === "forum" ? "告訴各研究室哪個單位什麼時候來座談，請各室在支援人力表上選老師能否出席" : "告訴各研究室哪個單位什麼時候來，請各室在支援人力表上填接待人員與共需幾分鐘——填的分鐘會自動排進今日流程"],
-        ["deck", v.deck?.skip ? "不用簡報" : stale("deck") ? "簡報 需重產" : v.deck?.generated_at ? "簡報已產" : `選了 ${(v.slides || []).length} 頁`, !!(v.deck?.skip || (v.deck?.generated_at && !stale("deck"))), stale("deck") ? "行程或選頁在產檔之後改過，手上那份 .pptx 是舊的" : "挑頁並產出這一場的 .pptx；只口頭介紹的場次可以整頁關掉"],
         ["pre", stale("confirmation") ? "確認信 行程已改" : v.letters?.confirmation?.sent_at ? "確認信 已寄" : "確認信", !!(v.letters?.confirmation?.sent_at && !stale("confirmation")), stale("confirmation") ? "寄出之後行程又改過，對方手上的時間是舊的" : "跟對方確認日期時間，順便把來賓專頁網址交出去"],
       ]],
       ["當天", [
         wrap("signbook", "簽名簿", !!v.signbook?.photo_key, "實體本子拍一張，AI 讀成留言"),
         wrap("cards", (v.cards || []).length ? `名片 ${v.cards.length} 張` : "名片", (v.cards || []).length > 0, "現場拿到的名片變成名單上的人——訪後信才寄得到他"),
         wrap("dictation", v.dictation?.record?.text ? "完整紀錄" : "口述", dictationDone(v.dictation), "主持人三十秒口述，或一項一項打重點；AI 寫成完整的參訪紀錄"),
-        wrap("materials", "當天資料", !!(m.deck_pdf || (m.photos || []).length || (m.links || []).length), "PDF、合照放上來賓專頁——感謝信只能承諾頁面上真的有的東西"),
+        wrap("materials", "當天資料", !!(m.deck_pdf || (m.photos || []).length || (m.links || []).length), "PDF、合照放上來賓專頁，來賓自己點進去看"),
       ]],
       ["訪後", [
         ["wrapup", v.letters?.thanks?.sent_at ? `感謝信 ${v.letters.thanks.sent_to?.length || 0} 人` : "感謝信", !!v.letters?.thanks?.sent_at, "寄給名單上每一個人，並請他們回三個問題"],
@@ -1794,304 +1603,8 @@
     $("qr").innerHTML = ""; if (window.QRCode) new QRCode($("qr"), { text: v.page_url, width: 128, height: 128 });
     $("saveInfo").textContent = `已存 ${(v.updated_at || "").slice(11, 16)}`;
   }
-  /** 訪前頁只報一行簡報狀態，實際的選頁與產檔在「簡報」分頁。 */
   $("copyLink").onclick = () => copy(state.visit.page_url);
 
-  // ── 產生簡報：在瀏覽器裡子集化母簡報（核心 /lib/pptx.mjs 與本機 CLI 同一份），直接下載 .pptx ──
-  // 母簡報來源：1) 站台媒體庫（「上傳母簡報」一次，分塊存進 Blobs，/api/master）2) commit 在 public/assets/master/ 的靜態檔 3) 現場從電腦選檔
-  const MASTER_URL = "/assets/master/slim-master.pptx";
-  const PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
-  const PART = 4 * 1024 * 1024;
-  const mb = (n) => `${(n / 1e6).toFixed(1)} MB`;
-  /**
-   * 站台上有沒有母簡報。**問完才換**：以前一開始就先清成「沒有」再去問，這一兩百毫秒裡按「產生簡報」
-   * 就跳出選檔視窗——站台上明明有一份（換一場、切到簡報分頁都會再問一次，所以不是只有剛打開才會遇到）。
-   * 後面又問了一次（或剛上傳、剛移除）就以那一次為準，舊的答案後回來不蓋掉新的。
-   */
-  function checkMaster() {
-    const seq = (checkMaster.seq = (checkMaster.seq || 0) + 1);
-    return (state.masterChecking = (async () => {
-      let master = null, onSite = false;
-      const r = await api("/api/master");
-      if (r.ok) master = r.master || null;
-      if (!master) {
-        try {
-          const h = await fetch(MASTER_URL, { method: "HEAD", cache: "no-store" });
-          // 站台對不存在的路徑會回 index.html（200），所以看型別不看狀態碼
-          onSite = h.ok && !/text\/html/i.test(h.headers.get("content-type") || "");
-        } catch (e) { onSite = false; }
-      }
-      if (seq === checkMaster.seq) setMaster(master, onSite);
-    })());
-  }
-  function setMaster(master, onSite = false) {
-    checkMaster.seq = (checkMaster.seq || 0) + 1; // 還在路上的那一次作廢
-    state.master = master; state.masterOnSite = onSite; state.masterKnown = true;
-    renderMasterRow();
-  }
-  function renderMasterRow() {
-    const row = $("masterRow");
-    $("deckMasterNote").innerHTML = state.master
-      ? `<span class="muted">母簡報：站台上有一份（${esc(state.master.name)}）</span>`
-      : state.masterOnSite
-        ? `<span class="muted">母簡報：用站台靜態檔那一份</span>`
-        : `<span class="muted">母簡報還沒放上站台——按「產生簡報」會請你當場選檔，或到「設定」放一份上去（只要做一次）。</span>`;
-    // 影片：放上站台時抽出來另外存（產簡報時放回選到的那幾頁）。舊版上傳的那一份沒有存，說一聲怎麼補
-    const vids = state.master?.videos;
-    const videoNote = !state.master ? "" : !vids ? `<span class="muted">影片沒有一起存（舊版上傳的）：要播影片，按「更換」選原始的母簡報再放一次</span>` : vids.count ? `<span class="muted">影片 ${vids.count} 支另外存著（${mb(vids.bytes)}），產簡報時放回選到的那幾頁</span>` : "";
-    if (state.master) row.innerHTML = `<span class="muted">母簡報 ${esc(state.master.name)} · ${mb(state.master.size)} · ${esc((state.master.uploaded_at || "").slice(0, 10))}</span>${videoNote}<label class="underline cursor-pointer">更換<input type="file" id="masterUpload" accept=".pptx" hidden></label><button type="button" class="underline" id="masterRemove" title="把站台上存的母簡報移除（換新版母簡報時才需要）">移除</button>`;
-    else if (state.masterOnSite) row.innerHTML = `<span class="muted">母簡報：站台上的 slim-master.pptx</span>`;
-    else row.innerHTML = `<span class="muted">母簡報還沒放上站台（只要做一次；可直接選原始母簡報，會先在瀏覽器裡瘦身）</span><label class="btn btn-soft cursor-pointer">上傳母簡報 .pptx<input type="file" id="masterUpload" accept=".pptx" hidden></label>`;
-    const up = $("masterUpload"); if (up) up.onchange = () => { const f = up.files[0]; if (f) uploadMaster(f); };
-    const rm = $("masterRemove"); if (rm) rm.onclick = async () => { if (!confirm(t("移除站台上的母簡報？"))) return; const r = await api("/api/master", { method: "DELETE" }); if (!r.ok) return flash(r.error, "err"); state.masterBytes = null; setMaster(null); await checkMaster(); };
-  }
-  async function uploadMaster(file) {
-    const info = $("deckInfo"); info.hidden = false;
-    try {
-      const { bytes, report, videos } = await slimIfNeeded(new Uint8Array(await file.arrayBuffer()), (m) => { info.textContent = m; });
-      await uploadMasterBytes(bytes, file.name.replace(/\.pptx$/i, "") + (report ? "-slim.pptx" : ".pptx"), videos);
-      info.textContent = report ? slimSummary(report) : "";
-      info.hidden = !report;
-      flash("母簡報已放上站台，以後直接按「產生簡報」");
-    } catch (e) { info.textContent = `上傳失敗：${e.message || e}`; flash(String(e.message || e), "err"); renderMasterRow(); }
-  }
-  /**
-   * 太大或含影片的母簡報先在瀏覽器裡瘦身（同 scripts/slim-master.py 的規則）：抽影片留海報、大圖縮到 2000px、清孤兒。
-   * 抽出來的影片交回去（videos），由 uploadMasterBytes 另外存在站台上——產簡報時放回選到的那幾頁
-   * （實際回報：「影片都不能跑」——以前影片抽掉就沒了，產出的簡報那幾頁只剩海報）。
-   */
-  async function slimIfNeeded(bytes, log) {
-    const core = await deckCore();
-    if (bytes.length < 60 * 1024 * 1024 && !(await core.hasEmbeddedMedia(bytes))) return { bytes, report: null, videos: null };
-    log(`母簡報 ${mb(bytes.length)}，瘦身中（影片另外存、縮圖），大檔約需一兩分鐘…`);
-    let out = await core.slimDeck(bytes, { resizeImage, log, keepVideos: true });
-    const { videos, report } = out;
-    if (out.pptx.length > 60 * 1024 * 1024) {
-      out = await core.slimDeck(out.pptx, { resizeImage, log, imageThreshold: 1_000_000, maxEdge: 1600 });
-      out.report = { ...out.report, before: report.before, videos_removed: report.videos_removed, images_resized: report.images_resized + out.report.images_resized, warnings: [...report.warnings, ...out.report.warnings] };
-    }
-    return { bytes: out.pptx, report: out.report, videos };
-  }
-  const slimSummary = (r) => `母簡報已瘦身：${r.videos_removed ? `${r.videos_removed} 支影片另外存在站台上（產簡報時放回選到的那幾頁）、` : ""}縮小 ${r.images_resized} 張圖，${mb(r.before)} → ${mb(r.after)}${r.warnings.length ? `；${r.warnings.join("；")}` : ""}`;
-  /** 瀏覽器版縮圖：長邊縮到 maxEdge，有透明留 PNG，其餘轉 JPEG 85。 */
-  async function resizeImage(bytes, ext, maxEdge) {
-    const type = ext === "png" ? "image/png" : ext === "gif" ? "image/gif" : ext === "bmp" ? "image/bmp" : /tif/.test(ext) ? "image/tiff" : "image/jpeg";
-    const bmp = await createImageBitmap(new Blob([bytes], { type }));
-    const scale = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
-    const w = Math.max(1, Math.round(bmp.width * scale)), h = Math.max(1, Math.round(bmp.height * scale));
-    const c = document.createElement("canvas"); c.width = w; c.height = h;
-    const ctx = c.getContext("2d"); ctx.drawImage(bmp, 0, 0, w, h); bmp.close();
-    let alpha = false;
-    if (ext === "png" || ext === "gif") { const d = ctx.getImageData(0, 0, w, h).data; const step = Math.max(4, Math.floor(d.length / 4 / 20000) * 4); for (let i = 3; i < d.length; i += step) if (d[i] < 255) { alpha = true; break; } }
-    const blob = await new Promise((r) => c.toBlob(r, alpha ? "image/png" : "image/jpeg", 0.85));
-    if (!blob) return null;
-    return { bytes: new Uint8Array(await blob.arrayBuffer()), ext: alpha ? "png" : "jpeg" };
-  }
-  async function uploadMasterBytes(bytes, name, videos = null) {
-    if (!(bytes[0] === 0x50 && bytes[1] === 0x4b)) throw new Error("這不是 .pptx 檔");
-    const total = Math.ceil(bytes.length / PART);
-    if (total > 64) throw new Error(`母簡報 ${mb(bytes.length)} 太大，請先瘦身（刪影片、壓縮圖片）到 30 MB 左右`);
-    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-    const row = $("masterRow");
-    const post = async (query, body, what) => {
-      const r = await fetch(`/api/master?${query}`, { method: "POST", headers: { ...(token() ? { authorization: `Bearer ${token()}` } : {}), "content-type": "application/octet-stream" }, credentials: "same-origin", body });
-      const j = await r.json().catch(() => ({}));
-      if (r.status === 401) { setAuth(false); throw new Error("這台裝置還沒登入：請到頁面最上方貼 ADMIN_TOKEN 登入後再上傳"); }
-      if (!r.ok || !j.ok) throw new Error(j.error || `${what}上傳失敗（${r.status}）`);
-    };
-    for (let i = 0; i < total; i++) {
-      row.innerHTML = `<span class="muted">上傳母簡報 ${i + 1}/${total}…</span>`;
-      await post(`upload=${id}&part=${i}&total=${total}`, bytes.slice(i * PART, (i + 1) * PART), `第 ${i + 1} 塊`);
-    }
-    // 影片一支一支解出來、切塊傳（一支一百多 MB，不要同時放在記憶體裡）
-    const list = videos?.media || [];
-    const media = [];
-    for (const [m, v] of list.entries()) {
-      let data = await v.read();
-      const chunks = Math.max(1, Math.ceil(data.length / PART));
-      for (let i = 0; i < chunks; i++) {
-        row.innerHTML = `<span class="muted">上傳影片 ${m + 1}/${list.length}（${Math.round((i / chunks) * 100)}%）……影片大，約需幾分鐘</span>`;
-        await post(`upload=${id}&media=${m}&part=${i}&total=${chunks}`, data.slice(i * PART, (i + 1) * PART), `影片第 ${i + 1} 塊`);
-      }
-      media.push({ part: v.part, content_type: v.content_type, size: data.length, chunks });
-      data = null;
-    }
-    // 沒有影片也送一份空的清單：伺服器才分得出「這一份沒有影片」與「舊版上傳的、影片沒有存」
-    const slides = (videos?.slides || []).map(({ path, n, xml, rels }) => ({ path, n, xml, rels }));
-    const c = await api(`/api/master?upload=${id}&commit=1&total=${total}&name=${encodeURIComponent(name)}`, { method: "POST", body: { videos: { slides, media } } });
-    if (!c.ok) throw new Error(c.error || "上傳沒有完成");
-    state.masterBytes = bytes; state.masterFrom = "site"; state.masterBytesId = c.master.upload_id; state.siteVideos = null; setMaster(c.master);
-  }
-  function loadScript(src) { return new Promise((resolve, reject) => { const el = document.createElement("script"); el.src = src; el.onload = resolve; el.onerror = () => reject(new Error("載入失敗：" + src)); document.head.appendChild(el); }); }
-  async function deckCore() {
-    if (!window.JSZip) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js");
-    const core = await import("/lib/pptx.mjs");
-    core.configure({ JSZip: window.JSZip, DOMParser: window.DOMParser });
-    return core;
-  }
-  async function masterBytes(log) {
-    // 站台上那一份換過了（別台電腦重新上傳）：手上這一份舊的不能再用——影片清單是跟著新的那一份存的
-    if (state.masterBytes && !(state.masterFrom === "site" && state.master && state.masterBytesId !== state.master.upload_id)) return state.masterBytes;
-    if (state.master) {
-      const parts = [];
-      for (let i = 0; i < state.master.parts; i++) {
-        log(`下載母簡報 ${i + 1}/${state.master.parts}…`);
-        const r = await fetch(`/api/master?part=${i}`, { headers: { ...(token() ? { authorization: `Bearer ${token()}` } : {}) }, credentials: "same-origin" });
-        if (!r.ok) throw new Error(`母簡報第 ${i + 1} 塊抓不到（${r.status}）`);
-        parts.push(new Uint8Array(await r.arrayBuffer()));
-      }
-      const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
-      state.masterBytes = out; state.masterFrom = "site"; state.masterBytesId = state.master.upload_id; return out;
-    }
-    if (state.masterOnSite) {
-      log("下載母簡報…");
-      const r = await fetch(MASTER_URL);
-      if (!r.ok || /text\/html/i.test(r.headers.get("content-type") || "")) throw new Error("抓不到站台上的母簡報");
-      state.masterBytes = new Uint8Array(await r.arrayBuffer()); state.masterFrom = "static"; return state.masterBytes;
-    }
-    return null;
-  }
-  /**
-   * 站台上另外存的影片（母簡報放上站台時抽出來的）：清單先拿，影片本身選到那一頁才下載（一支一百多 MB）。
-   * 下載過的留著，同一頁再產一次不必再抓；這一次沒用到的丟掉（iPad 的記憶體有限）。
-   */
-  async function siteVideos(log) {
-    const id = state.master?.upload_id;
-    if (!id || !(state.master.videos?.slides || []).length) return null;
-    if (state.siteVideos?.id !== id) {
-      const r = await api("/api/master?videos=1");
-      if (!r.ok) throw new Error(r.error || "抓不到站台上的影片清單");
-      state.siteVideos = { id, data: r.videos, cache: new Map() };
-    }
-    const sv = state.siteVideos;
-    if (!sv.data) return null;
-    const used = new Set();
-    return {
-      slides: sv.data.slides,
-      used,
-      media: async (part) => {
-        used.add(part);
-        if (sv.cache.has(part)) return sv.cache.get(part);
-        const m = sv.data.media.findIndex((x) => x.part === part);
-        if (m < 0) return null;
-        const info = sv.data.media[m];
-        const out = new Uint8Array(info.size); let o = 0;
-        for (let i = 0; i < info.chunks; i++) {
-          log(`下載影片（${Math.round((i / info.chunks) * 100)}%）……影片大，約需一兩分鐘`);
-          const r = await fetch(`/api/master?media=${m}&part=${i}`, { headers: { ...(token() ? { authorization: `Bearer ${token()}` } : {}) }, credentials: "same-origin" });
-          if (!r.ok) throw new Error(`影片第 ${i + 1} 塊抓不到（${r.status}）`);
-          const b = new Uint8Array(await r.arrayBuffer());
-          if (o + b.length > out.length) throw new Error("影片的大小對不上，請到「設定」重新上傳母簡報");
-          out.set(b, o); o += b.length;
-        }
-        if (o !== out.length) throw new Error("影片沒有下載完整");
-        const got = { bytes: out, content_type: info.content_type };
-        sv.cache.set(part, got);
-        return got;
-      },
-      prune() { for (const k of [...sv.cache.keys()]) if (!used.has(k)) sv.cache.delete(k); },
-    };
-  }
-  /** QR 圖：用頁面已載入的 qrcodejs 畫到 canvas；沒有就回 null（QR 頁只放網址文字）。 */
-  async function qrPng(url) {
-    if (!window.QRCode || !window.QRCode.CorrectLevel) return null;
-    const box = document.createElement("div"); box.style.position = "fixed"; box.style.left = "-9999px"; document.body.appendChild(box);
-    try {
-      new QRCode(box, { text: url, width: 1024, height: 1024, correctLevel: QRCode.CorrectLevel.M });
-      const canvas = box.querySelector("canvas");
-      if (!canvas) return null;
-      const b64 = canvas.toDataURL("image/png").split(",")[1];
-      const bin = atob(b64); const out = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-      return out;
-    } finally { box.remove(); }
-  }
-  /**
-   * 第二語言翻譯：走 /api/translate（伺服器端快取），一次 25 段。
-   * 整批都翻過的話當場就回；要叫 Claude 的那幾批走背景函式（一般函式只有 10 秒），這裡輪詢等它。
-   */
-  async function translateTexts(texts, target, log) {
-    const out = [];
-    for (let i = 0; i < texts.length; i += 25) {
-      const done = Math.min(i + 25, texts.length);
-      log(`翻譯 ${done}/${texts.length} 段 → ${target}`);
-      const r = await runJob("/api/translate", { texts: texts.slice(i, i + 25), target }, log, `翻譯 ${done}/${texts.length} 段 → ${target}……`, { anyVisit: true });
-      if (!r) throw new Error("翻譯失敗");
-      out.push(...r.translations);
-    }
-    return out;
-  }
-  // 按「產生簡報」：站台有母簡報就直接產；沒有就先跳選檔視窗（要在同一個點擊裡同步呼叫），選完立刻產
-  $("deckBtn").onclick = async () => {
-    if (!state.deckVisit) return flash("請先選一場參訪", "err");
-    // 剛打開、還不知道站台上有沒有母簡報：等第一次問完再決定（不然站台上明明有，卻跳出選檔視窗）。
-    // 問過一次之後就不等——選檔視窗要在同一個點擊裡同步打開（iPad 的 Safari 等久了就不給開）
-    if (!state.masterKnown) await state.masterChecking;
-    if (!state.masterBytes && !state.master && !state.masterOnSite) { state.buildAfterPick = true; $("masterFile").value = ""; $("masterFile").click(); return; }
-    buildDeck();
-  };
-  /**
-   * 當場選的母簡報**原封不動拿去產檔**——以前選完先瘦身（抽掉影片），產出來的簡報就播不了影片。
-   * 瘦身是「放上站台」才需要的事（站台要小、要寄得出去），不是「現在要上台講」需要的事：
-   * 這一場只留十幾頁，原始母簡報裡那五支影片最多跟著一兩支進來，現場播得動。
-   */
-  $("masterFile").onchange = async () => {
-    const f = $("masterFile").files[0]; if (!f) return;
-    const info = $("deckInfo"); info.hidden = false;
-    try {
-      const bytes = new Uint8Array(await f.arrayBuffer());
-      state.masterBytes = bytes; state.masterFrom = "file"; state.masterName = f.name.replace(/\.pptx$/i, "") + ".pptx"; state.slimReport = null;
-      state.masterHasVideo = await (await deckCore()).hasEmbeddedMedia(bytes);
-      info.textContent = `母簡報 ${mb(bytes.length)}${state.masterHasVideo ? "（含影片，會留在產出的簡報裡）" : ""}`;
-    } catch (e) { info.textContent = `母簡報無法使用：${e.message || e}`; flash(String(e.message || e), "err"); state.buildAfterPick = false; return; }
-    if (state.buildAfterPick) { state.buildAfterPick = false; buildDeck({ offerSave: true }); }
-  };
-  function buildDeck({ offerSave = false } = {}) {
-    return busy($("deckBtn"), async () => {
-      const info = $("deckInfo"); info.hidden = false; const log = (m) => { info.textContent = m; };
-      $("deckReport").innerHTML = "";
-      try {
-        // 規格一律用畫面上現在勾的那些頁：不必先按「儲存選頁」，下面存檔時會一起存回去
-        const spec = state.deckVisit && { ...state.deckVisit, slides: chosenSlides() };
-        if (!spec) throw new Error("請先選一場參訪");
-        const lang = spec.language || "zh";
-        const core = await deckCore();
-        const master = await masterBytes(log);
-        if (!master) throw new Error("沒有母簡報");
-        // 母簡報是站台上那一份（影片放上站台時抽掉了）：選到的影片頁把另外存的影片放回去
-        const videos = state.masterFrom === "site" ? await siteVideos(log) : null;
-        log("組裝簡報…");
-        const { pptx, report } = await core.buildDeck(spec, master, { slidesIndex: state.slides, masterFixes: state.masterFixes, lang, site: location.origin, qrPng, videos, translate: lang === "ko" || lang === "ja" ? (texts, target) => translateTexts(texts, target, log) : null, log });
-        videos?.prune();
-        const name = `GHRC_${spec.visit_id}.pptx`;
-        const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([pptx], { type: PPTX_MIME })); a.download = name; a.click();
-        setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-        info.textContent = `已下載 ${name}（${report.output_slides} 頁，${mb(pptx.length)}${report.translated ? `，翻譯 ${report.translated} 段` : ""}）`;
-        if (offerSave) {
-          info.insertAdjacentHTML("beforeend", ` <button type="button" class="underline" id="saveMasterBtn">把這份母簡報存到站台，以後直接按</button>`);
-          // 放上站台的那一份才瘦身（抽影片、縮圖）：站台要小、要寄得出去；剛才產的那一份影片還在
-          // 瘦身的進度寫在同一行（`info.textContent`），會把這顆按鈕一起洗掉——所以用 `?.`，不要假設它還在
-          $("saveMasterBtn").onclick = () => busy($("saveMasterBtn"), async () => { try { const { bytes, report, videos } = await slimIfNeeded(state.masterBytes, log); await uploadMasterBytes(bytes, (state.masterName || "master.pptx").replace(/\.pptx$/i, report ? "-slim.pptx" : ".pptx"), videos); $("saveMasterBtn")?.remove(); info.textContent = report ? slimSummary(report) : "母簡報已放上站台"; flash("母簡報已放上站台"); } catch (e) { flash(String(e.message || e), "err"); } });
-        }
-        const lines = [...(offerSave && state.slimReport ? [slimSummary(state.slimReport)] : []), ...report.warnings, ...report.edits.missed.map((m) => `第 ${m.slide} 頁找不到「${(m.find || "").slice(0, 40)}」`)];
-        if (report.programme_table === "missing") lines.push("母簡報裡沒有今日流程那一頁（有表格、寫著 Programme 的那一頁），這一份簡報沒有流程表");
-        else if (report.programme_table && report.programme_table !== "filled") lines.push(`第 2 頁流程表：${report.programme_table}`);
-        for (const f of report.fixes || []) lines.push(`更正母簡報內文：「${f.find}」→「${f.replace}」${f.count} 處`);
-        if (report.cover) lines.push(`封面換成這一場：${report.cover.join("／")}`);
-        if (report.contents) lines.push(`目錄頁只留這一份講到的章節：${report.contents.kept.join("、")}`);
-        if (report.notes_removed) lines.push(`沒有帶母簡報的講稿（${report.notes_removed} 頁）：那是寫給上一次來賓的，寄出去對方也看得到`);
-        if (report.pictures_fixed) lines.push(`照片比例更正 ${report.pictures_fixed} 張：母簡報裡被拉變形的照片，整張照原比例放回框裡`);
-        // 影片：留在檔案裡才播得動。母簡報是站台上那份瘦過的就不會有，說一句怎麼辦，不要讓人以為壞了
-        if (report.videos) lines.push(`${report.videos_restored ? "影片放回去了" : "保留了"} ${report.videos} 支影片，現場直接播。檔案大，寄給對方請改寄 PDF 或雲端連結`);
-        // 還是只有海報的影片頁：站台上那一份沒有存影片（舊版上傳的）就說怎麼補；有存卻沒放回去的，原因在上面的警告裡
-        if (report.videos_missing) lines.push(state.masterFrom === "site" && (state.master?.videos?.slides || []).length ? `${report.videos_missing} 頁影片頁沒有放回影片，只有海報` : `${report.videos_missing} 頁影片頁只有海報：站台上那一份母簡報沒有存影片。到「設定」按「更換」選原始的母簡報（有影片的那一份）放一次，影片會另外存起來，之後產的簡報就有影片`);
-        $("deckReport").innerHTML = lines.map((l) => `<li>${esc(l)}</li>`).join("");
-        const deck = { generated_at: new Date().toISOString(), slides: report.output_slides }; // 只送這兩格，指紋由伺服器蓋
-        const saved = await api("/api/visits", { method: "POST", body: { ...forSave(spec), deck } });
-        if (saved.ok) { afterDeckSave(saved.visit, saved.stale); $("slidesInfo").textContent = `已存 ${saved.visit.slides.length} 頁`; }
-      } catch (e) { info.textContent = `產檔失敗：${e.message || e}`; flash(String(e.message || e), "err"); }
-    });
-  }
   $("downloadIcs").onclick = () => download(`${state.visit.visit_id}-wrapup.ics`, ics(state.visit), "text/calendar");
   function ics(v) {
     const start = new Date(`${v.date}T${v.start_time || "10:00"}:00+08:00`); const end = new Date(start.getTime() + (v.duration_minutes || 90) * 60000);
@@ -2156,6 +1669,7 @@
    * （站台上的 /lib/vendor/heic2any.min.js，第一次遇到 HEIC 才載，約 1.3 MB）。名片、簽名簿、合照、老師照片、
    * 來信附件都先過這一關。轉不過來就講一句人話，**不要把 HEIC 原檔送上去**——送上去也讀不出來、來賓專頁上也看不到。
    */
+  function loadScript(src) { return new Promise((resolve, reject) => { const el = document.createElement("script"); el.src = src; el.onload = resolve; el.onerror = () => reject(new Error("載入失敗：" + src)); document.head.appendChild(el); }); }
   const isHeic = (f) => /^image\/hei[cf]/i.test(f?.type || "") || /\.hei[cf]$/i.test(f?.name || "");
   async function decodableImage(file) {
     if (!isHeic(file)) return file;
@@ -2828,10 +2342,8 @@
     ["gmail", "Gmail（從後台寄信）", "上面那一行的「連上 Google」（要允許寄信）；沒有就用 mailto 自己寄"],
     ["drive", "Google Drive（每場自動備份）", "上面那一行的「連上 Google」"],
     ["reminder", "後續提醒（參訪結束時寄信給自己）", "需要 Gmail ＋上面那個收件信箱"],
-    ["master", "母簡報", "在上面放一份，或 commit 到 public/assets/master/"],
   ];
   async function loadSettingsTab() {
-    await checkMaster();
     const r = await api("/api/settings");
     if (!r.ok) { $("statusList").innerHTML = `<li class="err">${esc(r.error)}</li>`; return; }
     state.settings = r.settings;

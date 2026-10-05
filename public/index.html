@@ -103,11 +103,14 @@
     <ol class="card timeline divide-y divide-stone-100 !py-2" id="programme"></ol>
   </section>
 
-  <!-- 當天資料：簡報 PDF、合照、相關連結（只在有東西時出現） -->
+  <!-- 當天資料：網頁版簡報、簡報 PDF、合照、相關連結（只在有東西時出現） -->
   <section id="materialsSec" class="reveal" hidden>
     <h2 class="text-lg font-semibold mb-3"><span id="materialsTitle"></span> <span class="second" id="materialsTitle2"></span></h2>
     <div class="card space-y-4">
-      <p id="pdfRow" hidden><a class="btn btn-accent" id="pdfBtn" target="_blank" rel="noopener"><span aria-hidden="true">▤</span> <span id="pdfLabel"></span></a></p>
+      <p class="flex flex-wrap gap-2" id="slidesRow" hidden>
+        <a class="btn btn-accent" id="deckLink" href="/deck" target="_blank" rel="noopener" hidden><span aria-hidden="true">▶</span> <span id="deckLabel"></span></a>
+        <a class="btn btn-accent" id="pdfBtn" target="_blank" rel="noopener" hidden><span aria-hidden="true">▤</span> <span id="pdfLabel"></span></a>
+      </p>
       <div id="photosRow" hidden>
         <p class="text-sm text-stone-500 mb-2" id="photosLabel"></p>
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="photoGrid"></div>
@@ -183,6 +186,8 @@
   const pathId = location.pathname.replace(/^\/+|\/+$/g, "");
   const visitId = qs.get("visit") || (/^\d{4}-\d{2}-\d{2}-[a-z0-9-]+$/.test(pathId) ? pathId : "");
 
+  // 網頁版簡報（/deck，每一場同一份）：做好了才在「當天資料」放連結。站台對不存在的檔案會回首頁（200），所以看型別
+  const deckReady = fetch("/data/deck.json", { method: "HEAD" }).then((r) => r.ok && /json/i.test(r.headers.get("content-type") || "")).catch(() => false);
   const [labsData, i18n] = await Promise.all([
     // /api/labs＝repo 裡的 labs.json ＋ 後台「設定」改過的部分；抓不到就退回靜態那一份（頁面不能因此開天窗）
     fetch("/api/labs").then((r) => r.json()).catch(() => fetch("/data/labs.json").then((r) => r.json())),
@@ -330,12 +335,16 @@
     }
   }
 
-  // 當天資料：簡報 PDF、合照、相關連結
+  // 當天資料：網頁版簡報、簡報 PDF、合照、相關連結。
+  // 網頁版簡報每一場都是同一份（/deck），當天與訪後才放——訪前那一份就是當天要講的，先留著
   const m = (visit && visit.materials) || { deck_pdf: "", photos: [], links: [] };
-  if (m.deck_pdf || (m.photos && m.photos.length) || (m.links && m.links.length)) {
+  const showDeck = !!visit && phase !== "before" && (await deckReady);
+  if (showDeck || m.deck_pdf || (m.photos && m.photos.length) || (m.links && m.links.length)) {
     $("materialsSec").hidden = false;
     $("materialsTitle").textContent = T("materials"); $("materialsTitle2").textContent = T2("materials");
-    if (m.deck_pdf) { $("pdfRow").hidden = false; $("pdfBtn").href = mediaUrl(m.deck_pdf); $("pdfLabel").textContent = bi("slides_pdf"); }
+    $("slidesRow").hidden = !(showDeck || m.deck_pdf);
+    if (showDeck) { $("deckLink").hidden = false; $("deckLink").href = primary === "zh" ? "/deck?ui=zh" : "/deck"; $("deckLabel").textContent = bi("slides_web"); }
+    if (m.deck_pdf) { $("pdfBtn").hidden = false; $("pdfBtn").href = mediaUrl(m.deck_pdf); $("pdfLabel").textContent = bi("slides_pdf"); }
     if (m.photos && m.photos.length) {
       $("photosRow").hidden = false; $("photosLabel").textContent = bi("photos");
       $("photoGrid").innerHTML = m.photos.map((p, i) => `<a class="photo reveal" style="--d:${i * 60}ms" href="${esc(mediaUrl(p))}" target="_blank" rel="noopener"><img src="${esc(mediaUrl(p))}" alt="" loading="lazy"></a>`).join("");

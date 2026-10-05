@@ -157,13 +157,18 @@ async function installGoogleFonts(names) {
   return got;
 }
 
-/** 影片壓成網頁用的大小（H.264／AAC、moov 放前面才能邊下載邊播）；壓不小就維持原檔（只搬 moov）。 */
-function encodeVideo(input, output) {
+/**
+ * 影片壓成網頁用的大小（H.264／AAC、moov 放前面才能邊下載邊播）；壓不小就維持原檔（只搬 moov）。
+ * 影片在投影片上的框多大就壓多大：框不到七成寬，投影機上也不到 1300 像素，1280 寬就夠（檔案小一半，repo 也長得慢）。
+ */
+function encodeVideo(input, output, boxWidth = 1) {
   const before = spawnSync("stat", ["-c", "%s", input], { encoding: "utf8" }).stdout.trim() * 1;
-  const tries = [["1920", "23"], ["1920", "26"], ["1280", "26"], ["1280", "29"], ["960", "30"]];
+  const tries = boxWidth >= 0.7
+    ? [["1920", "24"], ["1920", "27"], ["1280", "27"], ["1280", "30"], ["960", "30"]]
+    : [["1280", "24"], ["1280", "27"], ["960", "28"], ["854", "30"]];
   let size = 0;
   for (const [width, crf] of tries) {
-    run(FFMPEG, ["-y", "-loglevel", "error", "-i", input, "-vf", `scale='min(${width},iw)':-2`, "-c:v", "libx264", "-preset", "slow", "-crf", crf, "-pix_fmt", "yuv420p", "-profile:v", "high", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", output]);
+    run(FFMPEG, ["-y", "-loglevel", "error", "-i", input, "-vf", `scale='min(${width},iw)':-2`, "-c:v", "libx264", "-preset", "medium", "-crf", crf, "-pix_fmt", "yuv420p", "-profile:v", "high", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", output]);
     size = spawnSync("stat", ["-c", "%s", output], { encoding: "utf8" }).stdout.trim() * 1;
     if (size <= MAX_VIDEO) break;
   }
@@ -234,6 +239,11 @@ const fixed = {};
 for (const s of kept) for (const f of fixes) { const n = await deck.editText(s.path, [f]); if (n) fixed[f.find] = (fixed[f.find] || 0) + n; }
 report.fixes = fixed;
 
+// 4.5 照片不拉變形（既有標準：照片維持真實比例，不變形、不裁切；Deck.fixPictureAspect，跟以前產 .pptx 同一套）。
+// 要在記下影片位置之前做：影片的海報影格若被拉變形，框會跟著改，影片疊上去的位置才對得上
+report.pictures_fixed = 0;
+for (const s of kept) report.pictures_fixed += await deck.fixPictureAspect(s.path);
+
 // 5. 影片：記下位置、把檔案拿出來，頁面上換成一張圖
 const TMP = await mkdtemp(path.join(os.tmpdir(), "web-deck-"));
 await rm(OUT, { recursive: true, force: true });
@@ -253,8 +263,9 @@ for (const s of kept) {
       if (!media.has(rel.part)) {
         const file = path.join(TMP, `m${media.size + 1}.${rel.part.split(".").pop()}`);
         await writeFile(file, await deck.bytes(rel.part));
-        media.set(rel.part, { file, n: media.size + 1 });
+        media.set(rel.part, { file, n: media.size + 1, w: 0 });
       }
+      media.get(rel.part).w = Math.max(media.get(rel.part).w, item.w); // 同一支放在好幾頁：照最大的那個框壓
       item.part = rel.part;
     } else { report.warnings.push(`第 ${s.n} 頁有一支影片找不到檔案`); continue; }
     const poster = rels.get(pic.poster);
@@ -293,9 +304,17 @@ if (raster.pages !== kept.length) throw new Error(`PDF 有 ${raster.pages} 頁�
 report.videos = [];
 for (const [part, m] of media) {
   const out = path.join(OUT, `v${m.n}.mp4`);
-  const r = encodeVideo(m.file, out);
-  report.videos.push({ part, before: r.before, after: r.after });
-  log(`影片 ${part}：${(r.before / 1e6).toFixed(1)} MB → ${(r.after / 1e6).toFixed(1)} MB`);
+  try {
+    const r = encodeVideo(m.file, out, m.w);
+    report.videos.push({ part, before: r.before, after: r.after });
+    log(`影片 ${part}：${(r.before / 1e6).toFixed(1)} MB → ${(r.after / 1e6).toFixed(1)} MB`);
+  } catch (e) {
+    // 一支轉不了不要害整份停下來：那幾頁照樣有海報影格，只是不能播
+    m.failed = true;
+    await rm(out, { force: true });
+    report.warnings.push(`影片 ${part} 轉不了（${String(e.message || e).split("\n").pop().slice(0, 160)}），那一頁只有海報`);
+    log(`影片 ${part} 轉不了`, e.message);
+  }
 }
 const slides = [];
 for (const [i, s] of kept.entries()) {
@@ -307,7 +326,8 @@ for (const [i, s] of kept.entries()) {
     for (const [j, m] of s.media.entries()) {
       const item = { type: m.type, x: +m.x.toFixed(5), y: +m.y.toFixed(5), w: +m.w.toFixed(5), h: +m.h.toFixed(5) };
       if (m.url) item.url = m.url;
-      if (m.part) item.src = `${WEB}/v${media.get(m.part).n}.mp4`;
+      if (m.part && !media.get(m.part).failed) item.src = `${WEB}/v${media.get(m.part).n}.mp4`;
+      if (!item.src && !item.url) continue; // 轉不了的影片：那一頁的圖上本來就有海報影格
       if (m.posterBytes) {
         const file = path.join(TMP, `p${k}-${j}`);
         await writeFile(file, m.posterBytes);
@@ -316,6 +336,7 @@ for (const [i, s] of kept.entries()) {
       }
       entry.media.push(item);
     }
+    if (!entry.media.length) delete entry.media;
   }
   slides.push(entry);
 }
@@ -326,7 +347,8 @@ for (const name of await readdir(dir)) if (name !== VERSION && (await stat(path.
 const deckJson = {
   _comment: "網頁版簡報 /deck 的頁序與每一頁的圖、字、影片位置（x、y、w、h 是佔投影片寬高的比例）。由 scripts/web-deck/build.mjs 從母簡報產生，不要手改；母簡報改版就改 scripts/web-deck/source.json 重跑（見 CLAUDE.md）。",
   version: VERSION,
-  source: { title: SOURCE.title || path.basename(masterPath), drive_id: SOURCE.source === "drive" ? SOURCE.drive_id : null, slides: all.length },
+  // 不記 Drive 的檔案 ID：這一份是公開的，用不到就不放
+  source: { title: SOURCE.title || path.basename(masterPath), slides: all.length },
   built_at: new Date().toISOString(),
   width: raster.width, height: raster.height,
   slides,
