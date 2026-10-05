@@ -263,7 +263,7 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
 >
 > 目前走這一套的：`extract`（讀信）、`plan`（AI 挑頁）、`research`（訪前功課，狀態另外記在
 > `visit.background`）、`letter`（草擬**與寄出**）、`summary`（一頁摘要與跨場次彙整）、`signbook`（讀手寫字）、
-> `transcribe`（Whisper ＋抽取）、`cards`（讀名片）、`translate`（第二語言）、`geo`（訪客地圖上各單位在哪裡）、`import`（讀以前的參訪名單）、`visit-list`（讀名單裡新加的列）。（`settings` 不是 AI，當場回。）再有跑得久的 AI 就照這個模式加，
+> `transcribe`（Whisper ＋抽取；完整紀錄 `record` 也走這一支，背景是 `record-background`）、`cards`（讀名片）、`translate`（第二語言）、`geo`（訪客地圖上各單位在哪裡）、`import`（讀以前的參訪名單）、`visit-list`（讀名單裡新加的列）。（`settings` 不是 AI，當場回。）再有跑得久的 AI 就照這個模式加，
 > 不要直接在一般函式裡等。
 >
 > **兩條給畫面的規矩**（主辦端是老師，不是工程師）：
@@ -495,6 +495,21 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
 - **簽名簿**：實體本子，主持人拍照上傳，AI 讀手寫字歸檔（原圖保留）
 - **主持人三十秒口述**：參訪結束後由主持人口述，Whisper 轉文字後抽取
   （誰來、最想看哪一間、問了什麼、有無合作意願）。**依議程結束時間提醒＝寄一封信**（`reminder-cron`，見功能 4 底下那一段）
+  - **重點一項一項打，AI 寫成完整紀錄**（明確指示：「輸入簡要說明要分項次，之後由 AI 產生出完整紀錄」；
+    實際回報：合作意願是一行字，打不下第二項，只好把「Homework：…」塞進去）。後續分頁動作三的重點
+    （交流重點、來賓提問、合作意願、後續事項）**一項一個框、前面是項次**（`admin.html itemList`：Enter 換下一項、
+    空的那一項按退格刪掉、貼上好幾行拆成好幾項、自己打的「1.」「(2)」「一、」拿掉）；誰來、最想看哪幾間照舊一格。
+    錄音轉的、逐字稿抽的、直接打的，都整理成同一個樣子（`lib/visit.mjs sanitizeDictation`：notes／questions／cooperation／follow_ups
+    都是陣列；舊資料的合作意願是一句話、「其他」是一格字串，讀的時候轉過來）。
+    按「存入，AI 寫成完整紀錄」：重點存進 `visit.dictation.extracted`（`saved_at`），接著背景工作 `record-background`
+    寫完整紀錄存進 `visit.dictation.record`（純文字、分項次：一、二、三……底下 1. 2. 3.，貼進 Word、公文、LINE 都不亂）。
+    **事實那幾段（日期、地點、來訪單位與人員、本中心接待、流程與各室接待人員）照參訪資料排，不經過 AI**
+    （`lib/visit.mjs visitRecord`）；AI 只寫概要一段，與重點**一項對一項**寫成完整的句子（不合併、不拆、不加沒有的事實與客套話）——
+    回來的項數對不上就照主持人的原話排，AI 沒接好也照原話排出一份（附一句說明）。
+    完整紀錄可以直接改，停一秒半自己存（`action: "record_save"`，標成手改過）；之後再按「存入」要重寫時先問一聲。
+    「資料」分頁那一場也看得到，Drive 備份多一個 `參訪紀錄.txt`；一頁摘要比存重點的時間舊就重寫。
+    以前「存入」還另外寫一筆 responses（來源 dictation）：存一次多一筆，而且主持人記下的「最想看哪一間」被當成來賓自己說的又算一次——
+    **不寫了**（重點本來就在 `visit.dictation`）；舊的那幾筆在歷次統計與一頁摘要裡略過（`history.mts`、`summary-background`）。
 
 ### 4. 長期檔案與回饋下一次簡報
 
@@ -701,12 +716,12 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 **已完成（P1–P4 最小可用系統 ＋ P5 捷徑 ＋ P6 產檔 ＋ P7 摘要／彙整）**
 
-- `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → **通告研究室（跟老師們座談、不參觀研究室的先勾「這場是座談」；各室在支援人力表上填的分鐘自動排進行程）** → **今日流程（自動排好，平常只看；要改再點開）** → 自動存 → QR／.ics → **確認信（草擬、寄出或 mailto）**，**最底下列出「以前做過的參訪」**）、**簡報（獨立分頁：**AI 挑頁**、選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、後續（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述、動作四 當天資料放上專頁、**動作五 感謝信**）、資料（歷次參訪、**匯入以前的參訪**、回覆、摘要、跨場次彙整、CSV、Drive）、**設定（母簡報、預設值、支援人力表、外部服務狀態與「連上 Google」、老師卡片）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
+- `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → **通告研究室（跟老師們座談、不參觀研究室的先勾「這場是座談」；各室在支援人力表上填的分鐘自動排進行程）** → **今日流程（自動排好，平常只看；要改再點開）** → 自動存 → QR／.ics → **確認信（草擬、寄出或 mailto）**，**最底下列出「以前做過的參訪」**）、**簡報（獨立分頁：**AI 挑頁**、選用頁次、產生 .pptx、母簡報；「這場不用簡報，只口頭介紹」可整頁關掉）**、後續（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述或一項一項打重點 → **AI 寫成完整紀錄**、動作四 當天資料放上專頁、**動作五 感謝信（含答應提供給對方的檔案與連結）**）、資料（歷次參訪、**匯入以前的參訪**、回覆、摘要、跨場次彙整、CSV、Drive）、**設定（母簡報、預設值、支援人力表、外部服務狀態與「連上 Google」、老師卡片）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
 - `public/index.html`：專屬網址 `/<visit_id>`；整頁一種語言（預設英文，`?ui=zh` 換中文；ko／ja 來賓才另外附他們的語言）；流程（參訪當天標出「現在」；研究室參訪底下一間一行、各自的時段）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
 - `public/visits.html`：**來訪紀錄 `/visits`**——已經來過的每一場（日期、單位、來訪人員、交流重點、去了哪幾間）＋同一張世界地圖，首頁的「來訪單位」連過來（見「約定」的「中心首頁」）。
 - `public/privacy.html`：**隱私權政策 `/privacy`**——Google 的同意畫面要發布成正式版時 Branding 頁要填的那一個連結，也是寫給來賓看的（見「約定」的「隱私權政策」）。
 - `public/center.html`：**中心首頁 `/`**——中心簡介、三大任務、沿革、國際平台、來訪單位（世界地圖）、外部肯定、組織架構、五間研究室（卡片，各連到 `/lab/<房號>`）、聯絡；字在 `public/data/center.json`（見「約定」的「中心首頁」）。
-- `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `google-auth`（連上 Google：Drive、名單試算表、寄信共用的授權） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`cards-background`／`translate-background`／`geo-background`／`import-background`／`visit-list-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`；`geo` 查訪客地圖上各單位在哪裡；`import` 讀以前的參訪名單；`visit-list` 讀 Google 試算表名單裡新加的列）`drive` `drive-sync-background`（自動備份）；**四支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
+- `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `google-auth`（連上 Google：Drive、名單試算表、寄信共用的授權） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`record-background`（完整紀錄）／`cards-background`／`translate-background`／`geo-background`／`import-background`／`visit-list-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`；`geo` 查訪客地圖上各單位在哪裡；`import` 讀以前的參訪名單；`visit-list` 讀 Google 試算表名單裡新加的列）`drive` `drive-sync-background`（自動備份）；**四支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
   `rota`（支援人力表，各研究室自己填）； `visitor-map`（**公開**：中心首頁的來訪單位地圖，只有單位、位置與來過幾次）； `import`（匯入以前的參訪名單：預覽與寫入，規則在 `lib/import.mjs`）； `visit-log`（**公開**：`/visits` 來訪紀錄頁；admin 用 POST 改公開說明與「不公開」）；
   `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，後續提醒）／`visit-list-cron`（每十五分鐘，名單有人加了列就讀進來）； `visit-list`（參訪名單的 Google 試算表：連上、看一次、現在就讀）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive／cdn／visitlist）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
@@ -962,6 +977,17 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
   **存的時候拿伺服器上最新的那一份當底**（`saveSlides`，一樣只送 `forSave()` 挑的那幾格），只換上選頁與那幾樣：存檔是整筆覆寫，簡報分頁手上那一份
   是打開分頁時讀的，AI 一等就是一兩分鐘，這中間訪前改的若照手上的舊版送回去就被蓋回舊的了。
   挑完也先把結果換進訪前手上那一份（`state.visit`），那邊的自動存檔才不會把剛挑好的頁蓋回去。
+- **答應提供給對方的資料**（明確指示：「要加入答應提供給對方的資料，如檔案網頁等等」「能夠接受不同格式的檔案圖片或是檔案連結」）：
+  `visit.materials.links`，在**動作五（感謝信）那一張卡片**（以前是動作四的「相關連結」，搬過去了——要給的東西跟著信走）。
+  一項一行：貼網址（沒寫 https:// 的幫他補），或上傳檔案——PDF、Word、PowerPoint、Excel、Keynote、圖片、壓縮檔、影音都收
+  （`materials.mts FILE_TYPES`，**content-type 照副檔名、不照瀏覽器說的**；網頁、SVG、XML 這類打開會執行東西的不收；HEIC 先轉 JPEG），
+  一個 4.5 MB 以內（multipart，不轉 base64），更大的放雲端貼連結。上傳的檔案存 `materials/<visit_id>/<ts>-<英數字>.<副檔名>`，
+  **原本的檔名（可以是中文）記在媒體庫的 metadata 與 link 的 `name`**，`/api/media` 下載時就叫那個名字
+  （`filename*=UTF-8''…`；圖片、PDF、影音直接開，其他下載；一律 `nosniff`）。名稱與網址改完一秒多自己存，
+  `/api/materials` 的 `save` **只換帶來的那幾格**（當天資料與這一張各存各的，不會互相蓋掉）、拿掉的檔案一起刪、別場的檔案 key 不收。
+  感謝信**逐項列出**名稱＋完整網址（上傳的檔案換成 `https://<站台>/api/media?key=…`，`lib/visit.mjs promisedItems`），
+  放在三個回應項目之前；AI 漏了任何一個網址就把整段補上（`ai.mts settlePromised`）。來賓專頁「資料與連結」也列出來，檔案後面標類型（PDF／DOCX…）。
+  Drive 備份用原本的檔名。
 - **當天資料** `visit.materials = { deck_pdf, photos[], links[] }`：值是媒體庫 key（`materials/<visit_id>/<file>`）或 https 連結，`sanitizeMaterials` 只留這兩種。上傳走 `/api/materials`（單檔 4.5 MB 以內；更大的 PDF 貼雲端連結）。合照先在瀏覽器縮到長邊 1600px，**縮不動就原檔上傳**（壞檔、記憶體不夠都算；HEIC 先轉成 JPEG，見「照片讀得了 HEIC」），進度與錯誤顯示在「動作三」那張卡片上（`#materialsStatus`），不是只在頁面最上方 —— 上傳失敗時人在頁面中段，看不到頂端的提示。**訪後信只能承諾頁面上真的有的東西**：`lib/visit.mjs pageContents()` 算出清單交給提示詞（mock 信也照同一份清單）。PDF 由 PowerPoint 另存，再到「後續」放上去。
 - **影片：放上站台時另外存，產簡報時放回選到的那幾頁**（實際回報：「影片都不能跑」——站台上那一份是瘦過的，
   以前影片抽掉就沒了，產出來的簡報那幾頁只剩海報影格與一行「▶ Video」）。

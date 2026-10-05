@@ -34,8 +34,9 @@ export interface Store {
   appendResponse(r: ResponseRow): Promise<void>;
   listSlidePerformance(visitId?: string): Promise<SlidePerf[]>;
   appendSlidePerformance(rows: SlidePerf[]): Promise<void>;
-  putMedia(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
-  getMedia(key: string): Promise<{ bytes: Uint8Array; contentType: string } | null>;
+  /** name：下載時的檔名（上傳時原本的檔名，可以是中文）；key 只能用英數字，所以另外記。 */
+  putMedia(key: string, bytes: Uint8Array, contentType: string, name?: string): Promise<void>;
+  getMedia(key: string): Promise<{ bytes: Uint8Array; contentType: string; name?: string } | null>;
   deleteMedia(key: string): Promise<void>;
 }
 
@@ -119,19 +120,19 @@ async function writeJsonFile(file: string, data: unknown): Promise<void> {
 
 function fileMedia() {
   return {
-    async putMedia(key: string, bytes: Uint8Array, contentType: string) {
+    async putMedia(key: string, bytes: Uint8Array, contentType: string, name?: string) {
       const file = path.join(storeDir(), "media", key);
       await withLock(file, async () => {
         await writeFileAtomic(file, bytes);
-        await writeFileAtomic(`${file}.meta.json`, JSON.stringify({ contentType }));
+        await writeFileAtomic(`${file}.meta.json`, JSON.stringify(name ? { contentType, name } : { contentType }));
       });
     },
     async getMedia(key: string) {
       const file = path.join(storeDir(), "media", key);
       try {
         const bytes = new Uint8Array(await readFile(file));
-        const meta = await readJsonFile<{ contentType: string }>(`${file}.meta.json`, { contentType: "application/octet-stream" });
-        return { bytes, contentType: meta.contentType };
+        const meta = await readJsonFile<{ contentType: string; name?: string }>(`${file}.meta.json`, { contentType: "application/octet-stream" });
+        return { bytes, contentType: meta.contentType, ...(meta.name ? { name: meta.name } : {}) };
       } catch {
         return null;
       }
@@ -264,16 +265,18 @@ async function listLatest(prefix: string) {
 
 function blobsMedia() {
   return {
-    async putMedia(key: string, bytes: Uint8Array, contentType: string) {
+    async putMedia(key: string, bytes: Uint8Array, contentType: string, name?: string) {
       const s = await blobStore();
-      await s.set(`media/${key}`, new Blob([bytes as BlobPart]), { metadata: { contentType } });
+      // 檔名可以是中文：metadata 會整包轉成 base64 再放進 header，不必自己編碼
+      await s.set(`media/${key}`, new Blob([bytes as BlobPart]), { metadata: name ? { contentType, name } : { contentType } });
     },
     async getMedia(key: string) {
       const s = await blobStore();
       // 設定、老師卡片、暫存、工作進度都存在這裡——一樣要讀最新的
       const r = await readLatest((consistency) => s.getWithMetadata(`media/${key}`, { type: "arrayBuffer", consistency }));
       if (!r || !r.data) return null;
-      return { bytes: new Uint8Array(r.data as ArrayBuffer), contentType: String((r.metadata as any)?.contentType || "application/octet-stream") };
+      const meta = (r.metadata || {}) as { contentType?: string; name?: string };
+      return { bytes: new Uint8Array(r.data as ArrayBuffer), contentType: String(meta.contentType || "application/octet-stream"), ...(meta.name ? { name: String(meta.name) } : {}) };
     },
     async deleteMedia(key: string) {
       const s = await blobStore();

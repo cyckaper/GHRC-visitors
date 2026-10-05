@@ -1,7 +1,7 @@
 import { fail, json, nowISO, readJSON, requireAdmin, siteUrl } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
-import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes, needsGeo, sanitizeGeo, sanitizePublic, institutionKeys, visitEndAt, isForum, toForumProgramme, defaultProgramme } from "../../lib/visit.mjs";
+import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes, needsGeo, sanitizeGeo, sanitizePublic, institutionKeys, visitEndAt, isForum, toForumProgramme, defaultProgramme, hasDictation } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
 import { purgePublicVisits } from "../lib/cdn.mts";
 import { dropDraft, moveDraft } from "./draft.mts";
@@ -237,7 +237,7 @@ async function isUnused(store: ReturnType<typeof getStore>, v: Visit): Promise<b
   // 確認信裡就有來賓專頁的網址，寄出去之後對方手上那個連結不能失效
   if (v.letters?.thanks?.sent_at || v.letters?.confirmation?.sent_at) return false;
   if (v.materials?.deck_pdf || v.materials?.photos?.length || v.materials?.links?.length) return false;
-  if (v.signbook?.photo_key || v.dictation?.audio_key || v.dictation?.transcript) return false;
+  if (v.signbook?.photo_key || hasDictation(v.dictation)) return false;
   if (a.cards?.length || a.drive?.backed_up_at) return false;
   return !(await store.listResponses(v.visit_id)).length;
 }
@@ -245,7 +245,7 @@ async function isUnused(store: ReturnType<typeof getStore>, v: Visit): Promise<b
 /** 這一場自己的檔案（簽名簿、口述、名片、當天資料）——刪掉這一場就一起清掉。 */
 function mediaKeys(v: Visit): string[] {
   const a = v as any;
-  const keys = [v.signbook?.photo_key, v.dictation?.audio_key, v.materials?.deck_pdf, ...(v.materials?.photos || []), ...((a.cards || []) as { key: string }[]).map((c) => c.key)];
+  const keys = [v.signbook?.photo_key, v.dictation?.audio_key, v.materials?.deck_pdf, ...(v.materials?.photos || []), ...(v.materials?.links || []).map((l) => l.url), ...((a.cards || []) as { key: string }[]).map((c) => c.key)];
   return keys.filter((k): k is string => typeof k === "string" && !!k && !/^https?:/i.test(k));
 }
 

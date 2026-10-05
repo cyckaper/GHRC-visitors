@@ -5,7 +5,7 @@ import { env } from "./http.mts";
 import { isMock } from "./data.mts";
 import type { DictationExtract, ResponseRow, SignbookEntry, Visit } from "./types.mts";
 import type { Extracted } from "./files.mts";
-import { allocateProgramme, briefingBlockMinutes, endTimeOf, FORUM_TITLES, isForum, labStops, pageContents } from "../../lib/visit.mjs";
+import { allocateProgramme, briefingBlockMinutes, endTimeOf, FORUM_TITLES, isForum, labStops, pageContents, promisedItems, sanitizeDictation, zhDate } from "../../lib/visit.mjs";
 import { parseVisitTable } from "../../lib/import.mjs";
 
 /**
@@ -352,15 +352,35 @@ export function responseBlock(lang: string, i18n: any, url: string): string {
   ].join("\n");
 }
 
+/**
+ * 感謝信裡「答應提供給對方的資料」那一段（明確指示：「要加入答應提供給對方的資料，如檔案網頁等等」）：
+ * 一項一行，名稱＋完整的網址。AI 漏掉任何一個網址時，就用這一段補上（放在三個回應項目之前）。
+ */
+export function promisedBlock(lang: string, items: { title: string; url: string }[]): string {
+  if (!items.length) return "";
+  const zh = lang === "zh";
+  return [zh ? "如當天所提，附上答應提供的資料：" : "As promised during the visit, here are the materials we mentioned:", ...items.map((p, i) => `${i + 1}. ${p.title}${zh ? "：" : " — "}${p.url}`)].join("\n");
+}
+
+/** 每一個網址都要原封不動出現在信裡；少了就把整段補進去（三個回應項目那一段之前）。 */
+export function settlePromised(body: string, lang: string, items: { title: string; url: string }[]): string {
+  if (!items.length || items.every((p) => body.includes(p.url))) return body;
+  const block = promisedBlock(lang, items);
+  const at = body.indexOf("────────");
+  return at >= 0 ? `${body.slice(0, at).trimEnd()}\n\n${block}\n\n${body.slice(at)}` : `${body.trim()}\n\n${block}`;
+}
+
 export async function draftLetter(ctx: LetterContext): Promise<{ subject: string; body: string }> {
   const v = ctx.visit;
   const pageUrl = v.page_url || `${ctx.siteUrl}/${v.visit_id}`;
   const respondUrl = `${pageUrl}#respond`;
   const wanted = (ctx.labs.labs || []).filter((l: any) => ctx.mostWantedRooms.includes(l.room));
   const contents = pageContents(v, ctx.labs);
+  // 答應提供給對方的資料（檔案、圖片、網址）：感謝信裡逐項列出，網址一個字都不能改
+  const promised = ctx.kind === "thanks" ? (promisedItems(v, ctx.siteUrl) as { title: string; url: string; file: boolean }[]) : [];
   const internal = ctx.kind === "notice" || ctx.kind === "rundown"; // 寄給中心自己的研究室，不是來賓
   const briefingLocation = v.itinerary?.find((s) => s.room === "briefing")?.location || "302";
-  if (isMock()) return mockLetter(ctx, pageUrl, respondUrl, contents);
+  if (isMock()) return mockLetter(ctx, pageUrl, respondUrl, contents, promised);
   const system =
     ctx.kind === "rundown"
       ? `你替 GHRC 草擬一則**回報給中心自己五間研究室**的訊息：通告發出去、各室回覆簡報人員之後，把定案的安排再送回去一次。收信的是同事，**一律用繁體中文**。
@@ -392,7 +412,7 @@ ${CENTER_FACTS}`
 
 ${CENTER_FACTS}`
       : `你替 GHRC 草擬參訪後的感謝信。語氣：同行學者之間的請益與感謝，不是滿意度調查。用來賓的語言寫（language=zh 用繁體中文；en 用英文；ko／ja 用英文為主並在開頭與結尾附一句該語言問候）。
-內容順序：1) 感謝來訪，點到當天他們最感興趣的研究室（most_wanted_labs；沒有就不點名）；2) 專屬網頁連結，**只能說頁面上實際有的東西**——逐項對應 page_contents，清單以外的一律不要承諾（例如清單沒有「簡報 PDF」就不要提 PDF，沒有「合照」就不要提照片，沒有「老師的聯絡方式」就不要說裡面有聯絡方式）；3) 然後**原封不動**放入提供的 response_block（三個回應項目，含連結），不要改寫其中任何一句；4) 一兩句收尾；5) 署名 sender。
+內容順序：1) 感謝來訪，點到當天他們最感興趣的研究室（most_wanted_labs；沒有就不點名）；2) 專屬網頁連結，**只能說頁面上實際有的東西**——逐項對應 page_contents，清單以外的一律不要承諾（例如清單沒有「簡報 PDF」就不要提 PDF，沒有「合照」就不要提照片，沒有「老師的聯絡方式」就不要說裡面有聯絡方式）；2.5) 有 promised_materials（當天答應提供給對方的資料：檔案、圖片或網頁）就**逐項列出**：先一句引言（例如「如當天所提，附上答應提供的資料」），然後一項一行「名稱：網址」——**網址原封不動照抄，一個字都不能改、不能縮短**，名稱可以照信的語言寫；沒有 promised_materials 就不要提；3) 然後**原封不動**放入提供的 response_block（三個回應項目，含連結），不要改寫其中任何一句；4) 一兩句收尾；5) 署名 sender。
 寄給名單上每一個人，所以不要用只對主要來賓說話的口吻；稱呼用通用的「各位」／"Dear colleagues"，或以單位為對象。不要感謝中心自己的老師或同仁。回傳 subject 與純文字 body。
 
 ${CENTER_FACTS}`;
@@ -405,6 +425,7 @@ ${CENTER_FACTS}`;
     briefing_location: briefingLocation,
     page_url: pageUrl,
     page_contents: ctx.kind === "thanks" ? contents.map((c) => c.zh) : undefined,
+    promised_materials: promised.length ? promised.map((p) => ({ title: p.title, url: p.url, kind: p.file ? "file" : "link" })) : undefined,
     most_wanted_labs: wanted.map((l: any) => ({ room: l.room, name_en: l.name_en, lead: `${l.lead.name_zh} ${l.lead.name_en}` })),
     // 行前通告：當天幾點走到哪一間、各幾分鐘、誰負責（通告的主體就是這一份）
     // 行前通告／回報：當天幾點走到哪一間、各幾分鐘、誰負責、各室回覆的簡報人員
@@ -424,6 +445,7 @@ ${CENTER_FACTS}`;
   if (ctx.kind === "thanks" && !out.body.includes(respondUrl)) {
     out.body = `${out.body.trim()}\n\n${responseBlock(v.language, ctx.i18n, respondUrl)}`;
   }
+  if (ctx.kind === "thanks") out.body = settlePromised(out.body, v.language, promised);
   return out;
 }
 
@@ -452,10 +474,10 @@ export async function readSignbook(imageBase64: string, mediaType: string): Prom
 const DictationSchema = z.object({
   who_came: z.string(),
   most_wanted_rooms: z.array(z.enum(ROOMS)),
+  notes: z.array(z.string()),
   questions: z.array(z.string()),
-  cooperation: z.string(),
+  cooperation: z.array(z.string()),
   follow_ups: z.array(z.string()),
-  other: z.string(),
 });
 
 /** 名片照片 → 名單。一張照片可能同時拍到好幾張名片，所以回傳陣列。 */
@@ -518,12 +540,89 @@ export async function transcribeAudio(bytes: Uint8Array, mime: string, language 
 }
 
 export async function extractDictation(transcript: string, visit: Visit): Promise<DictationExtract> {
-  if (isMock()) return mockDictation(transcript);
-  return structured(
+  if (isMock()) return sanitizeDictation(mockDictation(transcript));
+  const out = await structured(
     DictationSchema,
-    `主持人在參訪結束後口述了三十秒。抽取：who_came（誰來，一句）、most_wanted_rooms（來賓在「最想看哪一部分」那一問點名的研究室，房號）、questions（來賓問了什麼，逐條）、cooperation（有沒有透露合作意願，一句；沒有就空字串）、follow_ups（要做的後續事項，例如寄名片、寄論文）、other（其他值得留下的話）。只抽口述裡有的，不要補。房號對應：301 張俊彥智能室、302 林寶秀規劃室、303 陳惠美模擬室、304 張伯茹全景影院、305 鄭佳昆 IVR 研究室。`,
+    `主持人在參訪結束後口述（或打字）記下這一場。抽成**一項一項的重點**（主持人之後會逐項確認，再請 AI 寫成完整紀錄）：
+who_came（誰來，一句）、most_wanted_rooms（來賓在「最想看哪一部分」那一問點名的研究室，房號）、
+notes（交流重點：談了什麼、其他值得留下的話，一項一件事）、questions（來賓問了什麼，一題一項）、
+cooperation（合作意願，一項一件事；沒有就空陣列）、follow_ups（我們要做的後續事項，例如寄名片、寄論文、提供網址，一項一件事）。
+只抽口述裡有的，不要補；每一項保持簡短、用主持人的說法，不要自己編號。房號對應：301 張俊彥智能室、302 林寶秀規劃室、303 陳惠美模擬室、304 張伯茹全景影院、305 鄭佳昆 IVR 研究室。`,
     `本次參訪：${visit.org?.name || ""}，${visit.date}。\n\n口述逐字稿：\n${transcript}`,
   );
+  return sanitizeDictation(out);
+}
+
+// ───────────────────────── 5.5 完整紀錄 ─────────────────────────
+
+const RecordSchema = z.object({
+  overview: z.string(),
+  notes: z.array(z.string()),
+  questions: z.array(z.string()),
+  cooperation: z.array(z.string()),
+  follow_ups: z.array(z.string()),
+});
+export type RecordProse = z.infer<typeof RecordSchema>;
+
+const RECORD_SYSTEM = `你替臺大綠色健康研究中心（GHRC）把主持人在參訪後記下的**重點**寫成正式「參訪紀錄」的內文（繁體中文）。
+重點是主持人自己一項一項打的，很短，常常只有幾個字；你的工作是把每一項寫成完整、通順、正式的句子，讓沒有參加的人也看得懂。
+日期、地點、來訪人員、流程那幾段不歸你寫（系統照參訪資料排），你只回下面這幾樣：
+- overview：一段話（兩三句）概述這一場——哪個單位、誰（主要來賓）、哪一天、來做什麼、看了什麼或談了什麼。只用 facts 與重點裡有的資訊。
+- notes（交流重點）、questions（來賓提問）、cooperation（合作意願）、follow_ups（後續事項）：**一項對一項**——輸入幾項就回幾項，順序不變，
+  不合併、不拆開、不新增、不刪掉。每一項改寫成一句完整的話（必要時兩句），不要加編號：
+  - questions：寫成「來賓詢問……」這類句子；那一項裡沒有回答就不要替我們回答。
+  - cooperation：照實寫，不誇大（「有興趣」不要寫成「確定合作」，「再談」不要寫成「已達成共識」）。
+  - follow_ups：寫成可以照著做的一句話；那一項沒寫是誰負責、什麼時候，就不要編。
+- **只根據那一項本身與 facts**：不要加入沒有的事實、數字、人名、單位、評價或客套話（例如「相談甚歡」「收穫豐碩」「圓滿成功」）。
+  看不懂的縮寫、專有名詞、人名照原樣保留；英文詞照原樣保留（例如 ESG、app）。
+- 這是同行之間的學術交流：不要評分、不要用滿意度或服務業的用語。
+
+${CENTER_FACTS}`;
+
+/**
+ * 主持人一項一項的重點 → 完整紀錄裡要用的句子（一項對一項）。
+ * 事實那幾段（日期、地點、人員、流程）不交給 AI，由 lib/visit.mjs visitRecord 照參訪資料排。
+ */
+export async function writeRecord(visit: Visit, labs: any): Promise<RecordProse> {
+  const notes = sanitizeDictation(visit.dictation?.extracted);
+  if (isMock()) return mockRecord(visit, notes);
+  const all = (labs?.labs || []) as any[];
+  const labOf = (room: string) => all.find((l) => String(l.room) === String(room));
+  const lead = visit.guests?.find((g) => g.role === "lead") || visit.guests?.[0];
+  const facts = {
+    org: { name: visit.org?.name, name_local: visit.org?.name_local, country: visit.org?.country, type: visit.org?.type },
+    date: zhDate(visit.date),
+    time: `${visit.start_time}–${endTimeOf(visit)}`,
+    headcount: visit.headcount || visit.guests?.length || 0,
+    lead_guest: lead ? `${lead.name} ${lead.title}`.trim() : "",
+    guests: (visit.guests || []).map((g) => `${g.name} ${g.title}`.trim()),
+    contact_teacher: visit.contact_teacher,
+    format: isForum(visit) ? "座談（與中心老師座談，不參觀研究室）" : "參觀研究室",
+    rooms_visited: (labStops(visit, labs) as any[]).map((s) => `${s.room} ${s.name_zh}`),
+    purpose: visit.purpose,
+  };
+  const payload = {
+    facts,
+    who_came: notes.who_came,
+    most_wanted_rooms: notes.most_wanted_rooms.map((r) => `${r} ${labOf(r)?.name_zh || ""}`.trim()),
+    notes: notes.notes,
+    questions: notes.questions,
+    cooperation: notes.cooperation,
+    follow_ups: notes.follow_ups,
+  };
+  return structured(RecordSchema, RECORD_SYSTEM, JSON.stringify(payload), 6000);
+}
+
+function mockRecord(visit: Visit, notes: DictationExtract): RecordProse {
+  const end = (s: string) => (/[。.!?！？]$/.test(s) ? s : `${s}。`);
+  const n = visit.headcount || visit.guests?.length || 0;
+  return {
+    overview: `（AI_MOCK）${visit.org?.name || "來賓"}${n ? ` ${n} 位` : ""}於 ${zhDate(visit.date)}來訪本中心。`,
+    notes: notes.notes.map(end),
+    questions: notes.questions.map((q) => end(`來賓詢問：${q}`)),
+    cooperation: notes.cooperation.map(end),
+    follow_ups: notes.follow_ups.map(end),
+  };
 }
 
 // ───────────────────────── 6. 摘要與彙整 ─────────────────────────
@@ -532,7 +631,7 @@ export async function summarizeVisit(visit: Visit, responses: ResponseRow[]): Pr
   if (isMock()) return mockSummary(visit, responses);
   const payload = { visit: { ...visit, letters: undefined }, responses };
   return plain(
-    `替 GHRC 寫一頁參訪摘要（繁體中文，Markdown，300 字內）。段落固定：誰來（單位、主要來賓、人數）；看了哪幾間各多久（用 visit.itinerary 當天排定的動線；visit.format 是 forum 的是**座談的場次、不參觀研究室**——這一段改寫「座談，不參觀研究室」，並列出席的老師：visit.attendance 是 yes 的那幾間的負責老師（no＝無法參加）；最想看什麼——**分兩行寫，來源不能混**：「來賓自己說」（responses 的 most_wanted_rooms）與「主持人聽到的」（visit.dictation 抽取），只有一邊有資料就只寫那一邊；問了哪些問題；想合作誰（來賓回的 cooperate_rooms；口述裡的合作意願另外一行寫「主持人記下」）；收到什麼建議（responses 的 suggestion，不具名的不要試圖猜是誰）；待辦。沒有資料的段落寫「（無）」。不要評分、不要用滿意度用語。\n\n${CENTER_FACTS}`,
+    `替 GHRC 寫一頁參訪摘要（繁體中文，Markdown，300 字內）。段落固定：誰來（單位、主要來賓、人數）；看了哪幾間各多久（用 visit.itinerary 當天排定的動線；visit.format 是 forum 的是**座談的場次、不參觀研究室**——這一段改寫「座談，不參觀研究室」，並列出席的老師：visit.attendance 是 yes 的那幾間的負責老師（no＝無法參加）；最想看什麼——**分兩行寫，來源不能混**：「來賓自己說」（responses 的 most_wanted_rooms）與「主持人聽到的」（visit.dictation.extracted：主持人一項一項記下的重點；visit.dictation.record 是依重點寫成的完整紀錄），只有一邊有資料就只寫那一邊；問了哪些問題；想合作誰（來賓回的 cooperate_rooms；口述裡的合作意願另外一行寫「主持人記下」）；收到什麼建議（responses 的 suggestion，不具名的不要試圖猜是誰）；待辦。沒有資料的段落寫「（無）」。不要評分、不要用滿意度用語。\n\n${CENTER_FACTS}`,
     JSON.stringify(payload),
   );
 }
@@ -848,7 +947,7 @@ function settleNotice(body: string, route: string, roll: string): string {
   return `${head}\n\n${roll}`;
 }
 
-function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, contents: { key: string; zh: string }[]): { subject: string; body: string } {
+function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, contents: { key: string; zh: string }[], promised: { title: string; url: string }[] = []): { subject: string; body: string } {
   const v = ctx.visit;
   const location = v.itinerary?.find((s) => s.room === "briefing")?.location || "302";
   if (ctx.kind === "notice" || ctx.kind === "rundown") {
@@ -877,11 +976,12 @@ function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, con
   }
   // 只提頁面上真的有的東西（page_contents），跟真提示詞同一條規則
   const keys = new Set(contents.map((c) => c.key));
-  const items = [keys.has("deck_pdf") && "the slides (PDF)", keys.has("photos") && "the photos from the day", keys.has("links") && "the links we promised", keys.has("papers") && "the papers of the laboratories", keys.has("contacts") && "the contact details of the laboratory leads"].filter(Boolean) as string[];
+  const items = [keys.has("deck_pdf") && "the slides (PDF)", keys.has("photos") && "the photos from the day", keys.has("links") && "the materials we promised", keys.has("papers") && "the papers of the laboratories", keys.has("contacts") && "the contact details of the laboratory leads"].filter(Boolean) as string[];
   const pageLine = items.length ? `${items.join(", ").replace(/^./, (c) => c.toUpperCase())} are on your visit page: ${pageUrl}` : `The programme and the laboratories you saw, with their leads, are on your visit page: ${pageUrl}`;
+  const block = promisedBlock(v.language, promised);
   return {
     subject: `(AI_MOCK) Thank you for visiting the Green Health Research Center`,
-    body: `Dear colleagues,\n\nThank you for visiting us on ${v.date}. ${pageLine}\n\n${responseBlock(v.language, ctx.i18n, respondUrl)}\n\nWith thanks,\n${senderBlock(ctx)}`,
+    body: `Dear colleagues,\n\nThank you for visiting us on ${v.date}. ${pageLine}\n\n${block ? `${block}\n\n` : ""}${responseBlock(v.language, ctx.i18n, respondUrl)}\n\nWith thanks,\n${senderBlock(ctx)}`,
   };
 }
 
@@ -891,10 +991,10 @@ function mockDictation(t: string): DictationExtract {
   return {
     who_came: sentences[0] || "",
     most_wanted_rooms: rooms,
+    notes: [],
     questions: sentences.filter((s) => /問|question|能不能|嗎/.test(s)),
-    cooperation: sentences.find((s) => /合作|collaborat|名片/.test(s)) || "",
+    cooperation: sentences.filter((s) => /合作|collaborat|名片/.test(s)).slice(0, 1),
     follow_ups: sentences.filter((s) => /名片|寄|send/.test(s)),
-    other: "（AI_MOCK）",
   };
 }
 

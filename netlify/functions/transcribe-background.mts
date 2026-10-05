@@ -28,7 +28,8 @@ export default backgroundHandler<{ visit_id: string; audio_key?: string; mime?: 
     const extracted = await extractDictation(transcript, visit);
     // 轉文字＋抽取要一兩分鐘：寫回去的時候只動 dictation 這一格，而且寫進最新的那一份
     await store.updateVisit(visit.visit_id, (v) => {
-      v.dictation = { audio_key: audioKey, transcript, extracted, recorded_at: v.dictation?.recorded_at || nowISO() };
+      // 完整紀錄與存入的時間留著（重抽一次重點，不等於主持人已經確認、也不該把寫好的紀錄弄丟）
+      v.dictation = { ...v.dictation, audio_key: audioKey, transcript, extracted, recorded_at: v.dictation?.recorded_at || nowISO() };
       v.updated_at = nowISO();
     });
     await triggerDriveSync(visit.visit_id);

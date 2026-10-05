@@ -398,6 +398,58 @@ test("materials: upload photo and PDF, public media, links; the thanks letter on
   assert.equal(again.status, 200, JSON.stringify(again.body));
 });
 
+test("答應提供的資料：檔案（各種格式、中文檔名）或連結；只存帶來的那一格；拿掉的檔案一起刪", async () => {
+  const fileForm = (name, bytes, type = "") => {
+    const fd = new FormData();
+    fd.append("visit_id", visitId); fd.append("action", "upload"); fd.append("kind", "file");
+    fd.append("file", new Blob([bytes], { type }), name);
+    return fd;
+  };
+  const upload = (fd) => api("/api/materials", { method: "POST", headers: { authorization: "Bearer test-token" }, body: fd });
+  const before = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit.materials;
+  // Word 檔、中文檔名：key 只用英數字，下載時叫原本的名字
+  const doc = await upload(fileForm("療癒景觀報告.docx", Buffer.from("PK\x03\x04 docx"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document"));
+  assert.equal(doc.status, 200, JSON.stringify(doc.body));
+  assert.match(doc.body.key, new RegExp(`^materials/${visitId}/\\d+-file\\.docx$`));
+  const added = doc.body.materials.links.at(-1);
+  assert.deepEqual(added, { title: "療癒景觀報告", url: doc.body.key, name: "療癒景觀報告.docx" });
+  assert.equal(doc.body.materials.deck_pdf, before.deck_pdf, "上傳檔案不動簡報 PDF");
+  assert.deepEqual(doc.body.materials.photos, before.photos, "也不動合照");
+  const dl = await api(`/api/media?key=${encodeURIComponent(doc.body.key)}`);
+  assert.equal(dl.status, 200, "來賓不用登入就打得開（感謝信裡的連結）");
+  assert.equal(dl.headers.get("content-type"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+  assert.ok(dl.headers.get("content-disposition").startsWith("attachment;"), "Word 檔下載，不在瀏覽器裡開");
+  assert.ok(dl.headers.get("content-disposition").includes(`filename*=UTF-8''${encodeURIComponent("療癒景觀報告.docx")}`), "下載時叫原本的檔名");
+  assert.equal(dl.headers.get("x-content-type-options"), "nosniff");
+  // 圖片也收；PDF 與圖片在瀏覽器裡直接開
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+  const img = await upload(fileForm("figure 1.png", png, "image/png"));
+  assert.equal(img.status, 200, JSON.stringify(img.body));
+  assert.ok((await api(`/api/media?key=${encodeURIComponent(img.body.key)}`)).headers.get("content-disposition").startsWith("inline;"));
+  // 打開會執行東西的格式、HEIC、沒有副檔名的不收
+  assert.equal((await upload(fileForm("page.html", Buffer.from("<script>alert(1)</script>"), "text/html"))).status, 415);
+  assert.equal((await upload(fileForm("drawing.svg", Buffer.from("<svg/>"), "image/svg+xml"))).status, 415);
+  assert.equal((await upload(fileForm("IMG_0001.HEIC", Buffer.from("....ftypheic"), "image/heic"))).status, 415);
+  assert.equal((await upload(fileForm("README", Buffer.from("x")))).status, 415);
+  // 只存 links 這一格（感謝信那一張自己存）：PDF 與合照照舊；連結沒寫 https 的不收；別場的檔案不收
+  const links = [...doc.body.materials.links.map(({ title, url }) => ({ title, url })), { title: "生態 app", url: "https://eco.example.org/app" }, { title: "別場的", url: "materials/2020-01-01-other/1-x.pdf" }];
+  const saved = await api("/api/materials", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "save", materials: { links } }) });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  assert.equal(saved.body.materials.deck_pdf, before.deck_pdf);
+  assert.deepEqual(saved.body.materials.photos, before.photos);
+  assert.ok(saved.body.materials.links.some((l) => l.url === "https://eco.example.org/app"));
+  assert.ok(!saved.body.materials.links.some((l) => l.url.includes("2020-01-01-other")), "別場的檔案不收（不然這裡一拿掉就刪到別場的）");
+  assert.equal(saved.body.materials.links.find((l) => l.url === doc.body.key).name, "療癒景觀報告.docx", "畫面沒送回原檔名，照伺服器上那一份");
+  // 拿掉那張圖：檔案一起刪
+  const without = await api("/api/materials", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "save", materials: { links: saved.body.materials.links.filter((l) => l.url !== img.body.key) } }) });
+  assert.equal(without.status, 200);
+  assert.equal((await api(`/api/media?key=${encodeURIComponent(img.body.key)}`)).status, 404);
+  assert.equal((await api(`/api/media?key=${encodeURIComponent(doc.body.key)}`)).status, 200, "沒拿掉的那一個還在");
+  // 來賓專頁看得到檔案（key）與連結
+  const pubVisit = await api(`/api/visits?id=${visitId}&public=1`);
+  assert.ok(pubVisit.body.visit.materials.links.some((l) => l.url === doc.body.key && l.name === "療癒景觀報告.docx"));
+});
+
 test("master deck: chunked upload, manifest, chunk download, replace, delete", async () => {
   const rawPost = (id, i, total, body) => fetch(`${base}/api/master?upload=${id}&part=${i}&total=${total}`, { method: "POST", headers: { authorization: "Bearer test-token", "content-type": "application/octet-stream" }, body });
   const part0 = Buffer.concat([Buffer.from("PK\x03\x04"), Buffer.alloc(3000, 1)]);
@@ -522,6 +574,64 @@ test("dictation: multipart audio → transcript → extraction → save", async 
   assert.equal(save.status, 200);
 });
 
+test("訪後重點一項一項存；AI 寫成完整紀錄（日期、人員、流程照資料排）；手改的存得住；重抽不會弄丟紀錄", async () => {
+  const before = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.responses.length;
+  const extracted = {
+    who_came: "院長與兩位教授",
+    most_wanted_rooms: ["303", "999"],
+    notes: ["1. Homework：思考如何量測接觸不同野生物種", ""],
+    questions: "(1) 能不能用在長照\n(2) 經費從哪裡來",
+    cooperation: "想派研究生來",
+    follow_ups: ["- 與使用者及其他賢哲共同討論療癒景觀", "在生態 app 中加入 ESG"],
+  };
+  const save = await api("/api/transcribe", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "save", extracted }) });
+  assert.equal(save.status, 200, JSON.stringify(save.body));
+  const ex = save.body.dictation.extracted;
+  assert.deepEqual(ex.notes, ["Homework：思考如何量測接觸不同野生物種"], "自己打的編號拿掉、空的那一項不留");
+  assert.deepEqual(ex.questions, ["能不能用在長照", "經費從哪裡來"]);
+  assert.deepEqual(ex.cooperation, ["想派研究生來"], "合作意願也是一項一項");
+  assert.deepEqual(ex.follow_ups, ["與使用者及其他賢哲共同討論療癒景觀", "在生態 app 中加入 ESG"]);
+  assert.deepEqual(ex.most_wanted_rooms, ["303"]);
+  assert.ok(save.body.dictation.saved_at);
+  assert.equal((await api(`/api/visits?id=${visitId}`, { headers: admin })).body.responses.length, before, "存重點不再另外寫一筆「回覆」（存幾次就多幾筆、還被當成來賓自己說的）");
+  assert.equal((await api("/api/transcribe", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "save", extracted: { notes: ["", " "] } }) })).status, 400, "一項都沒有不存");
+
+  // AI 寫完整紀錄（背景工作）
+  const started = await api("/api/transcribe", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "record" }) });
+  assert.equal(started.status, 202, JSON.stringify(started.body));
+  const ran = await api("/api/record-background", { method: "POST", headers: admin, body: JSON.stringify({ job_id: started.body.job_id }) });
+  assert.equal(ran.status, 200, JSON.stringify(ran.body));
+  const job = (await api(`/api/transcribe?job=${started.body.job_id}`, { headers: admin })).body;
+  assert.equal(job.status, "done", JSON.stringify(job));
+  const text = job.result.record.text;
+  assert.match(text, /參訪紀錄/);
+  assert.match(text, /^一、日期：2026 年 10 月 7 日（星期三）/m, "日期照參訪資料排，不經過 AI");
+  assert.match(text, /來訪人員（共 \d+ 位）/);
+  assert.match(text, /、流程\n1\. /);
+  for (const [a, b] of [["交流重點", "來賓提問"], ["來賓提問", "合作意願"], ["合作意願", "後續事項"]]) assert.ok(text.indexOf(`、${a}`) < text.indexOf(`、${b}`), `${a} 在 ${b} 前面`);
+  assert.ok(text.includes("1. Homework：思考如何量測接觸不同野生物種。"), "一項對一項寫成句子，項次照原本的");
+  assert.ok(text.includes("2. 來賓詢問：經費從哪裡來。"));
+  assert.ok(text.includes("2. 在生態 app 中加入 ESG。"));
+  assert.equal(job.result.record.edited, false);
+
+  // 手改過的存得住，標成「手改過」
+  const edited = await api("/api/transcribe", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "record_save", text: `${text}補一句。\n` }) });
+  assert.equal(edited.status, 200, JSON.stringify(edited.body));
+  assert.equal(edited.body.record.edited, true);
+  // 再錄一次音或再抽一次逐字稿：重點換新的，寫好的完整紀錄與存入的時間留著
+  const again = await runJob("transcribe", { visit_id: visitId, transcript: "今天院長來，最想看 303。" });
+  assert.equal(again.status, 200);
+  const v = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit;
+  assert.ok(v.dictation.record.text.endsWith("補一句。\n"), "重抽重點不會把完整紀錄弄丟");
+  assert.ok(v.dictation.saved_at);
+  // 一般存檔帶什麼都不算（口述只有 /api/transcribe 在寫）
+  const forged = await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ ...v, dictation: {} }) });
+  assert.equal(forged.status, 200);
+  assert.ok(forged.body.visit.dictation.record.text.endsWith("補一句。\n"));
+  // Drive 備份帶上參訪紀錄
+  assert.ok((await api(`/api/drive?id=${visitId}`, { headers: admin })).body.items.some((i) => i.name === "參訪紀錄.txt"));
+});
+
 test("thanks letter: recipients = list + onsite, wording is the 請益 question, send without Gmail reports sent:false", async () => {
   const rec = await api("/api/letter", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "recipients" }) });
   assert.deepEqual(rec.body.recipients.map((r) => r.email).sort(), ["jane.doe@uwa.edu.au", "kim.lee@uwa.edu.au", "simon.kilbane@uwa.edu.au", "walkin@example.org"]);
@@ -531,7 +641,15 @@ test("thanks letter: recipients = list + onsite, wording is the 請益 question,
   assert.ok(d.body.draft.body.includes("A single sentence is plenty."));
   assert.ok(d.body.draft.body.includes("#respond"));
   assert.ok(!/satisf|rate us|rating/i.test(d.body.draft.body));
-  assert.ok(/slides \(PDF\)/.test(d.body.draft.body) && /photos/.test(d.body.draft.body) && /links/.test(d.body.draft.body), "after uploading, the letter may mention the PDF, photos and links");
+  assert.ok(/slides \(PDF\)/.test(d.body.draft.body) && /photos/.test(d.body.draft.body) && /materials we promised/.test(d.body.draft.body), "after uploading, the letter may mention the PDF, photos and the promised materials");
+  // 答應提供的資料逐項列出：名稱＋點得開的完整網址（上傳的檔案換成站台上的網址）
+  const promised = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit.materials.links;
+  assert.ok(promised.length >= 2);
+  for (const l of promised) {
+    const url = /^https?:/.test(l.url) ? l.url : `https://visit.example.test/api/media?key=${l.url}`;
+    assert.ok(d.body.draft.body.includes(url), `the letter lists ${l.title} with its link`);
+  }
+  assert.ok(d.body.draft.body.indexOf("eco.example.org") < d.body.draft.body.indexOf("#respond"), "the promised materials come before the three questions");
   // 頁面上真的有的才承諾：305 在 labs.json 有公開信箱（老師自己的 CV 上就印著），
   // 其餘四間沒有，所以這一句在不在，要看這一場走到哪幾間
   const has305 = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit.itinerary.some((s) => String(s.room) === "305");

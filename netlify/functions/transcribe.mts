@@ -1,18 +1,25 @@
 import { fail, json, nowISO, readJSON, requireAdmin } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import { pollJob, startBackground } from "../lib/jobs.mts";
-import { sanitizeResponse } from "../../lib/visit.mjs";
+import { hasNotes, sanitizeDictation } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
 
 /**
- * 主持人三十秒口述（工作包 4.3 動作二）。音檔先存下來，Whisper 轉文字與抽取交給
- * transcribe-background——兩件事加起來一般函式的 10 秒撐不住。
+ * 主持人的訪後紀錄（工作包 4.3 動作二）：三十秒口述，或直接一項一項打重點，再請 AI 寫成完整紀錄
+ * （明確指示：「輸入簡要說明要分項次，之後由 AI 產生出完整紀錄」）。
+ * 音檔先存下來，Whisper 轉文字與抽取交給 transcribe-background；完整紀錄交給 record-background——
+ * 都是一般函式的 10 秒撐不住的事。
  *
- *  GET  /api/transcribe?job=<id>                                  → 進度與結果
+ *  GET  /api/transcribe?job=<id>                                  → 進度與結果（轉文字、抽取、完整紀錄都是這一支）
  *  POST multipart: audio=<file>, visit_id                         → 202 {job_id, audio_key}
  *  POST JSON {visit_id, audio_base64, mime}                       → 同上
  *  POST JSON {visit_id, transcript}                               → 不錄音，直接用打字的逐字稿抽取
- *  POST JSON {visit_id, action:"save", extracted:{...}}           → 確認後寫一筆 responses（來源 dictation）
+ *  POST JSON {visit_id, action:"save", extracted:{...}}           → 主持人確認過的重點（一項一項）存進這一場
+ *  POST JSON {visit_id, action:"record"}                          → 202 {job_id}；AI 依存好的重點寫完整紀錄
+ *  POST JSON {visit_id, action:"record_save", text}               → 主持人手改過的完整紀錄（空的＝拿掉）
+ *
+ * 以前「存入」時另外寫一筆 responses（來源 dictation）：存一次多一筆，而且主持人記下的「最想看哪一間」
+ * 被當成來賓自己說的又算了一次。現在不寫了——重點本來就在 visit.dictation，摘要、歷次統計、感謝信都從那裡讀。
  */
 export default async (req: Request) => {
   const denied = requireAdmin(req);
@@ -44,24 +51,35 @@ export default async (req: Request) => {
   if (!visit) return fail(404, "找不到這次參訪");
 
   if (body?.action === "save") {
-    const ex = body.extracted || visit.dictation?.extracted;
-    if (!ex) return fail(400, "沒有可儲存的抽取結果");
-    await store.updateVisit(visit.visit_id, (v) => {
-      v.dictation = { ...v.dictation, extracted: ex };
-      v.updated_at = nowISO();
+    const ex = sanitizeDictation(body.extracted || visit.dictation?.extracted);
+    if (!hasNotes(ex)) return fail(400, "還沒有任何重點：先錄音、貼逐字稿，或在下面一項一項打");
+    const at = nowISO();
+    const saved = await store.updateVisit(visit.visit_id, (v) => {
+      v.dictation = { ...v.dictation, extracted: ex, saved_at: at };
+      v.updated_at = at;
     });
-    await store.appendResponse(
-      sanitizeResponse({
-        visit_id: visit.visit_id,
-        source: "dictation",
-        anonymous: false,
-        name: ex.who_came || "",
-        most_wanted_rooms: ex.most_wanted_rooms || [],
-        note: [ex.questions?.length ? `問題：${ex.questions.join("；")}` : "", ex.cooperation ? `合作：${ex.cooperation}` : "", ex.follow_ups?.length ? `後續：${ex.follow_ups.join("；")}` : ""].filter(Boolean).join("\n"),
-      }),
-    );
     await triggerDriveSync(visit.visit_id);
-    return json({ ok: true });
+    return json({ ok: true, dictation: saved?.dictation });
+  }
+
+  if (body?.action === "record") {
+    const d = visit.dictation || {};
+    if (!hasNotes(d.extracted)) return fail(400, "還沒有存好的重點：先在上面一項一項打好，按「存入」");
+    return startBackground("record", { visit_id: visit.visit_id }, req);
+  }
+
+  if (body?.action === "record_save") {
+    const text = String(body.text ?? "").replace(/\r\n/g, "\n").slice(0, 60000);
+    const at = nowISO();
+    const saved = await store.updateVisit(visit.visit_id, (v) => {
+      const d = { ...(v.dictation || {}) };
+      if (!text.trim()) delete d.record;
+      else d.record = { text, at: d.record?.at || at, edited: true, edited_at: at };
+      v.dictation = d;
+      v.updated_at = at;
+    });
+    await triggerDriveSync(visit.visit_id);
+    return json({ ok: true, record: saved?.dictation?.record || null });
   }
 
   let audioKey = visit.dictation?.audio_key;

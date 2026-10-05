@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
 import { weekdayOf } from "../public/lib/rota.mjs";
-import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION, toForumProgramme, labRecipients, labStops, FORUM_TITLES } from "../lib/visit.mjs";
+import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, pageContents, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION, toForumProgramme, labRecipients, labStops, FORUM_TITLES, splitItems, sanitizeDictation, hasDictation, visitRecord, zhNumber, zhDate, promisedItems } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -715,4 +715,70 @@ test("公開的來訪紀錄：同一個單位的每一場帶同一個代碼；�
   const inst = (date) => entries.find((e) => e.date === date).orgs[0].inst;
   assert.ok(inst("2026-09-23") && inst("2026-09-23") === inst("2026-09-30"), "惇陽兩場是同一個單位");
   assert.doesNotMatch(JSON.stringify(entries), /還沒公開的中文名稱|2099/, "還沒來的那一場不列，也不能從代碼裡透出來");
+});
+
+/** 訪後紀錄與答應提供的資料用的研究室資料（labs.json 整份，跟伺服器 loadPublicData("labs") 一樣）。 */
+const LABS = JSON.parse(readFileSync("public/data/labs.json", "utf8"));
+
+test("訪後重點一項一項：自己打的編號拿掉、舊資料轉過來、空的不留", () => {
+  assert.deepEqual(splitItems("1. 生態 app\n(2) 論文\n一、合作\n- ESG\n\n•  名片"), ["生態 app", "論文", "合作", "ESG", "名片"]);
+  assert.deepEqual(splitItems(["10.5% 的人", "2027 年再來", "3 位研究生", "1.生態"]), ["10.5% 的人", "2027 年再來", "3 位研究生", "生態"], "數字是內容的不要當成編號拿掉");
+  const old = sanitizeDictation({ who_came: "x", most_wanted_rooms: ["303", "999", "303"], questions: ["a", ""], cooperation: "Homework：思考\n第二項", follow_ups: "寄論文", other: "其他一句" });
+  assert.deepEqual(old, { who_came: "x", most_wanted_rooms: ["303"], notes: ["其他一句"], questions: ["a"], cooperation: ["Homework：思考", "第二項"], follow_ups: ["寄論文"] }, "以前的合作意願是一句話、「其他」是一格字串");
+  assert.deepEqual(sanitizeDictation({ other: "（AI_MOCK）" }).notes, [], "測試用的範例字不算");
+  assert.equal(hasDictation({}), false);
+  assert.equal(hasDictation({ extracted: { notes: ["a"] } }), true, "沒錄音、只打了重點也算做了");
+  assert.equal(hasDictation({ record: { text: "紀錄" } }), true);
+  assert.equal(wrapupTodo({ dictation: { extracted: { follow_ups: ["寄論文"] } } }).find((t) => t.key === "dictation").done, true);
+});
+
+test("完整紀錄：事實照參訪資料排、重點一項對一項；AI 的項數對不上就用原話", () => {
+  assert.deepEqual([1, 9, 10, 11, 19, 20, 21].map(zhNumber), ["一", "九", "十", "十一", "十九", "二十", "二十一"]);
+  assert.equal(zhDate("2026-11-02"), "2026 年 11 月 2 日（星期一）", "照日期字串算，不經過時區");
+  const v = {
+    date: "2026-10-05", start_time: "09:00", duration_minutes: 150,
+    org: { name: "Example University", name_local: "範例大學", country: "日本" },
+    guests: [{ name: "山田太郎", title: "教授", role: "member" }, { name: "佐藤花子", title: "學院長", role: "lead" }],
+    headcount: 3, contact_teacher: "張俊彥",
+    itinerary: [{ room: "briefing", minutes: 20, location: "302" }, { room: "301", minutes: 20 }, { room: "303", minutes: 30 }],
+    presenters: { "303": "王小明" },
+    dictation: { extracted: { most_wanted_rooms: ["303"], notes: ["Homework：思考如何量測接觸不同野生物種"], questions: ["能不能用在長照"], cooperation: [], follow_ups: ["與使用者及其他賢哲共同討論療癒景觀", "在生態 app 中加入 ESG"] } },
+  };
+  v.programme = retimeProgramme({ ...v, programme: defaultProgramme(v) });
+  const raw = visitRecord(v, LABS, null);
+  assert.ok(raw.startsWith("範例大學 參訪紀錄\n"), "標題用中文名稱");
+  assert.match(raw, /^一、日期：2026 年 10 月 5 日（星期一）　09:00–11:30$/m);
+  assert.match(raw, /^二、地點：臺大園藝系造園館三樓　綠色健康研究中心（總體介紹在 302）$/m);
+  assert.match(raw, /^四、來訪人員（共 3 位）\n1\. 佐藤花子　學院長\n2\. 山田太郎　教授$/m, "主賓排第一");
+  assert.match(raw, /　　\d\d:\d\d–\d\d:\d\d　303 景觀環境模擬室　陳惠美（接待：王小明）/, "研究室參訪底下一間一行，寫接待人員");
+  assert.ok(!/概要/.test(raw), "AI 沒寫成就沒有概要那一段");
+  assert.match(raw, /、後續事項\n1\. 與使用者及其他賢哲共同討論療癒景觀\n2\. 在生態 app 中加入 ESG\n$/);
+  assert.ok(!/合作意願/.test(raw), "沒有內容的段落整段不出現");
+  const prose = { overview: "概要一段。", notes: ["寫好的一句。"], questions: ["來賓詢問……"], cooperation: [], follow_ups: ["只回了一項"] };
+  const out = visitRecord(v, LABS, prose);
+  assert.match(out, /、概要：概要一段。/);
+  assert.match(out, /、交流重點\n1\. 寫好的一句。/);
+  assert.match(out, /、後續事項\n1\. 與使用者及其他賢哲共同討論療癒景觀\n2\. 在生態 app 中加入 ESG/, "AI 回來的項數對不上：照原話，不少一項也不多一項");
+  const forum = visitRecord({ ...v, format: "forum", attendance: { "301": "yes", "303": "no" }, programme: toForumProgramme(v.programme, v.start_time) }, LABS, null);
+  assert.match(forum, /與中心老師座談（出席：張俊彥）/);
+  assert.ok(!/研究室參訪/.test(forum), "座談的場次不寫研究室參訪");
+});
+
+test("答應提供的資料：網址或上傳的檔案；信裡用完整的網址", () => {
+  const m = sanitizeMaterials({ links: [
+    { title: "", url: "materials/2026-10-05-x/123-file.pdf", name: "療癒報告.pdf" },
+    { title: "app", url: "https://example.org/app" },
+    { title: "bad", url: "javascript:alert(1)" },
+    { title: "別的", url: "../etc/passwd" },
+  ] });
+  assert.deepEqual(m.links, [{ title: "療癒報告", url: "materials/2026-10-05-x/123-file.pdf", name: "療癒報告.pdf" }, { title: "app", url: "https://example.org/app" }]);
+  assert.deepEqual(promisedItems({ materials: m }, "https://visit.healsdesign.org/"), [
+    { title: "療癒報告", url: "https://visit.healsdesign.org/api/media?key=materials/2026-10-05-x/123-file.pdf", file: true },
+    { title: "app", url: "https://example.org/app", file: false },
+  ]);
+  assert.ok(pageContents({ materials: m }, LABS).some((c) => c.key === "links" && c.zh.includes("答應提供的資料")));
+  // 一頁摘要：主持人存重點的時間比摘要新，就照新的重點重寫
+  const past = { visit_id: "v", date: "2026-01-01", start_time: "10:00", duration_minutes: 60, summary: "舊的", summary_at: "2026-01-02T00:00:00Z", dictation: { extracted: { notes: ["a"] }, saved_at: "2026-01-03T00:00:00Z" } };
+  assert.equal(needsSummary(past, [], new Date("2026-02-01")), true);
+  assert.equal(needsSummary({ ...past, summary_at: "2026-01-04T00:00:00Z" }, [], new Date("2026-02-01")), false);
 });

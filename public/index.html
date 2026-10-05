@@ -342,7 +342,12 @@
     }
     if (m.links && m.links.length) {
       $("linksRow").hidden = false; $("linksLabel").textContent = bi("links");
-      $("linkList").innerHTML = m.links.map((l) => `<li><a class="underline decoration-stone-300 hover:decoration-stone-900 break-all" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title || l.url)}</a></li>`).join("");
+      // 答應提供的資料：網址，或上傳的檔案（媒體庫 key；後面標出是什麼檔，PDF／DOCX／JPG……）
+      $("linkList").innerHTML = m.links.map((l) => {
+        const file = !/^https?:\/\//i.test(l.url);
+        const ext = file ? (/\.([a-z0-9]{1,8})$/i.exec(l.name || l.url)?.[1] || "").toUpperCase() : "";
+        return `<li><a class="underline decoration-stone-300 hover:decoration-stone-900 break-all" href="${esc(mediaUrl(l.url))}" target="_blank" rel="noopener">${file ? '<span aria-hidden="true">📎 </span>' : ""}${esc(l.title || l.url)}</a>${ext ? ` <span class="text-xs text-stone-400">${esc(ext)}</span>` : ""}</li>`;
+      }).join("");
     }
   }
 

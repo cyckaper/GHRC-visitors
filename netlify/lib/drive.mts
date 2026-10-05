@@ -122,6 +122,7 @@ export function plan(visit: Visit): DriveItem[] {
     { key: "responses.csv", name: "回覆.csv" },
   ];
   if (visit.summary) items.push({ key: "summary.md", name: "一頁摘要.md" });
+  if (visit.dictation?.record?.text) items.push({ key: "record.txt", name: "參訪紀錄.txt" });
   if (visit.signbook?.photo_key) items.push({ key: visit.signbook.photo_key, name: `簽名簿.${ext(visit.signbook.photo_key) || "jpg"}` });
   if (visit.dictation?.audio_key) items.push({ key: visit.dictation.audio_key, name: `主持人口述.${ext(visit.dictation.audio_key) || "webm"}` });
   const m = visit.materials || { deck_pdf: "", photos: [], links: [] };
@@ -138,6 +139,8 @@ export function plan(visit: Visit): DriveItem[] {
     return out;
   };
   (m.photos || []).filter((p) => !/^https?:/i.test(p)).forEach((p) => items.push({ key: p, name: unique(originalName(p)) }));
+  // 答應提供給對方的檔案：用上傳時原本的檔名（網址的那幾項不必備份，本來就在別的地方）
+  for (const l of m.links || []) if (!/^https?:/i.test(l.url)) items.push({ key: l.url, name: unique((l as { name?: string }).name || originalName(l.url)) });
   // 名片用名片主人的名字當檔名（同名的加序號）；名字沒讀到就只叫「名片」
   for (const c of (visit as any).cards || []) {
     const who = (c.names || []).filter(Boolean).join("、").slice(0, 60);
@@ -152,6 +155,7 @@ export async function itemBytes(visit: Visit, responses: ResponseRow[], key: str
   if (key === "visit.json") return text(JSON.stringify(visit, null, 2), "application/json");
   if (key === "responses.csv") return text("﻿" + toCSV(responses), "text/csv");
   if (key === "summary.md") return text(visit.summary || "", "text/markdown");
+  if (key === "record.txt") return text(visit.dictation?.record?.text || "", "text/plain");
   const m = await getStore().getMedia(key);
   if (!m) return null;
   return { bytes: m.bytes, mime: m.contentType || MIME[ext(key)] || "application/octet-stream" };

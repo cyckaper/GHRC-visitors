@@ -216,6 +216,8 @@ try {
   await page.uncheck("#noDeck");
   await page.waitForSelector("#deckWork:not([hidden])");
   await page.waitForFunction(() => document.querySelectorAll("#slideGrid input[data-block]:checked").length > 0);
+  // 等「要做簡報」真的存到伺服器才重新整理：不然重新整理之後讀到的還是「不用簡報」，產檔那一區是收起來的（CI 踩過）
+  await page.waitForFunction(() => /這場要做簡報/.test(document.getElementById("flash").textContent));
 
   // 一載入就直接點「簡報」分頁（boot 可能還沒跑完）也要看得到選項，不能一片空白
   await page.reload();
@@ -372,10 +374,30 @@ try {
   await page.waitForFunction(() => /名單目前/.test(document.getElementById("cardStatus").textContent)); // 等這一頁載完再打字
   await page.fill("#transcript", "今天校長來，最想看 303 的模擬，問了能不能合作。");
   await page.click("#extractDictationBtn");
-  await page.waitForSelector("#dictationFields:not([hidden])", { timeout: 60000 });
-  check((await page.inputValue("#dRooms")) === "303", "dictation extraction finds room 303");
+  await page.waitForFunction(() => document.getElementById("dRooms").value === "303", null, { timeout: 60000 });
+  check(true, "dictation extraction finds room 303");
+  // 重點一項一項（明確指示：「輸入簡要說明要分項次，之後由 AI 產生出完整紀錄」）：每一項一個框、前面是項次
+  const items = (id) => page.locator(`ol.items[data-for="${id}"] textarea`);
+  check((await items("dQuestions").count()) === 1 && (await page.textContent('ol.items[data-for="dQuestions"] .no')) === "1.", "extracted questions show up as numbered items");
+  await items("dNotes").first().fill("Homework：思考如何量測接觸不同野生物種");
+  await items("dNotes").first().press("End");
+  await items("dNotes").first().press("Enter");
+  await page.keyboard.type("在生態 app 中加入 ESG");
+  check((await items("dNotes").count()) === 2 && (await page.locator('ol.items[data-for="dNotes"] .no').nth(1).textContent()) === "2.", "Enter starts the next numbered item");
+  await page.locator('ol.items[data-for="dNotes"] + textarea + button').click(); // ＋ 一項
+  check((await items("dNotes").count()) === 3, "＋ 一項 adds an empty item at the end");
+  await page.keyboard.press("Backspace"); // 空的那一項按退格就刪掉
+  check((await items("dNotes").count()) === 2, "Backspace on an empty item removes it");
   await page.click("#dictationSave");
-  await page.waitForFunction(() => document.getElementById("dictationInfo").textContent.includes("已存入"));
+  await page.waitForFunction(() => document.getElementById("recordText").value.includes("參訪紀錄"), null, { timeout: 60000 });
+  const record = await page.inputValue("#recordText");
+  check(!(await page.isHidden("#recordBox")) && /交流重點\n1\. Homework：思考如何量測接觸不同野生物種。\n2\. 在生態 app 中加入 ESG。/.test(record), "after saving the points, the AI writes the full record, item for item");
+  check(/^一、日期：2026 年 10 月 7 日/m.test(record), "…with the date and the rest of the facts taken from the visit");
+  check(/重點已存/.test(await page.textContent("#dictationInfo")), "the points are saved");
+  await page.locator("#recordText").press("End");
+  await page.locator("#recordText").type("補一句。");
+  await page.waitForFunction(() => /手改過，已存/.test(document.getElementById("recordInfo").textContent), null, { timeout: 15000 });
+  check(true, "editing the full record saves by itself");
   const wrapLinks = await page.textContent("#wrapLinks");
   check(/結束時間一到.*寄一封提醒/s.test(await page.textContent("#tab-wrapup")), "the wrap-up tab promises the reminder arrives by itself at the end of the programme");
   check(wrapLinks.includes("#email") && wrapLinks.includes("#respond"), "after the visit, the wrap-up tab produces the on-site email and response links");
@@ -400,12 +422,16 @@ try {
   await page.waitForFunction(() => document.querySelectorAll("#photoList img").length === 1);
   check(true, "removing a photo takes it off the visit page");
 
-  await page.click("#linkAdd");
-  await page.fill("#linkTable tbody tr:last-child td:nth-child(1) input", "Lab 303 papers");
-  await page.fill("#linkTable tbody tr:last-child td:nth-child(2) input", "https://scholar.example/303");
-  await page.click("#materialsSave");
-  await page.waitForFunction(() => document.getElementById("materialsInfo").textContent.includes("已儲存"));
-  check(true, "photo uploaded and link saved for the visit page");
+  // 動作五：答應提供給對方的資料——連結（沒寫 https:// 的幫他補上）與檔案（各種格式，原檔名）
+  await page.click("#promisedAddLink");
+  await page.fill("#promisedList li:last-child .p-title", "Lab 303 papers");
+  await page.fill("#promisedList li:last-child .p-url", "scholar.example/303");
+  await page.waitForFunction(() => /已存/.test(document.getElementById("promisedInfo").textContent), null, { timeout: 15000 });
+  // 中文檔名用 buffer 交給瀏覽器（這台機器上的 Playwright 用路徑選不了中文檔名的檔案；真的瀏覽器選得了）
+  await page.setInputFiles("#promisedFiles", { name: "療癒景觀報告.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: Buffer.from("PK\x03\x04 not really a docx") });
+  await page.waitForFunction(() => /已放上 1 個/.test(document.getElementById("promisedInfo").textContent), null, { timeout: 20000 });
+  check((await page.locator("#promisedList li").count()) === 2 && /療癒景觀報告\.docx/.test(await page.textContent("#promisedList")), "a promised file is uploaded and listed under its original name");
+  check((await page.textContent("#promisedList li:first-child .no")) === "1." && (await page.textContent("#promisedList li:last-child .no")) === "2.", "…numbered one by one");
 
   // 後續分頁的動作五：感謝信
   await page.click('[data-tab="wrapup"]');
@@ -414,6 +440,8 @@ try {
   await page.waitForFunction(() => document.getElementById("thanksBody").value.includes("what should we be doing better"), null, { timeout: 60000 });
   await page.waitForFunction(() => document.querySelectorAll("#thanksRecipients input").length === 2);
   check(true, "thanks letter drafted with the 請益 wording and 2 recipients");
+  const thanks = await page.inputValue("#thanksBody");
+  check(thanks.includes("https://scholar.example/303") && /\/api\/media\?key=materials\/2026-10-07-uwa\/\d+-file\.docx/.test(thanks), "the letter lists every promised item with a link the guests can open");
   // 「寄出」兩個字看不出寄給誰：按鈕上直接寫人數，旁邊列出名字
   check(/寄出感謝信（2 位）/.test(await page.textContent("#sendBtn")), "the send button says how many people it is about to write to");
   check(/會寄給：/.test(await page.textContent("#thanksWho")), "…and names them");
@@ -1116,6 +1144,7 @@ try {
   check((await page.locator("#programme li").count()) > 0, "programme rendered");
   await page.waitForSelector("#materialsSec:not([hidden])");
   check((await page.locator("#photoGrid img").count()) === 1 && (await page.textContent("#linkList")).includes("Lab 303 papers"), "visit page shows the uploaded photo and the link");
+  check(/療癒景觀報告\s*DOCX/.test(await page.textContent("#linkList")) && (await page.getAttribute("#linkList li:last-child a", "href")).startsWith("/api/media?key=materials%2F"), "…and the promised file, marked with its type");
   check((await page.getAttribute("#photoGrid img", "src")).startsWith("/api/media?key=materials%2F"), "photo comes from the public media endpoint");
   await page.locator("#lab-303").scrollIntoViewIfNeeded();
   await page.waitForFunction(() => document.querySelector("#lab-303").classList.contains("in"));
@@ -1187,6 +1216,8 @@ try {
   await page.click("#langToggle");
   await page.waitForFunction(() => document.querySelector('[data-tab="pre"]')?.textContent === "訪前", null, { timeout: 20000 });
   check(true, "and back to Chinese");
+  // 切語言會重新整理：等開場把清單載完（它會自己挑最近的一場）再選「＋ 新的一場」，不然開場晚一步又把它換掉
+  await page.waitForFunction(() => /場參訪/.test(document.getElementById("backendInfo").textContent), null, { timeout: 20000 });
 
   // 讀信讀不到哪一天：以前補「今天」（信裡寫 10/5 的那一場變成當天 10/3，網址也跟著錯）。
   // 現在日期空著、底下說一聲，不拿今天建一場；填上日期就自己存
@@ -1207,6 +1238,7 @@ try {
   console.log("\nSMOKE OK");
 } catch (e) {
   console.error(e);
+  if (errors.length) console.error(`page errors so far: ${errors.join(" | ")}`);
   await page.screenshot({ path: path.join(tmp, "failure.png"), fullPage: true }).catch(() => {});
   console.error(`screenshot: ${path.join(tmp, "failure.png")}`);
   process.exitCode = 1;
