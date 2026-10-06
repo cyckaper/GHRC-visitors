@@ -47,6 +47,9 @@ jobs:
             # 拿到的是網頁（登入頁＝還沒開分享）就把標題印出來，看得出是哪一種
             if ! head -c 2 "$RUNNER_TEMP/master.pptx" | grep -q PK; then
               echo "::error::下載到的不是 pptx（$(grep -o '<title>[^<]*' "$RUNNER_TEMP/master.pptx" | head -1 | sed 's/<title>//')）——Drive 上那個檔要開成「知道連結的任何人都能檢視」"
+              # 對照組：一個確定公開的 Drive 檔（gdown 說明文件裡的範例）。這個拿得到＝分享沒開；也拿不到＝Google 擋了這台機器
+              PROBE=$(curl -sSL -r 0-1 "https://drive.usercontent.google.com/download?id=1l_5RK28JRL19wpT22B-DY9We3TVXnnQQ&export=download&confirm=t" | head -c 2 | od -An -c | tr -d ' ')
+              echo "對照組（公開檔）開頭：${PROBE:-（空的）}——是 PK 就表示公開的檔下載得到"
               exit 1
             fi
           else
