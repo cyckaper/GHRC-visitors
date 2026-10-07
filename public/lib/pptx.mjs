@@ -706,6 +706,76 @@ export class Deck {
     return result;
   }
 
+  /**
+   * 目錄頁拿掉卡片之後，那一章的標題還留在頁面上（排法只認得一半：號碼拿掉了，卡片的底與標題還在——
+   * 2026-10「ALL 參訪版」的目錄就是這樣，最後一張「Responses to Your Questions／提問回覆」留著）。
+   * 寫著 titles 其中一句的那一塊拿掉，連同墊在它底下、沒有字的那一塊底與底上面的東西（中文標題、空的圓圈）；
+   * 群組裡的往裡面找，群組裡只剩沒有字的東西就整個群組拿掉。回傳拿掉幾塊。
+   */
+  async dropTextCards(path, titles) {
+    const want = (titles || []).map((t) => String(t || "").trim()).filter(Boolean);
+    if (!want.length) return 0;
+    const xml = await this.text(path);
+    const tree = /<p:spTree\b[^>]*>([\s\S]*)<\/p:spTree>/.exec(xml);
+    if (!tree) return 0;
+    let removed = 0;
+    const center = (b) => ({ x: b.x + b.cx / 2, y: b.y + b.cy / 2 });
+    const inside = (pt, b) => pt.x >= b.x && pt.x <= b.x + b.cx && pt.y >= b.y && pt.y <= b.y + b.cy;
+    const area = (b) => b.cx * b.cy;
+    const clean = (inner) => {
+      const kids = childElements(inner).map((el) => ({ ...el, paras: parasOf(el.xml), box: boundsOf(el) }));
+      const has = (k) => k.paras.some((t) => want.some((w) => t.includes(w)));
+      const drop = new Set();
+      const edits = new Map();
+      kids.forEach((k, i) => {
+        if (!has(k)) return;
+        if (k.tag === "p:grpSp") {
+          const head = /^<p:grpSp\b[^>]*>/.exec(k.xml)[0];
+          const body = k.xml.slice(head.length, k.xml.length - "</p:grpSp>".length);
+          const next = clean(body);
+          if (!parasOf(next).length) drop.add(i);
+          else if (next !== body) edits.set(i, head + next + "</p:grpSp>");
+          return;
+        }
+        drop.add(i);
+        if (!k.box) return;
+        const c = center(k.box);
+        // 卡片的底：沒有字、包住它、不大於它的六倍（整頁的背景、一大塊面板不算）
+        const holder = kids
+          .filter((o, j) => j !== i && o.box && !o.paras.length && inside(c, o.box) && area(o.box) <= 6 * area(k.box))
+          .sort((a, b) => area(a.box) - area(b.box))[0];
+        if (holder) kids.forEach((o, j) => { if (o.box && inside(center(o.box), holder.box) && area(o.box) <= area(holder.box)) drop.add(j); });
+      });
+      if (!drop.size && !edits.size) return inner;
+      removed += drop.size;
+      let out = inner;
+      const order = [...new Set([...drop, ...edits.keys()])].sort((a, b) => kids[b].start - kids[a].start);
+      for (const i of order) out = out.slice(0, kids[i].start) + (drop.has(i) ? "" : edits.get(i)) + out.slice(kids[i].end);
+      return out;
+    };
+    const base = tree.index + tree[0].indexOf(tree[1]);
+    const next = clean(tree[1]);
+    if (next !== tree[1]) this.set(path, xml.slice(0, base) + next + xml.slice(base + tree[1].length));
+    return removed;
+  }
+
+  /** 這一頁直屬的形狀（群組往裡面看一層）：[{ tag, box, paras }]——查排版問題用，記在建置的紀錄裡。 */
+  async shapeSummary(path) {
+    const xml = await this.text(path);
+    const tree = /<p:spTree\b[^>]*>([\s\S]*)<\/p:spTree>/.exec(xml);
+    if (!tree) return [];
+    const row = (el, depth) => {
+      const b = boundsOf(el);
+      const out = [{ depth, tag: el.tag, box: b ? [b.x, b.y, b.cx, b.cy] : null, paras: parasOf(el.xml).slice(0, 4) }];
+      if (el.tag === "p:grpSp" && depth < 2) {
+        const head = /^<p:grpSp\b[^>]*>/.exec(el.xml)[0];
+        for (const k of childElements(el.xml.slice(head.length, el.xml.length - "</p:grpSp>".length))) out.push(...row(k, depth + 1));
+      }
+      return out;
+    };
+    return childElements(tree[1]).flatMap((el) => row(el, 0));
+  }
+
   /** 拿掉這一頁的講稿（備忘稿）關聯；沒人引用的講稿檔由 clean() 清掉。回傳 1（拿掉了）或 0（本來就沒有）。 */
   async dropNotes(path) {
     const p = relsPath(path);

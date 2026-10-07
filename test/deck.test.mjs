@@ -643,6 +643,19 @@ test("目錄頁的卡片是一張一個群組、或沒有底的排法也認得�
   // 一個文字框寫了好幾個章節號：認不出來，不動
   d = await zipOf(page(sp(2, 0, 0, 9000000, 500000, "Contents") + sp(3, 0, 1000000, 4000000, 3000000, "01", "Why Now", "02", "Core Proposition")));
   assert.equal(await d.keepContents("ppt/slides/slide3.xml", new Set(["02"])), null);
+
+  // 拿掉卡片之後標題還留著（號碼拿掉了、卡片的底與標題還在——2026-10「ALL 參訪版」的目錄）：連底一起拿掉，別張不動
+  d = await zipOf(page(sp(2, 0, 0, 9000000, 500000, "Contents") + sp(10, 0, 1000000, 4000000, 900000) + sp(11, 600000, 1100000, 3000000, 700000, "Why Now", "為什麼是現在") + sp(12, 0, 2000000, 4000000, 900000) + sp(13, 600000, 2100000, 3000000, 700000, "Responses to Your Questions", "提問回覆") + sp(14, 4200000, 2000000, 300000, 300000)));
+  assert.equal(await d.dropTextCards("ppt/slides/slide3.xml", ["Responses to Your Questions"]), 2);
+  xml = await d.text("ppt/slides/slide3.xml");
+  assert.ok(!/Responses to Your Questions|提問回覆|name="S12"/.test(xml), "標題與墊在底下的那一塊底一起拿掉");
+  assert.ok(/Why Now/.test(xml) && /name="S10"/.test(xml) && /name="S14"/.test(xml), "別張卡片與卡片外面的東西不動");
+  assert.equal(await d.dropTextCards("ppt/slides/slide3.xml", ["Responses to Your Questions"]), 0, "沒有就不動");
+  // 群組裡的：標題拿掉之後群組裡沒有字了，整個群組就是那一張卡片
+  d = await zipOf(page(sp(2, 0, 0, 9000000, 500000, "Contents") + card(0, "01", "Why Now") + card(1, "", "Responses to Your Questions")));
+  await d.dropTextCards("ppt/slides/slide3.xml", ["Responses to Your Questions"]);
+  xml = await d.text("ppt/slides/slide3.xml");
+  assert.ok(!/name="G1"|Responses/.test(xml) && /name="G0"/.test(xml));
 });
 
 test("產出的簡報不帶母簡報的講稿（寫給上一次來賓的），母簡報本身不動", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {

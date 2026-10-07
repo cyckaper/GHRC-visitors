@@ -200,9 +200,12 @@ for (const s of all) {
   const title = paras.find((t) => !KICKER.test(t)) || "";
   const role = Object.entries(mapped.ok ? mapped.roles : {}).find(([, n]) => n === s.n)?.[0];
   const text = paras.join("\n");
+  // 今日流程那一頁：照內容認的（有表格）之外，頁眉寫著「PROGRAMME · 今日流程」的也是——2026-10「ALL 參訪版」那一頁是形狀排的，不是表格
+  const programme = role === "programme" || paras.slice(0, 3).some((t) => /^PROGRAMME\b/i.test(t) || /^今日流程$/.test(t) || /^Programme for Today$/i.test(t));
   const reason = /<p:sld\b[^>]*\bshow="0"/.test(xml) ? "隱藏的頁"
     : (ex.slides || []).includes(s.n) ? "source.json 指定不放"
-    : role && (ex.roles || []).includes(role) ? (role === "programme" ? "今日流程（每一場不一樣，來賓專頁上有）" : `「${role}」那一頁`)
+    : programme && (ex.roles || []).includes("programme") ? "今日流程（每一場不一樣，來賓專頁上有）"
+    : role && (ex.roles || []).includes(role) ? `「${role}」那一頁`
     : (ex.text || []).find((t) => text.includes(t)) ? `寫著「${(ex.text || []).find((t) => text.includes(t))}」`
     : chapter && (ex.chapters || []).includes(chapter) ? `第 ${chapter} 章（寫給某一團的）`
     : "";
@@ -229,7 +232,19 @@ for (const s of kept) {
   const items = await deck.contentsItems(s.path);
   if (!items) { report.warnings.push("目錄頁的排法認不出來，目錄照母簡報"); break; }
   const keep = new Set(items.map((it) => it.no).filter((no) => present.has(no)));
-  if (keep.size && keep.size < items.length) report.contents = await deck.keepContents(s.path, keep);
+  // 目錄頁的形狀記在建置紀錄裡：排法認得不完整時，從這裡看得出是哪一塊沒拿掉（目錄頁的字本來就在網頁版上，不是秘密）
+  log("目錄頁（改之前）", JSON.stringify(await deck.shapeSummary(s.path)));
+  if (keep.size && keep.size < items.length) {
+    report.contents = await deck.keepContents(s.path, keep);
+    // 拿掉的那幾章，標題還留在頁面上（號碼拿掉了、卡片的底與標題還在）就整塊拿掉
+    const gone = items.filter((it) => !keep.has(it.no)).map((it) => it.title).filter(Boolean);
+    const left = (await deck.paragraphs(s.path)).some((t) => gone.some((g) => t.includes(g)));
+    if (left) {
+      report.contents.leftovers = await deck.dropTextCards(s.path, gone);
+      if ((await deck.paragraphs(s.path)).some((t) => gone.some((g) => t.includes(g)))) report.warnings.push(`目錄頁上還留著拿掉的章節：${gone.join("、")}`);
+    }
+    log("目錄頁（改之後）", JSON.stringify(await deck.shapeSummary(s.path)));
+  }
   break;
 }
 
