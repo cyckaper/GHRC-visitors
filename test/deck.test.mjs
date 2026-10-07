@@ -660,6 +660,15 @@ test("目錄頁的卡片是一張一個群組、或沒有底的排法也認得�
   assert.match(xml, /name="N31"\/>[\s\S]*?<a:off x="923544" y="1201168"\/>[\s\S]*?<a:chOff x="923544" y="2101168"\/>/, "圓圈的群組跟著搬（裡面的座標不動）");
   assert.match(xml, /name="S34"\/>[\s\S]*?<a:off x="1435607" y="1137160"\/>[\s\S]*?Core Proposition/, "標題跟著搬");
 
+  // 角落寫死的頁碼（網頁版拿掉了幾頁，母簡報印的頁碼就比播放頁的多）：只換右下角那個小框，頁面中間的大數字不動
+  const size = { cx: 12192000, cy: 6858000 };
+  d = await zipOf(page(sp(2, 685800, 600000, 9000000, 500000, "Three Commitments") + sp(3, 685800, 2000000, 2000000, 1500000, "3") + sp(4, 685800, 6437376, 7315200, 127001, "Green Health Research Center") + sp(5, 10591495, 6437376, 914401, 139701, "3")));
+  assert.equal(await d.renumberPage("ppt/slides/slide3.xml", 3, 2, size), 1);
+  xml = await d.text("ppt/slides/slide3.xml");
+  assert.match(xml, /name="S5"\/>[\s\S]*?<a:t>2<\/a:t>/, "右下角的頁碼換成網頁版的頁數");
+  assert.match(xml, /name="S3"\/>[\s\S]*?<a:t>3<\/a:t>/, "頁面中間的大數字不動");
+  assert.equal(await d.renumberPage("ppt/slides/slide3.xml", 7, 6, size), 0, "印的不是這一頁的頁次就不動");
+
   // 一個文字框寫了好幾個章節號：認不出來，不動
   d = await zipOf(page(sp(2, 0, 0, 9000000, 500000, "Contents") + sp(3, 0, 1000000, 4000000, 3000000, "01", "Why Now", "02", "Core Proposition")));
   assert.equal(await d.keepContents("ppt/slides/slide3.xml", new Set(["02"])), null);

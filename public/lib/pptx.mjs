@@ -708,6 +708,32 @@ export class Deck {
   }
 
   /**
+   * 角落寫死的頁碼換成 to：網頁版拿掉了幾頁（今日流程、寫給某一團的），母簡報上印的頁碼就比播放頁的頁數多——
+   * 講的人說「請看第 12 頁」、或打 12 跳過去，看到的是不一樣的一頁。2026-10「ALL 參訪版」的頁碼是右下角一個小文字框，不是自動的頁碼欄位。
+   * 只認頁面最下面那一條（上緣在頁高 85% 以下）、不寬（不到頁寬的五分之一）、整個框只寫著 from 的；頁面中間的大數字不動。
+   * size＝投影片的寬高（`slideSize()`）。回傳換了幾個。
+   */
+  async renumberPage(path, from, to, size) {
+    if (String(from) === String(to) || !size?.cx || !size?.cy) return 0;
+    const xml = await this.text(path);
+    const tree = /<p:spTree\b[^>]*>([\s\S]*)<\/p:spTree>/.exec(xml);
+    if (!tree) return 0;
+    const base = tree.index + tree[0].indexOf(tree[1]);
+    let inner = tree[1], n = 0;
+    for (const el of childElements(tree[1]).reverse()) {
+      const b = el.tag === "p:sp" && boundsOf(el);
+      const paras = b ? parasOf(el.xml) : [];
+      if (!b || paras.length !== 1 || paras[0] !== String(from) || b.y < size.cy * 0.85 || b.cx > size.cx / 5) continue;
+      const next = el.xml.replace(/(<a:t>\s*)(\d+)(\s*<\/a:t>)/, (m, a, d, c) => (d === String(from) ? a + to + c : m));
+      if (next === el.xml) continue;
+      inner = inner.slice(0, el.start) + next + inner.slice(el.end);
+      n++;
+    }
+    if (n) this.set(path, xml.slice(0, base) + inner + xml.slice(base + tree[1].length));
+    return n;
+  }
+
+  /**
    * 目錄頁拿掉卡片之後，那一章的標題還留在頁面上（排法只認得一半：號碼拿掉了，卡片的底與標題還在——
    * 2026-10「ALL 參訪版」的目錄就是這樣，最後一張「Responses to Your Questions／提問回覆」留著）。
    * 寫著 titles 其中一句的那一塊拿掉，連同墊在它底下、沒有字的那一塊底與底上面的東西（中文標題、空的圓圈）；

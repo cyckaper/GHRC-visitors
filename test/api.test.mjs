@@ -886,6 +886,12 @@ test("後續提醒：依結束時間寄信給自己，一場只寄一次；沒�
   const v = (await put({ org: { name: "Reminder Normal University" }, date, code: "rmd", start_time: hhmm, duration_minutes: 60 })).body.visit;
   const later = (await put({ org: { name: "Tomorrow University" }, date, code: "tmr", start_time: "23:30", duration_minutes: 60 })).body.visit;
 
+  // 別的測試留下來的場次剛好也在這幾個小時內結束的話，一樣會被提醒，mail/last.json 就不是這一封了
+  // （2026-10-07 下午踩到：西澳大學那一場的日期就是那一天）。先當作都提醒過了，這個測試哪一天跑都一樣
+  for (const o of await getStore().listVisits()) {
+    if (o.visit_id !== v.visit_id && o.visit_id !== later.visit_id) await seed(o.visit_id, (x) => { x.reminders = { ...(x.reminders || {}), wrapup_sent_at: new Date().toISOString() }; });
+  }
+
   process.env.MAIL_MOCK = "1"; // 不真的打 Gmail：信會寫進媒體庫讓這裡讀
   try {
     const sent = await cron();

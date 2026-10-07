@@ -259,6 +259,10 @@ report.fixes = fixed;
 report.pictures_fixed = 0;
 for (const s of kept) report.pictures_fixed += await deck.fixPictureAspect(s.path);
 
+// 4.6 角落寫死的頁碼換成網頁版的頁數：拿掉了今日流程與寫給某一團的那幾頁，母簡報印的頁碼就比播放頁的多
+report.pages_renumbered = 0;
+for (const [i, s] of kept.entries()) report.pages_renumbered += await deck.renumberPage(s.path, s.n, i + 1, size);
+
 // 5. 影片：記下位置、把檔案拿出來，頁面上換成一張圖
 const TMP = await mkdtemp(path.join(os.tmpdir(), "web-deck-"));
 await rm(OUT, { recursive: true, force: true });
