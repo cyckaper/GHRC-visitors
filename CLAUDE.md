@@ -62,9 +62,11 @@ Drive 上的母簡報（暫時的複本） → GitHub Actions（.github/workflow
   → public/assets/deck/<版本>/ ＋ public/data/deck.json，Actions 自己 commit 回同一條分支
 ```
 
-- **不放的頁**寫在 `scripts/web-deck/source.json` 的 `exclude`：今日流程那一頁（每一場不一樣，來賓專頁上有；照內容認，`slideBlocks` 的 roles）、
+- **不放的頁**寫在 `scripts/web-deck/source.json` 的 `exclude`：今日流程那一頁（每一場不一樣，來賓專頁上有；照內容認，`slideBlocks` 的 roles；
+  頁眉寫著「PROGRAMME · 今日流程」、用形狀排的也算——2026-10「ALL 參訪版」那一頁不是表格，第一次建就漏了）、
   寫著「此頁不投影」的頁、第 09 章（寫給某一團的提問回覆）、隱藏的頁，要再拿掉哪一頁就加在 `slides`（母簡報的頁次）。
-  封面寫來賓的那一塊整塊清掉（`Deck.visitBox`／`fillVisitBox`，只動母簡報的第一頁）、目錄只列這一份有的章節（`keepContents`）、
+  封面寫來賓的那一塊整塊清掉（`Deck.visitBox`／`fillVisitBox`，只動母簡報的第一頁）、目錄只列這一份有的章節（`keepContents`；
+  拿掉之後那一章的標題還留在頁面上——號碼拿掉了、卡片的底與標題還在——就用 `dropTextCards` 連底一起拿掉，目錄頁的形狀記在建置紀錄裡）、
   `master-fixes.json` 照套（四間 → 五間）、照片比例照 `fixPictureAspect` 更正、講稿不帶（圖上本來就沒有，`dropNotes` 再保險一次）。
 - **`deck.json` 是公開的**：每一頁的圖、縮圖、標題與字、影片在頁面上的位置（x、y、w、h 是佔投影片寬高的比例）、海報影格。
   不放的頁只記頁次與原因（寫給某一團的那幾頁，標題可能帶著那一團的名字）；**不記 Drive 的檔案 ID**。
@@ -797,7 +799,9 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - Whisper、Gmail API、Google Sheets 後端、Netlify Blobs——都照官方 API 寫，沒有實際呼叫過。
 - 真母簡報：`slim-master.py` 與產檔核心只在 `scripts/make-fixture.py` 的合成簡報上測過（Node 與 Chromium 兩邊都測，含分塊上傳／下載）。真檔的第 2 頁若不是表格，流程要靠 `text_edits`；先 `--dump` 再 commit `data/master-text.json`。slim master 尚未上傳到站台。
 - PDF 輸出：沙箱裡 LibreOffice 不完整，沒跑到；本機有 LibreOffice 即可。
-- 網頁版簡報：Actions 上用合成簡報跑過整條（下載 → LibreOffice → 圖與影片 → commit）；真的母簡報要一頁一頁看過（LibreOffice 的換行與字寬跟 PowerPoint 不完全一樣）。
+- 網頁版簡報：2026-10-07 用「英中對照ALL參訪版_定稿」（90 頁）建過，放進 75 頁、5 支影片（302 MB 壓到 75 MB），一頁一頁看過，LibreOffice 的排版沒有走樣。
+  母簡報自己寫的幾處跟系統的說法不一樣（母簡報第 12 頁標題改成 Five 但圖上是 301–304 四格、第 28 頁 303 列兩位負責人、第 63 頁國際平台列了康乃爾、第 75 頁組織架構寫陳惠美「續任共同主持人」），
+  本系統不改寫投影片原文，要在母簡報裡改，改完重建一次。
 
 **約定**
 
