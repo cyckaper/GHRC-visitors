@@ -72,7 +72,7 @@ Drive 上的母簡報（暫時的複本） → GitHub Actions（.github/workflow
   **角落寫死的頁碼換成網頁版的頁數**（`renumberPage`：拿掉了今日流程那一頁，母簡報印的頁碼就比播放頁多一號——說「請看第 12 頁」、
   打 12 跳過去會是不一樣的一頁。只換頁面最下面、不寬、整個框只寫著那一頁母簡報頁次的；換了幾頁寫在 `build.pages_renumbered`）。
 - **`deck.json` 是公開的**：每一頁的圖、縮圖、標題與字、影片在頁面上的位置（x、y、w、h 是佔投影片寬高的比例）、海報影格。
-  不放的頁只記頁次與原因（寫給某一團的那幾頁，標題可能帶著那一團的名字）；**不記 Drive 的檔案 ID**。
+  不放的頁只記頁次與原因（寫給某一團的那幾頁，標題可能帶著那一團的名字）；**不記 Drive 的檔案 ID**（`source` 只有檔名、頁數與 source.json 的指紋）。
 - **版本**＝建置那一天＋母簡報與 `source.json` 的指紋：圖與影片放在那個名字的資料夾，`netlify.toml` 讓瀏覽器與 CDN 一直留著
   （`/assets/deck/*` immutable、`/data/deck.json` 每次問）；新的一版建好，舊版本的資料夾就刪掉。`/deck` 與這些檔案都標 noindex。
 - **影片**：每一支壓到 45 MB 以下（GitHub 一個檔超過 50 MB 就警告、100 MB 擋下），影片在投影片上的框不到七成寬就壓 1280 寬就好；
@@ -89,6 +89,9 @@ Drive 上的母簡報（暫時的複本） → GitHub Actions（.github/workflow
   2. `source.json` 的 `source: "drive"`、`drive_id` 換成複本的 ID、`title` 寫母簡報的檔名、`run` 加一，push——Actions 會自己跑、自己 commit。
   3. 建好了就把複本**丟到垃圾桶**（分享跟著失效，repo 裡那個 ID 指到的是垃圾桶裡的檔案）。
   4. Actions 用 `GITHUB_TOKEN` 推的 commit **不會觸發 CI**：再推一個 commit（或在 PR 上推任何東西），CI 才會跑。
+  5. **合併到 main 不會再建一次**：push 的 paths 條件只看 source.json 有沒有改，合併時 main 也算改了——以前會在 main 上再建一次、
+     直接 commit 進 main（只差建置時間），複本丟掉之後還會下載失敗、在 main 上掛紅叉。現在 deck.json 記著是從哪一份 source.json 建的
+     （`source.hash`），workflow 第一步（`scripts/web-deck/needs-build.mjs`）看到一樣就整個跳過；要強制重建就在 Actions 頁面手動觸發。
   開發用的雲端環境連不到 Drive 的下載網址，所以只能在 Actions 上建；`source: "fixture"` 用合成簡報試跑整條管線。
 - **播放頁** `public/deck.html`（`/deck`）：不從別的伺服器載任何東西。鍵盤與簡報遙控器（PageDown／PageUp、方向鍵、F／F5 全螢幕、
   G 全部頁面、B／. 黑幕、打頁碼再按 Enter）、手機左右滑、點左三分之一上一頁；網址 `#12` 直接到第 12 頁；

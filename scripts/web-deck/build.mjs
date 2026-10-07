@@ -20,6 +20,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Deck, slideBlocks } from "../../cli/lib/pptx.mjs";
+import { sourceHash } from "./needs-build.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const SOURCE = JSON.parse(await readFile(path.join(ROOT, "scripts/web-deck/source.json"), "utf8"));
@@ -409,7 +410,8 @@ const deckJson = {
   _comment: "網頁版簡報 /deck 的頁序與每一頁的圖、字、影片位置（x、y、w、h 是佔投影片寬高的比例）。由 scripts/web-deck/build.mjs 從母簡報產生，不要手改；母簡報改版就改 scripts/web-deck/source.json 重跑（見 CLAUDE.md）。",
   version: VERSION,
   // 不記 Drive 的檔案 ID：這一份是公開的，用不到就不放
-  source: { title: SOURCE.title || path.basename(masterPath), slides: all.length },
+  // hash＝從哪一份 source.json 建的：合併到 main 時 workflow 看到一樣就不再建（scripts/web-deck/needs-build.mjs）
+  source: { title: SOURCE.title || path.basename(masterPath), slides: all.length, hash: sourceHash(SOURCE) },
   built_at: new Date().toISOString(),
   width: raster.width, height: raster.height,
   slides,

@@ -19,8 +19,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 合併到 main、或分支改回 main 時，source.json 也算「有改」，但那一份早就在分支上建過了：
+  # deck.json 記著是從哪一份 source.json 建的，一樣就不再建（不然 main 上多一個只差建置時間的 commit，
+  # 母簡報的分享關掉之後還會下載失敗）。手動觸發一律重建。
+  check:
+    name: anything to build?
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.need.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: need
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "build=true" >> "$GITHUB_OUTPUT"
+          else echo "build=$(node scripts/web-deck/needs-build.mjs)" >> "$GITHUB_OUTPUT"; fi
+
   build:
     name: web deck
+    needs: check
+    if: needs.check.outputs.build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

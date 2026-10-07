@@ -12,6 +12,7 @@ import path from "node:path";
 import { buildDeck, inspectDeck } from "../cli/deck.mjs";
 import { Deck, slimDeck, hasEmbeddedMedia, imageInfo, coverLines, slideBlock, englishPart } from "../cli/lib/pptx.mjs";
 import zlib from "node:zlib";
+import { sourceHash, needsBuild } from "../scripts/web-deck/needs-build.mjs";
 
 /** 一張真的 PNG（全黑）：寬、高、色彩型態（2＝RGB，6＝RGBA 有透明）。 */
 function pngBytes(w, h, colorType = 2) {
@@ -819,4 +820,16 @@ test("瘦身：縮完的圖換副檔名時不能蓋掉另一張同名的圖；�
   assert.equal(bad.report.images_resized, 0);
   assert.ok(bad.report.warnings.some((w) => /比例不對/.test(w)), bad.report.warnings.join("；"));
   assert.ok((await Deck.load(bad.pptx)).files().includes("ppt/media/image3.png"));
+});
+
+test("網頁版簡報：這一份 source.json 建過了就不再建（合併到 main、分支改回 main 時）", () => {
+  // push 的 paths 條件只看 source.json 有沒有改：合併時 main 也算改了，再建一次只會在 main 上多一個 commit，
+  // 母簡報的分享關掉之後還會下載失敗。deck.json 記著是從哪一份 source.json 建的，一樣就跳過
+  const src = { source: "drive", drive_id: "abc", title: "母簡報", run: 11, exclude: { chapters: ["09"] } };
+  assert.equal(needsBuild(src, { source: { hash: sourceHash(src) } }), false, "建過了");
+  assert.equal(needsBuild({ ...src, run: 12 }, { source: { hash: sourceHash(src) } }), true, "run 加一就重建");
+  assert.equal(needsBuild({ ...src, drive_id: "def" }, { source: { hash: sourceHash(src) } }), true, "換母簡報就重建");
+  assert.equal(needsBuild(src, null), true, "還沒有 deck.json");
+  assert.equal(needsBuild(src, { source: { title: "母簡報" } }), true, "舊版的 deck.json 沒有記指紋");
+  assert.match(sourceHash(src), /^[0-9a-f]{12}$/);
 });
