@@ -5,6 +5,8 @@
       PDF 每一頁 → sNN.webp（寬 width）與縮圖 tNN.webp；印出 {"pages", "width", "height", "bytes"}
   python3 raster.py image <in> <out.webp> --max 1600
       一張圖（影片的海報影格）→ webp，長邊最多 max；維持原比例，不裁切
+  python3 raster.py luma <in>
+      一張圖有多亮：印出 {"width", "height", "mean"（平均亮度 0–255）, "bright"（不暗的像素佔幾成）}——看影片的封面是不是一片黑
 """
 import argparse
 import json
@@ -42,6 +44,18 @@ def one_image(args):
     print(json.dumps({"width": img.size[0], "height": img.size[1]}))
 
 
+def luma(args):
+    img = Image.open(args.src)
+    width, height = img.size
+    small = img.convert("L")
+    small.thumbnail((256, 256))
+    hist = small.histogram()
+    n = sum(hist) or 1
+    mean = sum(i * c for i, c in enumerate(hist)) / n
+    bright = sum(hist[48:]) / n
+    print(json.dumps({"width": width, "height": height, "mean": round(mean, 1), "bright": round(bright, 4)}))
+
+
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -57,6 +71,9 @@ def main():
     q.add_argument("out")
     q.add_argument("--max", type=int, default=1600)
     q.set_defaults(fn=one_image)
+    r = sub.add_parser("luma")
+    r.add_argument("src")
+    r.set_defaults(fn=luma)
     args = ap.parse_args()
     args.fn(args)
 

@@ -31,6 +31,7 @@ const VERSION = `${new Date().toISOString().slice(0, 10)}-${createHash("sha1").u
 const OUT = path.join(ROOT, "public/assets/deck", VERSION);
 const WEB = `assets/deck/${VERSION}`;
 const FFMPEG = process.env.FFMPEG || "ffmpeg";
+const FFPROBE = process.env.FFPROBE || "ffprobe";
 const MAX_VIDEO = 45 * 1024 * 1024; // GitHub 一個檔超過 50 MB 就警告、100 MB 擋下
 
 const log = (...a) => console.log("[web-deck]", ...a);
@@ -254,6 +255,48 @@ const fixed = {};
 for (const s of kept) for (const f of fixes) { const n = await deck.editText(s.path, [f]); if (n) fixed[f.find] = (fixed[f.find] || 0) + n; }
 report.fixes = fixed;
 
+// 4.4 影片的封面是一片黑（影片從黑畫面淡入，PowerPoint 就拿那一格當封面）：投影片上只看到一個黑框，要按了播放才知道是什麼——
+// 2026-10「ALL 參訪版」Lab 301 的影片就是。從影片裡挑一格有畫面的換上去（母簡報本身不動）。
+// 要在照片比例（4.5）之前：封面換成影片的比例，框才會跟著調成影片的比例，影片疊上去不會多出黑邊
+const TMP = await mkdtemp(path.join(os.tmpdir(), "web-deck-"));
+const RASTER = path.join(ROOT, "scripts/web-deck/raster.py");
+const lumaOf = (file) => JSON.parse(run("python3", [RASTER, "luma", file]));
+const isDark = (l) => l.mean < 20 && l.bright < 0.02;
+report.posters_replaced = 0;
+const coverSeen = new Set();
+for (const s of kept) {
+  const pics = mediaPics(await deck.text(s.path));
+  if (!pics.length) continue;
+  const rels = new Map((await deck.rels(s.path)).map((r) => [r.id, r]));
+  for (const pic of pics) {
+    const video = rels.get(pic.embed)?.part ? rels.get(pic.embed) : rels.get(pic.link);
+    const cover = rels.get(pic.poster);
+    if (pic.audio || !video?.part || !deck.has(video.part) || !cover?.part || !deck.has(cover.part) || coverSeen.has(cover.part)) continue;
+    coverSeen.add(cover.part);
+    const ext = cover.part.split(".").pop().toLowerCase();
+    if (!["png", "jpg", "jpeg"].includes(ext)) continue;
+    const old = path.join(TMP, `cover-old.${ext}`);
+    await writeFile(old, await deck.bytes(cover.part));
+    if (!isDark(lumaOf(old))) continue;
+    const clip = path.join(TMP, `cover-clip.${video.part.split(".").pop()}`);
+    await writeFile(clip, await deck.bytes(video.part));
+    let picked = null;
+    try {
+      const dur = Number(run(FFPROBE, ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", clip]).trim()) || 0;
+      for (const at of [0.1, 0.3, 0.5]) {
+        const out = path.join(TMP, `cover-${at}.${ext}`);
+        run(FFMPEG, ["-y", "-loglevel", "error", "-ss", (dur * at).toFixed(2), "-i", clip, "-vf", "thumbnail=60", "-frames:v", "1", ...(ext === "png" ? [] : ["-q:v", "3"]), out]);
+        if (!isDark(lumaOf(out))) { picked = out; break; }
+      }
+    } catch (e) { log(`第 ${s.n} 頁影片的封面換不了`, e.message); }
+    await rm(clip, { force: true });
+    if (!picked) { report.warnings.push(`第 ${s.n} 頁影片的封面是一片黑，影片裡也挑不到有畫面的一格`); continue; }
+    deck.set(cover.part, await readFile(picked));
+    report.posters_replaced++;
+    log(`第 ${s.n} 頁影片的封面是一片黑，換成影片裡的一格`);
+  }
+}
+
 // 4.5 照片不拉變形（既有標準：照片維持真實比例，不變形、不裁切；Deck.fixPictureAspect，跟以前產 .pptx 同一套）。
 // 要在記下影片位置之前做：影片的海報影格若被拉變形，框會跟著改，影片疊上去的位置才對得上
 report.pictures_fixed = 0;
@@ -264,7 +307,6 @@ report.pages_renumbered = 0;
 for (const [i, s] of kept.entries()) report.pages_renumbered += await deck.renumberPage(s.path, s.n, i + 1, size);
 
 // 5. 影片：記下位置、把檔案拿出來，頁面上換成一張圖
-const TMP = await mkdtemp(path.join(os.tmpdir(), "web-deck-"));
 await rm(OUT, { recursive: true, force: true });
 await mkdir(OUT, { recursive: true });
 const media = new Map(); // part → { file, n }

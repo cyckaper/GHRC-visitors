@@ -3,7 +3,7 @@
  "source": "drive",
  "drive_id": "1Xd6fe_m0gOnbirhSi3JyMhlJJfSJTia8",
  "title": "GHRC 介紹簡報 2026 英中對照ALL參訪版_定稿",
- "run": 10,
+ "run": 11,
  "width": 1920,
  "exclude": { "roles": ["programme"], "text": ["此頁不投影"], "chapters": ["09"], "slides": [] }
 }
