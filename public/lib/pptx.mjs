@@ -117,7 +117,7 @@ function boundsOf(el) {
 }
 /**
  * 目錄頁上一章一張的卡片。母簡報的目錄是兩欄的卡片（圓角底＋綠色圓圈裡的章節號＋英文、中文標題），
- * 可能是分開的幾個形狀，也可能每一張是一個群組（整張表包在一個群組裡也行，往裡面找一層）。
+ * 可能是分開的幾個形狀（圓圈本身可能是圓形＋號碼包成的小群組），也可能每一張是一個群組（整張表包在一個群組裡也行，往裡面找一層）。
  * 一張卡片＝一個章節號（01–09）＋它的底（裡面只有這一個章節號、比圓圈大的最小那一個形狀）與底上面的東西；
  * 沒有底就拿同一列、圓圈右邊的文字。認不出來（一個形狀裡好幾個章節號、一個形狀屬於兩張卡片……）就回 null，不去動。
  * 回傳 { base, inner, kids, items:[{ no, title, els, box }] }：base 是 inner 在整頁 XML 裡的位置。
@@ -148,7 +148,8 @@ function contentsCards(xml) {
     for (const n of numbered) {
       const ni = kids.indexOf(n);
       let els = [ni];
-      if (n.tag !== "p:grpSp") {
+      // 群組裡只有章節號＝那是圓圈（圓形＋號碼包成一個群組，「ALL 參訪版」的目錄就是），不是整張卡片：一樣去找它的底
+      if (n.tag !== "p:grpSp" || n.paras.every((t) => CHAPTER_NO.test(t))) {
         const c = center(n.box);
         const others = numbered.filter((m) => m !== n).map((m) => center(m.box));
         // 底上面要有這一章的標題（底自己寫著、或另一個文字框疊在上面）：圓圈底下另墊一個圓的話，那個圓不算底
