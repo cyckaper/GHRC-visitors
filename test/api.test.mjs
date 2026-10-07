@@ -209,7 +209,7 @@ test("public visit view exists without a token and leaks nothing personal", asyn
   assert.equal((await api(`/api/visits?id=2026-10-07-nope&public=1`)).status, 404);
 });
 
-test("產檔那一刻的行程指紋由伺服器蓋；行程一改就回報簡報過期", async () => {
+test("以前產過 .pptx 的那幾場：指紋照舊由伺服器蓋，但簡報改成網頁版之後不再回報過期", async () => {
   const put = (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
   const before = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit;
   assert.deepEqual((await api(`/api/visits?id=${visitId}`, { headers: admin })).body.stale, [], "還沒產過簡報，沒有什麼會過期");
@@ -217,9 +217,9 @@ test("產檔那一刻的行程指紋由伺服器蓋；行程一改就回報簡�
   const made = await put({ ...before, deck: { ...(before.deck || {}), generated_at: new Date().toISOString(), slides: 12 } });
   assert.ok(made.body.visit.deck.fingerprint, "伺服器蓋了指紋");
   assert.deepEqual(made.body.stale, [], "剛產出來的不算舊");
-  // 行程改了：手上那份 .pptx 的第 2 頁就錯了
+  // 行程改了：以前會說「手上那份 .pptx 是舊的」；現在每一場都用同一份網頁版簡報（/deck），沒有東西會過期
   const moved = await put({ ...made.body.visit, programme: [{ kind: "briefing", start: "11:00", end: "11:30", title_en: "Overview", title_2nd: "總體介紹", slides_range: "" }] });
-  assert.deepEqual(moved.body.stale.map((x) => x.key), ["deck"], JSON.stringify(moved.body.stale));
+  assert.deepEqual(moved.body.stale, [], JSON.stringify(moved.body.stale));
   assert.equal(moved.body.visit.deck.fingerprint, made.body.visit.deck.fingerprint, "沒有重新產檔就不要偷偷換掉指紋");
   // 重新產一次就乾淨了
   const again = await put({ ...moved.body.visit, deck: { ...moved.body.visit.deck, generated_at: new Date(Date.now() + 1000).toISOString() } });
@@ -353,11 +353,11 @@ test("signbook: photo stored, OCR entries returned, then saved as responses", as
   assert.equal(save.body.saved, 1);
 });
 
-test("materials: upload photo and PDF, public media, links; the thanks letter only promises what the page has", async () => {
+test("materials: upload photo and PDF, public media, links", async () => {
   const before = await runJob("letter", { visit_id: visitId, kind: "thanks", sender: "director" });
   assert.equal(before.status, 200, JSON.stringify(before.body));
-  assert.ok(!/PDF|photo/i.test(before.body.draft.body), "nothing uploaded yet → the letter must not promise slides or photos");
-  assert.ok(before.body.draft.body.includes(`https://visit.example.test/${visitId}`));
+  assert.ok(!/PDF|photo/i.test(before.body.draft.body), "the thanks letter does not talk about slides or photos");
+  assert.ok(before.body.draft.body.includes(`https://visit.example.test/${visitId}#respond`));
 
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
   const up = await api("/api/materials", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "upload", kind: "photo", name: "合照 group.JPG", data: `data:image/png;base64,${png.toString("base64")}` }) });
@@ -641,19 +641,24 @@ test("thanks letter: recipients = list + onsite, wording is the 請益 question,
   assert.ok(d.body.draft.body.includes("A single sentence is plenty."));
   assert.ok(d.body.draft.body.includes("#respond"));
   assert.ok(!/satisf|rate us|rating/i.test(d.body.draft.body));
-  assert.ok(/slides \(PDF\)/.test(d.body.draft.body) && /photos/.test(d.body.draft.body) && /materials we promised/.test(d.body.draft.body), "after uploading, the letter may mention the PDF, photos and the promised materials");
+  // 稱呼寫出每一位來賓的姓名與頭銜，主賓排第一（明確指示：「要把參訪者名字頭銜加進去」）
+  const guests = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit.guests.filter((g) => g.name);
+  const lead = guests.find((g) => g.role === "lead");
+  const firstLine = d.body.draft.body.split("\n")[0];
+  assert.ok(guests.slice(0, 6).every((g) => firstLine.includes(g.name) && (!g.title || firstLine.includes(g.title))), `the salutation names every guest with their title: ${firstLine}`);
+  assert.ok(!lead || firstLine.indexOf(lead.name) === Math.min(...guests.slice(0, 6).map((g) => firstLine.indexOf(g.name))), "…the principal guest first");
   // 答應提供的資料逐項列出：名稱＋點得開的完整網址（上傳的檔案換成站台上的網址）
   const promised = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit.materials.links;
+  // 精簡（明確指示）：簡報講過的、專頁上有什麼（老師的網頁、論文、聯絡方式、照片、簡報）都不提——
+  // 答應提供的那幾項（名稱是主辦端自己取的）與三個回應項目以外，信裡沒有別的
+  const prose = d.body.draft.body.split("────────")[0].split("\n").filter((line) => !promised.some((l) => line.includes(l.title))).join("\n");
+  assert.ok(!/slides|PDF|photos|contact details|papers|visit page|laborator(y|ies) you saw/i.test(prose), `the letter does not tour the visit page or recap the day: ${prose}`);
   assert.ok(promised.length >= 2);
   for (const l of promised) {
     const url = /^https?:/.test(l.url) ? l.url : `https://visit.example.test/api/media?key=${l.url}`;
     assert.ok(d.body.draft.body.includes(url), `the letter lists ${l.title} with its link`);
   }
   assert.ok(d.body.draft.body.indexOf("eco.example.org") < d.body.draft.body.indexOf("#respond"), "the promised materials come before the three questions");
-  // 頁面上真的有的才承諾：305 在 labs.json 有公開信箱（老師自己的 CV 上就印著），
-  // 其餘四間沒有，所以這一句在不在，要看這一場走到哪幾間
-  const has305 = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit.itinerary.some((s) => String(s.room) === "305");
-  assert.equal(/contact details/.test(d.body.draft.body), has305, "只有走到有公開信箱的那一間，信裡才提得到聯絡方式");
   const send = await runJob("letter", { visit_id: visitId, action: "send", subject: d.body.draft.subject, body: d.body.draft.body, recipients: rec.body.recipients });
   assert.equal(send.status, 200);
   assert.equal(send.body.sent, false);
@@ -880,6 +885,12 @@ test("後續提醒：依結束時間寄信給自己，一場只寄一次；沒�
   const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
   const v = (await put({ org: { name: "Reminder Normal University" }, date, code: "rmd", start_time: hhmm, duration_minutes: 60 })).body.visit;
   const later = (await put({ org: { name: "Tomorrow University" }, date, code: "tmr", start_time: "23:30", duration_minutes: 60 })).body.visit;
+
+  // 別的測試留下來的場次剛好也在這幾個小時內結束的話，一樣會被提醒，mail/last.json 就不是這一封了
+  // （2026-10-07 下午踩到：西澳大學那一場的日期就是那一天）。先當作都提醒過了，這個測試哪一天跑都一樣
+  for (const o of await getStore().listVisits()) {
+    if (o.visit_id !== v.visit_id && o.visit_id !== later.visit_id) await seed(o.visit_id, (x) => { x.reminders = { ...(x.reminders || {}), wrapup_sent_at: new Date().toISOString() }; });
+  }
 
   process.env.MAIL_MOCK = "1"; // 不真的打 Gmail：信會寫進媒體庫讓這裡讀
   try {

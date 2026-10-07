@@ -94,7 +94,6 @@ export default async (req: Request) => {
   }
   if (req.method !== "GET") return fail(405, "method not allowed");
 
-  const master = await getStore().getMedia("master/manifest.json");
   const to = await reminderTo();
   const gmail = await gmailReady();
   await ensureRotaKey(); // 打開設定就看得到連結，不必先按「產生」
@@ -111,7 +110,6 @@ export default async (req: Request) => {
       drive: await driveReady(),
       reminder: !!(gmail && to),
       store: getStore().backend,
-      master: !!master,
       // Google 連上了沒、哪個帳號、**現在能不能用**（過期了也要看得出來——以前寫「已設定」，備份停了兩週沒人知道）
       google: await googleStatus(req),
     },

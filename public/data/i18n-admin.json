@@ -801,7 +801,40 @@
   "主持人三十秒口述，或一項一項打重點；AI 寫成完整的參訪紀錄": "The host’s thirty seconds, or points typed one by one; the AI writes up the full record",
   "PDF、合照放上來賓專頁——感謝信只能承諾頁面上真的有的東西": "The PDF and photos on the guest page — the letter can only promise what is really there",
   "來賓回的三個問題、簽名簿留言": "The guests’ answers to the three questions, and signbook messages",
-  "存入": "Save"
+  "存入": "Save",
+  "同類單位上次怎麼排": "how similar organisations were scheduled last time",
+  "這一頁：網頁版簡報": "This page: the web slides",
+  "——每一場都用同一份，打開連結就能講，不必再挑頁、產 .pptx。當天與訪後，來賓專頁的「當天資料」也有這個連結。": " — every visit uses the same deck: open the link and present, no picking slides or building a .pptx. On the day and afterwards, the visit page links to it under “Materials from the visit”.",
+  "網頁版簡報": "Web slides",
+  "打開簡報": "Open the slides",
+  "複製連結": "Copy link",
+  "講的時候：F 全螢幕 · ← → 或簡報遙控器翻頁 · G 看全部頁面 · B 黑幕 · 打頁碼再按 Enter 跳到那一頁 · 手機、平板左右滑。": "While presenting: F full screen · ← → or a clicker to turn pages · G all slides · B black screen · type a slide number and Enter to jump there · swipe on a phone or tablet.",
+  "連結是公開的（不用登入），來賓也看得到；母簡報的講稿、上一場來賓的名字、今日流程那一頁都不在裡面。": "The link is public (no sign-in), so guests can open it too; the speaker notes, the previous guests' names and the programme slide are not in it.",
+  "每一頁": "Every slide",
+  "點一頁就從那一頁打開。▶ 是有影片的頁。": "Click a slide to open the deck there. ▶ marks a slide with a video.",
+  "母簡報裡沒有放進來的頁": "Slides of the master that were left out",
+  "母簡報改了": "When the master deck changes",
+  "網頁版是從 Google Drive 上的母簡報做出來的：每一頁轉成圖，影片壓縮後放在站台上。母簡報改版之後要重新產生一次（約十分鐘），網頁版不會自己跟著變——請維護系統的人處理。": "The web slides are made from the master deck on Google Drive: every slide becomes an image, and the videos are compressed and kept on the site. After the master changes the web version has to be rebuilt (about ten minutes); it does not follow along by itself — ask whoever maintains the system.",
+  "在新的分頁打開；按 F 全螢幕，簡報遙控器可以直接翻頁": "Opens in a new tab; press F for full screen, a clicker turns the pages",
+  "複製簡報的網址：每一場都是同一個，可以貼給來賓或同事": "Copy the address of the slides: it is the same for every visit, so you can pass it to guests or colleagues",
+  "# 頁": "# slides",
+  "# 支影片": "# videos",
+  "產生於": "built on",
+  "網頁版簡報還沒建好": "The web slides have not been built yet",
+  "要先從 Drive 上的母簡報做一次（見下面「母簡報改了」）": "they have to be made from the master deck on Drive first (see “When the master deck changes” below)",
+  "（共 # 頁）": "(# slides)",
+  "原第 # 頁": "Master slide #",
+  "今日流程（每一場不一樣，來賓專頁上有）": "today's programme (different for every visit; it is on the visit page)",
+  "隱藏的頁": "a hidden slide",
+  "source.json 指定不放": "left out in source.json",
+  "第 # 章（寫給某一團的）": "chapter # (written for one particular delegation)",
+  "簡報 PDF、合照放上來賓專頁，來賓自己點進去看（感謝信不另外介紹；答應提供給對方的檔案與連結在下面的感謝信那一張，信裡會逐項列出）。專頁：": "The slides PDF and photos go on the visit page for the guests to look at (the thank-you letter does not describe them; files and links you promised them are on the thank-you letter card below, and the letter lists them one by one). Visit page: ",
+  "稱呼寫出每一位來賓的姓名與頭銜，附上答應提供的資料，並請他們回三個問題——其他的不提，精簡。": "Addressed to every guest by name and title, with the materials you promised and the three questions — nothing else, kept short.",
+  "名片先讀進名單": "Read the business cards into the guest list first",
+  "：稱呼與收件人都照名單。": ": the greeting and the recipients both come from the list.",
+  "草擬感謝信：稱呼寫出每一位來賓的姓名與頭銜，列出答應提供的資料，放進三個回應項目的連結": "Draft the thank-you letter: every guest by name and title, the promised materials listed, and the link to the three questions",
+  "感謝信草稿：稱呼（每一位來賓的姓名與頭銜）、一兩句感謝、答應提供的資料（逐項列出）、三個回應項目（含請益語氣的開放建議欄位、可不具名）": "Thank-you letter draft: greeting (every guest by name and title), a line or two of thanks, the promised materials (one per line), and the three questions (including the open suggestion, which can be sent anonymously)",
+  "PDF、合照放上來賓專頁，來賓自己點進去看": "The PDF and photos on the visit page, for the guests to look at"
  },
  "patterns": [
   [
@@ -1239,6 +1272,14 @@
   [
    "^上傳中 (\\d+)／(\\d+)：(.+)…$",
    "Uploading $1 of $2: $3…"
+  ],
+  [
+   "^寫著「(.+)」$",
+   "marked “$1”"
+  ],
+  [
+   "^「(.+)」那一頁$",
+   "the “$1” slide"
   ]
  ]
 }

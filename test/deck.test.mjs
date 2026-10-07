@@ -640,9 +640,51 @@ test("目錄頁的卡片是一張一個群組、或沒有底的排法也認得�
   assert.ok(!/name="S7"/.test(xml), "01 的圓圈一起拿掉");
   assert.match(xml, /name="S8"\/>[\s\S]*?<a:off x="0" y="1000000"\/>/, "02 的圓圈搬到第一個位置");
 
+  // 「ALL 參訪版」的排法：底、圓圈、英文標題、中文標題是分開的形狀，圓圈是圓形＋號碼包成的小群組（以前只拿掉了圓圈，底與標題留著）
+  const circle = (id, x, y, r, no) => `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${id}" name="N${id}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr>${xfrm(x, y, r, r).replace("</a:xfrm>", `<a:chOff x="${x}" y="${y}"/><a:chExt cx="${r}" cy="${r}"/></a:xfrm>`)}</p:grpSpPr>${sp(id + 1, x, y, r, r)}${sp(id + 2, x, y, r, r, no)}</p:grpSp>`;
+  const split = (i, no, en, zh) => {
+    const y = 1000000 + i * 900000, id = 20 + i * 10;
+    return sp(id, 685800, y, 5257800, 786385) + circle(id + 1, 923544, y + 201168, 384049, no) + sp(id + 4, 1435607, y + 137160, 4000000, 300000, en) + sp(id + 5, 1435607, y + 438912, 4000000, 250000, zh);
+  };
+  const splitPage = page(sp(2, 0, 0, 9000000, 500000, "CONTENTS · 簡報架構") + split(0, "01", "Why Now", "為什麼是現在") + split(1, "02", "Core Proposition", "核心主張") + split(2, "09", "Responses to Your Questions", "提問回覆"));
+  d = await zipOf(splitPage);
+  assert.deepEqual(await d.contentsItems("ppt/slides/slide3.xml"), [{ no: "01", title: "Why Now" }, { no: "02", title: "Core Proposition" }, { no: "09", title: "Responses to Your Questions" }]);
+  assert.deepEqual(await d.keepContents("ppt/slides/slide3.xml", new Set(["01", "02"])), { all: ["01", "02", "09"], kept: ["01", "02"] });
+  xml = await d.text("ppt/slides/slide3.xml");
+  assert.ok(!/Responses to Your Questions|提問回覆|<a:t>09<|name="S40"|name="N41"/.test(xml), "09 那一張整張拿掉：底、圓圈、兩行標題");
+  assert.ok(/Core Proposition/.test(xml) && /name="S30"/.test(xml) && /name="N31"/.test(xml), "別張不動");
+  d = await zipOf(splitPage);
+  await d.keepContents("ppt/slides/slide3.xml", new Set(["02"]));
+  xml = await d.text("ppt/slides/slide3.xml");
+  assert.match(xml, /name="S30"\/>[\s\S]*?<a:off x="685800" y="1000000"\/>/, "02 的底搬到第一個位置");
+  assert.match(xml, /name="N31"\/>[\s\S]*?<a:off x="923544" y="1201168"\/>[\s\S]*?<a:chOff x="923544" y="2101168"\/>/, "圓圈的群組跟著搬（裡面的座標不動）");
+  assert.match(xml, /name="S34"\/>[\s\S]*?<a:off x="1435607" y="1137160"\/>[\s\S]*?Core Proposition/, "標題跟著搬");
+
+  // 角落寫死的頁碼（網頁版拿掉了幾頁，母簡報印的頁碼就比播放頁的多）：只換右下角那個小框，頁面中間的大數字不動
+  const size = { cx: 12192000, cy: 6858000 };
+  d = await zipOf(page(sp(2, 685800, 600000, 9000000, 500000, "Three Commitments") + sp(3, 685800, 2000000, 2000000, 1500000, "3") + sp(4, 685800, 6437376, 7315200, 127001, "Green Health Research Center") + sp(5, 10591495, 6437376, 914401, 139701, "3")));
+  assert.equal(await d.renumberPage("ppt/slides/slide3.xml", 3, 2, size), 1);
+  xml = await d.text("ppt/slides/slide3.xml");
+  assert.match(xml, /name="S5"\/>[\s\S]*?<a:t>2<\/a:t>/, "右下角的頁碼換成網頁版的頁數");
+  assert.match(xml, /name="S3"\/>[\s\S]*?<a:t>3<\/a:t>/, "頁面中間的大數字不動");
+  assert.equal(await d.renumberPage("ppt/slides/slide3.xml", 7, 6, size), 0, "印的不是這一頁的頁次就不動");
+
   // 一個文字框寫了好幾個章節號：認不出來，不動
   d = await zipOf(page(sp(2, 0, 0, 9000000, 500000, "Contents") + sp(3, 0, 1000000, 4000000, 3000000, "01", "Why Now", "02", "Core Proposition")));
   assert.equal(await d.keepContents("ppt/slides/slide3.xml", new Set(["02"])), null);
+
+  // 拿掉卡片之後標題還留著（號碼拿掉了、卡片的底與標題還在——2026-10「ALL 參訪版」的目錄）：連底一起拿掉，別張不動
+  d = await zipOf(page(sp(2, 0, 0, 9000000, 500000, "Contents") + sp(10, 0, 1000000, 4000000, 900000) + sp(11, 600000, 1100000, 3000000, 700000, "Why Now", "為什麼是現在") + sp(12, 0, 2000000, 4000000, 900000) + sp(13, 600000, 2100000, 3000000, 700000, "Responses to Your Questions", "提問回覆") + sp(14, 4200000, 2000000, 300000, 300000)));
+  assert.equal(await d.dropTextCards("ppt/slides/slide3.xml", ["Responses to Your Questions"]), 2);
+  xml = await d.text("ppt/slides/slide3.xml");
+  assert.ok(!/Responses to Your Questions|提問回覆|name="S12"/.test(xml), "標題與墊在底下的那一塊底一起拿掉");
+  assert.ok(/Why Now/.test(xml) && /name="S10"/.test(xml) && /name="S14"/.test(xml), "別張卡片與卡片外面的東西不動");
+  assert.equal(await d.dropTextCards("ppt/slides/slide3.xml", ["Responses to Your Questions"]), 0, "沒有就不動");
+  // 群組裡的：標題拿掉之後群組裡沒有字了，整個群組就是那一張卡片
+  d = await zipOf(page(sp(2, 0, 0, 9000000, 500000, "Contents") + card(0, "01", "Why Now") + card(1, "", "Responses to Your Questions")));
+  await d.dropTextCards("ppt/slides/slide3.xml", ["Responses to Your Questions"]);
+  xml = await d.text("ppt/slides/slide3.xml");
+  assert.ok(!/name="G1"|Responses/.test(xml) && /name="G0"/.test(xml));
 });
 
 test("產出的簡報不帶母簡報的講稿（寫給上一次來賓的），母簡報本身不動", { skip: !available && "fixture unavailable (python-pptx)" }, async () => {

@@ -1,0 +1,109 @@
+# 網頁版簡報 /deck：從母簡報做出每一頁的圖、影片與 public/data/deck.json，做好直接 commit 回同一條分支。
+# 觸發：scripts/web-deck/source.json 有改（換母簡報、改 exclude、或把 run 加一重跑）。
+# 為什麼在這裡跑：要 LibreOffice（pptx → PDF）與 ffmpeg；開發用的雲端環境裡 LibreOffice 開不了 pptx，
+# 也連不到 Google Drive 的下載網址（Drive 的連接一次只能下載 10 MB，母簡報 398 MB）。
+# source 是 "drive" 時，drive_id 是母簡報的**複本**（開成「知道連結的任何人都能檢視」），建好就把複本丟到垃圾桶。
+# 原始的母簡報不要開分享：講稿裡有上一場來賓的名字，而 drive_id 會寫進這個公開的 repo（見 CLAUDE.md「網頁版簡報」）。
+name: Web deck
+
+on:
+  push:
+    paths: ["scripts/web-deck/source.json"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: web-deck-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: web deck
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Python tools
+        run: pip install --quiet gdown pymupdf pillow python-pptx
+
+      # 先下載：母簡報開分享的時間越短越好
+      - name: Get the master deck
+        run: |
+          set -euo pipefail
+          SRC=$(python3 -c "import json;print(json.load(open('scripts/web-deck/source.json'))['source'])")
+          if [ "$SRC" = "drive" ]; then
+            ID=$(python3 -c "import json;print(json.load(open('scripts/web-deck/source.json'))['drive_id'])")
+            # gdown 處理大檔的「無法掃毒」確認頁（新版直接吃檔案 ID）；它不行就直接打 Drive 的下載網址再試一次
+            gdown --quiet "$ID" -O "$RUNNER_TEMP/master.pptx" \
+              || curl -sSL --fail -o "$RUNNER_TEMP/master.pptx" "https://drive.usercontent.google.com/download?id=${ID}&export=download&confirm=t" \
+              || { echo "::error::母簡報下載不到：Drive 上那個檔要先開成「知道連結的任何人都能檢視」"; exit 1; }
+            # 拿到的是網頁（登入頁＝還沒開分享）就把標題印出來，看得出是哪一種
+            if ! head -c 2 "$RUNNER_TEMP/master.pptx" | grep -q PK; then
+              echo "::error::下載到的不是 pptx（$(grep -o '<title>[^<]*' "$RUNNER_TEMP/master.pptx" | head -1 | sed 's/<title>//')）——Drive 上那個檔要開成「知道連結的任何人都能檢視」"
+              # 對照組：一個確定公開的 Drive 檔（gdown 說明文件裡的範例）。這個拿得到＝分享沒開；也拿不到＝Google 擋了這台機器
+              PROBE=$(curl -sSL -r 0-1 "https://drive.usercontent.google.com/download?id=1l_5RK28JRL19wpT22B-DY9We3TVXnnQQ&export=download&confirm=t" | head -c 2 | od -An -c | tr -d ' ')
+              echo "對照組（公開檔）開頭：${PROBE:-（空的）}——是 PK 就表示公開的檔下載得到"
+              exit 1
+            fi
+          else
+            sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg > /dev/null
+            python3 scripts/make-fixture.py "$RUNNER_TEMP/master.pptx"
+          fi
+          head -c 2 "$RUNNER_TEMP/master.pptx" | grep -q PK || { echo "::error::下載到的不是 pptx（多半是分享還沒打開）"; exit 1; }
+          ls -la "$RUNNER_TEMP/master.pptx"
+
+      - name: LibreOffice, ffmpeg, fonts
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends libreoffice-impress ffmpeg \
+            fonts-noto-cjk fonts-noto-cjk-extra fonts-crosextra-caladea fonts-crosextra-carlito fonts-liberation2 fontconfig > /dev/null
+          # 母簡報指定的中日韓字型這台沒有：換成 Noto CJK（不然 LibreOffice 會隨便挑一個）
+          mkdir -p ~/.config/fontconfig
+          cat > ~/.config/fontconfig/fonts.conf <<'XML'
+          <?xml version="1.0"?>
+          <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+          <fontconfig>
+            <alias><family>Microsoft JhengHei</family><prefer><family>Noto Sans CJK TC</family></prefer></alias>
+            <alias><family>微軟正黑體</family><prefer><family>Noto Sans CJK TC</family></prefer></alias>
+            <alias><family>Microsoft JhengHei UI</family><prefer><family>Noto Sans CJK TC</family></prefer></alias>
+            <alias><family>PMingLiU</family><prefer><family>Noto Serif CJK TC</family></prefer></alias>
+            <alias><family>新細明體</family><prefer><family>Noto Serif CJK TC</family></prefer></alias>
+            <alias><family>MingLiU</family><prefer><family>Noto Serif CJK TC</family></prefer></alias>
+            <alias><family>DFKai-SB</family><prefer><family>Noto Serif CJK TC</family></prefer></alias>
+            <alias><family>標楷體</family><prefer><family>Noto Serif CJK TC</family></prefer></alias>
+            <alias><family>Malgun Gothic</family><prefer><family>Noto Sans CJK KR</family></prefer></alias>
+            <alias><family>Yu Gothic</family><prefer><family>Noto Sans CJK JP</family></prefer></alias>
+            <alias><family>Meiryo</family><prefer><family>Noto Sans CJK JP</family></prefer></alias>
+          </fontconfig>
+          XML
+          fc-cache -f > /dev/null
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build the web deck
+        run: node scripts/web-deck/build.mjs "$RUNNER_TEMP/master.pptx"
+
+      - name: Commit
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A public/assets/deck public/data/deck.json
+          if git diff --cached --quiet; then echo "nothing changed"; exit 0; fi
+          VERSION=$(python3 -c "import json;print(json.load(open('public/data/deck.json'))['version'])")
+          git commit -q -m "網頁版簡報：從母簡報重新產生（${VERSION}）"
+          git push
