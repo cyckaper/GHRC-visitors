@@ -824,3 +824,30 @@ test("答應提供的資料：網址或上傳的檔案；信裡用完整的網�
   assert.equal(needsSummary(past, [], new Date("2026-02-01")), true);
   assert.equal(needsSummary({ ...past, summary_at: "2026-01-04T00:00:00Z" }, [], new Date("2026-02-01")), false);
 });
+
+test("地圖上點旁邊的名稱：網頁上截在 15 個字寬，畫成簡報那一頁的圖時放得下長一點（labelWidth）", async () => {
+  const { shortLabel } = await import("../public/lib/worldmap.mjs");
+  const en = "Norwegian University of Science and Technology";
+  // 網頁上的地圖只有一欄寬：截短，而且截在字與字之間（不要切在單字中間）
+  assert.ok(shortLabel(en).endsWith("…"));
+  assert.ok(!/\s…$/.test(shortLabel(en)), "截在字與字之間，不留一個空白在刪節號前面");
+  assert.ok(en.startsWith(shortLabel(en).replace("…", "")));
+  // 簡報那一頁的圖寬得多：整個正式名稱放得下，不然滿頁都是「University of…」
+  assert.equal(shortLabel(en, 30), en);
+  // 中日韓字算一個字寬、西文算 0.58
+  assert.equal(shortLabel("訪客來自哪裡", 6), "訪客來自哪裡");
+  assert.ok(shortLabel("訪客來自哪裡", 5).endsWith("…"));
+});
+
+test("母簡報地圖頁的形狀名稱是約定：build.mjs 認 GHRC_MAP，deck.html 才疊得上活的地圖", () => {
+  const build = readFileSync("scripts/web-deck/build.mjs", "utf8");
+  const deck = readFileSync("public/deck.html", "utf8");
+  const insert = readFileSync("scripts/map-slide/insert.py", "utf8");
+  assert.ok(/name="GHRC_MAP"/.test(build), "build.mjs 要認 GHRC_MAP");
+  assert.ok(/MAP_NAME = "GHRC_MAP"/.test(insert), "insert.py 放進去的形狀要叫 GHRC_MAP");
+  assert.ok(/entry\.map = \{/.test(build), "deck.json 要記下地圖那張圖的位置");
+  assert.ok(/s\.map/.test(deck) && /\/api\/visitor-map/.test(deck), "deck.html 要照 map 的位置掛活的地圖");
+  // 公開的那一支：地圖頁只拿得到單位、位置與來過幾次，名單與日期不在裡面（跟首頁同一條規矩）
+  const fn = readFileSync("netlify/functions/visitor-map.mts", "utf8");
+  for (const leak of ["guests", "email", "purpose", "background"]) assert.ok(!fn.includes(`${leak}:`), `visitor-map 不給 ${leak}`);
+});

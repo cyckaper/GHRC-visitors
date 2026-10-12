@@ -22,6 +22,10 @@
   #slide { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; user-select: none; -webkit-user-select: none; -webkit-user-drag: none; }
   #media > * { position: absolute; }
   #media video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+  /* 地圖頁：母簡報那一頁放的是一張畫好的圖，這裡把活的疊在同一個位置上（來訪單位一加進系統就跟著變）。
+     不給點、不給縮放——現場是投影，點一下要翻頁，不是去拖地圖 */
+  #livemap { position: absolute; pointer-events: none; font-family: inherit; --wm-dot: #0f766e; }
+  #livemap svg { border: 0 !important; border-radius: 0 !important; }
   #media a { display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, .55); color: #fff; text-decoration: none; font-size: clamp(14px, 2vw, 22px); border-radius: 8px; }
   #black { position: absolute; inset: 0; background: #000; }
   #bar { height: var(--bar); flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px calc(env(safe-area-inset-bottom) * .5); background: #0c0a09; border-top: 1px solid #292524; transition: opacity .25s; }
@@ -57,6 +61,7 @@
 <main id="stage">
   <div id="frame" hidden>
     <img id="slide" alt="">
+    <div id="livemap" hidden></div>
     <div id="media"></div>
     <div id="black" hidden></div>
   </div>
@@ -87,8 +92,8 @@
   if (ui !== "zh" && ui !== "en") { try { ui = localStorage.getItem(UI_KEY); } catch (e) { ui = null; } }
   if (ui !== "zh") ui = "en";
   const T = {
-    en: { title: "GHRC Slides", prev: "Previous slide", next: "Next slide", grid: "All slides", full: "Full screen", exit: "Exit full screen", close: "Close", home: "Green Health Research Center", all: "All slides", empty: "The web version of the slides is not ready yet.", back: "Green Health Research Center", video: "▶ Play video", slide: (n, t) => `Slide ${n} of ${t}`, hint: "← → or a clicker to turn pages · F full screen · G all slides", hintTouch: "Swipe to turn pages" },
-    zh: { title: "GHRC 簡報", prev: "上一頁", next: "下一頁", grid: "全部頁面", full: "全螢幕", exit: "離開全螢幕", close: "關閉", home: "綠色健康研究中心", all: "全部頁面", empty: "網頁版簡報還沒建好。", back: "綠色健康研究中心", video: "▶ 播放影片", slide: (n, t) => `第 ${n} 頁，共 ${t} 頁`, hint: "← → 或簡報遙控器翻頁 · F 全螢幕 · G 看全部頁面", hintTouch: "左右滑動翻頁" },
+    en: { title: "GHRC Slides", prev: "Previous slide", next: "Next slide", grid: "All slides", full: "Full screen", exit: "Exit full screen", close: "Close", home: "Green Health Research Center", all: "All slides", empty: "The web version of the slides is not ready yet.", back: "Green Health Research Center", video: "▶ Play video", slide: (n, t) => `Slide ${n} of ${t}`, hint: "← → or a clicker to turn pages · F full screen · G all slides", hintTouch: "Swipe to turn pages", mapAria: "World map of where our visitors come from" },
+    zh: { title: "GHRC 簡報", prev: "上一頁", next: "下一頁", grid: "全部頁面", full: "全螢幕", exit: "離開全螢幕", close: "關閉", home: "綠色健康研究中心", all: "全部頁面", empty: "網頁版簡報還沒建好。", back: "綠色健康研究中心", video: "▶ 播放影片", slide: (n, t) => `第 ${n} 頁，共 ${t} 頁`, hint: "← → 或簡報遙控器翻頁 · F 全螢幕 · G 看全部頁面", hintTouch: "左右滑動翻頁", mapAria: "訪客來自哪裡的世界地圖" },
   }[ui];
   document.documentElement.lang = ui === "zh" ? "zh-Hant" : "en";
   document.title = T.title;
@@ -130,6 +135,7 @@
         $("media").append(a);
       }
     }
+    liveMap(s);
     $("count").textContent = `${n + 1} / ${deck.slides.length}`;
     $("prev").disabled = n === 0;
     $("next").disabled = n === deck.slides.length - 1;
@@ -140,6 +146,42 @@
     for (const b of $("thumbs").children) b.setAttribute("aria-current", String(Number(b.dataset.i) === n));
   }
   const step = (d) => { if (!$("black").hidden) $("black").hidden = true; show(i + d); };
+
+  /**
+   * 地圖頁：母簡報那一頁放的是一張畫好的圖（`scripts/map-slide/` 產的），這裡把**活的**疊在同一個位置上
+   * （`deck.json` 的 `map`，跟影片一樣是佔投影片寬高的比例）。來訪單位一加進系統，打開 /deck 這一頁就是最新的，
+   * 不必為了一張地圖重建整份簡報。資料走公開的 `/api/visitor-map`（只有單位、位置與來過幾次，不必登入），
+   * 畫法跟後台「資料」分頁、中心首頁同一支 `/lib/worldmap.mjs`——三個地方不會各長各的。
+   * **載不到就維持圖上那一張**（現場網路不一定好，這一頁本來就不該為了一張地圖開天窗）。
+   */
+  let mapReady = null;
+  function liveMap(s) {
+    const el = $("livemap");
+    if (!s.map) { el.hidden = true; return; }
+    el.style.cssText = `left:${s.map.x * 100}%;top:${s.map.y * 100}%;width:${s.map.w * 100}%;height:${s.map.h * 100}%`;
+    el.hidden = false; // 要先有寬度，地圖才量得到要畫多大
+    mapReady ||= (async () => {
+      const [W, data] = await Promise.all([import("/lib/worldmap.mjs"), fetch("/api/visitor-map").then((r) => r.json())]);
+      const world = await W.loadWorld();
+      const by = new Map();
+      for (const it of (data && data.institutions) || []) {
+        const at = W.placeOf(world, { country: it.country, geo: it.geo });
+        if (!at) continue; // 國名對不到、也還沒查到位置：跟公開頁一樣先不畫
+        const key = `${W.normCountry(it.name)}|${W.normCountry(at.country)}`;
+        const p = by.get(key) || { key, name: it.name, local: it.local || "", x: at.x, y: at.y, approx: at.approx, n: 0 };
+        p.n += Number(it.visits) || 1;
+        by.set(key, p);
+      }
+      const points = [...by.values()];
+      if (!points.length) throw new Error("no points");
+      // 名稱照這一頁的語言；投影出來比網頁上的地圖寬得多，英文正式名稱放得下長一點
+      const nameOf = (p) => (ui === "zh" && /[一-鿿]/.test(p.local) ? p.local : p.name);
+      W.mountWorldMap(el, world, { ariaLabel: T.mapAria, labelWidth: ui === "zh" ? 16 : 30 })
+        .setPoints(points.map((p) => ({ ...p, label: nameOf(p), title: nameOf(p) })));
+      return true;
+    })().catch(() => false);
+    mapReady.then((ok) => { el.hidden = !ok || !deck.slides[i].map; });
+  }
 
   // 全螢幕：現場接投影機用。按鈕列與滑鼠游標不動一陣子就藏起來，動一下再出現
   const isFull = () => !!(document.fullscreenElement || document.webkitFullscreenElement);

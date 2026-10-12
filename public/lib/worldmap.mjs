@@ -72,13 +72,18 @@ export function placeOf(world, { country, geo } = {}) {
 
 const WIDE = /[⺀-鿿가-힯぀-ヿ＀-￯]/;
 const textWidth = (s) => [...s].reduce((w, ch) => w + (WIDE.test(ch) ? 1 : 0.58), 0);
-/** 點旁邊的字太長就截短（完整的名稱在點一下之後的清單裡）。英文截在字與字之間（「University of Western…」）。 */
-export function shortLabel(s) {
+/**
+ * 點旁邊的字太長就截短（完整的名稱在點一下之後的清單裡）。英文截在字與字之間（「University of Western…」）。
+ * `max` 是「幾個全形字寬」：網頁上的地圖只有一欄寬，15 個字就頂到別的點了；畫成簡報那一頁的圖時整張是
+ * 一千六百多像素寬，放得下長一點的英文正式名稱（`mountWorldMap` 的 `labelWidth`）——不然滿頁都是
+ * 「University of…」「French Ministry of…」，看不出是誰。
+ */
+export function shortLabel(s, max = 15) {
   let w = 0;
   let out = "";
   for (const ch of String(s || "")) {
     w += WIDE.test(ch) ? 1 : 0.58;
-    if (w > 15) return `${(/\s/.test(out) && !WIDE.test(out) ? out.replace(/\s+\S*$/, "") : out).trimEnd()}…`;
+    if (w > max) return `${(/\s/.test(out) && !WIDE.test(out) ? out.replace(/\s+\S*$/, "") : out).trimEnd()}…`;
     out += ch;
   }
   return out;
@@ -119,7 +124,8 @@ let detailFailed = false;
  * @param {HTMLElement} root
  * @param {object} world loadWorld() 的結果
  * @param {{ariaLabel?: string, controls?: {zoomIn?: HTMLElement, zoomOut?: HTMLElement, reset?: HTMLElement},
- *          onPick?: (keys: string[]) => void, clusterTitle?: (members: object[]) => string}} opts
+ *          onPick?: (keys: string[]) => void, clusterTitle?: (members: object[]) => string,
+ *          labelWidth?: number}} opts 點旁邊的名稱最多幾個全形字寬（預設 15，見 shortLabel）
  */
 export function mountWorldMap(root, world, opts = {}) {
   injectStyle();
@@ -165,7 +171,7 @@ export function mountWorldMap(root, world, opts = {}) {
     const labels = [];
     for (const c of clusters) {
       if (c.members.length !== 1) continue; // 群集的數字已經寫在圈裡
-      const text = shortLabel(c.members[0].label);
+      const text = shortLabel(c.members[0].label, opts.labelWidth);
       if (!text) continue;
       const w = textWidth(text) * FS;
       const r = radius(c);

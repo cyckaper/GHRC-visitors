@@ -810,6 +810,7 @@
   "複製連結": "Copy link",
   "講的時候：F 全螢幕 · ← → 或簡報遙控器翻頁 · G 看全部頁面 · B 黑幕 · 打頁碼再按 Enter 跳到那一頁 · 手機、平板左右滑。": "While presenting: F full screen · ← → or a clicker to turn pages · G all slides · B black screen · type a slide number and Enter to jump there · swipe on a phone or tablet.",
   "連結是公開的（不用登入），來賓也看得到；母簡報的講稿、上一場來賓的名字、今日流程那一頁都不在裡面。": "The link is public (no sign-in), so guests can open it too; the speaker notes, the previous guests' names and the programme slide are not in it.",
+  "地圖那一頁是活的：跟「資料」分頁上面那張「訪客來自哪裡」同一份資料，來訪單位一加進來，打開簡報就是最新的，不必重新產生。母簡報 .pptx 裡的那一張是圖，要更新請維護系統的人重跑一次。": "The map slide is live: it shows the same “Where our visitors come from” data as the Data tab. Add a visiting institution and the slides are up to date next time you open them — no rebuild needed. The copy inside the master .pptx is a picture; ask whoever maintains the system to refresh it.",
   "每一頁": "Every slide",
   "點一頁就從那一頁打開。▶ 是有影片的頁。": "Click a slide to open the deck there. ▶ marks a slide with a video.",
   "母簡報裡沒有放進來的頁": "Slides of the master that were left out",

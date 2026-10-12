@@ -100,6 +100,38 @@ function mediaPics(xml) {
   return out;
 }
 
+/**
+ * 「訪客來自哪裡」那張地圖在這一頁的哪裡（投影片座標，EMU；在群組裡的換算過），沒有就是 null。
+ * 母簡報那一頁放的是一張畫好的圖（`scripts/map-slide/`），形狀的名稱叫 `GHRC_MAP`；
+ * `/deck` 認出它，就把**活的**地圖疊在同一個位置上——來訪單位一加進系統，網頁版這一頁自己就變了，
+ * 不必為了一張地圖重建整份簡報（.pptx 裡只能放圖，所以那邊還是要重跑 `scripts/map-slide/`）。
+ */
+function mapBox(xml) {
+  const groups = [];
+  const re = /<p:grpSp>|<\/p:grpSp>|<p:pic>[\s\S]*?<\/p:pic>|<p:sp>[\s\S]*?<\/p:sp>/g;
+  for (let m = re.exec(xml); m; m = re.exec(xml)) {
+    const tok = m[0];
+    if (tok === "<p:grpSp>") {
+      const pr = /<p:grpSpPr\b[^>]*>([\s\S]*?)<\/p:grpSpPr>/.exec(xml.slice(m.index, m.index + 6000));
+      groups.push(pr ? groupXfrm(pr[1]) : null);
+      continue;
+    }
+    if (tok === "</p:grpSp>") { groups.pop(); continue; }
+    if (!/<p:cNvPr\b[^>]*\bname="GHRC_MAP"/.test(tok)) continue;
+    const xf = /<a:off x="(-?\d+)" y="(-?\d+)"\/>\s*<a:ext cx="(\d+)" cy="(\d+)"\/>/.exec(tok);
+    if (!xf) continue;
+    let [x, y, w, h] = xf.slice(1).map(Number);
+    for (let i = groups.length - 1; i >= 0; i--) {
+      const g = groups[i];
+      if (!g) continue;
+      const sx = g.chExt[0] ? g.ext[0] / g.chExt[0] : 1, sy = g.chExt[1] ? g.ext[1] / g.chExt[1] : 1;
+      x = g.off[0] + (x - g.chOff[0]) * sx; y = g.off[1] + (y - g.chOff[1]) * sy; w *= sx; h *= sy;
+    }
+    return { x, y, w, h };
+  }
+  return null;
+}
+
 /** 影片物件變成一張普通的圖（LibreOffice 才會畫出海報影格），播放的設定與自動播放的 timing 拿掉。 */
 function stripMedia(xml, pics) {
   let out = xml;
@@ -313,6 +345,9 @@ await mkdir(OUT, { recursive: true });
 const media = new Map(); // part → { file, n }
 for (const s of kept) {
   const xml = await deck.text(s.path);
+  // 地圖頁：記下那張圖的位置，/deck 把活的地圖疊上去（圖本身留著——.pptx、PDF、縮圖都要看得到）
+  s.map = mapBox(xml);
+  if (s.map) (report.live_map ||= []).push(s.n);
   const pics = mediaPics(xml);
   if (!pics.length) continue;
   const rels = new Map((await deck.rels(s.path)).map((r) => [r.id, r]));
@@ -383,6 +418,8 @@ for (const [i, s] of kept.entries()) {
   const k = String(i + 1).padStart(2, "0");
   const paras = (await deck.paragraphs(s.path)).map((t) => t.trim()).filter(Boolean);
   const entry = { n: i + 1, src: s.n, img: `${WEB}/s${k}.webp`, thumb: `${WEB}/t${k}.webp`, title: s.title, text: paras.join("\n").slice(0, 1500), block: s.block, chapter: s.chapter };
+  // 地圖頁：位置照影片那一套（佔投影片寬高的比例），deck.html 把活的地圖疊在同一個位置上
+  if (s.map) entry.map = { x: +(s.map.x / size.cx).toFixed(5), y: +(s.map.y / size.cy).toFixed(5), w: +(s.map.w / size.cx).toFixed(5), h: +(s.map.h / size.cy).toFixed(5) };
   if (s.media?.length) {
     entry.media = [];
     for (const [j, m] of s.media.entries()) {
@@ -407,7 +444,7 @@ for (const [i, s] of kept.entries()) {
 const dir = path.join(ROOT, "public/assets/deck");
 for (const name of await readdir(dir)) if (name !== VERSION && (await stat(path.join(dir, name))).isDirectory()) await rm(path.join(dir, name), { recursive: true, force: true });
 const deckJson = {
-  _comment: "網頁版簡報 /deck 的頁序與每一頁的圖、字、影片位置（x、y、w、h 是佔投影片寬高的比例）。由 scripts/web-deck/build.mjs 從母簡報產生，不要手改；母簡報改版就改 scripts/web-deck/source.json 重跑（見 CLAUDE.md）。",
+  _comment: "網頁版簡報 /deck 的頁序與每一頁的圖、字、影片位置（x、y、w、h 是佔投影片寬高的比例；map 是地圖頁那張圖的位置，/deck 在那裡疊一張活的世界地圖）。由 scripts/web-deck/build.mjs 從母簡報產生，不要手改；母簡報改版就改 scripts/web-deck/source.json 重跑（見 CLAUDE.md）。",
   version: VERSION,
   // 不記 Drive 的檔案 ID：這一份是公開的，用不到就不放
   // hash＝從哪一份 source.json 建的：合併到 main 時 workflow 看到一樣就不再建（scripts/web-deck/needs-build.mjs）
