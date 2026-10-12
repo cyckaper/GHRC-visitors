@@ -38,6 +38,8 @@ export interface Store {
   putMedia(key: string, bytes: Uint8Array, contentType: string, name?: string): Promise<void>;
   getMedia(key: string): Promise<{ bytes: Uint8Array; contentType: string; name?: string } | null>;
   deleteMedia(key: string): Promise<void>;
+  /** 某個前綴底下的媒體 key（只有清理暫存用得到：讀信抽取上傳到一半就關掉的截圖）。 */
+  listMedia(prefix: string): Promise<string[]>;
 }
 
 export type VisitChange = (v: Visit) => Visit | void | false | Promise<Visit | void | false>;
@@ -140,6 +142,18 @@ function fileMedia() {
     async deleteMedia(key: string) {
       const file = path.join(storeDir(), "media", key);
       await Promise.allSettled([unlink(file), unlink(`${file}.meta.json`)]);
+    },
+    async listMedia(prefix: string) {
+      const root = path.join(storeDir(), "media");
+      const dir = path.join(root, prefix.replace(/[^/]*$/, ""));
+      try {
+        const files = (await readdir(dir, { recursive: true })) as string[];
+        return files
+          .map((f) => path.relative(root, path.join(dir, f)).split(path.sep).join("/"))
+          .filter((k) => k.startsWith(prefix) && !k.endsWith(".meta.json") && !k.endsWith(".tmp"));
+      } catch {
+        return [];
+      }
     },
   };
 }
@@ -281,6 +295,10 @@ function blobsMedia() {
     async deleteMedia(key: string) {
       const s = await blobStore();
       await s.delete(`media/${key}`);
+    },
+    async listMedia(prefix: string) {
+      const { blobs } = await listLatest(`media/${prefix}`);
+      return blobs.map((b) => b.key.slice("media/".length));
     },
   };
 }
@@ -496,7 +514,7 @@ function parseJSON<T>(s: string, fallback: T): T {
   }
 }
 
-function sheetsStore(media: { putMedia: Store["putMedia"]; getMedia: Store["getMedia"]; deleteMedia: Store["deleteMedia"] }): Store {
+function sheetsStore(media: { putMedia: Store["putMedia"]; getMedia: Store["getMedia"]; deleteMedia: Store["deleteMedia"]; listMedia: Store["listMedia"] }): Store {
   const responseRow = (r: ResponseRow) => SHEETS.responses.map(([k]) => cell((r as any)[k]));
   const perfRow = (p: SlidePerf) => SHEETS.slide_performance.map(([k]) => cell((p as any)[k]));
   const toResponse = (o: Record<string, string>): ResponseRow => ({

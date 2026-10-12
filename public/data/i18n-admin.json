@@ -834,7 +834,25 @@
   "：稱呼與收件人都照名單。": ": the greeting and the recipients both come from the list.",
   "草擬感謝信：稱呼寫出每一位來賓的姓名與頭銜，列出答應提供的資料，放進三個回應項目的連結": "Draft the thank-you letter: every guest by name and title, the promised materials listed, and the link to the three questions",
   "感謝信草稿：稱呼（每一位來賓的姓名與頭銜）、一兩句感謝、答應提供的資料（逐項列出）、三個回應項目（含請益語氣的開放建議欄位、可不具名）": "Thank-you letter draft: greeting (every guest by name and title), a line or two of thanks, the promised materials (one per line), and the three questions (including the open suggestion, which can be sent anonymously)",
-  "PDF、合照放上來賓專頁，來賓自己點進去看": "The PDF and photos on the visit page, for the guests to look at"
+  "PDF、合照放上來賓專頁，來賓自己點進去看": "The PDF and photos on the visit page, for the guests to look at",
+  "貼上 email、簡訊或 LINE 截圖，AI 抽取背景": "Paste an email, or text-message / LINE screenshots — AI reads the background",
+  "加截圖或檔案": "Add screenshots or files",
+  "手機截圖（簡訊、LINE）一段對話截了幾張就放幾張；名單檔可以是 Word、Excel、CSV、PDF（.doc／.xls 請先另存新格式）": "Phone screenshots (text messages, LINE): add every screenshot of the conversation. Guest lists can be Word, Excel, CSV or PDF (save .doc/.xls in the newer format first)",
+  "把 email 往來（含轉寄、簽名檔）整段貼進來。簡訊、LINE 的手機截圖可以直接貼在這裡，或拖進這一區": "Paste the whole email thread (forwards and signatures included). Phone screenshots of text messages or LINE can be pasted right here, or dragged into this box",
+  "簡訊、LINE 來的申請常常只有電話；名片上讀到的電話也在這裡": "Requests by text message or LINE often come with only a phone number; numbers read from business cards go here too",
+  "長截圖，會切成 # 段來讀": "long screenshot — read in # parts",
+  "截圖切完共 # 張，一次最多 # 張：請分兩次讀，或只留跟參訪有關的那幾張": "That makes # screenshot images, and at most # can be read at once — read them in two goes, or keep only the ones about the visit",
+  "一次最多 # 個附件": "At most # attachments at a time",
+  "請貼上 email 內容、手機截圖或名單檔": "Paste an email, a phone screenshot or a guest list first",
+  "附件加起來太大（超過 # MB）：請分兩次讀，或少放幾張": "The attachments add up to more than # MB — read them in two goes, or use fewer",
+  "上傳附件中……（#／#）": "Uploading attachments… (#/#)",
+  "上傳失敗，請再按一次": "The upload failed — please press it again",
+  "拿掉這一個": "Remove this one",
+  "聯絡人只有電話、沒有 email：確認信按「複製信件」，貼回簡訊或 LINE 給他。": "The contact has only a phone number, no email: press “Copy letter” and paste the confirmation back into the text message or LINE chat.",
+  "貼上的截圖 #": "Pasted screenshot #",
+  "已讀（# 字）": "Read (# characters)",
+  "已讀（照片交給 AI 直接讀）": "Read (the image goes straight to the AI)",
+  "已讀（PDF 交給 AI 直接讀）": "Read (the PDF goes straight to the AI)"
  },
  "patterns": [
   [
@@ -1280,6 +1298,26 @@
   [
    "^「(.+)」那一頁$",
    "the “$1” slide"
+  ],
+  [
+   "^貼上的截圖 (\\d+)（第 (\\d+)／(\\d+) 段）\\.(\\w+)$",
+   "Pasted screenshot $1 (part $2 of $3).$4"
+  ],
+  [
+   "^(.+)（第 (\\d+)／(\\d+) 段）\\.(\\w+)$",
+   "$1 (part $2 of $3).$4"
+  ],
+  [
+   "^貼上的截圖 (\\d+)\\.(\\w+)$",
+   "Pasted screenshot $1.$2"
+  ],
+  [
+   "^(.+) 讀不出來（檔案可能壞了，或不是照片）$",
+   "Could not read $1 (the file may be damaged, or it is not a photo)"
+  ],
+  [
+   "^(.+)：瀏覽器處理不了這張圖$",
+   "$1: the browser could not process this image"
   ]
  ]
 }

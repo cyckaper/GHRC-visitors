@@ -28,8 +28,9 @@
 
 **排程（Netlify Scheduled Functions，`export const config = { schedule }`）**：`summary-cron`（台北一點：過完又有回饋的參訪自己產一頁摘要）、
 `drive-cron`（兩點：備份補漏）、`reminder-cron`（台北 08:00–21:59 每十五分鐘：參訪結束時寄後續提醒）、
-`visit-list-cron`（每十五分鐘：參訪名單的 Google 試算表有人加了列就讀進來）。
-四支都只接受 Netlify 排程器送來的 `POST {next_run}`，或帶 `ADMIN_TOKEN` 的手動觸發；被擋下來時函式紀錄會寫明原因。
+`visit-list-cron`（每十五分鐘：參訪名單的 Google 試算表有人加了列就讀進來）、
+`extract-sweep-cron`（每小時：讀信抽取上傳了卻沒讀成的截圖，放上去超過一小時就刪）。
+五支都只接受 Netlify 排程器送來的 `POST {next_run}`，或帶 `ADMIN_TOKEN` 的手動觸發；被擋下來時函式紀錄會寫明原因。
 
 **金鑰安全**：所有金鑰只在 Netlify Functions 裡使用，前端只拿 `ADMIN_TOKEN`（登入後換成 HttpOnly cookie）。
 
