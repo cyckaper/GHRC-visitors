@@ -852,7 +852,13 @@
   "貼上的截圖 #": "Pasted screenshot #",
   "已讀（# 字）": "Read (# characters)",
   "已讀（照片交給 AI 直接讀）": "Read (the image goes straight to the AI)",
-  "已讀（PDF 交給 AI 直接讀）": "Read (the PDF goes straight to the AI)"
+  "已讀（PDF 交給 AI 直接讀）": "Read (the PDF goes straight to the AI)",
+  "選相簿或檔案裡的照片": "Choose from photos or files",
+  "HEIC 照片轉成 JPEG 中……一張大約五秒。": "Converting the HEIC photo to JPEG… about five seconds per photo.",
+  "HEIC 照片還在轉成 JPEG，轉好了再按一次": "The HEIC photo is still being converted to JPEG — press again once it is done",
+  "HEIC 的轉檔程式沒有載入成功（網路不穩？）：請重新整理後台再試一次": "The HEIC converter did not load (unstable network?): reload the admin page and try again",
+  "這不是照片：簽名簿請選一張照片": "This is not a photo: pick a photo of the sign-in book",
+  "簽名簿請上傳照片": "Please upload a photo of the sign-in book"
  },
  "patterns": [
   [
@@ -1260,8 +1266,8 @@
    "$1 is a HEIC photo that could not be turned into a JPEG: export it as JPEG from your photo library and pick it again"
   ],
   [
-   "^這張照片是 HEIC：請重新整理後台再選一次（後台會自動轉成 JPEG），或在相簿裡匯出成 JPEG$",
-   "This photo is HEIC: reload the admin page and pick it again (it is converted to JPEG automatically), or export it as JPEG from your photo library"
+   "^這張照片是 HEIC，沒有先在瀏覽器裡轉成 JPEG：請重新整理後台再選一次（後台會自動轉）；還是不行，請在相簿裡把它匯出成 JPEG$",
+   "This photo is HEIC and was not converted to JPEG in the browser: reload the admin page and pick it again (it converts automatically); if that still fails, export it as JPEG from your photo library"
   ],
   [
    "^重點已存（(.+)）$",
@@ -1318,6 +1324,14 @@
   [
    "^(.+)：瀏覽器處理不了這張圖$",
    "$1: the browser could not process this image"
+  ],
+  [
+   "^(.+) 轉了兩分鐘還沒好：請重新整理後台再試一次，或在相簿裡把它匯出成 JPEG$",
+   "$1 was still converting after two minutes: reload the admin page and try again, or export it as JPEG from your photo library"
+  ],
+  [
+   "^(.+)：這一格放不進這種檔案$",
+   "$1: this kind of file cannot go here"
   ]
  ]
 }

@@ -19,9 +19,27 @@ export function json(data: unknown, init: ResponseInit = {}): Response {
 /**
  * HEIC／HEIF 照片（iPhone、iPad 拍的）伺服器不收：Claude 讀不了，存起來來賓專頁上 Chrome 也看不到。
  * 後台在瀏覽器裡就先轉成 JPEG（admin.html 的 `decodableImage`）；走到這裡的是還開著舊版後台的分頁。
+ * 給了 bytes 就**連內容一起看**（`isHeifBytes`）：類型寫 image/jpeg、副檔名是 .jpg，內容卻是 HEIC 的也擋得到——
+ * 不然存起來的是一張誰都打不開的「JPEG」，交給 Claude 也會整個請求退回。
  */
-export function rejectHeic(mediaType: string): Response | null {
-  return /^image\/hei[cf]/i.test(mediaType) ? fail(415, "這張照片是 HEIC：請重新整理後台再選一次（後台會自動轉成 JPEG），或在相簿裡匯出成 JPEG") : null;
+export function rejectHeic(mediaType: string, bytes?: Uint8Array): Response | null {
+  return /^image\/hei[cf]/i.test(mediaType) || (bytes && isHeifBytes(bytes))
+    ? fail(415, "這張照片是 HEIC，沒有先在瀏覽器裡轉成 JPEG：請重新整理後台再選一次（後台會自動轉）；還是不行，請在相簿裡把它匯出成 JPEG")
+    : null;
+}
+
+/** HEVC 編碼的 HEIF（iPhone 的 HEIC、Sony／Canon 的 .hif）。AVIF 也是 HEIF 容器，但瀏覽器與 Claude 都讀得了，不算。 */
+const HEVC_BRANDS = new Set(["heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs"]);
+/** 看檔案開頭的 ftyp：主要 brand 或相容 brand 裡有 HEVC 的就是；只寫 mif1／msf1、又沒標 avif 的也算（一般的 HEIF）。 */
+export function isHeifBytes(bytes: Uint8Array): boolean {
+  if (!bytes || bytes.length < 16) return false;
+  const tag = (at: number) => String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]);
+  if (tag(4) !== "ftyp") return false;
+  const size = Math.min(bytes.length, ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0 || 16, 64);
+  const brands = [tag(8)];
+  for (let at = 16; at + 4 <= size; at += 4) brands.push(tag(at));
+  if (brands.some((b) => HEVC_BRANDS.has(b))) return true;
+  return (brands[0] === "mif1" || brands[0] === "msf1") && !brands.some((b) => b === "avif" || b === "avis");
 }
 
 export function fail(status: number, message: string, extra: Record<string, unknown> = {}): Response {
