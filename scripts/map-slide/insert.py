@@ -138,14 +138,26 @@ def do_add(args):
     new = prs.slides.add_slide(src.slide_layout)
     for sh in list(new.shapes):  # 版面配置帶來的空白佔位框拿掉，整頁照來源頁複製
         sh._element.getparent().remove(sh._element)
+    keep = [s.strip() for s in (args.keep or "").split(",") if s.strip()]
     for sh in src.shapes:
+        if keep and sh.name not in keep and sh.name != args.stats_from:
+            continue  # 只帶頁眉、標題、頁尾那幾個（本文是這一頁自己的）
         if args.drop_pictures and sh.shape_type == 13:  # PICTURE
             continue
         new.shapes._spTree.append(copy.deepcopy(sh._element))
+    # 數字那一行：照來源頁某一個文字框的格式（字型、字級、顏色都不動），搬到地圖底下
+    if args.stats_from:
+        for sh in walk(new.shapes):
+            if sh.name == args.stats_from:
+                sh.name = STATS_NAME
+                if args.stats_box:
+                    l, t, w, h = (Inches(float(v)) for v in args.stats_box.split(","))
+                    sh.left, sh.top, sh.width, sh.height = l, t, w, h
+                break
     for pair in args.replace or []:
         old, _, newtext = pair.partition("=")
         for sh in walk(new.shapes):
-            if sh.has_text_frame and old and old in sh.text_frame.text:
+            if sh.has_text_frame and old and old in sh.text_frame.text and sh.name != STATS_NAME:
                 set_lines(sh, [newtext] if newtext else [])
     box = tuple(Inches(float(v)) for v in args.box.split(","))
     pic = new.shapes.add_picture(args.png, box[0], box[1], width=box[2])
@@ -156,6 +168,26 @@ def do_add(args):
     out = args.out or args.pptx
     prs.save(out)
     print(f"地圖頁加好了（第 {args.at} 頁）{note} → {out}")
+
+
+def do_renumber(args):
+    """角落寫死的頁碼照現在的頁序改回來（插一頁進去，後面每一頁的頁碼都少一號）。"""
+    prs = Presentation(args.pptx)
+    n = 0
+    for i, slide in enumerate(prs.slides, 1):
+        for sh in slide.shapes:
+            if not sh.has_text_frame or sh.top is None:
+                continue
+            t = sh.text_frame.text.strip()
+            # 頁面最下面、不寬、整個框只寫著一個數字的那一個
+            if t.isdigit() and sh.top > prs.slide_height * 0.88 and sh.width < prs.slide_width * 0.15:
+                if t != str(i):
+                    set_lines(sh, [str(i)])
+                    n += 1
+                break
+    out = args.out or args.pptx
+    prs.save(out)
+    print(f"頁碼改了 {n} 頁 → {out}")
 
 
 def main(argv=None):
@@ -175,9 +207,17 @@ def main(argv=None):
     a.add_argument("--at", type=int, required=True, help="放成第幾頁")
     a.add_argument("--box", required=True, help="地圖的框：left,top,width,height（英吋）")
     a.add_argument("--replace", action="append", help='文字取代「舊=新」，新的留空就是整個拿掉；可以給好幾個')
+    a.add_argument("--keep", help="來源頁只帶這幾個形狀過來（名稱，逗號分隔；頁眉、標題、頁尾、頁碼）")
+    a.add_argument("--stats-from", help="數字那一行照來源頁哪一個文字框的格式（會改名成 GHRC_MAP_STATS）")
+    a.add_argument("--stats-box", help="數字那一行的位置：left,top,width,height（英吋）")
     a.add_argument("--drop-pictures", action="store_true", help="來源頁的照片不要帶過來")
     a.add_argument("--out")
     a.set_defaults(func=do_add)
+
+    r = sub.add_parser("renumber", help="角落寫死的頁碼照現在的頁序改回來")
+    r.add_argument("pptx")
+    r.add_argument("--out")
+    r.set_defaults(func=do_renumber)
 
     args = ap.parse_args(argv)
     return args.func(args)
