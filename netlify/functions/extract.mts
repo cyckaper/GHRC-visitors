@@ -42,10 +42,10 @@ export default async (req: Request) => {
     if (!isUploadId(upload)) return fail(400, "upload 不對");
     if (!file || typeof file === "string") return fail(400, "沒有收到檔案");
     const name = String(file.name || "file").slice(0, 160);
-    const heic = rejectHeic(file.type || "") || (/^hei[cf]$/.test(extOf(name)) ? rejectHeic("image/heic") : null);
-    if (heic) return heic;
     const bytes = new Uint8Array(await file.arrayBuffer());
     if (bytes.length > MAX_FILE_BYTES) return fail(413, `${name} 超過 4.5 MB`);
+    const heic = rejectHeic(file.type || "", bytes) || (/^(hei[cf]|hif)$/.test(extOf(name)) ? rejectHeic("image/heic") : null);
+    if (heic) return heic;
     const out = await extractFile(name, file.type || "", bytes);
     if (out.kind === "unsupported") return json({ ok: true, warning: `${name}：${out.reason}` });
     if (out.kind === "text" && !out.text.trim()) return json({ ok: true, warning: `${name}：檔案裡讀不到文字` });

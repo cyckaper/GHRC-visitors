@@ -127,7 +127,7 @@ export default async (req: Request) => {
     if (upload.bytes.length > MAX_BYTES) return fail(413, "檔案超過 4.5 MB：請放到雲端（Drive／OneDrive）再貼連結");
     const name = cleanName(upload.name);
     const ext = (/\.([a-z0-9]{1,8})$/i.exec(name)?.[1] || "").toLowerCase();
-    const heic = rejectHeic(upload.type) || (/^hei[cf]$/.test(ext) ? rejectHeic("image/heic") : null);
+    const heic = rejectHeic(upload.type, upload.bytes) || (/^(hei[cf]|hif)$/.test(ext) ? rejectHeic("image/heic") : null);
     if (heic) return heic;
     const type = FILE_TYPES[ext];
     if (!type) return fail(415, `這種檔案（${ext ? `.${ext}` : "沒有副檔名"}）不收：請存成 PDF、Word、PowerPoint、Excel、圖片或壓縮檔，或放到雲端再貼連結`);
@@ -162,7 +162,7 @@ export default async (req: Request) => {
     if (bytes.length > MAX_BYTES) return fail(413, kind === "pdf" ? "PDF 超過 4.5 MB：請放到雲端（Drive／OneDrive）再貼連結" : "照片超過 4.5 MB，請先縮小（後台會自動縮到長邊 1600px）");
     if (kind === "pdf" && !mediaType.includes("pdf")) return fail(400, "簡報請上傳 PDF");
     if (kind === "photo" && !mediaType.startsWith("image/")) return fail(400, "合照請上傳圖片檔");
-    const heic = rejectHeic(mediaType);
+    const heic = rejectHeic(mediaType, bytes);
     if (heic) return heic;
     const ext = kind === "pdf" ? "pdf" : mediaType.includes("png") ? "png" : mediaType.includes("webp") ? "webp" : "jpg";
     const base = slug(String(body.name || "")) || (kind === "pdf" ? "slides" : "photo");

@@ -1,8 +1,10 @@
 /** 名單檔讀取：用 JSZip 現做最小的 docx／xlsx／pptx，驗證文字抽取、Big5、不支援格式。 */
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import JSZip from "jszip";
 import { extractFile, decodeText, docxText, xlsxText, excelSerial, sniffImage } from "../netlify/lib/files.mts";
+import { isHeifBytes } from "../netlify/lib/http.mts";
 
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
 async function makeDocx() {
@@ -100,6 +102,17 @@ test("extractFile dispatches by extension and passes PDF/images through to the m
   const heic = await extractFile("IMG_0001.HEIC", "image/heic", new Uint8Array([0, 0, 0, 0x18]));
   assert.equal(heic.kind, "unsupported");
   assert.match(heic.reason, /HEIC/, "HEIC 講清楚是 HEIC（後台會先轉成 JPEG）");
+  // 內容是 HEIC、名字與類型寫成 JPEG（轉寄來的、改過副檔名的）：照內容認，不當成「壞掉的圖」
+  const ftyp = (major, ...compat) => new Uint8Array(Buffer.concat([Buffer.from([0, 0, 0, 16 + 4 * compat.length]), Buffer.from("ftyp" + major + "\0\0\0\0" + compat.join(""), "latin1"), Buffer.alloc(16)]));
+  const disguised = await extractFile("scan.jpg", "image/jpeg", ftyp("heic", "mif1", "heic"));
+  assert.deepEqual([disguised.kind, /HEIC/.test(disguised.reason)], ["unsupported", true], "副檔名是 jpg、內容是 HEIC：說是 HEIC");
+  assert.equal(isHeifBytes(ftyp("heix", "mif1", "heix")), true, "10-bit 的 heix");
+  assert.equal(isHeifBytes(ftyp("mif1", "MiHE", "miaf", "heic")), true, "iPhone：主要 brand 是 mif1、相容裡有 heic");
+  assert.equal(isHeifBytes(ftyp("mif1", "miaf")), true, "只寫 mif1 的一般 HEIF");
+  assert.equal(isHeifBytes(ftyp("avif", "mif1", "miaf")), false, "AVIF 瀏覽器與 Claude 都讀得了，不算");
+  assert.equal(isHeifBytes(ftyp("mif1", "avif", "miaf")), false, "主要 brand 是 mif1 的 AVIF 也不算");
+  assert.equal(isHeifBytes(new Uint8Array([0, 0, 0, 0x18])), false, "太短的不算");
+  assert.equal(isHeifBytes(new Uint8Array(await readFile(new URL("./fixtures/tenbit.heic", import.meta.url)))), true, "測試用的 10-bit HEIC");
   assert.equal(sniffImage(new Uint8Array([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50])), "image/webp");
   assert.equal(sniffImage(new TextEncoder().encode("GIF89a")), "image/gif");
   const doc = await extractFile("old.doc", "application/msword", new Uint8Array([0xd0, 0xcf]));

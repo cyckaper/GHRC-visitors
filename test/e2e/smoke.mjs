@@ -309,6 +309,36 @@ try {
   await page.waitForFunction(() => document.querySelectorAll("#photoList img").length === 1);
   check(true, "removing a photo takes it off the visit page");
 
+  // HEIC 拖進合照那一格（明確指示：「要能收HEIC」）：沒有副檔名、類型也寫錯（AirDrop、轉寄來的常這樣）——看內容認得出是 HEIC，
+  // 轉成 JPEG 才上傳。這一張是 10-bit：舊的 heic2any（libheif 1.10）轉出來是一片雜訊、不報錯，所以看轉出來的顏色（左紅右藍）
+  check(!(await page.evaluate(() => performance.getEntriesByType("resource").some((e) => /heic-to/.test(e.name)))), "the HEIC converter (3 MB) is not loaded until a HEIC photo shows up");
+  const tenbit = (await readFile("test/fixtures/tenbit.heic")).toString("base64");
+  const heicDrop = await page.evaluateHandle((b64) => {
+    const dt = new DataTransfer();
+    dt.items.add(new File([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], "IMG_2001", { type: "application/octet-stream" }));
+    return dt;
+  }, tenbit);
+  const photoSent = page.waitForRequest((q) => q.method() === "POST" && new URL(q.url()).pathname === "/api/materials" && /"kind":"photo"/.test(q.postData() || ""), { timeout: 60000 });
+  await page.dispatchEvent("div:has(> #photoFiles)", "dragover", { dataTransfer: heicDrop });
+  await page.dispatchEvent("div:has(> #photoFiles)", "drop", { dataTransfer: heicDrop });
+  const sentPhoto = JSON.parse((await photoSent).postData()).data;
+  const colors = await page.evaluate(async (url) => {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const c = document.createElement("canvas");
+    c.width = img.width; c.height = img.height;
+    const g = c.getContext("2d");
+    g.drawImage(img, 0, 0);
+    const at = (x) => [...g.getImageData(Math.round(x * img.width), Math.round(img.height / 2), 1, 1).data].slice(0, 3);
+    return { w: img.width, h: img.height, left: at(0.25), right: at(0.75) };
+  }, sentPhoto);
+  check(sentPhoto.startsWith("data:image/jpeg;base64,") && colors.w === 320 && colors.h === 240, `a HEIC dropped on the photo card, with no extension and the wrong type, goes up as a JPEG (${colors.w}×${colors.h})`);
+  check(colors.left[0] > 200 && colors.left[2] < 70 && colors.right[2] > 200 && colors.right[0] < 70, `…and a 10-bit HEIC comes out with its real colours, not noise (left ${colors.left}, right ${colors.right})`);
+  await page.waitForFunction(() => document.querySelectorAll("#photoList img").length === 2, null, { timeout: 20000 });
+  await page.click("#photoList [data-remove-photo]:last-of-type");
+  await page.waitForFunction(() => document.querySelectorAll("#photoList img").length === 1);
+
   // 動作五：答應提供給對方的資料——連結（沒寫 https:// 的幫他補上）與檔案（各種格式，原檔名）
   await page.click("#promisedAddLink");
   await page.fill("#promisedList li:last-child .p-title", "Lab 303 papers");
@@ -319,6 +349,12 @@ try {
   await page.waitForFunction(() => /已放上 1 個/.test(document.getElementById("promisedInfo").textContent), null, { timeout: 20000 });
   check((await page.locator("#promisedList li").count()) === 2 && /療癒景觀報告\.docx/.test(await page.textContent("#promisedList")), "a promised file is uploaded and listed under its original name");
   check((await page.textContent("#promisedList li:first-child .no")) === "1." && (await page.textContent("#promisedList li:last-child .no")) === "2.", "…numbered one by one");
+  // 答應提供的照片是 HEIC：對方多半打不開，轉成 JPEG 才放上去（以前只看檔名；Safari 那一條還把 HEIC 原檔照送、被伺服器擋下來）
+  await page.setInputFiles("#promisedFiles", { name: "site-visit", mimeType: "application/octet-stream", buffer: await readFile("test/fixtures/card.heic") });
+  await page.waitForFunction(() => /已放上 1 個/.test(document.getElementById("promisedInfo").textContent) && document.querySelectorAll("#promisedList li").length === 3, null, { timeout: 60000 });
+  check(/site-visit\.jpg/.test(await page.textContent("#promisedList li:last-child")), "a HEIC photo given to the guests is uploaded as a JPEG, even without a .heic name");
+  await page.click("#promisedList li:last-child .del");
+  await page.waitForFunction(() => document.querySelectorAll("#promisedList li").length === 2, null, { timeout: 15000 });
 
   // 後續分頁的動作五：感謝信
   await page.click('[data-tab="wrapup"]');
@@ -1230,7 +1266,15 @@ try {
   check((await page.locator("#listFilesInfo li").count()) === 2 && !/wrong\.jpg/.test(await page.textContent("#listFilesInfo")), "dropped screenshots are added too, and ✕ takes one back out");
   // iPhone 存成 HEIC 的截圖：選檔也是加在後面（不會把剛貼的換掉），Chrome 看不懂 HEIC 就先轉成 JPEG
   await page.setInputFiles("#listFiles", "test/fixtures/card.heic");
-  await page.waitForFunction(() => document.querySelectorAll("#listFilesInfo li").length === 3, null, { timeout: 30000 });
+  // 轉檔的那幾秒，清單上先列一列「HEIC 照片轉成 JPEG 中」（不然看起來像沒反應）；這時候按「AI 抽取」會叫你等一下
+  // 看到那一列的同一刻就按（在頁面裡同一步做完，轉檔不會剛好在中間做完）
+  const whileConverting = await (await page.waitForFunction(() => {
+    if (!/HEIC 照片轉成 JPEG 中/.test(document.getElementById("listFilesInfo").textContent)) return false;
+    document.getElementById("extractBtn").click();
+    return document.getElementById("flash").textContent;
+  }, null, { timeout: 30000, polling: 10 })).jsonValue();
+  check(/還在轉成 JPEG/.test(whileConverting), "while a HEIC is still converting, the list says so and AI 抽取 waits for it");
+  await page.waitForFunction(() => document.querySelectorAll("#listFilesInfo [data-att-del]").length === 3, null, { timeout: 30000 });
   // 按「AI 抽取」：一個一個上傳（每一個請求都很小），開始抽取的那一個只帶 key
   const extractPosts = [];
   const onExtract = (q) => { if (q.method() === "POST" && new URL(q.url()).pathname === "/api/extract") extractPosts.push(q); };

@@ -124,6 +124,7 @@ test("手機截圖（簡訊、LINE）：一個一個先上傳，工作裡只帶 
   assert.equal(a.body.kind, "image");
   assert.match(a.body.key, /^extract\/shotsupload01\/[a-z0-9]+_[a-z0-9]+-image\.json$/);
   assert.equal((await stage("IMG_1.HEIC", "image/heic", Buffer.from([0, 0, 0, 0x18]))).status, 415, "HEIC 擋下來（後台會先轉成 JPEG）");
+  assert.equal((await stage("IMG_1", "", await readFile(new URL("./fixtures/tenbit.heic", import.meta.url)))).status, 415, "沒有副檔名、沒有類型，內容是 HEIC 也擋");
   const odd = await stage("old.doc", "application/msword", Buffer.from("x"));
   assert.equal(odd.status, 200);
   assert.match(odd.body.warning, /old\.doc/);
@@ -523,6 +524,7 @@ test("答應提供的資料：檔案（各種格式、中文檔名）或連結�
   assert.equal((await upload(fileForm("page.html", Buffer.from("<script>alert(1)</script>"), "text/html"))).status, 415);
   assert.equal((await upload(fileForm("drawing.svg", Buffer.from("<svg/>"), "image/svg+xml"))).status, 415);
   assert.equal((await upload(fileForm("IMG_0001.HEIC", Buffer.from("....ftypheic"), "image/heic"))).status, 415);
+  assert.equal((await upload(fileForm("photo.jpg", await readFile(new URL("./fixtures/tenbit.heic", import.meta.url)), "image/jpeg"))).status, 415, "名字是 jpg、內容是 HEIC 也擋");
   assert.equal((await upload(fileForm("README", Buffer.from("x")))).status, 415);
   // 只存 links 這一格（感謝信那一張自己存）：PDF 與合照照舊；連結沒寫 https 的不收；別場的檔案不收
   const links = [...doc.body.materials.links.map(({ title, url }) => ({ title, url })), { title: "生態 app", url: "https://eco.example.org/app" }, { title: "別場的", url: "materials/2020-01-01-other/1-x.pdf" }];
@@ -816,6 +818,11 @@ test("cards: 名片讀成名單，確認後才併進 guests，原圖留著", asy
   const heic = await post({ visit_id: visitId, image: "data:image/heic;base64,AAAAHGZ0eXBoZWlj" });
   assert.equal(heic.status, 415, JSON.stringify(heic.body));
   assert.match(heic.body.error, /HEIC/, "…and says so in plain words");
+  // 類型寫 JPEG、內容是 HEIC（轉寄來的、改過副檔名的）：照內容擋——不然存起來的是誰都打不開的「JPEG」，交給 Claude 也整個退回
+  const tenbit = (await readFile(new URL("./fixtures/tenbit.heic", import.meta.url))).toString("base64");
+  const disguised = await post({ visit_id: visitId, image: `data:image/jpeg;base64,${tenbit}` });
+  assert.equal(disguised.status, 415, JSON.stringify(disguised.body));
+  assert.match(disguised.body.error, /HEIC/);
 
   const before = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit.guests.length;
   const read = await post({ visit_id: visitId, image: `data:image/png;base64,${cardPng}` });

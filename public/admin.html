@@ -28,7 +28,7 @@
   body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 60; background: linear-gradient(90deg, var(--c301), var(--c302) 25%, var(--c303) 50%, var(--c304) 75%, var(--c305)); }
   .grad-text { background: linear-gradient(90deg, #065f46, #0f766e 55%, #4d7c0f); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .card { background: #fff; border: 1px solid #e7e5e4; border-radius: 1rem; padding: 1.25rem; }
-  #extractCard.dropping { outline: 2px dashed var(--tab, #0f766e); outline-offset: 4px; }
+  .dropping { outline: 2px dashed var(--tab, #0f766e); outline-offset: 4px; }
   .att-thumb { flex: none; height: 3rem; width: 3rem; object-fit: contain; border: 1px solid #e7e5e4; border-radius: .35rem; background: #f5f5f4; }
   .att-doc { display: inline-flex; align-items: center; justify-content: center; font-size: .7rem; color: #57534e; }
   /* 卡片標題掛一條分頁色的細線；開頭有號碼的（1./動作一）改用圓形號碼，不重複標兩次 */
@@ -43,6 +43,9 @@
   .btn { display: inline-flex; align-items: center; gap: .4rem; padding: .5rem .9rem; border-radius: .7rem; background: var(--tab); color: #fff; font-weight: 500; font-size: .95rem; }
   .btn:disabled { opacity: .45; cursor: wait; }
   .btn-soft { background: #f5f5f4; color: #1c1917; }
+  /* 「拍照」那一顆在 iPad、手機上會直接開相機（capture），沒辦法選已經拍好的照片：觸控的裝置另外給一顆選檔的 */
+  .touch-only { display: none; }
+  @media (pointer: coarse) { .touch-only { display: inline-flex; } }
   .btn-danger { background: #b91c1c; }
   input[type=text], input[type=email], input[type=tel], input[type=date], input[type=time], input[type=number], select, textarea { width: 100%; border: 1px solid #d6d3d1; border-radius: .55rem; padding: .45rem .6rem; background: #fff; font-size: .95rem; }
   input:focus, select:focus, textarea:focus { outline: none; border-color: var(--tab); box-shadow: 0 0 0 3px rgba(15, 118, 110, .12); }
@@ -142,7 +145,7 @@
       <p class="muted">單位、人名、職稱、人數、隨行名單與聯絡方式、對口老師、來訪目的、興趣、日期時間。抽出來的東西會填進下面的欄位，你逐項看過再改。</p>
       <textarea id="emailText" rows="8" placeholder="把 email 往來（含轉寄、簽名檔）整段貼進來。簡訊、LINE 的手機截圖可以直接貼在這裡，或拖進這一區"></textarea>
       <div class="flex flex-wrap items-center gap-2">
-        <label class="btn btn-soft cursor-pointer">加截圖或檔案<input type="file" id="listFiles" multiple accept="image/*,.heic,.heif,.docx,.xlsx,.xlsm,.pptx,.csv,.tsv,.txt,.md,.pdf" hidden></label>
+        <label class="btn btn-soft cursor-pointer">加截圖或檔案<input type="file" id="listFiles" multiple accept="image/*,.docx,.xlsx,.xlsm,.pptx,.csv,.tsv,.txt,.md,.pdf" hidden></label>
         <span class="muted">手機截圖（簡訊、LINE）一段對話截了幾張就放幾張；名單檔可以是 Word、Excel、CSV、PDF（.doc／.xls 請先另存新格式）</span>
       </div>
       <ul id="listFilesInfo" class="text-sm text-stone-600 space-y-1"></ul>
@@ -346,7 +349,7 @@
     <div class="card space-y-3">
       <div class="flex flex-wrap items-baseline gap-2"><h2 class="font-semibold mr-auto">動作一｜拍一張簽名簿</h2><label class="muted flex items-center gap-1" title="這一場本來就沒有這件事（沒有簽名簿、沒交換名片、沒錄口述都很正常）。標了就不算未完成，後續提醒也不會再為它寄信"><input type="checkbox" data-na="signbook"> 本次沒有</label></div>
       <p class="muted">實體本子拍一張就好。AI 把手寫字讀成一則一則留言，讀錯直接改——原圖會一直留著，之後還能回頭核對。</p>
-      <input type="file" id="signbookFile" accept="image/*" capture="environment">
+      <div class="flex flex-wrap gap-2 items-center"><input type="file" id="signbookFile" accept="image/*" capture="environment"><label class="btn btn-soft cursor-pointer touch-only">選相簿或檔案裡的照片<input type="file" id="signbookPick" accept="image/*" hidden></label></div>
       <img id="signbookPreview" class="max-h-64 rounded-lg" hidden alt="">
       <div class="flex flex-wrap gap-2"><button class="btn" id="signbookUpload" title="把簽名簿照片存起來，並讓 AI 把手寫字讀成一則一則留言" disabled>上傳並讀字</button><span class="muted" id="signbookInfo"></span></div>
       <div id="signbookEntries" class="space-y-2" hidden>
@@ -361,6 +364,7 @@
       <p class="muted">現場拿到名片就拍一張（手機會直接開相機，可以連拍幾張）。AI 讀成姓名、職稱、單位、email、電話，<b>你確認後</b>才併進這場的名單——訪後信就會寄給他。原圖留著，讀錯可以回頭核對。</p>
       <div class="flex flex-wrap gap-2 items-center">
         <input type="file" id="cardFiles" accept="image/*" capture="environment" multiple>
+        <label class="btn btn-soft cursor-pointer touch-only">選相簿或檔案裡的照片<input type="file" id="cardPick" accept="image/*" multiple hidden></label>
         <span class="text-sm" id="cardStatus"></span>
       </div>
       <table id="cardTable" hidden><thead><tr><th>加入</th><th>姓名</th><th>職稱</th><th>單位</th><th>email</th><th>電話</th><th></th></tr></thead><tbody></tbody></table>
@@ -1286,7 +1290,8 @@
   const SHOT = { edge: 2576, width: 1440, overlap: 240, keep: 1.2 * 1024 * 1024, pngMax: 900 * 1024, maxImages: 20, maxFiles: 24, maxFileBytes: 4.5 * 1024 * 1024, maxTotal: 20 * 1024 * 1024 };
   const extractAtt = []; // { id, file, name, image, tiles, thumb }
   let extractRead = ""; // 上一次讀完「讀了哪幾個」那幾行（列在還沒讀的附件底下）
-  const isImageFile = (f) => /^image\//i.test(f?.type || "") || /\.(jpe?g|png|webp|gif|hei[cf])$/i.test(f?.name || "");
+  const extractConverting = []; // 正在轉成 JPEG 的 HEIC（一張要幾秒，清單上先列出來，不然看起來像沒反應）
+  const isImageFile = (f) => /^image\//i.test(f?.type || "") || /\.(jpe?g|jfif|png|webp|gif|hei[cf]|hif)$/i.test(f?.name || "");
   /** 一張圖要切成幾段：照原樣（或縮一點點）看得清楚就一張；縮到八成以下的又高又窄的捲動截圖才切。 */
   function planShot(w, h) {
     const single = SHOT.edge / Math.max(w, h);
@@ -1335,17 +1340,19 @@
     extractRead = ""; // 開始放下一批了，上一次「讀了哪幾個」不必再列
     for (const f0 of [...(files || [])].filter(Boolean)) {
       if (extractAtt.length >= SHOT.maxFiles) { flash(`一次最多 ${SHOT.maxFiles} 個附件`, "err"); break; }
-      const image = isImageFile(f0);
+      const image = isImageFile(f0) || (await looksHeif(f0)); // 沒有副檔名、類型是空的 HEIC 也是照片
       if (!image && f0.size > SHOT.maxFileBytes) { flash(`${f0.name} 超過 4.5 MB`, "err"); continue; }
       let file = f0, tiles = 1, thumb = "";
       if (image) {
+        const pending = { name: f0.name || "這張照片" };
         try {
-          file = await decodableImage(f0);
+          file = await decodableImage(f0, () => { extractConverting.push(pending); renderAttachments(); });
           const bmp = await createImageBitmap(file);
           tiles = planShot(bmp.width, bmp.height).tiles;
           bmp.close();
           thumb = URL.createObjectURL(file);
-        } catch (e) { flash(e?.message && /HEIC/.test(e.message) ? e.message : `${f0.name || "這張圖"} 讀不出來（檔案可能壞了，或不是照片）`, "err"); continue; }
+        } catch (e) { flash(e?.heic ? e.message : `${f0.name || "這張圖"} 讀不出來（檔案可能壞了，或不是照片）`, "err"); continue; }
+        finally { const i = extractConverting.indexOf(pending); if (i >= 0) { extractConverting.splice(i, 1); renderAttachments(); } }
       }
       // 貼上的截圖瀏覽器都叫 image.png：換成看得出先後的名字（AI 也照這個順序讀）
       const ext = (/\.([a-z0-9]+)$/i.exec(file.name || "") || [, image ? "png" : "txt"])[1];
@@ -1358,6 +1365,7 @@
     const images = extractAtt.filter((a) => a.image).reduce((n, a) => n + a.tiles, 0);
     const size = (n) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
     $("listFilesInfo").innerHTML = extractAtt.map((a) => `<li class="flex items-center gap-2">${a.thumb ? `<img class="att-thumb" src="${a.thumb}" alt="">` : `<span class="att-thumb att-doc">${esc((/\.([a-z0-9]+)$/i.exec(a.name) || [, "檔案"])[1].toUpperCase())}</span>`}<span class="min-w-0 break-all">${esc(a.name)} <span class="muted">${size(a.file.size)}</span>${a.tiles > 1 ? ` <span class="muted">${t(`長截圖，會切成 ${a.tiles} 段來讀`)}</span>` : ""}</span><button type="button" class="muted" data-att-del="${a.id}" title="拿掉這一個">✕</button></li>`).join("")
+      + extractConverting.map((b) => `<li class="flex items-center gap-2"><span class="att-thumb att-doc">HEIC</span><span class="min-w-0 break-all">${esc(b.name)} <span class="muted">HEIC 照片轉成 JPEG 中……一張大約五秒。</span></span></li>`).join("")
       + (images > SHOT.maxImages ? `<li class="err">${t(`截圖切完共 ${images} 張，一次最多 ${SHOT.maxImages} 張：請分兩次讀，或只留跟參訪有關的那幾張`)}</li>` : "")
       + extractRead;
   }
@@ -1405,6 +1413,7 @@
   const readFileB64 = (file) => new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(String(fr.result).replace(/^data:[^,]*,/, "")); fr.onerror = () => reject(fr.error); fr.readAsDataURL(file); });
   $("extractBtn").onclick = () => busy($("extractBtn"), async () => {
     const text = $("emailText").value;
+    if (extractConverting.length) return flash("HEIC 照片還在轉成 JPEG，轉好了再按一次", "err"); // 不然這一次讀不到那幾張
     if (text.trim().length < 20 && !extractAtt.length) return flash("請貼上 email 內容、手機截圖或名單檔", "err");
     const visitSeq = selectVisit.seq || 0; // 按下去的那一刻就記：上傳到一半換了一場，結果一樣要丟掉
     const note = noteInto("extractInfo");
@@ -1797,18 +1806,21 @@
   }
 
   // ── 後續：簽名簿 ──
-  $("signbookFile").onchange = async () => {
-    const file = $("signbookFile").files[0]; if (!file) return;
+  // 拍照（capture）與選檔（iPad 選相簿裡已經拍好的，或拖進這一張卡片）走同一條
+  $("signbookFile").onchange = () => takeSignbook($("signbookFile").files[0]);
+  $("signbookPick").onchange = () => { const f = $("signbookPick").files[0]; $("signbookPick").value = ""; takeSignbook(f); };
+  async function takeSignbook(file) {
+    if (!file) return;
     $("signbookInfo").textContent = "讀取照片…";
-    try { state.signbookDataUrl = await downscale(file, 2000, 0.85); }
+    try { state.signbookDataUrl = await downscale(file, 2000, 0.85, noteInto("signbookInfo")); }
     catch (e) {
-      if (isHeic(file)) { $("signbookInfo").textContent = String(e.message || e); return flash(String(e.message || e), "err"); }
+      if (e?.heic) { $("signbookInfo").textContent = String(e.message || e); return flash(String(e.message || e), "err"); }
       if (file.size > 4.5 * 1024 * 1024) { $("signbookInfo").textContent = `讀不到這張照片（${e.message || e}），而且超過 4.5 MB，請先匯出成 JPEG`; return flash(String(e.message || e), "err"); }
       state.signbookDataUrl = await readFileDataUrl(file);
     }
     $("signbookInfo").textContent = "";
     $("signbookPreview").src = state.signbookDataUrl; $("signbookPreview").hidden = false; $("signbookUpload").disabled = false;
-  };
+  }
   $("signbookUpload").onclick = () => busy($("signbookUpload"), async () => {
     const note = noteInto("signbookInfo");
     const r = await runJob("/api/signbook", { visit_id: $("visitSelect").value, image: state.signbookDataUrl }, note, "照片已存，AI 讀手寫字中……大約一分鐘。");
@@ -1824,27 +1836,73 @@
     if (!r.ok) return flash(r.error, "err"); flash(`已存入 ${r.saved} 則簽名簿留言`);
   });
   /**
-   * iPhone／iPad 拍的照片常是 HEIC（實際回報：「要能讀 HEIC 檔」——名片選了 HEIC，讀出 0 個人）。
-   * Safari 自己解得開；Chrome、Edge 解不開，Claude 也不收 HEIC。所以**瀏覽器解不開的 HEIC 先轉成 JPEG**
-   * （站台上的 /lib/vendor/heic2any.min.js，第一次遇到 HEIC 才載，約 1.3 MB）。名片、簽名簿、合照、老師照片、
-   * 來信附件都先過這一關。轉不過來就講一句人話，**不要把 HEIC 原檔送上去**——送上去也讀不出來、來賓專頁上也看不到。
+   * iPhone／iPad 的照片常是 HEIC（實際回報：「要能讀 HEIC 檔」——名片選了 HEIC，讀出 0 個人；「要能收HEIC」）。
+   * Claude 不收 HEIC，Chrome、Edge 也看不懂，所以**每一個收照片的地方都先過這一關，HEIC 一律變成 JPEG 才往下走**
+   * （來信附件、簽名簿、名片、合照、答應提供的檔案、老師照片）。Safari 自己看得懂的也轉——以前 Safari 那一條把 HEIC 原檔照送，
+   * 「答應提供的檔案」就被伺服器擋下來。
+   * - **認 HEIC 看檔案開頭**（ftyp 的 brand，`looksHeif`），不只看檔名與類型：AirDrop、轉寄來的檔常常沒有副檔名、類型是空的或寫錯。
+   * - 瀏覽器自己解得開就用瀏覽器的（Safari 17 以後）；解不開才載 `/lib/vendor/heic-to.js`（libheif 1.23，約 3 MB、
+   *   傳輸壓縮後 0.8 MB，第一次遇到 HEIC 才載）。以前的 heic2any 帶的是 2020 年的 libheif 1.10：iOS 18 之後的 iPhone 照片
+   *   轉不了（「轉不成 JPEG」），10-bit 的轉出來是一片雜訊，之後同一頁再轉別張也會壞掉——實際拿各代 iPhone 的照片測過。
+   * - 長邊最多 4096（iPad 的 canvas 有面積上限，48 MP 的照片畫不上去；後面每一條路本來就還會再縮），透明的地方墊白底。
+   * - 一張 12 MP 大約五秒，轉的時候 `note` 說一聲；兩分鐘還沒好就放棄、講一句人話。
+   *   轉不過來**不要把 HEIC 原檔送上去**（送上去也讀不出來、來賓專頁上也看不到）：丟出來的錯誤帶 `heic: true`，呼叫的地方照這個判斷。
    */
-  function loadScript(src) { return new Promise((resolve, reject) => { const el = document.createElement("script"); el.src = src; el.onload = resolve; el.onerror = () => reject(new Error("載入失敗：" + src)); document.head.appendChild(el); }); }
-  const isHeic = (f) => /^image\/hei[cf]/i.test(f?.type || "") || /\.hei[cf]$/i.test(f?.name || "");
-  async function decodableImage(file) {
-    if (!isHeic(file)) return file;
-    try { const bmp = await createImageBitmap(file); bmp.close(); return file; } catch (e) { /* 這個瀏覽器解不開，轉成 JPEG */ }
+  const HEVC_BRANDS = new Set(["heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs"]);
+  const isHeic = (f) => /^image\/hei[cf]/i.test(f?.type || "") || /\.(hei[cf]|hif)$/i.test(f?.name || "");
+  /** 檔案開頭的 ftyp 是不是 HEIF（跟伺服器 http.mts 的 isHeifBytes 同一套：HEVC 的 brand，或只寫 mif1／msf1 又不是 AVIF）。 */
+  async function looksHeif(f) {
     try {
-      if (!window.heic2any) await loadScript("/lib/vendor/heic2any.min.js");
-      const out = await window.heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
-      const blob = Array.isArray(out) ? out[0] : out; // 連拍、原況照片會給好幾張，用第一張
-      return new File([blob], `${String(file.name || "photo").replace(/\.hei[cf]$/i, "")}.jpg`, { type: "image/jpeg" });
+      const b = new Uint8Array(await f.slice(0, 64).arrayBuffer());
+      if (b.length < 16) return false;
+      const tag = (at) => String.fromCharCode(b[at], b[at + 1], b[at + 2], b[at + 3]);
+      if (tag(4) !== "ftyp") return false;
+      const size = Math.min(b.length, ((b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]) >>> 0 || 16);
+      const brands = [tag(8)];
+      for (let at = 16; at + 4 <= size; at += 4) brands.push(tag(at));
+      return brands.some((x) => HEVC_BRANDS.has(x)) || ((brands[0] === "mif1" || brands[0] === "msf1") && !brands.some((x) => x === "avif" || x === "avis"));
+    } catch (e) { return false; }
+  }
+  const HEIC_EDGE = 4096, HEIC_WAIT = 120000;
+  let heicLib = null; // 轉檔程式只載一次；載失敗就清掉，下一張再試
+  async function decodableImage(file, note = () => {}) {
+    if (!isHeic(file) && !(await looksHeif(file))) return file;
+    const name = file.name || "這張照片";
+    const heicError = (msg) => Object.assign(new Error(msg), { heic: true });
+    let bmp = null, late = false;
+    try { bmp = await createImageBitmap(file); } catch (e) { /* 這個瀏覽器看不懂 HEIC，交給轉檔程式 */ }
+    try {
+      if (!bmp) {
+        note("HEIC 照片轉成 JPEG 中……一張大約五秒。");
+        const work = (async () => {
+          heicLib = heicLib || import("/lib/vendor/heic-to.js").catch((e) => { heicLib = null; throw e; });
+          const { heicTo } = await heicLib;
+          return await heicTo({ blob: file, type: "bitmap" });
+        })();
+        work.then((b) => { if (late) b?.close?.(); }, () => {}); // 等太久放棄了，晚到的那一張也要收掉
+        let timer;
+        const slow = new Promise((_, reject) => { timer = setTimeout(() => { late = true; reject(heicError(`${name} 轉了兩分鐘還沒好：請重新整理後台再試一次，或在相簿裡把它匯出成 JPEG`)); }, HEIC_WAIT); });
+        try { bmp = await Promise.race([work, slow]); } finally { clearTimeout(timer); }
+      }
+      const s = Math.min(1, HEIC_EDGE / Math.max(bmp.width, bmp.height));
+      const c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(bmp.width * s)); c.height = Math.max(1, Math.round(bmp.height * s));
+      const g = c.getContext("2d");
+      g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
+      g.drawImage(bmp, 0, 0, c.width, c.height);
+      const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.92));
+      c.width = c.height = 1; // 大張的 canvas 馬上放掉（iPad 的記憶體）
+      if (!blob) throw new Error("canvas");
+      return new File([blob], `${String(file.name || "photo").replace(/\.[a-z0-9]{1,5}$/i, "")}.jpg`, { type: "image/jpeg" });
     } catch (e) {
-      throw new Error(`${file.name || "這張照片"} 是 HEIC，轉不成 JPEG：請在相簿裡把它匯出成 JPEG 再選一次`);
+      if (e?.heic) throw e;
+      throw heicError(`${name} 是 HEIC，轉不成 JPEG：請在相簿裡把它匯出成 JPEG 再選一次`);
+    } finally {
+      try { bmp?.close?.(); } catch (e) { /* 已經關了 */ }
     }
   }
-  async function downscale(file, maxEdge, quality) {
-    file = await decodableImage(file);
+  async function downscale(file, maxEdge, quality, note) {
+    file = await decodableImage(file, note);
     return new Promise((resolve, reject) => {
       const img = new Image(), url = URL.createObjectURL(file);
       const finish = (fn, v) => { URL.revokeObjectURL(url); fn(v); };
@@ -2239,7 +2297,7 @@
       $("promisedInfo").textContent = `${t("上傳中")} ${i + 1}／${files.length}：${f0.name}…`;
       try {
         let f = f0;
-        if (isHeic(f)) f = await decodableImage(f); // iPhone 的 HEIC：對方多半打不開，轉成 JPEG
+        f = await decodableImage(f, noteInto("promisedInfo")); // iPhone 的 HEIC（看內容認）：對方多半打不開，轉成 JPEG
         if (f.size > 4.5 * 1024 * 1024 && /^image\/(jpeg|png|webp)/.test(f.type)) { const data = await downscale(f, 2400, 0.88); f = new File([await (await fetch(data)).blob()], f.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" }); }
         if (f.size > 4.5 * 1024 * 1024) throw new Error(t("超過 4.5 MB：請放到雲端（Drive／OneDrive）再貼連結"));
         const fd = new FormData();
@@ -2277,7 +2335,7 @@
     let done = 0; const failed = [];
     for (const [i, f] of files.entries()) {
       mnote(`上傳合照 ${i + 1}／${files.length}：${f.name}…`);
-      try { await uploadMaterial("photo", f.name, await photoData(f)); done += 1; }
+      try { await uploadMaterial("photo", f.name, await photoData(f, 1600, mnote)); done += 1; }
       catch (e) { failed.push(`${f.name}：${e.message || e}`); }
     }
     $("photoFiles").value = "";
@@ -2285,15 +2343,39 @@
     else { mnote(`已放上 ${done} 張合照，專頁上就看得到了。`, "ok"); flash(`已放上 ${done} 張合照`); }
   };
   // 縮圖失敗（HEIC、壞檔、記憶體不夠）時退回原檔上傳，不要卡在那裡沒有反應
-  async function photoData(file, maxEdge = 1600) {
-    try { return await downscale(file, maxEdge, 0.85); }
+  async function photoData(file, maxEdge = 1600, note) {
+    try { return await downscale(file, maxEdge, 0.85, note); }
     catch (e) {
-      if (isHeic(file)) throw e; // HEIC 原檔送上去也讀不出來、來賓專頁上也看不到
+      if (e?.heic) throw e; // HEIC 原檔送上去也讀不出來、來賓專頁上也看不到
       if (file.size > 4.5 * 1024 * 1024) throw new Error(`瀏覽器縮不了這張圖（${e.message || e}），而且原檔超過 4.5 MB，請先在相簿匯出成 JPEG`);
       return await readFileDataUrl(file);
     }
   }
   const readFileDataUrl = (file) => new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(String(fr.result)); fr.onerror = () => reject(fr.error); fr.readAsDataURL(file); });
+  /**
+   * 把照片（或檔案）拖進那一張卡片＝選了那幾個檔（Mac 上從 Finder、下載資料夾、AirDrop 收到的 HEIC 直接拖）。
+   * 只收檔案，拖一段字照舊；交給那一格自己的 onchange，所以 HEIC 轉檔、縮圖、上傳都走同一條。
+   */
+  function dropZone(zone, input) {
+    if (!zone || !input) return;
+    const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+    zone.addEventListener("dragover", (e) => { if (!hasFiles(e)) return; e.preventDefault(); zone.classList.add("dropping"); });
+    zone.addEventListener("dragleave", (e) => { if (!zone.contains(e.relatedTarget)) zone.classList.remove("dropping"); });
+    zone.addEventListener("drop", (e) => {
+      zone.classList.remove("dropping");
+      const dropped = [...(e.dataTransfer?.files || [])];
+      if (!dropped.length) return;
+      e.preventDefault();
+      const dt = new DataTransfer();
+      for (const f of input.multiple ? dropped : dropped.slice(0, 1)) dt.items.add(f);
+      input.files = dt.files;
+      input.dispatchEvent(new Event("change"));
+    });
+  }
+  dropZone($("signbookFile").closest(".card"), $("signbookPick"));
+  dropZone($("cardFiles").closest(".card"), $("cardPick"));
+  dropZone($("photoFiles").parentElement, $("photoFiles"));
+  dropZone($("promisedBox"), $("promisedFiles"));
 
   // ── 信件：兩封信（確認信、感謝信）都在這裡，收件人共用一份 ──
   $("confirmRecipientsRefresh").onclick = loadRecipients;
@@ -2741,7 +2823,7 @@
   /** 照片先在瀏覽器縮到長邊 maxEdge（跟合照同一套做法），縮不動就原檔送。 */
   async function shrinkImage(file, maxEdge) {
     const toData = (blob) => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob); });
-    file = await decodableImage(file);
+    file = await decodableImage(file, noteInto("labsInfo"));
     try {
       const bmp = await createImageBitmap(file);
       const scale = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
@@ -3181,8 +3263,11 @@ $("driveInfo").innerHTML = d?.backed_up_at
     $("cardTable").hidden = !any;
     $("cardActions").hidden = !any;
   }
-  $("cardFiles").onchange = async () => {
-    const files = [...$("cardFiles").files];
+  // 拍照（capture）與選檔（iPad 選相簿裡已經拍好的，或拖進這一張卡片）走同一條
+  const cardInput = (input) => () => { const files = [...input.files]; input.value = ""; readCardPhotos(files); };
+  $("cardFiles").onchange = cardInput($("cardFiles"));
+  $("cardPick").onchange = cardInput($("cardPick"));
+  async function readCardPhotos(files) {
     if (!files.length) return;
     const id = $("visitSelect").value;
     if (!id) return cnote("請先在上面選一場參訪。", "err");
@@ -3191,7 +3276,7 @@ $("driveInfo").innerHTML = d?.backed_up_at
     for (const [i, f] of files.entries()) {
       cnote(`讀名片 ${i + 1}／${files.length}：${f.name}…`);
       try {
-        const image = await photoData(f, 2000);
+        const image = await photoData(f, 2000, cnote);
         const r = await runJob("/api/cards", { visit_id: id, image }, cnote, `讀名片 ${i + 1}／${files.length}：${f.name}……`);
         if (!r) throw new Error("讀名片失敗");
         state.cardPending.push({ photo_key: r.photo_key, people: (r.people || []).map((p) => ({ name: p.name || "", title: p.title || "", affiliation: p.affiliation || "", email: p.email || "", phone: p.phone || "" })) });
@@ -3201,10 +3286,9 @@ $("driveInfo").innerHTML = d?.backed_up_at
         flash(`${f.name}：${e.message || e}`, "err");
       }
     }
-    $("cardFiles").value = "";
     const n = (state.cardPending || []).reduce((s, g) => s + (g.people || []).length, 0);
     cnote(failed ? `讀出 ${n} 個人，${failed} 張沒讀成功` : `讀出 ${n} 個人，請逐欄確認（尤其是 email）再加進名單`, failed ? "err" : "ok");
-  };
+  }
   $("cardSave").onclick = () => busy($("cardSave"), async () => {
     const id = $("visitSelect").value;
     if (!id) return flash("請先選一場參訪", "err");
