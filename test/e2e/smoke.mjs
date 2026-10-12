@@ -1178,6 +1178,20 @@ try {
   await page.waitForFunction(() => document.getElementById("preStatus").textContent === "" && document.getElementById("orgName").value === "", null, { timeout: 15000 });
   await page.fill("#emailText", "");
   const shotsBefore = await page.locator("#visitSelect option").count();
+  // 從 Excel、Word 複製幾格：剪貼簿裡同時有字和一張那幾格的圖——要的是字，不是一張圖
+  const cellsPasted = await page.evaluate(async () => {
+    const c = document.createElement("canvas");
+    c.width = 200; c.height = 40;
+    const blob = await new Promise((r) => c.toBlob(r, "image/png"));
+    const dt = new DataTransfer();
+    dt.setData("text/plain", "Jane Roe\tProfessor\tjane.roe@example.test");
+    dt.items.add(new File([blob], "image.png", { type: "image/png" }));
+    const ev = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+    document.getElementById("emailText").dispatchEvent(ev);
+    return ev.defaultPrevented;
+  });
+  await page.waitForTimeout(300);
+  check(!cellsPasted && (await page.locator("#listFilesInfo li").count()) === 0, "pasting cells copied from a spreadsheet (text plus a picture of them) stays text");
   // 貼上：一張很長的捲動截圖（400×4000）——整張縮到 Claude 看得下就糊了，所以切成兩段
   const pasted = await page.evaluate(async () => {
     const c = document.createElement("canvas");
@@ -1224,12 +1238,25 @@ try {
   await page.click("#extractBtn");
   await page.waitForFunction(() => /讀信中/.test(document.getElementById("extractInfo").textContent), null, { timeout: 30000 });
   page.off("request", onExtract);
+  // AI 讀的那一兩分鐘裡又拖進來一張：留在清單上、下一次讀（以前讀完整個清單一起清掉，這一張就不見了）
+  const later = await page.evaluateHandle(async () => {
+    const c = document.createElement("canvas");
+    c.width = 390; c.height = 844;
+    c.getContext("2d").fillRect(0, 0, 390, 844);
+    const dt = new DataTransfer();
+    dt.items.add(new File([await new Promise((r) => c.toBlob(r, "image/jpeg", 0.9))], "later.jpg", { type: "image/jpeg" }));
+    return dt;
+  });
+  await page.dispatchEvent("#extractCard", "drop", { dataTransfer: later });
+  await page.waitForFunction(() => /later\.jpg/.test(document.getElementById("listFilesInfo").textContent), null, { timeout: 15000 });
   const startBody = JSON.parse(extractPosts[extractPosts.length - 1].postData() || "{}");
   check(extractPosts.length === 5 && startBody.keys?.length === 4 && startBody.email_text === "" && !startBody.files, `four uploads (the long screenshot as two parts, the dropped one, the HEIC), then one small request with only the keys (${extractPosts.length}, ${startBody.keys?.length})`);
   await page.waitForFunction(() => document.getElementById("orgName").value.length > 0, null, { timeout: 90000 });
   check((await page.inputValue("#guestTable tbody tr:first-child td:nth-child(4) input")) === "0912-345-678", "the contact who only has a phone number lands in the guest list, number and all");
   const readList = await page.textContent("#listFilesInfo");
   check(/貼上的截圖 1（第 1／2 段）/.test(readList) && /貼上的截圖 1（第 2／2 段）/.test(readList) && /card\.jpg/.test(readList) && /LINE_chat/.test(readList), `…and the list now says what was read: both parts, the dropped screenshot, and the HEIC as a JPEG (${readList})`);
+  check((await page.locator("#listFilesInfo [data-att-del]").count()) === 1 && /later\.jpg/.test(readList), "…while the screenshot added during the read is still listed, for the next read");
+  await page.click("#listFilesInfo [data-att-del]");
   const { readdir } = await import("node:fs/promises");
   const leftovers = (await readdir(path.join(tmp, "media", "extract"), { recursive: true }).catch(() => [])).filter((f) => f.endsWith(".json"));
   check(leftovers.length === 0, `the screenshots are deleted once read (${leftovers.join(", ")})`);

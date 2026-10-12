@@ -94,6 +94,8 @@ test("extractFile dispatches by extension and passes PDF/images through to the m
   const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   assert.equal((await extractFile("chat.jpg", "image/jpeg", png)).media_type, "image/png", "副檔名寫 jpg、內容是 PNG：照內容");
   assert.equal((await extractFile("", "", png)).kind, "image", "沒有檔名、沒有類型也認得出是圖");
+  const jfif = await extractFile("scan.jfif", "image/jpeg", new Uint8Array([0xff, 0xd8, 0xff, 0xe0]));
+  assert.deepEqual([jfif.kind, jfif.media_type], ["image", "image/jpeg"], "少見的副檔名（.jfif）內容是 JPEG 就照 JPEG 讀");
   assert.equal((await extractFile("broken.png", "image/png", new Uint8Array([1, 2, 3]))).kind, "unsupported", "副檔名是圖、內容不是：不送");
   const heic = await extractFile("IMG_0001.HEIC", "image/heic", new Uint8Array([0, 0, 0, 0x18]));
   assert.equal(heic.kind, "unsupported");

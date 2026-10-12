@@ -1285,14 +1285,18 @@
    */
   const SHOT = { edge: 2576, width: 1440, overlap: 240, keep: 1.2 * 1024 * 1024, pngMax: 900 * 1024, maxImages: 20, maxFiles: 24, maxFileBytes: 4.5 * 1024 * 1024, maxTotal: 20 * 1024 * 1024 };
   const extractAtt = []; // { id, file, name, image, tiles, thumb }
+  let extractRead = ""; // 上一次讀完「讀了哪幾個」那幾行（列在還沒讀的附件底下）
   const isImageFile = (f) => /^image\//i.test(f?.type || "") || /\.(jpe?g|png|webp|gif|hei[cf])$/i.test(f?.name || "");
   /** 一張圖要切成幾段：照原樣（或縮一點點）看得清楚就一張；縮到八成以下的又高又窄的捲動截圖才切。 */
   function planShot(w, h) {
     const single = SHOT.edge / Math.max(w, h);
-    if (single >= 0.8 || h <= w) return { tiles: 1, scale: Math.min(1, single), tileH: Math.round(h * Math.min(1, single)) };
+    const whole = { tiles: 1, scale: Math.min(1, single), tileH: Math.round(h * Math.min(1, single)) };
+    if (single >= 0.8 || h <= w) return whole;
     const scale = Math.min(1, SHOT.width / w);
     const H = Math.round(h * scale), tileH = Math.min(SHOT.edge, H);
-    return { tiles: Math.max(1, Math.ceil((H - SHOT.overlap) / (tileH - SHOT.overlap))), scale, tileH };
+    const tiles = Math.ceil((H - SHOT.overlap) / (tileH - SHOT.overlap));
+    // 切下來只有一段（直拍的大照片，不是捲動截圖）：照整張縮就好，不要再縮到 1440 寬
+    return tiles > 1 ? { tiles, scale, tileH } : whole;
   }
   const toBlob = (c, type, q) => new Promise((resolve) => c.toBlob(resolve, type, q));
   /**
@@ -1328,6 +1332,7 @@
   }
   /** 貼上、拖進來、選檔都走這裡：照片先看得懂（HEIC 轉掉），量一下要切成幾段，列在底下。 */
   async function addAttachments(files, how) {
+    extractRead = ""; // 開始放下一批了，上一次「讀了哪幾個」不必再列
     for (const f0 of [...(files || [])].filter(Boolean)) {
       if (extractAtt.length >= SHOT.maxFiles) { flash(`一次最多 ${SHOT.maxFiles} 個附件`, "err"); break; }
       const image = isImageFile(f0);
@@ -1353,10 +1358,16 @@
     const images = extractAtt.filter((a) => a.image).reduce((n, a) => n + a.tiles, 0);
     const size = (n) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
     $("listFilesInfo").innerHTML = extractAtt.map((a) => `<li class="flex items-center gap-2">${a.thumb ? `<img class="att-thumb" src="${a.thumb}" alt="">` : `<span class="att-thumb att-doc">${esc((/\.([a-z0-9]+)$/i.exec(a.name) || [, "檔案"])[1].toUpperCase())}</span>`}<span class="min-w-0 break-all">${esc(a.name)} <span class="muted">${size(a.file.size)}</span>${a.tiles > 1 ? ` <span class="muted">${t(`長截圖，會切成 ${a.tiles} 段來讀`)}</span>` : ""}</span><button type="button" class="muted" data-att-del="${a.id}" title="拿掉這一個">✕</button></li>`).join("")
-      + (images > SHOT.maxImages ? `<li class="err">${t(`截圖切完共 ${images} 張，一次最多 ${SHOT.maxImages} 張：請分兩次讀，或只留跟參訪有關的那幾張`)}</li>` : "");
+      + (images > SHOT.maxImages ? `<li class="err">${t(`截圖切完共 ${images} 張，一次最多 ${SHOT.maxImages} 張：請分兩次讀，或只留跟參訪有關的那幾張`)}</li>` : "")
+      + extractRead;
   }
-  function clearAttachments() {
-    for (const a of extractAtt.splice(0)) if (a.thumb) URL.revokeObjectURL(a.thumb);
+  /** 讀完的那幾個拿掉（給了 ids 就只拿掉那幾個——AI 讀的那一兩分鐘裡又加進來的留著）。 */
+  function clearAttachments(ids) {
+    for (let i = extractAtt.length - 1; i >= 0; i--) {
+      if (ids && !ids.has(extractAtt[i].id)) continue;
+      const [a] = extractAtt.splice(i, 1);
+      if (a.thumb) URL.revokeObjectURL(a.thumb);
+    }
     renderAttachments();
   }
   $("listFilesInfo").addEventListener("click", (e) => {
@@ -1368,16 +1379,19 @@
   });
   // 選檔：加到清單後面（不是換掉——先貼的截圖不要因為再選一次檔就不見）
   $("listFiles").onchange = async () => { const picked = [...$("listFiles").files]; $("listFiles").value = ""; await addAttachments(picked, "pick"); };
-  // 貼上：剪貼簿裡有圖才接手，純文字照舊貼進文字框。iPad 的 Safari 圖放在 items 裡
+  // 貼上：剪貼簿裡有圖才接手，純文字照舊貼進文字框。iPad 的 Safari 圖放在 items 裡。
+  // 有文字就是貼文字：從 Excel、Word 複製幾格，剪貼簿裡同時有字和一張那幾格的圖——要的是字
   const clipboardImages = (e) => {
     const cd = e.clipboardData;
+    if ((cd?.getData?.("text/plain") || "").trim()) return [];
     const files = cd?.files?.length ? [...cd.files] : [...(cd?.items || [])].filter((i) => i.kind === "file").map((i) => i.getAsFile()).filter(Boolean);
     return files.filter(isImageFile);
   };
   $("extractCard").addEventListener("paste", (e) => { const imgs = clipboardImages(e); if (!imgs.length) return; e.preventDefault(); addAttachments(imgs, "paste"); });
-  // 游標沒有停在任何欄位（剛截完圖、直接按 ⌘V）也收：只在「訪前」分頁
+  // 游標沒有停在任何欄位（剛截完圖、直接按 ⌘V；點過頁面上的字也算）也收：只在「訪前」分頁，貼進欄位的照舊
+  const editable = (el) => !!(el && (el.isContentEditable || el.closest?.("input, textarea, select, [contenteditable]")));
   document.addEventListener("paste", (e) => {
-    if (e.defaultPrevented || $("tab-pre").hidden || (e.target !== document.body && e.target !== document.documentElement)) return;
+    if (e.defaultPrevented || $("tab-pre").hidden || editable(e.target)) return;
     const imgs = clipboardImages(e);
     if (!imgs.length) return;
     e.preventDefault();
@@ -1394,10 +1408,12 @@
     if (text.trim().length < 20 && !extractAtt.length) return flash("請貼上 email 內容、手機截圖或名單檔", "err");
     const visitSeq = selectVisit.seq || 0; // 按下去的那一刻就記：上傳到一半換了一場，結果一樣要丟掉
     const note = noteInto("extractInfo");
+    const batch = [...extractAtt]; // 這一次讀的就是現在列著的這幾個；等的時候再加的，下一次讀
+    if (extractRead) { extractRead = ""; renderAttachments(); }
     // 1. 整理：長截圖切段、HEIC 轉掉
     const pieces = [];
     try {
-      for (const a of extractAtt) {
+      for (const a of batch) {
         if (!a.image) pieces.push({ blob: a.file, name: a.name, image: false });
         else for (const p of await prepareShot(a)) pieces.push({ ...p, image: true });
       }
@@ -1424,13 +1440,14 @@
     const r = await api("/api/extract", { method: "POST", body: { email_text: text, upload, keys, warnings } });
     if (!r.ok || !r.job_id) { await dropUploaded(); note(""); return flash(r.error || "抽取沒有開始，請再按一次", "err"); }
     note("AI 讀信中……大約一兩分鐘，讀完會自己填進下面的欄位。");
-    pollExtract(r.job_id, visitSeq);
+    pollExtract(r.job_id, visitSeq, new Set(batch.map((a) => a.id)));
   });
-  async function pollExtract(jobId, visitSeq) {
+  async function pollExtract(jobId, visitSeq, batch) {
     const out = await waitForJob("/api/extract", jobId, noteInto("extractInfo"), { visitSeq });
     if (!out) return;
-    clearAttachments(); // 讀完了：底下改列「讀了哪幾個」，截圖不留在這台瀏覽器
-    $("listFilesInfo").innerHTML = (out.files_read || []).map((f) => `<li>${esc(f.name)} <span class="ok">已讀（${f.kind === "text" ? `${f.chars} 字` : f.kind === "document" ? "PDF 交給 AI 直接讀" : "照片交給 AI 直接讀"}）</span></li>`).join("") + (out.warnings || []).map((w) => `<li class="err">${esc(w)}</li>`).join("");
+    // 讀完了：讀過的那幾個拿掉、改列「讀了哪幾個」，截圖不留在這台瀏覽器（等的時候又加的留著，下一次讀）
+    extractRead = (out.files_read || []).map((f) => `<li>${esc(f.name)} <span class="ok">${f.kind === "text" ? `已讀（${f.chars} 字）` : f.kind === "document" ? "已讀（PDF 交給 AI 直接讀）" : "已讀（照片交給 AI 直接讀）"}</span></li>`).join("") + (out.warnings || []).map((w) => `<li class="err">${esc(w)}</li>`).join("");
+    clearAttachments(batch);
     state.saved = false; $("visitSelect").value = "";
     if (state.draft && state.draft.id !== "new") await migrateDraft(state.draft.id, "new"); // 貼進來的那封信是這一場新的，不留在剛才那一場底下
     // 信裡讀不出動線（讀出來的只有總體介紹）：跟自己打字建的一場一樣，先擺五間各 20 分的預設——
@@ -3196,7 +3213,7 @@ $("driveInfo").innerHTML = d?.backed_up_at
       if (!tr.querySelector("[data-take]").checked) continue;
       const cells = [...tr.cells].map((td) => td.firstChild);
       const person = { name: cells[1].value.trim(), title: cells[2].value.trim(), affiliation: cells[3].value.trim(), email: cells[4].value.trim(), phone: cells[5].value.trim() };
-      if (!person.name && !person.email) continue;
+      if (!person.name && !person.email && person.phone.replace(/\D/g, "").length < 8) continue; // 姓名、email、電話有一個就算（跟伺服器同一條）
       const key = state.cardPending[Number(tr.dataset.g)]?.photo_key || "";
       if (!byGroup.has(key)) byGroup.set(key, []);
       byGroup.get(key).push(person);

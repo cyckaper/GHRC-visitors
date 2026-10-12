@@ -159,6 +159,20 @@ test("名片併進名單：同一個人只補空欄位，不覆寫已確認的�
   assert.deepEqual([card.guests[0].name, card.guests[0].email, card.guests[0].contact], ["林小姐", "lin@z.org", true], "只補空的欄位，聯絡人身分照舊");
   assert.equal(mergeGuests([], [{ name: "", email: "", phone: "0912345678" }]).added, 1, "只有電話的人也收");
   assert.equal(mergeGuests([], [{ name: "", email: "", phone: "12" }]).added, 0, "兩三個數字不算電話");
+  // 名片上常常是單位的總機：同一支電話、姓名與 email 都不一樣，是兩個人（以前第二張被併進第一個人、不見了）
+  const desk = mergeGuests([], [
+    { name: "王大明", title: "教授", email: "wang@q.edu", phone: "02-2345-6789" },
+    { name: "陳美麗", title: "副教授", email: "chen@q.edu", phone: "(02) 2345 6789" },
+  ]);
+  assert.deepEqual(desk.guests.map((g) => g.name), ["王大明", "陳美麗"], "總機號碼相同不算同一人");
+  assert.equal(desk.added, 2);
+  // 簡訊裡只有電話的那一位，之後同一支電話的兩張名片：只有一張補上他，另一張是新的人
+  const shared = mergeGuests([{ name: "", email: "", phone: "02 2345 6789", contact: true }], [
+    { name: "王大明", email: "wang@q.edu", phone: "0223456789" },
+    { name: "陳美麗", email: "chen@q.edu", phone: "0223456789" },
+  ]);
+  assert.deepEqual(shared.guests.map((g) => [g.name, !!g.contact]), [["王大明", true], ["陳美麗", false]]);
+  assert.equal(mergeGuests([{ name: "Wang Da-Ming", email: "", phone: "0912345678" }], [{ name: "wang  da-ming", email: "w@q.edu", phone: "0912 345 678" }]).added, 0, "姓名只差大小寫與空白，同一人");
 });
 
 test("讀信抽出來的日期：沒有就用候選的，都沒有就留空——絕不補今天", () => {
@@ -456,9 +470,9 @@ test("隱私權政策 /privacy：每一個外部服務、每一個 Google 權限
   }
   // 參訪申請也會是簡訊、LINE 的手機截圖（上面有對話與電話）：要寫出來，也要寫截圖讀完就刪
   assert.match(langs[0][1], /screenshots of text messages[\s\S]*phone numbers?|phone numbers[\s\S]*screenshots of text messages/, "英文：截圖與電話");
-  assert.match(langs[0][1], /screenshots themselves are deleted/);
+  assert.match(langs[0][1], /screenshots themselves are deleted.*never read.*within two hours/);
   assert.match(langs[1][1], /截圖[\s\S]*電話/, "中文：截圖與電話");
-  assert.match(langs[1][1], /截圖本身讀完就刪掉/);
+  assert.match(langs[1][1], /截圖本身讀完就刪掉.*沒讀成的.*兩小時內/);
 });
 
 test("座談的場次：總體介紹 → 座談、沒有研究室參訪；換成座談時研究室參訪的時間給座談；支援人力表與通告五間都問", () => {

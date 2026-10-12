@@ -36,7 +36,8 @@ export async function extractFile(name: string, mime: string, bytes: Uint8Array)
     if (["csv", "tsv", "txt", "md", "json", "eml", "text"].includes(ext)) return { kind: "text", name, text: clip(decodeText(bytes)) };
     if (ext === "pdf") return { kind: "document", name, media_type: "application/pdf", data: Buffer.from(bytes).toString("base64") };
     const sniffed = sniffImage(bytes);
-    if (IMAGE_TYPES[ext] || (!ext && sniffed)) {
+    // 副檔名是圖、或內容認得出是圖（.jfif、.jpe 這種少見的副檔名也是 JPEG）
+    if (IMAGE_TYPES[ext] || sniffed) {
       if (!sniffed) return { kind: "unsupported", name, reason: "讀不出這張圖（檔案可能壞了，或不是照片）" };
       return { kind: "image", name, media_type: sniffed, data: Buffer.from(bytes).toString("base64") };
     }

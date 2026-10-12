@@ -122,7 +122,7 @@ test("手機截圖（簡訊、LINE）：一個一個先上傳，工作裡只帶 
   const a = await stage("貼上的截圖 1.png", "image/png", PNG);
   assert.equal(a.status, 200, JSON.stringify(a.body));
   assert.equal(a.body.kind, "image");
-  assert.match(a.body.key, /^extract\/shotsupload01\/[a-z0-9]+-image\.json$/);
+  assert.match(a.body.key, /^extract\/shotsupload01\/[a-z0-9]+_[a-z0-9]+-image\.json$/);
   assert.equal((await stage("IMG_1.HEIC", "image/heic", Buffer.from([0, 0, 0, 0x18]))).status, 415, "HEIC 擋下來（後台會先轉成 JPEG）");
   const odd = await stage("old.doc", "application/msword", Buffer.from("x"));
   assert.equal(odd.status, 200);
@@ -161,6 +161,31 @@ test("手機截圖（簡訊、LINE）：一個一個先上傳，工作裡只帶 
   assert.equal(tooMany.status, 413);
   assert.match(tooMany.body.error, /20 張/);
   await assert.rejects(staged(many[0]), "退回時一起清掉");
+  // 信貼太長也一樣：退回之前先把這一批清掉
+  const long = await stage("long.png", "image/png", PNG, "longupload01");
+  const tooLong = await api("/api/extract", { method: "POST", headers: admin, body: JSON.stringify({ email_text: "x".repeat(200001), upload: "longupload01", keys: [long.body.key] }) });
+  assert.equal(tooLong.status, 413);
+  await assert.rejects(staged(long.body.key), "內容太長退回時也清掉");
+});
+
+test("沒讀成的截圖（上傳到一半關掉網頁）：放上去超過一小時就清掉，剛放的不動", async () => {
+  const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+  const fd = new FormData();
+  fd.append("upload", "sweepupload01");
+  fd.append("file", new Blob([PNG], { type: "image/png" }), "fresh.png");
+  const fresh = (await api("/api/extract", { method: "POST", headers: { authorization: "Bearer test-token" }, body: fd })).body.key;
+  // 兩小時前放上去、一直沒讀的那一個（直接寫進媒體庫：時間寫在 key 裡）
+  const { mkdir } = await import("node:fs/promises");
+  const stale = `extract/sweepupload01/${(Date.now() - 2 * 3600_000).toString(36)}_abc123-image.json`;
+  await mkdir(path.join(tmp, "media", "extract", "sweepupload01"), { recursive: true });
+  await writeFile(path.join(tmp, "media", stale), "{}");
+  assert.equal((await api("/api/extract-sweep-cron")).status, 401, "路過的人打不動");
+  const swept = await api("/api/extract-sweep-cron", { method: "POST", headers: admin, body: "{}" });
+  assert.equal(swept.status, 200);
+  assert.match(String(swept.body), /清掉 1 個/);
+  await assert.rejects(readFile(path.join(tmp, "media", stale)), "超過一小時的清掉");
+  await readFile(path.join(tmp, "media", fresh)); // 剛放上去的（說不定正在讀）不動
+  await api(`/api/extract?upload=sweepupload01&key=${encodeURIComponent(fresh)}`, { method: "DELETE", headers: admin });
 });
 
 test("只有電話的聯絡人：存檔留著、來賓專頁看不到電話", async () => {

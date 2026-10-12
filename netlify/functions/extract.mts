@@ -55,15 +55,15 @@ export default async (req: Request) => {
   const body = await readJSON<{ email_text?: string; files?: { name?: string; type?: string; data?: string }[]; upload?: string; keys?: unknown[]; warnings?: unknown[] }>(req);
   const text = String(body?.email_text || "").trim();
   const files = Array.isArray(body?.files) ? body!.files! : [];
-  if (files.length > MAX_FILES) return fail(413, `一次最多 ${MAX_FILES} 個檔案`);
-  if (text.length > 200000) return fail(413, "內容太長，請只貼相關的往來");
   const upload = String(body?.upload || "");
   const keys = (Array.isArray(body?.keys) ? body!.keys! : []).map(String);
-  // 退回去之前先把這一批已經放上去的清掉（截圖裡有對方的電話與對話，不留著）
+  // 退回去之前先把這一批已經放上去的清掉（截圖裡有對方的電話與對話，不留著）——**每一個退回都走這裡**
   const refuse = async (status: number, message: string) => {
     if (isUploadId(upload)) await dropStaged(keys.filter((k) => isStagedKey(k, upload)));
     return fail(status, message);
   };
+  if (files.length > MAX_FILES) return refuse(413, `一次最多 ${MAX_FILES} 個檔案`);
+  if (text.length > 200000) return refuse(413, "內容太長，請只貼相關的往來");
   if (keys.length && (!isUploadId(upload) || keys.some((k) => !isStagedKey(k, upload)))) return refuse(400, "附件的編號不對，請重新選一次");
   if (keys.length > MAX_STAGED) return refuse(413, `一次最多 ${MAX_STAGED} 個附件`);
   if (keys.filter((k) => stagedKind(k) === "image").length > MAX_IMAGES) return refuse(413, `截圖一次最多 ${MAX_IMAGES} 張（長截圖會切成好幾段，也算在裡面）：請分兩次讀，或只留跟參訪有關的那幾張`);
@@ -83,6 +83,6 @@ export default async (req: Request) => {
     else if (out.kind === "text" && !out.text.trim()) warnings.push(`${name}：檔案裡讀不到文字`);
     else attachments.push(out);
   }
-  if (text.length < 20 && !attachments.length && !keys.length) return fail(400, warnings.length ? `沒有可讀的資料。${warnings.join("；")}` : "請貼上 email 內容、手機截圖或名單檔");
+  if (text.length < 20 && !attachments.length && !keys.length) return refuse(400, warnings.length ? `沒有可讀的資料。${warnings.join("；")}` : "請貼上 email 內容、手機截圖或名單檔");
   return startBackground("extract", { text, attachments, keys, warnings }, req);
 };

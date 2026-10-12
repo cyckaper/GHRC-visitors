@@ -849,7 +849,10 @@
   "上傳失敗，請再按一次": "The upload failed — please press it again",
   "拿掉這一個": "Remove this one",
   "聯絡人只有電話、沒有 email：確認信按「複製信件」，貼回簡訊或 LINE 給他。": "The contact has only a phone number, no email: press “Copy letter” and paste the confirmation back into the text message or LINE chat.",
-  "貼上的截圖 #": "Pasted screenshot #"
+  "貼上的截圖 #": "Pasted screenshot #",
+  "已讀（# 字）": "Read (# characters)",
+  "已讀（照片交給 AI 直接讀）": "Read (the image goes straight to the AI)",
+  "已讀（PDF 交給 AI 直接讀）": "Read (the PDF goes straight to the AI)"
  },
  "patterns": [
   [
@@ -1295,6 +1298,26 @@
   [
    "^「(.+)」那一頁$",
    "the “$1” slide"
+  ],
+  [
+   "^貼上的截圖 (\\d+)（第 (\\d+)／(\\d+) 段）\\.(\\w+)$",
+   "Pasted screenshot $1 (part $2 of $3).$4"
+  ],
+  [
+   "^(.+)（第 (\\d+)／(\\d+) 段）\\.(\\w+)$",
+   "$1 (part $2 of $3).$4"
+  ],
+  [
+   "^貼上的截圖 (\\d+)\\.(\\w+)$",
+   "Pasted screenshot $1.$2"
+  ],
+  [
+   "^(.+) 讀不出來（檔案可能壞了，或不是照片）$",
+   "Could not read $1 (the file may be damaged, or it is not a photo)"
+  ],
+  [
+   "^(.+)：瀏覽器處理不了這張圖$",
+   "$1: the browser could not process this image"
   ]
  ]
 }

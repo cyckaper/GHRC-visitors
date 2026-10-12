@@ -16,7 +16,8 @@ export const MAX_IMAGES = 20;
 export const MAX_REQUEST_BASE64 = 28 * 1024 * 1024;
 
 const UPLOAD = /^[a-z0-9]{10,40}$/;
-const KEY = /^extract\/([a-z0-9]{10,40})\/[a-z0-9]{6,40}-(image|document|text)\.json$/;
+// extract/<upload>/<上傳的時間（36 進位毫秒）>_<亂數>-<種類>.json：時間寫在 key 裡，清理時不必把檔案讀出來
+const KEY = /^extract\/([a-z0-9]{10,40})\/([a-z0-9]{6,12})_[a-z0-9]{1,12}-(image|document|text)\.json$/;
 
 export const isUploadId = (id: string) => UPLOAD.test(String(id || ""));
 /** 這個 key 是不是抽取的暫存（給了 upload 就還要是那一批的）。 */
@@ -25,13 +26,18 @@ export function isStagedKey(key: string, upload?: string): boolean {
   return !!m && (!upload || m[1] === upload);
 }
 /** key 裡記著是哪一種（image／document／text）：檢查張數不必把檔案讀出來。 */
-export const stagedKind = (key: string) => KEY.exec(String(key || ""))?.[2] || "";
+export const stagedKind = (key: string) => KEY.exec(String(key || ""))?.[3] || "";
+/** 這一個是什麼時候放上去的（毫秒）；不是暫存的 key 回 NaN。 */
+export const stagedAt = (key: string) => {
+  const m = KEY.exec(String(key || ""));
+  return m ? parseInt(m[2], 36) : NaN;
+};
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
 export async function stageFile(upload: string, file: Exclude<Extracted, { kind: "unsupported" }>): Promise<string> {
-  const key = `extract/${upload}/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}-${file.kind}.json`;
+  const key = `extract/${upload}/${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8) || "0"}-${file.kind}.json`;
   await getStore().putMedia(key, enc.encode(JSON.stringify(file)), "application/json");
   return key;
 }
@@ -58,4 +64,18 @@ export async function loadStaged(keys: string[]): Promise<{ attachments: Extract
 export async function dropStaged(keys: string[]): Promise<void> {
   const store = getStore();
   await Promise.allSettled((keys || []).filter((k) => isStagedKey(k)).map((k) => store.deleteMedia(k)));
+}
+
+/** 放上去超過這麼久還在的，就是沒讀成的（上傳到一半關掉網頁、抽取的工作中途掛掉）。抽取最久十五分鐘，留一點餘裕。 */
+export const STALE_MS = 60 * 60 * 1000;
+
+/**
+ * 清掉沒讀成的暫存（`extract-sweep-cron` 每小時叫一次）：截圖裡有對方的電話與整段對話，
+ * 讀完就刪是正常的路；這裡收的是沒走到「讀完」的那幾個——不清的話就一直留在媒體庫裡。
+ */
+export async function sweepStaged(now = Date.now(), maxAge = STALE_MS): Promise<string[]> {
+  const store = getStore();
+  const old = (await store.listMedia("extract/")).filter((k) => isStagedKey(k) && now - stagedAt(k) > maxAge);
+  await Promise.allSettled(old.map((k) => store.deleteMedia(k)));
+  return old;
 }
