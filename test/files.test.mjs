@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import JSZip from "jszip";
-import { extractFile, decodeText, docxText, xlsxText, excelSerial } from "../netlify/lib/files.mts";
+import { extractFile, decodeText, docxText, xlsxText, excelSerial, sniffImage } from "../netlify/lib/files.mts";
 
 const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
 async function makeDocx() {
@@ -90,6 +90,16 @@ test("extractFile dispatches by extension and passes PDF/images through to the m
   const img = await extractFile("photo.JPG", "", new Uint8Array([0xff, 0xd8, 0xff]));
   assert.equal(img.kind, "image");
   assert.equal(img.media_type, "image/jpeg");
+  // 照片的格式照檔案開頭的位元組認，不照副檔名：貼上的截圖常叫 image.png、內容卻是 JPEG——格式寫錯，Claude 會整個請求退回
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  assert.equal((await extractFile("chat.jpg", "image/jpeg", png)).media_type, "image/png", "副檔名寫 jpg、內容是 PNG：照內容");
+  assert.equal((await extractFile("", "", png)).kind, "image", "沒有檔名、沒有類型也認得出是圖");
+  assert.equal((await extractFile("broken.png", "image/png", new Uint8Array([1, 2, 3]))).kind, "unsupported", "副檔名是圖、內容不是：不送");
+  const heic = await extractFile("IMG_0001.HEIC", "image/heic", new Uint8Array([0, 0, 0, 0x18]));
+  assert.equal(heic.kind, "unsupported");
+  assert.match(heic.reason, /HEIC/, "HEIC 講清楚是 HEIC（後台會先轉成 JPEG）");
+  assert.equal(sniffImage(new Uint8Array([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50])), "image/webp");
+  assert.equal(sniffImage(new TextEncoder().encode("GIF89a")), "image/gif");
   const doc = await extractFile("old.doc", "application/msword", new Uint8Array([0xd0, 0xcf]));
   assert.equal(doc.kind, "unsupported");
   assert.ok(doc.reason.includes(".docx"));

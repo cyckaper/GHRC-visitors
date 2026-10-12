@@ -106,6 +106,74 @@ test("extract accepts uploaded list files: csv + docx text is read, .doc is repo
   assert.equal(empty.status, 400);
 });
 
+test("手機截圖（簡訊、LINE）：一個一個先上傳，工作裡只帶 key，讀完就刪；只有電話的聯絡人留在名單上", async () => {
+  // 明確指示：「申請參訪有時是簡訊，要能接受圖片資料來分析」「手機畫面截圖」
+  const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+  const upload = "shotsupload01";
+  const stage = async (name, type, bytes, up = upload) => {
+    const fd = new FormData();
+    fd.append("upload", up);
+    fd.append("file", new Blob([bytes], { type }), name);
+    return api("/api/extract", { method: "POST", headers: { authorization: "Bearer test-token" }, body: fd });
+  };
+  const staged = (k) => readFile(path.join(tmp, "media", k));
+  assert.equal((await api("/api/extract", { method: "POST", body: new FormData() })).status, 401, "上傳也要 token");
+
+  const a = await stage("貼上的截圖 1.png", "image/png", PNG);
+  assert.equal(a.status, 200, JSON.stringify(a.body));
+  assert.equal(a.body.kind, "image");
+  assert.match(a.body.key, /^extract\/shotsupload01\/[a-z0-9]+-image\.json$/);
+  assert.equal((await stage("IMG_1.HEIC", "image/heic", Buffer.from([0, 0, 0, 0x18]))).status, 415, "HEIC 擋下來（後台會先轉成 JPEG）");
+  const odd = await stage("old.doc", "application/msword", Buffer.from("x"));
+  assert.equal(odd.status, 200);
+  assert.match(odd.body.warning, /old\.doc/);
+  assert.equal(odd.body.key, undefined, "讀不了的不存");
+  assert.equal((await stage("x.png", "image/png", PNG, "BAD/upload")).status, 400, "upload 編號不對不收");
+
+  // 別一批的 key 不收：整批退回，這一批已經放上去的也清掉（截圖裡有對方的電話與對話，不留著）
+  const other = await stage("y.png", "image/png", PNG, "otherupload01");
+  const mixed = await api("/api/extract", { method: "POST", headers: admin, body: JSON.stringify({ email_text: "", upload, keys: [a.body.key, other.body.key] }) });
+  assert.equal(mixed.status, 400);
+  await assert.rejects(staged(a.body.key), "退回時這一批放上去的清掉");
+  await staged(other.body.key); // 別一批的不動
+
+  // 只有截圖、一個字都沒貼也讀得了；照上傳的順序讀，讀完就刪
+  const a2 = await stage("貼上的截圖 1.png", "image/png", PNG);
+  const b2 = await stage("LINE（第 2／2 段）.jpg", "image/jpeg", PNG); // 副檔名寫 jpg、內容是 PNG：照內容送
+  const r = await extract({ email_text: "", upload, keys: [a2.body.key, b2.body.key], warnings: [odd.body.warning] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.files_read.map((f) => [f.name, f.kind]), [["貼上的截圖 1.png", "image"], ["LINE（第 2／2 段）.jpg", "image"]]);
+  assert.ok(r.body.warnings.some((w) => /old\.doc/.test(w)), "讀不了的那一個照樣說一聲");
+  assert.ok(r.body.extracted.uncertainties.some((u) => /2 張截圖/.test(u)), "兩張都交給 AI 了");
+  const contact = r.body.visit.guests.find((g) => g.phone);
+  assert.ok(contact && contact.contact && !contact.email, `只有電話的聯絡人也留在名單上：${JSON.stringify(r.body.visit.guests)}`);
+  assert.equal(r.body.visit.date, "", "截圖沒讀到日期就不編");
+  for (const k of [a2.body.key, b2.body.key]) await assert.rejects(staged(k), "讀完就刪");
+
+  // 上傳到一半出錯：前端叫 DELETE 把已經放上去的清掉（只清那一批的）
+  assert.equal((await api(`/api/extract?upload=otherupload01&key=${encodeURIComponent(other.body.key)}`, { method: "DELETE", headers: admin })).status, 200);
+  await assert.rejects(staged(other.body.key));
+
+  // 一次最多 20 張（Claude 一個請求超過 20 張，每一張都要縮到 2000 像素以下，截圖的字就糊了）
+  const many = [];
+  for (let i = 0; i < 21; i++) many.push((await stage(`s${i}.png`, "image/png", PNG, "manyupload01")).body.key);
+  const tooMany = await api("/api/extract", { method: "POST", headers: admin, body: JSON.stringify({ upload: "manyupload01", keys: many }) });
+  assert.equal(tooMany.status, 413);
+  assert.match(tooMany.body.error, /20 張/);
+  await assert.rejects(staged(many[0]), "退回時一起清掉");
+});
+
+test("只有電話的聯絡人：存檔留著、來賓專頁看不到電話", async () => {
+  const saved = await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ org: { name: "Phone Only Institute" }, date: "2099-03-04", code: "phoneonly", guests: [{ name: "", title: "", email: "", phone: "+886 912-345-678", contact: true }] }) });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  const v = saved.body.visit;
+  assert.deepEqual(v.guests.map((g) => [g.phone, g.contact]), [["+886 912-345-678", true]], "以前沒有姓名也沒有 email 的人會被丟掉");
+  const pub = await api(`/api/visits?id=${v.visit_id}&public=1`);
+  assert.equal(pub.status, 200);
+  assert.ok(!/912|345-678/.test(JSON.stringify(pub.body)), "電話不上來賓專頁");
+  await api(`/api/visits?id=${v.visit_id}`, { method: "DELETE", headers: admin });
+});
+
 test("extract 跑在背景：一般函式 10 秒不夠，所以回 202 加工作編號，前端輪詢", async () => {
   const started = await api("/api/extract", { method: "POST", headers: admin, body: JSON.stringify({ email_text: EMAIL }) });
   assert.equal(started.status, 202, JSON.stringify(started.body));

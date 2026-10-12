@@ -82,6 +82,8 @@ const GuestSchema = z.object({
   email: z.string(),
   role: z.enum(["lead", "member"]),
   affiliation: z.string(),
+  /** 電話（照原樣抄）。簡訊、LINE 來的申請常常只有電話——那就是唯一的聯絡方式。 */
+  phone: z.string(),
   /** 這封信的往來對象（承辦人／秘書）：確認信預設只寄給他，不寄給全團。 */
   contact: z.boolean(),
 });
@@ -103,32 +105,55 @@ export const ExtractedSchema = z.object({
 });
 export type ExtractedVisit = z.infer<typeof ExtractedSchema>;
 
-const EXTRACT_SYSTEM = `你是臺大生農學院綠色健康研究中心（GHRC）的參訪承辦助理。從主辦端貼上的 email 往來（可能中英夾雜、含轉寄與簽名檔）與上傳的相關檔案（名單 Word／Excel／CSV 轉出的文字、PDF、名單照片）抽出參訪資料。
+const EXTRACT_SYSTEM = `你是臺大生農學院綠色健康研究中心（GHRC）的參訪承辦助理。從主辦端交來的參訪申請抽出參訪資料。申請可能是：
+- email 往來（可能中英夾雜、含轉寄與簽名檔）；
+- **手機截圖**：簡訊、LINE、WhatsApp、Messenger、微信等聊天畫面。一段對話常常分好幾張，很長的截圖會切成幾段、彼此重疊；
+- 從聊天軟體複製或匯出的文字；
+- 相關檔案：名單 Word／Excel／CSV 轉出的文字、PDF、名單照片。
 
 規則：
-- guests：來訪方**每一位**被點名的人都要列出，含職稱與 email（隨行者的 email 是訪後信寄送的關鍵，不要只留主要窗口）。**名單檔（<file> 區塊、PDF、照片）裡的每一列都是一個人**，表格欄位常見順序是姓名／職稱／單位／email，請對應好；沒有 email 的人也要列，email 留空。主要來賓 role=lead，其餘 member。**contact=true 給真正在往來這件事的人**（寄這封信的人、信裡指定的承辦人或秘書；他常常不是主賓，也可能不在來訪名單上但仍要列）——確認信預設只寄給 contact，所以寧可只標一兩個，不要全部標 true；看不出來就全部 false。affiliation 填該人的單位（可能與 org 不同）。
+- guests：來訪方**每一位**被點名的人都要列出，含職稱、email 與電話（隨行者的 email 是訪後信寄送的關鍵，不要只留主要窗口）。**名單檔（<file> 區塊、PDF、名單照片）裡的每一列都是一個人**，表格欄位常見順序是姓名／職稱／單位／email，請對應好；沒有 email 的人也要列，email 留空。主要來賓 role=lead，其餘 member。**contact=true 給真正在往來這件事的人**（寄這封信的人、傳簡訊或 LINE 來的人、信裡指定的承辦人或秘書；他常常不是主賓，也可能不在來訪名單上但仍要列）——確認信預設只寄給 contact，所以寧可只標一兩個，不要全部標 true；看不出來就全部 false。affiliation 填該人的單位（可能與 org 不同）。
+- phone：電話號碼**照原樣抄**（保留 +886、09 開頭、括號與分隔符號），看不清楚的數字就整個留空，不要猜。**電話只放 phone**，不要寫進 purpose、interests 或 uncertainties。
 - org：來訪單位的正式名稱（英文為主，name_local 放當地語言名稱）；type 取 government／university／enterprise／school／ngo／other；country 用英文國名。
 - headcount：預計人數；不知道就用 guests 人數。
 - date：來信**提議或約好**的參訪日期（YYYY-MM-DD）。**用問句提的也算**——「請問您下週 10/5（一）有空嗎？……10/5 週一早上 9:00 到中心」，date 就是那一天，不要因為對方還在問、還沒回覆就留空；還要跟對方確認的話在 uncertainties 寫一句。只有信裡**完全沒提日期**，或列了好幾個日期、看不出偏好哪一個，才留空字串，把那幾個日期放 candidate_dates（YYYY-MM-DD）。沒寫年份就用「今天」之後最近的那一個；信裡也寫了星期幾的話要對得上，對不上就在 uncertainties 說。start_time、end_time 用 HH:MM（台北時間），未提到留空——**來信通常寫「10:00-12:30」，照抽**。duration_minutes 只有在信裡直接寫分鐘數（例如「兩小時」）時才給，否則 0。
 - contact_teacher：中心這邊負責聯絡的老師，只能是 ${TEACHERS.join("／")} 之一，看不出來留空。
 - purpose：來訪目的一句話；interests：信中透露的研究興趣關鍵字（英文，每項 2–6 字）。
 - language：來賓的第二語言層：台灣／華語團 zh、韓國 ko、日本 ja，其餘 en。
-- 不要編造。不知道的欄位留空字串／空陣列／0，並在 uncertainties 用中文列出需要人工確認的事項。`;
+- 不要編造。不知道的欄位留空字串／空陣列／0，並在 uncertainties 用中文列出需要人工確認的事項。
+
+手機截圖與聊天紀錄（簡訊、LINE 等）另外照這幾條讀：
+- 截圖是中心這邊的人用自己的手機截的：**靠右（通常是綠色或藍色）的泡泡是中心這邊說的話，靠左的是對方**。對方才是來訪方；中心這邊的人（${TEACHERS.join("、")}與中心同仁）不要列進 guests。分不出哪一邊是誰就照內容判斷，並在 uncertainties 說一聲。
+- **訊息不是人**：「名單的每一列是一個人」只適用於名單。guests 列的是對方說要來的人；傳訊息的人自己也要列（他是 contact），即使他不一定會來。
+- 畫面最上方的名稱是中心這邊手機裡**存的聯絡人名稱**（可能是暱稱，或「XX 大學 王小姐」這種）。對方在訊息裡自我介紹的姓名、職稱優先；只有存的名稱就用它當 name，在 uncertainties 寫「姓名取自手機聯絡人名稱」。畫面上方或訊息裡的電話號碼放進那個人的 phone。
+- **日期**：聊天裡的「明天」「下週三」「這週五」是**相對於那則訊息傳送的那一天**，不是相對於今天——看訊息上方的日期分隔線（「10月5日（日）」「2026/10/05」）。分隔線寫「今天」「昨天」或截圖裡看不到日期時，以下面給的「今天」推算，並在 uncertainties 寫「截圖看不出訊息是哪一天傳的，日期請確認」。
+- **時間**：手機最上面狀態列的時鐘、每則訊息旁邊的傳送時間（例如 14:32）都**不是**參訪時間，不要拿來填 start_time／end_time；只有訊息內容裡說的時間（「早上 10 點到」「10:00-12:00」）才算。
+- 長截圖切成的段落、連續幾張截圖會**重疊**（每一張前面有編號，照編號的順序讀）：同一則訊息出現兩次只算一次，名單與人數不要因此重複。
+- 不要讀手機介面上的東西：電信業者、電量、通知橫幅、鍵盤、「已讀」、貼圖、輸入框裡還沒送出的字。
+- 聊天裡的單位名稱常是簡稱：org.name 寫正式名稱（看得出來才寫），看不出來就照訊息寫、在 uncertainties 說要確認，不要自己編一個英文名稱。`;
 
 export async function extractVisit(emailText: string, today: string, attachments: Extracted[] = []): Promise<ExtractedVisit> {
   const texts = attachments.filter((a): a is Extract<Extracted, { kind: "text" }> => a.kind === "text");
   const binaries = attachments.filter((a) => a.kind === "document" || a.kind === "image");
-  let text = emailText.trim() ? `以下是 email 往來：\n\n<email>\n${emailText}\n</email>` : "（沒有 email 內文，資料在附件裡）";
+  const images = binaries.filter((a) => a.kind === "image");
+  let text = emailText.trim() ? `以下是主辦端貼上的往來（email，或從簡訊、LINE 複製的文字）：\n\n<email>\n${emailText}\n</email>` : "（沒有貼上文字，資料在附件裡）";
   for (const t of texts) text += `\n\n<file name="${t.name.replace(/"/g, "'")}">\n${t.text}\n</file>`;
-  if (isMock()) return mockExtract(text);
+  if (isMock()) return mockExtract(text, images.length);
   const content: Anthropic.ContentBlockParam[] = [];
+  let n = 0;
   for (const b of binaries) {
     if (b.kind === "document") content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: b.data }, title: b.name });
-    else if (b.kind === "image") content.push({ type: "image", source: { type: "base64", media_type: b.media_type, data: b.data } });
+    else if (b.kind === "image") {
+      // 每一張前面一行編號：好幾張截圖、長截圖切成的幾段，先後與重疊才讀得對
+      n += 1;
+      content.push({ type: "text", text: `截圖／照片 ${n}／${images.length}：${b.name}` });
+      content.push({ type: "image", source: { type: "base64", media_type: b.media_type, data: b.data } });
+    }
   }
-  if (binaries.length) text += `\n\n另有 ${binaries.length} 個附件（PDF／照片）已附在前面，裡面的名單也要讀出。`;
+  if (images.length) text += `\n\n前面附了 ${images.length} 張截圖或照片（照編號的順序；長截圖切成的幾段彼此重疊，同一則訊息只算一次）：是名單就照名單讀，是聊天畫面就照「手機截圖與聊天紀錄」那幾條讀。`;
+  if (binaries.length > images.length) text += `\n\n另有 ${binaries.length - images.length} 個 PDF 附在前面，裡面的名單也要讀出。`;
   content.push({ type: "text", text });
-  return structured(ExtractedSchema, `${EXTRACT_SYSTEM}\n\n${CENTER_FACTS}\n今天是 ${today}。`, content, 12000);
+  return structured(ExtractedSchema, `${EXTRACT_SYSTEM}\n\n${CENTER_FACTS}\n今天是 ${today}。`, content, images.length ? 16000 : 12000);
 }
 
 // ─────────────────── 1.5 訪客背景研判（訪前功課） ───────────────────
@@ -636,7 +661,9 @@ function mockRecord(visit: Visit, notes: DictationExtract): RecordProse {
 
 export async function summarizeVisit(visit: Visit, responses: ResponseRow[]): Promise<string> {
   if (isMock()) return mockSummary(visit, responses);
-  const payload = { visit: { ...visit, letters: undefined }, responses };
+  // 名單只帶姓名、職稱與單位：摘要用不到聯絡方式，也就不必把 email、電話交出去
+  const guests = (visit.guests || []).map((g) => ({ name: g.name, title: g.title, affiliation: g.affiliation, role: g.role }));
+  const payload = { visit: { ...visit, guests, letters: undefined }, responses };
   return plain(
     `替 GHRC 寫一頁參訪摘要（繁體中文，Markdown，300 字內）。段落固定：誰來（單位、主要來賓、人數）；看了哪幾間各多久（用 visit.itinerary 當天排定的動線；visit.format 是 forum 的是**座談的場次、不參觀研究室**——這一段改寫「座談，不參觀研究室」，並列出席的老師：visit.attendance 是 yes 的那幾間的負責老師（no＝無法參加）；最想看什麼——**分兩行寫，來源不能混**：「來賓自己說」（responses 的 most_wanted_rooms）與「主持人聽到的」（visit.dictation.extracted：主持人一項一項記下的重點；visit.dictation.record 是依重點寫成的完整紀錄），只有一邊有資料就只寫那一邊；問了哪些問題；想合作誰（來賓回的 cooperate_rooms；口述裡的合作意願另外一行寫「主持人記下」）；收到什麼建議（responses 的 suggestion，不具名的不要試圖猜是誰）；待辦。沒有資料的段落寫「（無）」。不要評分、不要用滿意度用語。\n\n${CENTER_FACTS}`,
     JSON.stringify(payload),
@@ -795,13 +822,19 @@ function mockPlace(item: GeoQuery): GeoPlace {
   return hit ? { id: item.id, place: `（AI_MOCK）${hit[1]}`, lat: hit[2], lon: hit[3], precision: hit[4] } : { id: item.id, place: "", lat: 0, lon: 0, precision: "country" };
 }
 
-function mockExtract(text: string): ExtractedVisit {
+/**
+ * AI_MOCK：照字面抓 email 當名單。附了截圖、又抓不到 email 的（簡訊、LINE 的申請），
+ * 給一位只有電話的聯絡人——測試看得到電話一路帶到名單上；日期一樣不編（截圖沒讀，就是不知道哪一天）。
+ */
+function mockExtract(text: string, images = 0): ExtractedVisit {
   const emails = [...new Set((text.match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) || []).map((e) => e.toLowerCase()))];
   const guests: ExtractedVisit["guests"] = emails.map((email, i) => {
     const local = email.split("@")[0];
     const name = local.replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    return { name, title: i === 0 ? "Principal guest" : "Member", email, role: i === 0 ? "lead" : "member", affiliation: "", contact: i === 0 };
+    return { name, title: i === 0 ? "Principal guest" : "Member", email, role: i === 0 ? "lead" : "member", affiliation: "", phone: "", contact: i === 0 };
   });
+  const phone = (text.match(/(?:\+886[\s-]?|\b0)9\d{2}[\s-]?\d{3}[\s-]?\d{3}\b/) || [])[0] || (images ? "0912-345-678" : "");
+  if (!guests.length && phone) guests.push({ name: images ? "（AI_MOCK）截圖裡的聯絡人" : "（AI_MOCK）簡訊聯絡人", title: "", email: "", role: "lead", affiliation: "", phone, contact: true });
   const orgLine = (text.split(/\r?\n/).find((l) => /university|大學|ministry|部|college|學院|高中|company|公司/i.test(l)) || "").trim();
   const orgMatch = orgLine.match(/(University of [A-Z][A-Za-z ]+|[A-Z][A-Za-z]+ University|[^\s，。、]+大學|[^\s，。、]+高中)/);
   const cjk = (text.match(/[一-鿿]/g) || []).length;
@@ -819,7 +852,7 @@ function mockExtract(text: string): ExtractedVisit {
     interests: ["green infrastructure", "health landscape"],
     language: cjk > 50 ? "zh" : /korea|한국/i.test(text) ? "ko" : /japan|日本/i.test(text) ? "ja" : "en",
     candidate_dates: date ? [] : ["（AI_MOCK）日期未定"],
-    uncertainties: ["AI_MOCK 模式：這是範例抽取，不是真正的 AI 結果"],
+    uncertainties: ["AI_MOCK 模式：這是範例抽取，不是真正的 AI 結果", ...(images ? [`AI_MOCK：附了 ${images} 張截圖或照片（沒有真的讀）`] : [])],
   };
 }
 

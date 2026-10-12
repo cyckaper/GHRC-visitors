@@ -1173,6 +1173,82 @@ try {
   await page.waitForFunction(() => document.getElementById("visitSelect").value === "2026-12-01-testing", null, { timeout: 15000 });
   check(await page.isHidden("#dateMissing"), "filling in the date saves it by itself, under that date");
 
+  // ── 簡訊、LINE 的手機截圖（明確指示：「申請參訪有時是簡訊，要能接受圖片資料來分析」「手機畫面截圖」）──
+  await page.selectOption("#visitSelect", "");
+  await page.waitForFunction(() => document.getElementById("preStatus").textContent === "" && document.getElementById("orgName").value === "", null, { timeout: 15000 });
+  await page.fill("#emailText", "");
+  const shotsBefore = await page.locator("#visitSelect option").count();
+  // 貼上：一張很長的捲動截圖（400×4000）——整張縮到 Claude 看得下就糊了，所以切成兩段
+  const pasted = await page.evaluate(async () => {
+    const c = document.createElement("canvas");
+    c.width = 400; c.height = 4000;
+    const g = c.getContext("2d");
+    g.fillStyle = "#fff"; g.fillRect(0, 0, 400, 4000); g.fillStyle = "#000"; g.font = "28px sans-serif";
+    for (let y = 60; y < 4000; y += 120) g.fillText(`訊息 ${y}`, 20, y);
+    const blob = await new Promise((r) => c.toBlob(r, "image/png"));
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], "image.png", { type: "image/png" }));
+    const ev = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+    document.getElementById("emailText").dispatchEvent(ev);
+    return ev.defaultPrevented;
+  });
+  check(pasted, "pasting a screenshot into the email box takes it as an attachment, not as text");
+  await page.waitForFunction(() => document.querySelectorAll("#listFilesInfo li").length === 1, null, { timeout: 15000 });
+  const listed = await page.textContent("#listFilesInfo");
+  check(/貼上的截圖 1\.png/.test(listed) && /2 段/.test(listed), `…named so the order is kept, and a long scrolling screenshot says it will be read in two parts (${listed})`);
+  // 拖進來：兩張，一張放錯了要拿掉
+  const dropped = await page.evaluateHandle(async () => {
+    const mk = async (name, w, h) => {
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d").fillRect(0, 0, w, h);
+      return new File([await new Promise((r) => c.toBlob(r, "image/jpeg", 0.9))], name, { type: "image/jpeg" });
+    };
+    const dt = new DataTransfer();
+    dt.items.add(await mk("LINE_chat.jpg", 390, 844));
+    dt.items.add(await mk("wrong.jpg", 100, 100));
+    return dt;
+  });
+  await page.dispatchEvent("#extractCard", "dragover", { dataTransfer: dropped });
+  await page.dispatchEvent("#extractCard", "drop", { dataTransfer: dropped });
+  await page.waitForFunction(() => document.querySelectorAll("#listFilesInfo li").length === 3, null, { timeout: 15000 });
+  await page.click("#listFilesInfo li:nth-child(3) [data-att-del]");
+  check((await page.locator("#listFilesInfo li").count()) === 2 && !/wrong\.jpg/.test(await page.textContent("#listFilesInfo")), "dropped screenshots are added too, and ✕ takes one back out");
+  // iPhone 存成 HEIC 的截圖：選檔也是加在後面（不會把剛貼的換掉），Chrome 看不懂 HEIC 就先轉成 JPEG
+  await page.setInputFiles("#listFiles", "test/fixtures/card.heic");
+  await page.waitForFunction(() => document.querySelectorAll("#listFilesInfo li").length === 3, null, { timeout: 30000 });
+  // 按「AI 抽取」：一個一個上傳（每一個請求都很小），開始抽取的那一個只帶 key
+  const extractPosts = [];
+  const onExtract = (q) => { if (q.method() === "POST" && new URL(q.url()).pathname === "/api/extract") extractPosts.push(q); };
+  page.on("request", onExtract);
+  await page.click("#extractBtn");
+  await page.waitForFunction(() => /讀信中/.test(document.getElementById("extractInfo").textContent), null, { timeout: 30000 });
+  page.off("request", onExtract);
+  const startBody = JSON.parse(extractPosts[extractPosts.length - 1].postData() || "{}");
+  check(extractPosts.length === 5 && startBody.keys?.length === 4 && startBody.email_text === "" && !startBody.files, `four uploads (the long screenshot as two parts, the dropped one, the HEIC), then one small request with only the keys (${extractPosts.length}, ${startBody.keys?.length})`);
+  await page.waitForFunction(() => document.getElementById("orgName").value.length > 0, null, { timeout: 90000 });
+  check((await page.inputValue("#guestTable tbody tr:first-child td:nth-child(4) input")) === "0912-345-678", "the contact who only has a phone number lands in the guest list, number and all");
+  const readList = await page.textContent("#listFilesInfo");
+  check(/貼上的截圖 1（第 1／2 段）/.test(readList) && /貼上的截圖 1（第 2／2 段）/.test(readList) && /card\.jpg/.test(readList) && /LINE_chat/.test(readList), `…and the list now says what was read: both parts, the dropped screenshot, and the HEIC as a JPEG (${readList})`);
+  const { readdir } = await import("node:fs/promises");
+  const leftovers = (await readdir(path.join(tmp, "media", "extract"), { recursive: true }).catch(() => [])).filter((f) => f.endsWith(".json"));
+  check(leftovers.length === 0, `the screenshots are deleted once read (${leftovers.join(", ")})`);
+  await page.waitForTimeout(2000); // 自動存檔的間隔過了
+  check((await page.locator("#visitSelect option").count()) === shotsBefore, "no date in the screenshots: no visit is made up");
+  // 填上日期就存：電話跟著存進去（以前那張表沒有電話那一欄，下一次自動存檔就洗掉了）
+  await page.fill("#date", "2099-12-30");
+  await page.waitForFunction(() => document.getElementById("visitSelect").value.startsWith("2099-12-30-"), null, { timeout: 15000 });
+  const smsId = await page.inputValue("#visitSelect");
+  await page.waitForTimeout(1500);
+  const smsVisit = (await (await fetch(`${base}/api/visits?id=${smsId}`, { headers: { authorization: "Bearer e2e-token" } })).json()).visit;
+  check(smsVisit.guests.some((g) => g.phone === "0912-345-678" && g.contact && !g.email), "…the phone number is saved with the contact");
+  // 確認信：聯絡人只有電話——不要退回「全部勾起來」，說用「複製信件」貼回簡訊或 LINE
+  await page.click('[data-tab="wrapup"]');
+  await page.click('[data-tab="pre"]');
+  await page.waitForFunction(() => /只有電話/.test(document.getElementById("confirmRecipients").textContent), null, { timeout: 15000 });
+  check(/0912-345-678/.test(await page.textContent("#confirmRecipients")), "the confirmation card says the contact can only be reached by phone, and how to send it");
+  await fetch(`${base}/api/visits?id=${smsId}`, { method: "DELETE", headers: { authorization: "Bearer e2e-token" } });
+
   check(errors.length === 0, `no page errors (${errors.join(" | ")})`);
   console.log("\nSMOKE OK");
 } catch (e) {

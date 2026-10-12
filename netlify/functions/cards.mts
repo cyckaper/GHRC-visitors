@@ -30,8 +30,8 @@ export default async (req: Request) => {
 
   if (body.action === "save") {
     // 只有「整批都沒東西可讀」才算錯；同一張名片再存一次是沒事的 no-op（added=merged=0）
-    const incoming = (Array.isArray(body.guests) ? body.guests : []).filter((g: any) => String(g?.name || "").trim() || String(g?.email || "").trim());
-    if (!incoming.length) return fail(400, "沒有可以加進名單的資料（姓名與 email 至少要有一個）");
+    const incoming = (Array.isArray(body.guests) ? body.guests : []).filter((g: any) => String(g?.name || "").trim() || String(g?.email || "").trim() || String(g?.phone || "").replace(/\D/g, "").length >= 8);
+    if (!incoming.length) return fail(400, "沒有可以加進名單的資料（姓名、email、電話至少要有一個）");
     // 併進名單要拿最新的名單來併（主辦端可能剛在訪前分頁改過），在 updateVisit 裡做
     const key = String(body.photo_key || "");
     let added = 0;

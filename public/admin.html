@@ -28,6 +28,9 @@
   body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 60; background: linear-gradient(90deg, var(--c301), var(--c302) 25%, var(--c303) 50%, var(--c304) 75%, var(--c305)); }
   .grad-text { background: linear-gradient(90deg, #065f46, #0f766e 55%, #4d7c0f); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .card { background: #fff; border: 1px solid #e7e5e4; border-radius: 1rem; padding: 1.25rem; }
+  #extractCard.dropping { outline: 2px dashed var(--tab, #0f766e); outline-offset: 4px; }
+  .att-thumb { flex: none; height: 3rem; width: 3rem; object-fit: contain; border: 1px solid #e7e5e4; border-radius: .35rem; background: #f5f5f4; }
+  .att-doc { display: inline-flex; align-items: center; justify-content: center; font-size: .7rem; color: #57534e; }
   /* 卡片標題掛一條分頁色的細線；開頭有號碼的（1./動作一）改用圓形號碼，不重複標兩次 */
   .card h2 { border-left: 3px solid var(--tab); padding-left: .55rem; }
   .card h2:has(.num) { border-left: 0; padding-left: 0; }
@@ -41,7 +44,7 @@
   .btn:disabled { opacity: .45; cursor: wait; }
   .btn-soft { background: #f5f5f4; color: #1c1917; }
   .btn-danger { background: #b91c1c; }
-  input[type=text], input[type=email], input[type=date], input[type=time], input[type=number], select, textarea { width: 100%; border: 1px solid #d6d3d1; border-radius: .55rem; padding: .45rem .6rem; background: #fff; font-size: .95rem; }
+  input[type=text], input[type=email], input[type=tel], input[type=date], input[type=time], input[type=number], select, textarea { width: 100%; border: 1px solid #d6d3d1; border-radius: .55rem; padding: .45rem .6rem; background: #fff; font-size: .95rem; }
   input:focus, select:focus, textarea:focus { outline: none; border-color: var(--tab); box-shadow: 0 0 0 3px rgba(15, 118, 110, .12); }
   label.f { display: block; font-size: .8rem; color: #57534e; margin-bottom: .15rem; }
   .tab { padding: .5rem .9rem; border-radius: .7rem; font-weight: 500; color: #57534e; }
@@ -134,15 +137,15 @@
   <!-- ───────── 訪前 ───────── -->
   <section id="tab-pre" class="space-y-5">
     <p class="lede text-sm"><b>這一頁：參訪前把六件事做完</b>——讀來信抽出資料、確認欄位、查對方背景、通告研究室、排今日流程，最後把確認信寄出去。寄出的那封信裡就有來賓專頁的網址。填完自己會存，不必找存檔鍵。</p>
-    <div class="card space-y-3">
-      <h2 class="font-semibold"><span class="num">1</span>貼上 email 往來或上傳名單檔，AI 抽取背景</h2>
+    <div class="card space-y-3" id="extractCard">
+      <h2 class="font-semibold"><span class="num">1</span>貼上 email、簡訊或 LINE 截圖，AI 抽取背景</h2>
       <p class="muted">單位、人名、職稱、人數、隨行名單與聯絡方式、對口老師、來訪目的、興趣、日期時間。抽出來的東西會填進下面的欄位，你逐項看過再改。</p>
-      <textarea id="emailText" rows="8" placeholder="把 email 往來（含轉寄、簽名檔）整段貼進來……（也可以只上傳名單檔）"></textarea>
+      <textarea id="emailText" rows="8" placeholder="把 email 往來（含轉寄、簽名檔）整段貼進來。簡訊、LINE 的手機截圖可以直接貼在這裡，或拖進這一區"></textarea>
       <div class="flex flex-wrap items-center gap-2">
-        <input type="file" id="listFiles" multiple accept=".docx,.xlsx,.xlsm,.pptx,.csv,.tsv,.txt,.md,.pdf,.jpg,.jpeg,.png,.webp,.heic,.heif">
-        <span class="muted">名單檔：Word（.docx）、Excel（.xlsx）、CSV／文字、PDF、名單照片，最多 8 個共 5 MB；.doc／.xls 請先另存新格式</span>
+        <label class="btn btn-soft cursor-pointer">加截圖或檔案<input type="file" id="listFiles" multiple accept="image/*,.heic,.heif,.docx,.xlsx,.xlsm,.pptx,.csv,.tsv,.txt,.md,.pdf" hidden></label>
+        <span class="muted">手機截圖（簡訊、LINE）一段對話截了幾張就放幾張；名單檔可以是 Word、Excel、CSV、PDF（.doc／.xls 請先另存新格式）</span>
       </div>
-      <ul id="listFilesInfo" class="text-sm text-stone-600 list-disc pl-5"></ul>
+      <ul id="listFilesInfo" class="text-sm text-stone-600 space-y-1"></ul>
       <p class="muted" id="emailDraftNote" hidden></p>
       <div class="flex flex-wrap items-center gap-2"><button class="btn" id="extractBtn" title="把貼上的信與附件交給 AI，讀出單位、名單、日期、目的，填進下面的欄位給你改">AI 抽取</button><span class="muted" id="extractInfo"></span></div>
       <ul class="text-sm text-amber-700 list-disc pl-5" id="uncertainties"></ul>
@@ -168,7 +171,7 @@
       </div>
       <div>
         <div class="flex items-center justify-between"><label class="f">參訪名單（每一個人都要留 email：訪後信會寄給名單上每一個人）</label><button class="btn btn-soft" id="addGuest" title="手動補一個人（名單上每個人都要 email，訪後信才寄得到）" type="button">＋ 加一人</button></div>
-        <table id="guestTable"><thead><tr><th>姓名</th><th>職稱</th><th>email</th><th>單位</th><th title="禮賓身分：封面與信件開頭寫的那個人">主賓</th><th title="負責收信、確認行程的那個人。確認信預設只寄給他——日期還在往返時，把還沒定案的行程寄給全團只會造成困擾">聯絡人</th><th></th></tr></thead><tbody></tbody></table>
+        <table id="guestTable"><thead><tr><th>姓名</th><th>職稱</th><th>email</th><th title="簡訊、LINE 來的申請常常只有電話；名片上讀到的電話也在這裡">電話</th><th>單位</th><th title="禮賓身分：封面與信件開頭寫的那個人">主賓</th><th title="負責收信、確認行程的那個人。確認信預設只寄給他——日期還在往返時，把還沒定案的行程寄給全團只會造成困擾">聯絡人</th><th></th></tr></thead><tbody></tbody></table>
       </div>
     </div>
 
@@ -1016,7 +1019,8 @@
     v.org = { name: $("orgName").value.trim(), name_local: $("orgLocal").value.trim(), type: $("orgType").value, country: $("orgCountry").value.trim() };
     v.language = $("language").value; v.date = $("date").value; v.start_time = $("startTime").value; v.end_time = $("endTime").value; v.duration_minutes = minutesBetween(v.start_time, v.end_time) || Number(state.visit?.duration_minutes) || 90; v.headcount = Number($("headcount").value) || 0;
     v.contact_teacher = $("contactTeacher").value; v.purpose = $("purpose").value.trim(); v.interests = $("interests").value.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
-    v.guests = [...$("guestTable").tBodies[0].rows].map((tr) => ({ name: tr.cells[0].firstChild.value.trim(), title: tr.cells[1].firstChild.value.trim(), email: tr.cells[2].firstChild.value.trim(), affiliation: tr.cells[3].firstChild.value.trim(), role: tr.cells[4].firstChild.checked ? "lead" : "member", contact: tr.cells[5].firstChild.checked })).filter((g) => g.name || g.email);
+    // 電話也要讀回來：以前這張表沒有電話那一欄，名片上讀到的電話下一次自動存檔就被洗掉（存檔是整份名單換掉）
+    v.guests = [...$("guestTable").tBodies[0].rows].map((tr) => ({ name: tr.cells[0].firstChild.value.trim(), title: tr.cells[1].firstChild.value.trim(), email: tr.cells[2].firstChild.value.trim(), phone: tr.cells[3].firstChild.value.trim(), affiliation: tr.cells[4].firstChild.value.trim(), role: tr.cells[5].firstChild.checked ? "lead" : "member", contact: tr.cells[6].firstChild.checked })).filter((g) => g.name || g.email || g.phone);
     v.format = isForumForm() ? "forum" : "tour";
     v.programme = readProgramme();
     v.itinerary = readItinerary();
@@ -1027,7 +1031,7 @@
   function renderGuests(guests) {
     $("guestTable").tBodies[0].innerHTML = guests.map((g) => guestRow(g)).join("");
   }
-  const guestRow = (g = {}) => `<tr><td><input type="text" value="${esc(g.name)}"></td><td><input type="text" value="${esc(g.title)}"></td><td><input type="email" value="${esc(g.email)}"></td><td><input type="text" value="${esc(g.affiliation)}"></td><td class="text-center"><input type="radio" name="lead" ${g.role === "lead" ? "checked" : ""}></td><td class="text-center"><input type="checkbox" ${g.contact ? "checked" : ""} title="確認信預設只寄給勾起來的人"></td><td><button type="button" class="muted" data-del-row title="刪掉這一列">✕</button></td></tr>`;
+  const guestRow = (g = {}) => `<tr><td><input type="text" value="${esc(g.name)}"></td><td><input type="text" value="${esc(g.title)}"></td><td><input type="email" value="${esc(g.email)}"></td><td><input type="tel" value="${esc(g.phone)}"></td><td><input type="text" value="${esc(g.affiliation)}"></td><td class="text-center"><input type="radio" name="lead" ${g.role === "lead" ? "checked" : ""}></td><td class="text-center"><input type="checkbox" ${g.contact ? "checked" : ""} title="確認信預設只寄給勾起來的人"></td><td><button type="button" class="muted" data-del-row title="刪掉這一列">✕</button></td></tr>`;
   $("addGuest").onclick = () => $("guestTable").tBodies[0].insertAdjacentHTML("beforeend", guestRow());
   /**
    * 每一張表的 ✕：刪掉那一列。**訪前那兩張表（名單、今日流程）刪完要自己叫一次存檔**——
@@ -1267,26 +1271,165 @@
     $("researchInfo").textContent = "等了十五分鐘還沒查完，請再按一次";
   }
 
-  // ── 訪前：AI ──
-  $("listFiles").onchange = () => { $("listFilesInfo").innerHTML = [...$("listFiles").files].map((f) => `<li>${esc(f.name)} <span class="muted">${(f.size / 1024).toFixed(0)} KB</span></li>`).join(""); };
+  // ── 訪前：AI 抽取（email、簡訊／LINE 的手機截圖、名單檔）──
+  /**
+   * 申請有時不是 email，是簡訊或 LINE（明確指示：「申請參訪有時是簡訊，要能接受圖片資料來分析」「手機畫面截圖」）。
+   * 截圖可以直接貼上（⌘V／Ctrl+V）、拖進第 1 步那一區，或按「加截圖或檔案」選；一個一個列在底下，可以拿掉。
+   * 按「AI 抽取」才整理（`prepareShot`：很長的捲動截圖切成幾段、HEIC 轉掉），再**一個一個上傳**
+   * （`/api/extract` 的 multipart），抽取的工作裡只帶 key——以前整批 base64 塞在同一個請求裡，
+   * 兩三張截圖就撞到 Netlify 一個請求 6 MB 的上限，連錯誤訊息都是平台的英文。
+   *
+   * 尺寸照 Claude 看圖的規矩（claude-opus-5 這一級）：長邊 2576 像素以內原樣看，更大的會被縮——
+   * 一般手機截圖剛好塞得下，**捲動截圖（又高又窄）縮下去字就糊了**，所以切成重疊的幾段，每一段都是原本的清楚度。
+   * 一個請求超過 20 張圖，每一張都得縮到 2000 像素以下，所以一次最多 20 張（切完的段數也算）。
+   */
+  const SHOT = { edge: 2576, width: 1440, overlap: 240, keep: 1.2 * 1024 * 1024, pngMax: 900 * 1024, maxImages: 20, maxFiles: 24, maxFileBytes: 4.5 * 1024 * 1024, maxTotal: 20 * 1024 * 1024 };
+  const extractAtt = []; // { id, file, name, image, tiles, thumb }
+  const isImageFile = (f) => /^image\//i.test(f?.type || "") || /\.(jpe?g|png|webp|gif|hei[cf])$/i.test(f?.name || "");
+  /** 一張圖要切成幾段：照原樣（或縮一點點）看得清楚就一張；縮到八成以下的又高又窄的捲動截圖才切。 */
+  function planShot(w, h) {
+    const single = SHOT.edge / Math.max(w, h);
+    if (single >= 0.8 || h <= w) return { tiles: 1, scale: Math.min(1, single), tileH: Math.round(h * Math.min(1, single)) };
+    const scale = Math.min(1, SHOT.width / w);
+    const H = Math.round(h * scale), tileH = Math.min(SHOT.edge, H);
+    return { tiles: Math.max(1, Math.ceil((H - SHOT.overlap) / (tileH - SHOT.overlap))), scale, tileH };
+  }
+  const toBlob = (c, type, q) => new Promise((resolve) => c.toBlob(resolve, type, q));
+  /**
+   * 一張截圖整理成要上傳的一段或幾段：本來就夠小、格式 Claude 收的就原檔不動（不要再壓一次）；
+   * 要縮或要切的，截圖（PNG）照舊存 PNG——字比較清楚——太大才換成 JPEG 0.92。HEIC 一律轉掉（Safari 自己看得懂、Claude 看不懂）。
+   */
+  async function prepareShot(att) {
+    const f = att.file;
+    const bmp = await createImageBitmap(f);
+    try {
+      const plan = planShot(bmp.width, bmp.height);
+      const claudeReads = /^image\/(jpeg|png|webp|gif)$/i.test(f.type || "") && !isHeic(f);
+      if (plan.tiles === 1 && plan.scale >= 1 && claudeReads && f.size <= SHOT.keep) return [{ blob: f, name: att.name }];
+      const png = /png|gif/i.test(f.type || "") && !isHeic(f);
+      const W = Math.max(1, Math.round(bmp.width * plan.scale)), tileH = Math.max(1, plan.tileH);
+      const H = Math.round(bmp.height * plan.scale);
+      const base = String(att.name || "截圖").replace(/\.[^.]+$/, "");
+      const out = [];
+      for (let i = 0; i < plan.tiles; i++) {
+        const y = plan.tiles > 1 ? Math.min(i * (tileH - SHOT.overlap), H - tileH) : 0;
+        const c = document.createElement("canvas");
+        c.width = W; c.height = tileH;
+        const g = c.getContext("2d");
+        g.fillStyle = "#fff"; g.fillRect(0, 0, W, tileH); // 透明的地方墊白底（JPEG 沒有透明，黑底上的黑字就看不到了）
+        g.drawImage(bmp, 0, y / plan.scale, bmp.width, tileH / plan.scale, 0, 0, W, tileH);
+        let blob = png ? await toBlob(c, "image/png") : null, ext = "png";
+        if (!blob || blob.size > SHOT.pngMax) { blob = await toBlob(c, "image/jpeg", 0.92); ext = "jpg"; }
+        if (!blob) throw new Error(`${att.name}：瀏覽器處理不了這張圖`);
+        out.push({ blob, name: `${base}${plan.tiles > 1 ? `（第 ${i + 1}／${plan.tiles} 段）` : ""}.${ext}` });
+      }
+      return out;
+    } finally { bmp.close(); }
+  }
+  /** 貼上、拖進來、選檔都走這裡：照片先看得懂（HEIC 轉掉），量一下要切成幾段，列在底下。 */
+  async function addAttachments(files, how) {
+    for (const f0 of [...(files || [])].filter(Boolean)) {
+      if (extractAtt.length >= SHOT.maxFiles) { flash(`一次最多 ${SHOT.maxFiles} 個附件`, "err"); break; }
+      const image = isImageFile(f0);
+      if (!image && f0.size > SHOT.maxFileBytes) { flash(`${f0.name} 超過 4.5 MB`, "err"); continue; }
+      let file = f0, tiles = 1, thumb = "";
+      if (image) {
+        try {
+          file = await decodableImage(f0);
+          const bmp = await createImageBitmap(file);
+          tiles = planShot(bmp.width, bmp.height).tiles;
+          bmp.close();
+          thumb = URL.createObjectURL(file);
+        } catch (e) { flash(e?.message && /HEIC/.test(e.message) ? e.message : `${f0.name || "這張圖"} 讀不出來（檔案可能壞了，或不是照片）`, "err"); continue; }
+      }
+      // 貼上的截圖瀏覽器都叫 image.png：換成看得出先後的名字（AI 也照這個順序讀）
+      const ext = (/\.([a-z0-9]+)$/i.exec(file.name || "") || [, image ? "png" : "txt"])[1];
+      const name = how === "paste" ? `貼上的截圖 ${(addAttachments.pasted = (addAttachments.pasted || 0) + 1)}.${ext}` : file.name || "附件";
+      extractAtt.push({ id: (addAttachments.seq = (addAttachments.seq || 0) + 1), file, name, image, tiles, thumb });
+    }
+    renderAttachments();
+  }
+  function renderAttachments() {
+    const images = extractAtt.filter((a) => a.image).reduce((n, a) => n + a.tiles, 0);
+    const size = (n) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+    $("listFilesInfo").innerHTML = extractAtt.map((a) => `<li class="flex items-center gap-2">${a.thumb ? `<img class="att-thumb" src="${a.thumb}" alt="">` : `<span class="att-thumb att-doc">${esc((/\.([a-z0-9]+)$/i.exec(a.name) || [, "檔案"])[1].toUpperCase())}</span>`}<span class="min-w-0 break-all">${esc(a.name)} <span class="muted">${size(a.file.size)}</span>${a.tiles > 1 ? ` <span class="muted">${t(`長截圖，會切成 ${a.tiles} 段來讀`)}</span>` : ""}</span><button type="button" class="muted" data-att-del="${a.id}" title="拿掉這一個">✕</button></li>`).join("")
+      + (images > SHOT.maxImages ? `<li class="err">${t(`截圖切完共 ${images} 張，一次最多 ${SHOT.maxImages} 張：請分兩次讀，或只留跟參訪有關的那幾張`)}</li>` : "");
+  }
+  function clearAttachments() {
+    for (const a of extractAtt.splice(0)) if (a.thumb) URL.revokeObjectURL(a.thumb);
+    renderAttachments();
+  }
+  $("listFilesInfo").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-att-del]");
+    if (!btn) return;
+    const i = extractAtt.findIndex((a) => String(a.id) === btn.dataset.attDel);
+    if (i >= 0) { const [a] = extractAtt.splice(i, 1); if (a.thumb) URL.revokeObjectURL(a.thumb); }
+    renderAttachments();
+  });
+  // 選檔：加到清單後面（不是換掉——先貼的截圖不要因為再選一次檔就不見）
+  $("listFiles").onchange = async () => { const picked = [...$("listFiles").files]; $("listFiles").value = ""; await addAttachments(picked, "pick"); };
+  // 貼上：剪貼簿裡有圖才接手，純文字照舊貼進文字框。iPad 的 Safari 圖放在 items 裡
+  const clipboardImages = (e) => {
+    const cd = e.clipboardData;
+    const files = cd?.files?.length ? [...cd.files] : [...(cd?.items || [])].filter((i) => i.kind === "file").map((i) => i.getAsFile()).filter(Boolean);
+    return files.filter(isImageFile);
+  };
+  $("extractCard").addEventListener("paste", (e) => { const imgs = clipboardImages(e); if (!imgs.length) return; e.preventDefault(); addAttachments(imgs, "paste"); });
+  // 游標沒有停在任何欄位（剛截完圖、直接按 ⌘V）也收：只在「訪前」分頁
+  document.addEventListener("paste", (e) => {
+    if (e.defaultPrevented || $("tab-pre").hidden || (e.target !== document.body && e.target !== document.documentElement)) return;
+    const imgs = clipboardImages(e);
+    if (!imgs.length) return;
+    e.preventDefault();
+    addAttachments(imgs, "paste");
+  });
+  // 拖進來：檔案才接手，拖一段文字進文字框照舊
+  const dragsFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+  $("extractCard").addEventListener("dragover", (e) => { if (!dragsFiles(e)) return; e.preventDefault(); $("extractCard").classList.add("dropping"); });
+  $("extractCard").addEventListener("dragleave", (e) => { if (!$("extractCard").contains(e.relatedTarget)) $("extractCard").classList.remove("dropping"); });
+  $("extractCard").addEventListener("drop", (e) => { $("extractCard").classList.remove("dropping"); if (!e.dataTransfer?.files?.length) return; e.preventDefault(); addAttachments(e.dataTransfer.files, "drop"); });
   const readFileB64 = (file) => new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(String(fr.result).replace(/^data:[^,]*,/, "")); fr.onerror = () => reject(fr.error); fr.readAsDataURL(file); });
   $("extractBtn").onclick = () => busy($("extractBtn"), async () => {
-    const picked = [...$("listFiles").files];
-    if (picked.length > 8) return flash("一次最多 8 個檔案", "err");
-    if (picked.reduce((s, f) => s + f.size, 0) > 5 * 1024 * 1024) return flash("檔案總量超過 5 MB，請分批或改貼文字", "err");
-    const files = [];
+    const text = $("emailText").value;
+    if (text.trim().length < 20 && !extractAtt.length) return flash("請貼上 email 內容、手機截圖或名單檔", "err");
+    const visitSeq = selectVisit.seq || 0; // 按下去的那一刻就記：上傳到一半換了一場，結果一樣要丟掉
+    const note = noteInto("extractInfo");
+    // 1. 整理：長截圖切段、HEIC 轉掉
+    const pieces = [];
     try {
-      for (const f of picked) { const g = await decodableImage(f); files.push({ name: g.name, type: g.type, data: await readFileB64(g) }); }
-    } catch (e) { return flash(String(e.message || e), "err"); }
-    const visitSeq = selectVisit.seq || 0;
-    const r = await api("/api/extract", { method: "POST", body: { email_text: $("emailText").value, files } });
-    if (!r.ok || !r.job_id) return flash(r.error || "抽取沒有開始，請再按一次", "err");
-    $("extractInfo").textContent = "AI 讀信中……大約一兩分鐘，讀完會自己填進下面的欄位。";
+      for (const a of extractAtt) {
+        if (!a.image) pieces.push({ blob: a.file, name: a.name, image: false });
+        else for (const p of await prepareShot(a)) pieces.push({ ...p, image: true });
+      }
+    } catch (e) { return flash(String(e?.message || e), "err"); }
+    const images = pieces.filter((p) => p.image).length;
+    if (images > SHOT.maxImages) return flash(`截圖切完共 ${images} 張，一次最多 ${SHOT.maxImages} 張：請分兩次讀，或只留跟參訪有關的那幾張`, "err");
+    if (pieces.length > SHOT.maxFiles) return flash(`一次最多 ${SHOT.maxFiles} 個附件`, "err");
+    if (pieces.reduce((n, p) => n + p.blob.size, 0) > SHOT.maxTotal) return flash("附件加起來太大（超過 20 MB）：請分兩次讀，或少放幾張", "err");
+    // 2. 一個一個上傳（每一個請求都很小），拿回 key
+    const upload = (Date.now().toString(36) + Math.random().toString(36).slice(2, 12)).slice(0, 24);
+    const keys = [], warnings = [];
+    const dropUploaded = () => (keys.length ? api(`/api/extract?upload=${upload}&${keys.map((k) => `key=${encodeURIComponent(k)}`).join("&")}`, { method: "DELETE" }) : null);
+    for (const [i, p] of pieces.entries()) {
+      note(`上傳附件中……（${i + 1}／${pieces.length}）`);
+      const fd = new FormData();
+      fd.append("upload", upload);
+      fd.append("file", p.blob, p.name);
+      const r = await api("/api/extract", { method: "POST", body: fd });
+      if (!r.ok) { await dropUploaded(); note(""); return flash(r.error || "上傳失敗，請再按一次", "err"); }
+      if (r.warning) warnings.push(r.warning);
+      else keys.push(r.key);
+    }
+    // 3. 開始抽取：工作裡只帶 key
+    const r = await api("/api/extract", { method: "POST", body: { email_text: text, upload, keys, warnings } });
+    if (!r.ok || !r.job_id) { await dropUploaded(); note(""); return flash(r.error || "抽取沒有開始，請再按一次", "err"); }
+    note("AI 讀信中……大約一兩分鐘，讀完會自己填進下面的欄位。");
     pollExtract(r.job_id, visitSeq);
   });
   async function pollExtract(jobId, visitSeq) {
     const out = await waitForJob("/api/extract", jobId, noteInto("extractInfo"), { visitSeq });
     if (!out) return;
+    clearAttachments(); // 讀完了：底下改列「讀了哪幾個」，截圖不留在這台瀏覽器
     $("listFilesInfo").innerHTML = (out.files_read || []).map((f) => `<li>${esc(f.name)} <span class="ok">已讀（${f.kind === "text" ? `${f.chars} 字` : f.kind === "document" ? "PDF 交給 AI 直接讀" : "照片交給 AI 直接讀"}）</span></li>`).join("") + (out.warnings || []).map((w) => `<li class="err">${esc(w)}</li>`).join("");
     state.saved = false; $("visitSelect").value = "";
     if (state.draft && state.draft.id !== "new") await migrateDraft(state.draft.id, "new"); // 貼進來的那封信是這一場新的，不留在剛才那一場底下
@@ -2235,14 +2378,18 @@
    * 兩封信的**預設收件人不一樣**：確認信只勾「聯絡人」，感謝信勾名單上每一位。
    * 協調參訪的人不一定等於參加參訪的人——日期還在往返時，把還沒定案的行程寄給全團只會造成困擾。
    * 名單上一個聯絡人都沒標時退回全選（寧可多寄，也不要按了寄出卻一個人都沒寄到）。
+   * **聯絡人只有電話**（簡訊、LINE 來的申請）：他不在 email 收件人裡，但也不能因此退回全選——
+   * 那等於把還沒定案的行程寄給全團。一個都不先勾，說一聲用「複製信件」貼回簡訊或 LINE。
    */
   function renderRecipients() {
     const list = state.thanksRecipients;
     const anyContact = list.some((r) => r.contact);
+    const phoneOnly = (state.visit?.guests || []).filter((g) => g.contact && !g.email && g.phone);
     const row = (r, i, checked) => `<label class="flex gap-2 items-center"><input type="checkbox" ${checked ? "checked" : ""} data-i="${i}"><span>${esc(r.name)} <span class="muted">${esc(r.email)} · <span>${r.from === "list" ? "名單" : "現場留信箱"}</span>${r.contact ? " · <span>聯絡人</span>" : ""}</span></span></label>`;
     const empty = `<p class="muted">名單上沒有 email。請回「訪前」補上隨行名單的聯絡方式。</p>`;
-    const hint = anyContact ? "" : `<p class="muted">名單上還沒標「聯絡人」（訪前分頁那張表最後一欄），所以先全部勾起來。</p>`;
-    if ($("confirmRecipients")) $("confirmRecipients").innerHTML = list.length ? hint + list.map((r, i) => row(r, i, anyContact ? !!r.contact : true)).join("") : empty;
+    const phoneNote = phoneOnly.length ? `<p class="muted"><span>聯絡人只有電話、沒有 email：確認信按「複製信件」，貼回簡訊或 LINE 給他。</span> ${esc(phoneOnly.map((g) => `${g.name || ""} ${g.phone}`.trim()).join("、"))}</p>` : "";
+    const hint = anyContact || phoneOnly.length ? "" : `<p class="muted">名單上還沒標「聯絡人」（訪前分頁那張表最後一欄），所以先全部勾起來。</p>`;
+    if ($("confirmRecipients")) $("confirmRecipients").innerHTML = list.length ? phoneNote + hint + list.map((r, i) => row(r, i, anyContact ? !!r.contact : !phoneOnly.length)).join("") : phoneNote || empty;
     if ($("thanksRecipients")) $("thanksRecipients").innerHTML = list.length ? list.map((r, i) => row(r, i, true)).join("") : empty;
     updateSendCounts();
   }

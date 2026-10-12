@@ -265,7 +265,7 @@ export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   const base = emptyVisit() as Visit;
   const v: Visit = { ...base, ...input } as Visit;
   v.org = { ...base.org, ...(input.org || {}) } as Visit["org"];
-  v.guests = Array.isArray(input.guests) ? input.guests.map((g) => ({ name: String(g.name || "").trim(), title: String(g.title || "").trim(), email: String(g.email || "").trim().toLowerCase(), role: (g.role === "lead" ? "lead" : "member") as "lead" | "member", affiliation: g.affiliation ? String(g.affiliation) : "", phone: g.phone ? String(g.phone).slice(0, 60) : "", contact: g.contact === true || String(g.contact) === "true" })).filter((g) => g.name || g.email) : [];
+  v.guests = Array.isArray(input.guests) ? input.guests.map((g) => ({ name: String(g.name || "").trim(), title: String(g.title || "").trim(), email: String(g.email || "").trim().toLowerCase(), role: (g.role === "lead" ? "lead" : "member") as "lead" | "member", affiliation: g.affiliation ? String(g.affiliation) : "", phone: g.phone ? String(g.phone).trim().slice(0, 60) : "", contact: g.contact === true || String(g.contact) === "true" })).filter((g) => g.name || g.email || g.phone) : []; // 簡訊、LINE 來的申請常常只有電話
   if (v.guests.length && !v.guests.some((g) => g.role === "lead")) v.guests[0].role = "lead";
   v.headcount = Number(input.headcount) || v.guests.length || 0;
   // **主辦端填的是幾點開始、幾點結束**；總分鐘由這兩個算出來（下游的排程、提醒、ICS 都還是吃 duration_minutes）

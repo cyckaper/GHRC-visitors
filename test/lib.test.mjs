@@ -150,6 +150,15 @@ test("名片併進名單：同一個人只補空欄位，不覆寫已確認的�
   const again = mergeGuests(r.guests, [{ name: "李小華", title: "研究員", affiliation: "X 大學", email: "hua@x.edu.tw" }]);
   assert.equal(again.added, 0, "同一張名片再讀一次不會多一個人");
   assert.deepEqual(mergeGuests([{ name: "陳大文", affiliation: "Y 所" }], [{ name: "陳大文", affiliation: "Y 所", phone: "09" }]).guests.length, 1);
+
+  // 簡訊、LINE 來的申請常常只有電話：之後拍到他的名片（電話寫法不一樣），補上姓名，不要多出一個人
+  const sms = [{ name: "", email: "", phone: "0912-345-678", contact: true, role: "lead" }];
+  const card = mergeGuests(sms, [{ name: "林小姐", title: "秘書", phone: "+886 912 345 678", email: "lin@z.org" }]);
+  assert.equal(card.guests.length, 1, "同一支電話就是同一個人");
+  assert.equal(card.added, 0);
+  assert.deepEqual([card.guests[0].name, card.guests[0].email, card.guests[0].contact], ["林小姐", "lin@z.org", true], "只補空的欄位，聯絡人身分照舊");
+  assert.equal(mergeGuests([], [{ name: "", email: "", phone: "0912345678" }]).added, 1, "只有電話的人也收");
+  assert.equal(mergeGuests([], [{ name: "", email: "", phone: "12" }]).added, 0, "兩三個數字不算電話");
 });
 
 test("讀信抽出來的日期：沒有就用候選的，都沒有就留空——絕不補今天", () => {
@@ -445,6 +454,11 @@ test("隱私權政策 /privacy：每一個外部服務、每一個 Google 權限
     assert.match(t, /Limited Use/, `Limited Use（${lang}）`);
     assert.match(t, /ntughrc@gmail\.com/, `聯絡信箱（${lang}）`);
   }
+  // 參訪申請也會是簡訊、LINE 的手機截圖（上面有對話與電話）：要寫出來，也要寫截圖讀完就刪
+  assert.match(langs[0][1], /screenshots of text messages[\s\S]*phone numbers?|phone numbers[\s\S]*screenshots of text messages/, "英文：截圖與電話");
+  assert.match(langs[0][1], /screenshots themselves are deleted/);
+  assert.match(langs[1][1], /截圖[\s\S]*電話/, "中文：截圖與電話");
+  assert.match(langs[1][1], /截圖本身讀完就刪掉/);
 });
 
 test("座談的場次：總體介紹 → 座談、沒有研究室參訪；換成座談時研究室參訪的時間給座談；支援人力表與通告五間都問", () => {

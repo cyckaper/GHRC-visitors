@@ -4,7 +4,8 @@ import JSZip from "jszip";
  * 參訪名單／相關資料的檔案讀取（功能 1：查來信或相關資料）。
  * - Word .docx、Excel .xlsx／.xlsm、PowerPoint .pptx：解壓後抽純文字（表格列以 tab 分隔）
  * - .csv／.tsv／.txt／.md／.json／.eml：UTF-8，失敗退回 Big5（台灣舊版 Excel 匯出常見）
- * - .pdf、照片：不轉文字，原檔交給 Claude 直接讀（document／image block）
+ * - .pdf、照片與手機截圖：不轉文字，原檔交給 Claude 直接讀（document／image block）；照片的格式照**檔案開頭的位元組**認，
+ *   不照副檔名（貼上的截圖常常叫 image.png、內容卻是 JPEG——格式寫錯 Claude 會整個請求退回）
  * - .doc／.xls／其他：不支援，請另存新格式或貼上文字
  */
 export type Extracted =
@@ -34,13 +35,28 @@ export async function extractFile(name: string, mime: string, bytes: Uint8Array)
     if (ext === "pptx") return { kind: "text", name, text: clip(await pptxText(bytes)) };
     if (["csv", "tsv", "txt", "md", "json", "eml", "text"].includes(ext)) return { kind: "text", name, text: clip(decodeText(bytes)) };
     if (ext === "pdf") return { kind: "document", name, media_type: "application/pdf", data: Buffer.from(bytes).toString("base64") };
-    if (IMAGE_TYPES[ext]) return { kind: "image", name, media_type: IMAGE_TYPES[ext], data: Buffer.from(bytes).toString("base64") };
+    const sniffed = sniffImage(bytes);
+    if (IMAGE_TYPES[ext] || (!ext && sniffed)) {
+      if (!sniffed) return { kind: "unsupported", name, reason: "讀不出這張圖（檔案可能壞了，或不是照片）" };
+      return { kind: "image", name, media_type: sniffed, data: Buffer.from(bytes).toString("base64") };
+    }
+    if (ext === "heic" || ext === "heif") return { kind: "unsupported", name, reason: "HEIC 照片：後台會先轉成 JPEG，這一張沒轉到——請重新整理後台再選一次，或在相簿裡匯出成 JPEG" };
     if (ext === "doc" || ext === "xls" || ext === "ppt") return { kind: "unsupported", name, reason: `舊版 Office 格式（.${ext}）：請在 Office 另存為 .${ext}x，或把內容貼到文字框` };
     if (!ext && looksLikeText(bytes)) return { kind: "text", name: name || "text", text: clip(decodeText(bytes)) };
     return { kind: "unsupported", name, reason: `不支援的格式（.${ext || "?"}）：支援 .docx .xlsx .pptx .csv .txt .pdf 與照片` };
   } catch (e: any) {
     return { kind: "unsupported", name, reason: `讀取失敗：${e?.message || e}` };
   }
+}
+
+/** 照片真正的格式：看檔案開頭的位元組（JPEG FF D8 FF、PNG 89 50 4E 47、GIF8、RIFF…WEBP）；都不是回空字串。 */
+export function sniffImage(bytes: Uint8Array): "image/jpeg" | "image/png" | "image/webp" | "image/gif" | "" {
+  const b = bytes || new Uint8Array();
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38) return "image/gif";
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return "image/webp";
+  return "";
 }
 
 function mimeToExt(mime: string): string {
@@ -55,6 +71,7 @@ function mimeToExt(mime: string): string {
   if (m === "image/png") return "png";
   if (m === "image/webp") return "webp";
   if (m === "image/gif") return "gif";
+  if (m === "image/heic" || m === "image/heif") return "heic";
   return "";
 }
 

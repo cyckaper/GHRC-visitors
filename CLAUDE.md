@@ -253,7 +253,7 @@ Google Sheet 一份四個工作表（或等價的 JSON 檔），靠 `visit_id` �
 
 **visits** — `visit_id`、日期、**開始時間、結束時間**（`start_time`／`end_time`；主辦端填的就是這兩個，
 `duration_minutes` 由它們算出來給排程、提醒與 ICS 用）、單位、單位類型、國家、人數、主要來賓姓名職稱、
-隨行名單（JSON：姓名/職稱/email）、對口老師、來訪目的、興趣關鍵字、議程（JSON）、
+隨行名單（JSON：姓名/職稱/email/電話）、對口老師、來訪目的、興趣關鍵字、議程（JSON）、
 選用頁次（JSON）、語言、**形式**（`format`：參觀 `tour`／座談 `forum`，見功能 3「座談的場次」）、專頁網址、簡報檔連結、簽名簿照片、口述音檔、口述逐字稿、
 訪後信寄送清單與時間、一頁摘要
 
@@ -306,6 +306,35 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
 > 後台日期空著就**只暫存、不存成一場**（`scheduleSave`／`saveVisit`；visit_id 要日期），日期底下說「填上日期就會自己存」（`#dateMissing`）。
 
 > 隨行名單的 email 是功能 3 取得代表性的關鍵，抽取時要特別留住，不要只留主要窗口一人。
+
+> **申請也會是簡訊、LINE 的手機截圖**（明確指示：「申請參訪有時是簡訊，要能接受圖片資料來分析」「手機畫面截圖」）。第 1 步那一區：
+> - **截圖怎麼進來**：直接貼上（⌘V／Ctrl+V，貼在文字框裡或游標不在任何欄位時都收）、拖進那一區，或按「加截圖或檔案」選
+>   （選檔是**加在後面**，不會把剛貼的換掉）。一個一個列在底下（縮圖、檔名、✕），貼上的叫「貼上的截圖 N」（AI 照這個順序讀）。
+>   HEIC 加進來時就轉掉（`decodableImage`），Safari 自己看得懂的 HEIC 也在整理時重新存成 PNG／JPEG——Claude 看不懂 HEIC。
+> - **按「AI 抽取」才整理**（`prepareShot`）：照 Claude 看圖的規矩（claude-opus-5 這一級：長邊 2576 像素以內原樣看，更大的會被縮）。
+>   一般手機截圖（1179×2556、1080×2400）剛好塞得下，**1.2 MB 以內、格式 Claude 收的就原檔不動**；要縮的照比例縮（不裁、不變形）。
+>   **又高又窄的捲動截圖**（整張縮進 2576 會縮到八成以下的）**切成重疊 240 像素的幾段**，每一段寬 1440 以內、高 2576 以內——
+>   整張縮下去字就糊了。截圖存 PNG（字比較清楚），一段超過 900 KB 才換 JPEG 0.92；透明的地方墊白底。
+> - **一個一個上傳**（`POST /api/extract` multipart `{upload, file}` → `{key}`），抽取的工作裡**只帶 key**（`netlify/lib/staged.mts`，
+>   存在媒體庫 `extract/<upload>/<編號>-<image|document|text>.json`，是 `extractFile()` 讀好的結果），背景函式照 key 的順序讀回來、
+>   **讀完不管成功失敗都刪掉**（截圖裡有對方的電話與整段對話）。上傳到一半出錯、或開始抽取被擋下來，那一批已經放上去的一起清掉
+>   （前端 `DELETE /api/extract?upload=&key=`，伺服器擋下時自己清）。以前整批 base64 塞在同一個 JSON 裡：Netlify 一個請求 6 MB，
+>   base64 又多三分之一，**兩三張截圖就超過**、連錯誤訊息都是平台的英文。舊的寫法（`files` 整批帶）還收，給還開著舊版後台的分頁，總量降到 4 MB。
+> - **上限**：截圖一次最多 20 張（切完的段數也算；Claude 一個請求超過 20 張，每一張都得縮到 2000 像素以下）、附件最多 24 個、
+>   前端加起來 20 MB 以內、背景送 Claude 前再擋一次（附件的 base64 超過 28 MB 不送，Claude 一個請求 32 MB）。超過都講人話。
+> - **照片的格式照檔案開頭的位元組認**（`files.mts sniffImage`），不照副檔名：貼上的截圖常叫 image.png、內容卻是 JPEG，格式寫錯 Claude 整個請求退回。
+> - **提示詞**（`ai.mts EXTRACT_SYSTEM` 的「手機截圖與聊天紀錄」那一段）：靠右的泡泡是中心這邊、靠左的才是來訪方（中心的人不列進名單）；
+>   訊息不是人（「每一列是一個人」只適用名單）；畫面上方是手機裡**存的聯絡人名稱**，對方自我介紹的姓名優先；
+>   「明天」「下週三」**相對於那則訊息傳送的那一天**（看日期分隔線，看不到就說要確認）；**狀態列的時鐘、訊息旁的傳送時間不是參訪時間**；
+>   連續幾張、切開的幾段會重疊，同一則只算一次；手機介面上的東西不讀；聊天裡的簡稱不要自己編成英文正式名稱。每一張圖前面一行編號（`截圖／照片 i／N：檔名`）。
+> - **電話**：`guests[].phone`（照原樣抄，**只放 phone**——不要寫進 purpose，那一格支援人力表的連結看得到）。簡訊、LINE 來的申請常常只有電話，
+>   所以**只有電話的人也留在名單上**（`normalizeVisit`、後台名單、`mergeGuests`、名片都改成「姓名、email、電話有一個就算」），
+>   同一支電話（`+886 912…`＝`0912…`）就是同一個人：之後拍到他的名片，補上姓名，不會多出一個人。
+>   後台訪前的名單**多了「電話」那一欄**——以前沒有，名片上讀到的電話下一次自動存檔就被洗掉（存檔是整份名單換掉）。
+>   電話不出後台：來賓專頁、支援人力表、地圖、來訪紀錄都是白名單，本來就不帶名單；一頁摘要交給 Claude 的名單也只帶姓名、職稱、單位。
+> - **確認信**：聯絡人只有電話、沒有 email 時，**不退回「全部勾起來」**（那等於把還沒定案的行程寄給全團），一個都不先勾，
+>   說一聲按「複製信件」貼回簡訊或 LINE。
+> - 隱私權政策跟著改（兩種語言）：往來信件與訊息、截圖與電話、截圖讀完就刪。
 
 > **跑得久的 AI 一律走背景函式。** Netlify 一般函式只有 10 秒，Claude 讀一封長信、排一整份行程、
 > 寫一封雙語信都不只（實際踩過：畫面回 504 Inactivity Timeout）。所以一般函式那一支只做「檢查、
@@ -786,7 +815,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 
 **已完成（P1–P4 最小可用系統 ＋ P5 捷徑 ＋ P6 產檔 ＋ P7 摘要／彙整）**
 
-- `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → **通告研究室（跟老師們座談、不參觀研究室的先勾「這場是座談」；各室在支援人力表上填的分鐘自動排進行程）** → **今日流程（自動排好，平常只看；要改再點開）** → 自動存 → QR／.ics → **確認信（草擬、寄出或 mailto）**，**最底下列出「以前做過的參訪」**）、**簡報（網頁版簡報：打開、複製連結、每一頁的縮圖、母簡報裡沒放進來的頁；跟「這一場」無關）**、後續（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述或一項一項打重點 → **AI 寫成完整紀錄**、動作四 當天資料放上專頁、**動作五 感謝信（含答應提供給對方的檔案與連結）**）、資料（歷次參訪、**匯入以前的參訪**、回覆、摘要、跨場次彙整、CSV、Drive）、**設定（預設值、支援人力表、外部服務狀態與「連上 Google」、老師卡片）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
+- `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信、簡訊／LINE 的手機截圖或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → **通告研究室（跟老師們座談、不參觀研究室的先勾「這場是座談」；各室在支援人力表上填的分鐘自動排進行程）** → **今日流程（自動排好，平常只看；要改再點開）** → 自動存 → QR／.ics → **確認信（草擬、寄出或 mailto）**，**最底下列出「以前做過的參訪」**）、**簡報（網頁版簡報：打開、複製連結、每一頁的縮圖、母簡報裡沒放進來的頁；跟「這一場」無關）**、後續（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述或一項一項打重點 → **AI 寫成完整紀錄**、動作四 當天資料放上專頁、**動作五 感謝信（含答應提供給對方的檔案與連結）**）、資料（歷次參訪、**匯入以前的參訪**、回覆、摘要、跨場次彙整、CSV、Drive）、**設定（預設值、支援人力表、外部服務狀態與「連上 Google」、老師卡片）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
 - `public/index.html`：專屬網址 `/<visit_id>`；整頁一種語言（預設英文，`?ui=zh` 換中文；ko／ja 來賓才另外附他們的語言）；流程（參訪當天標出「現在」；研究室參訪底下一間一行、各自的時段）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、留信箱、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
 - `public/deck.html`：**網頁版簡報 `/deck`**——每一場同一份；圖與影片在 `public/assets/deck/<版本>/`、頁序在 `public/data/deck.json`，由 `scripts/web-deck/build.mjs` 在 GitHub Actions 上從 Drive 的母簡報產生（見「架構決定」的「網頁版簡報」）。
 - `public/visits.html`：**來訪紀錄 `/visits`**——已經來過的每一場（日期、單位、來訪人員、交流重點、去了哪幾間）＋同一張世界地圖，首頁的「來訪單位」連過來（見「約定」的「中心首頁」）。
@@ -794,7 +823,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - `public/center.html`：**中心首頁 `/`**——中心簡介、三大任務、沿革、國際平台、來訪單位（世界地圖）、外部肯定、組織架構、五間研究室（卡片，各連到 `/lab/<房號>`）、聯絡；字在 `public/data/center.json`（見「約定」的「中心首頁」）。
 - `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `google-auth`（連上 Google：Drive、名單試算表、寄信共用的授權） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`record-background`（完整紀錄）／`cards-background`／`translate-background`／`geo-background`／`import-background`／`visit-list-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`；`geo` 查訪客地圖上各單位在哪裡；`import` 讀以前的參訪名單；`visit-list` 讀 Google 試算表名單裡新加的列）`drive` `drive-sync-background`（自動備份）；**四支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
   `rota`（支援人力表，各研究室自己填）； `visitor-map`（**公開**：中心首頁的來訪單位地圖，只有單位、位置與來過幾次）； `import`（匯入以前的參訪名單：預覽與寫入，規則在 `lib/import.mjs`）； `visit-log`（**公開**：`/visits` 來訪紀錄頁；admin 用 POST 改公開說明與「不公開」）；
-  `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，後續提醒）／`visit-list-cron`（每十五分鐘，名單有人加了列就讀進來）； `visit-list`（參訪名單的 Google 試算表：連上、看一次、現在就讀）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive／cdn／visitlist）。`extract` 接受上傳檔：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF 與照片以 document／image block 直接交給 Claude；.doc／.xls 不支援。
+  `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，後續提醒）／`visit-list-cron`（每十五分鐘，名單有人加了列就讀進來）； `visit-list`（參訪名單的 Google 試算表：連上、看一次、現在就讀）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive／cdn／visitlist／staged）。`extract` 接受上傳檔（**一個一個先上傳**，工作裡只帶 key，見功能 1 的「申請也會是簡訊、LINE 的手機截圖」）：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF、照片與手機截圖以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
 - `public/lib/pptx.mjs`（網頁版簡報的建置也用它：認頁、清封面、目錄、更正、照片比例）：母簡報子集化核心（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證），零 Node 相依，瀏覽器與 CLI 共用；`cli/lib/pptx.mjs` 只是注入 jszip／xmldom 的 Node 入口；`cli/deck.mjs` 加上 QR（qrcode 套件）與 PDF（LibreOffice）。`--inspect`、`--dump`、`--validate`。
 - `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-world.mjs`：訪客地圖的陸地輪廓與國家落點（`public/data/world.json`），加第三個參數（1:50m）另外產放大用的細海岸線（`world-detail.json`）。畫地圖的是 `public/lib/worldmap.mjs`（後台「資料」分頁與中心首頁共用）。
