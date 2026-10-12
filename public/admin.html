@@ -1814,7 +1814,9 @@
     $("signbookInfo").textContent = "讀取照片…";
     try { state.signbookDataUrl = await downscale(file, 2000, 0.85, noteInto("signbookInfo")); }
     catch (e) {
-      if (e?.heic) { $("signbookInfo").textContent = String(e.message || e); return flash(String(e.message || e), "err"); }
+      // HEIC（轉檔那一步、或轉完之後縮圖那一步出錯）不退回原檔：送上去也讀不出來
+      if (e?.heic || isHeic(file) || (await looksHeif(file))) { $("signbookInfo").textContent = String(e.message || e); return flash(String(e.message || e), "err"); }
+      if (!/^image\//i.test(file.type || "") && !isImageFile(file)) { $("signbookInfo").textContent = "這不是照片：簽名簿請選一張照片"; return flash("這不是照片：簽名簿請選一張照片", "err"); }
       if (file.size > 4.5 * 1024 * 1024) { $("signbookInfo").textContent = `讀不到這張照片（${e.message || e}），而且超過 4.5 MB，請先匯出成 JPEG`; return flash(String(e.message || e), "err"); }
       state.signbookDataUrl = await readFileDataUrl(file);
     }
@@ -1844,7 +1846,7 @@
    * - 瀏覽器自己解得開就用瀏覽器的（Safari 17 以後）；解不開才載 `/lib/vendor/heic-to.js`（libheif 1.23，約 3 MB、
    *   傳輸壓縮後 0.8 MB，第一次遇到 HEIC 才載）。以前的 heic2any 帶的是 2020 年的 libheif 1.10：iOS 18 之後的 iPhone 照片
    *   轉不了（「轉不成 JPEG」），10-bit 的轉出來是一片雜訊，之後同一頁再轉別張也會壞掉——實際拿各代 iPhone 的照片測過。
-   * - 長邊最多 4096（iPad 的 canvas 有面積上限，48 MP 的照片畫不上去；後面每一條路本來就還會再縮），透明的地方墊白底。
+   * - 最多 16 MP（iPad 的 canvas 有面積上限，48 MP 的照片畫不上去；後面每一條路本來就還會再縮），透明的地方墊白底。
    * - 一張 12 MP 大約五秒，轉的時候 `note` 說一聲；兩分鐘還沒好就放棄、講一句人話。
    *   轉不過來**不要把 HEIC 原檔送上去**（送上去也讀不出來、來賓專頁上也看不到）：丟出來的錯誤帶 `heic: true`，呼叫的地方照這個判斷。
    */
@@ -1863,8 +1865,9 @@
       return brands.some((x) => HEVC_BRANDS.has(x)) || ((brands[0] === "mif1" || brands[0] === "msf1") && !brands.some((x) => x === "avif" || x === "avis"));
     } catch (e) { return false; }
   }
-  const HEIC_EDGE = 4096, HEIC_WAIT = 120000;
-  let heicLib = null; // 轉檔程式只載一次；載失敗就清掉，下一張再試
+  // 面積上限 16 MP（iPad 的 canvas 是照面積算的）、長邊上限 16384：又高又窄的捲動截圖保留原本的寬度，第 1 步才切得清楚
+  const HEIC_AREA = 16e6, HEIC_EDGE = 16384, HEIC_WAIT = 120000;
+  let heicLib = null, heicLoads = 0; // 轉檔程式只載一次；載失敗就清掉，下一張換一個網址再試（瀏覽器會記住載失敗的那一個網址）
   async function decodableImage(file, note = () => {}) {
     if (!isHeic(file) && !(await looksHeif(file))) return file;
     const name = file.name || "這張照片";
@@ -1875,8 +1878,8 @@
       if (!bmp) {
         note("HEIC 照片轉成 JPEG 中……一張大約五秒。");
         const work = (async () => {
-          heicLib = heicLib || import("/lib/vendor/heic-to.js").catch((e) => { heicLib = null; throw e; });
-          const { heicTo } = await heicLib;
+          heicLib = heicLib || import(`/lib/vendor/heic-to.js${heicLoads++ ? `?r=${Date.now()}` : ""}`).catch((e) => { heicLib = null; throw e; });
+          const { heicTo } = await heicLib.catch(() => { throw heicError("HEIC 的轉檔程式沒有載入成功（網路不穩？）：請重新整理後台再試一次"); });
           return await heicTo({ blob: file, type: "bitmap" });
         })();
         work.then((b) => { if (late) b?.close?.(); }, () => {}); // 等太久放棄了，晚到的那一張也要收掉
@@ -1884,7 +1887,7 @@
         const slow = new Promise((_, reject) => { timer = setTimeout(() => { late = true; reject(heicError(`${name} 轉了兩分鐘還沒好：請重新整理後台再試一次，或在相簿裡把它匯出成 JPEG`)); }, HEIC_WAIT); });
         try { bmp = await Promise.race([work, slow]); } finally { clearTimeout(timer); }
       }
-      const s = Math.min(1, HEIC_EDGE / Math.max(bmp.width, bmp.height));
+      const s = Math.min(1, Math.sqrt(HEIC_AREA / (bmp.width * bmp.height)), HEIC_EDGE / Math.max(bmp.width, bmp.height));
       const c = document.createElement("canvas");
       c.width = Math.max(1, Math.round(bmp.width * s)); c.height = Math.max(1, Math.round(bmp.height * s));
       const g = c.getContext("2d");
@@ -2346,7 +2349,7 @@
   async function photoData(file, maxEdge = 1600, note) {
     try { return await downscale(file, maxEdge, 0.85, note); }
     catch (e) {
-      if (e?.heic) throw e; // HEIC 原檔送上去也讀不出來、來賓專頁上也看不到
+      if (e?.heic || isHeic(file) || (await looksHeif(file))) throw e; // HEIC 原檔送上去也讀不出來、來賓專頁上也看不到
       if (file.size > 4.5 * 1024 * 1024) throw new Error(`瀏覽器縮不了這張圖（${e.message || e}），而且原檔超過 4.5 MB，請先在相簿匯出成 JPEG`);
       return await readFileDataUrl(file);
     }
@@ -2354,28 +2357,53 @@
   const readFileDataUrl = (file) => new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(String(fr.result)); fr.onerror = () => reject(fr.error); fr.readAsDataURL(file); });
   /**
    * 把照片（或檔案）拖進那一張卡片＝選了那幾個檔（Mac 上從 Finder、下載資料夾、AirDrop 收到的 HEIC 直接拖）。
-   * 只收檔案，拖一段字照舊；交給那一格自己的 onchange，所以 HEIC 轉檔、縮圖、上傳都走同一條。
+   * 只收檔案，拖一段字照舊；**照每一格的 accept 分**（程式指定的檔案瀏覽器不會幫忙擋：PDF 拖進簽名簿那一張，會被當成簽名簿照片），
+   * 交給那一格自己的 onchange，所以 HEIC 轉檔、縮圖、上傳都走同一條。一張卡片可以有好幾格（合照那一張：照片與簡報 PDF）。
    */
-  function dropZone(zone, input) {
-    if (!zone || !input) return;
+  const accepts = (input, f, heif) => {
+    const list = String(input.accept || "").toLowerCase().split(",").map((x) => x.trim()).filter(Boolean);
+    if (!list.length) return true;
+    const name = String(f.name || "").toLowerCase();
+    return list.some((a) => (a === "image/*" ? isImageFile(f) || heif : a.startsWith(".") ? name.endsWith(a) : String(f.type || "").toLowerCase() === a));
+  };
+  function dropZone(zone, ...inputs) {
+    if (!zone || !inputs.length) return;
     const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
     zone.addEventListener("dragover", (e) => { if (!hasFiles(e)) return; e.preventDefault(); zone.classList.add("dropping"); });
     zone.addEventListener("dragleave", (e) => { if (!zone.contains(e.relatedTarget)) zone.classList.remove("dropping"); });
-    zone.addEventListener("drop", (e) => {
+    zone.addEventListener("drop", async (e) => {
       zone.classList.remove("dropping");
       const dropped = [...(e.dataTransfer?.files || [])];
       if (!dropped.length) return;
       e.preventDefault();
-      const dt = new DataTransfer();
-      for (const f of input.multiple ? dropped : dropped.slice(0, 1)) dt.items.add(f);
-      input.files = dt.files;
-      input.dispatchEvent(new Event("change"));
+      const heif = await Promise.all(dropped.map((f) => looksHeif(f)));
+      const left = dropped.map((f, i) => ({ f, heif: heif[i] }));
+      for (const input of inputs) {
+        const mine = left.filter((x) => accepts(input, x.f, x.heif));
+        if (!mine.length) continue;
+        const take = input.multiple ? mine : mine.slice(0, 1);
+        for (const x of take) left.splice(left.indexOf(x), 1);
+        const dt = new DataTransfer();
+        for (const x of take) dt.items.add(x.f);
+        input.files = dt.files;
+        input.dispatchEvent(new Event("change"));
+      }
+      if (left.length) flash(`${left.map((x) => x.f.name).join("、")}：這一格放不進這種檔案`, "err");
+    });
+  }
+  // 拖到卡片外面的檔案什麼都不做：不然瀏覽器會在這個分頁直接打開那個檔，後台整頁不見、上傳到一半的也沒了。
+  // 拖到看得見的選檔格子上照舊（那是瀏覽器自己會收的）
+  for (const type of ["dragover", "drop"]) {
+    document.addEventListener(type, (e) => {
+      if (e.defaultPrevented || ![...(e.dataTransfer?.types || [])].includes("Files") || e.target?.closest?.("input[type=file]")) return;
+      e.preventDefault();
+      if (type === "dragover") e.dataTransfer.dropEffect = "none";
     });
   }
   dropZone($("signbookFile").closest(".card"), $("signbookPick"));
   dropZone($("cardFiles").closest(".card"), $("cardPick"));
-  dropZone($("photoFiles").parentElement, $("photoFiles"));
-  dropZone($("promisedBox"), $("promisedFiles"));
+  dropZone($("photoFiles").closest(".card"), $("photoFiles"), $("pdfFile"));
+  dropZone($("thanksCard"), $("promisedFiles"));
 
   // ── 信件：兩封信（確認信、感謝信）都在這裡，收件人共用一份 ──
   $("confirmRecipientsRefresh").onclick = loadRecipients;

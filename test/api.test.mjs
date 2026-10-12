@@ -435,6 +435,9 @@ test("respond: anonymous suggestion is stored with no identity; named onsite ema
 
 test("signbook: photo stored, OCR entries returned, then saved as responses", async () => {
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+  // 不是照片的不收（PDF 拖進簽名簿那一張卡片：存起來會蓋掉這一場的簽名簿照片，AI 也讀不了）
+  const pdf = await api("/api/signbook", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, image: "data:application/pdf;base64,JVBERi0xLjQ=" }) });
+  assert.equal(pdf.status, 400, JSON.stringify(pdf.body));
   const r = await runJob("signbook", { visit_id: visitId, image: `data:image/png;base64,${png.toString("base64")}` });
   assert.equal(r.status, 200, JSON.stringify(r.body));
   assert.ok(r.body.photo_key.startsWith(`signbook/${visitId}/`));

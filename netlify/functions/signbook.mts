@@ -45,6 +45,7 @@ export default async (req: Request) => {
   const mediaType = (m ? m[1] : body.media_type || "image/jpeg").toLowerCase();
   const b64 = (m ? m[2] : raw).replace(/\s/g, "");
   if (!b64) return fail(400, "需要 image");
+  if (!mediaType.startsWith("image/")) return fail(400, "簽名簿請上傳照片");
   const bytes = Buffer.from(b64, "base64");
   const heic = rejectHeic(mediaType, bytes);
   if (heic) return heic;

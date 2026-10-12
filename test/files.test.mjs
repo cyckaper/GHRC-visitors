@@ -109,6 +109,9 @@ test("extractFile dispatches by extension and passes PDF/images through to the m
   assert.equal(isHeifBytes(ftyp("heix", "mif1", "heix")), true, "10-bit 的 heix");
   assert.equal(isHeifBytes(ftyp("mif1", "MiHE", "miaf", "heic")), true, "iPhone：主要 brand 是 mif1、相容裡有 heic");
   assert.equal(isHeifBytes(ftyp("mif1", "miaf")), true, "只寫 mif1 的一般 HEIF");
+  assert.equal(isHeifBytes(ftyp("miaf", "MiHB", "heic")), true, "HEVC 只寫在相容 brand 裡也算");
+  assert.equal(isHeifBytes(ftyp("isom", "iso2", "mp41")), false, "MP4 影片不算");
+  assert.equal(isHeifBytes(ftyp("qt  ", "qt  ")), false, "iPhone 的 MOV 不算");
   assert.equal(isHeifBytes(ftyp("avif", "mif1", "miaf")), false, "AVIF 瀏覽器與 Claude 都讀得了，不算");
   assert.equal(isHeifBytes(ftyp("mif1", "avif", "miaf")), false, "主要 brand 是 mif1 的 AVIF 也不算");
   assert.equal(isHeifBytes(new Uint8Array([0, 0, 0, 0x18])), false, "太短的不算");

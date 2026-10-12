@@ -338,6 +338,11 @@ try {
   await page.waitForFunction(() => document.querySelectorAll("#photoList img").length === 2, null, { timeout: 20000 });
   await page.click("#photoList [data-remove-photo]:last-of-type");
   await page.waitForFunction(() => document.querySelectorAll("#photoList img").length === 1);
+  // 拖進卡片的檔案照那一格收什麼分：PDF 拖到簽名簿那一張不會被當成簽名簿照片
+  const pdfDrop = await page.evaluateHandle(() => { const dt = new DataTransfer(); dt.items.add(new File(["%PDF-1.4"], "scan.pdf", { type: "application/pdf" })); return dt; });
+  await page.dispatchEvent("div.card:has(#signbookFile)", "drop", { dataTransfer: pdfDrop });
+  await page.waitForFunction(() => /放不進這種檔案/.test(document.getElementById("flash").textContent), null, { timeout: 10000 });
+  check(await page.isHidden("#signbookPreview"), "a PDF dropped on the sign-in book card is turned away instead of becoming the sign-in book photo");
 
   // 動作五：答應提供給對方的資料——連結（沒寫 https:// 的幫他補上）與檔案（各種格式，原檔名）
   await page.click("#promisedAddLink");
