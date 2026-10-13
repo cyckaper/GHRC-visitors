@@ -852,6 +852,14 @@ test("母簡報地圖頁的形狀名稱是約定：build.mjs 認 GHRC_MAP，deck
   for (const leak of ["guests", "email", "purpose", "background"]) assert.ok(!fn.includes(`${leak}:`), `visitor-map 不給 ${leak}`);
 });
 
+test("地圖頁按在點上不翻頁：點大多在左半邊，不擋的話會被當成「點左邊三分之一＝上一頁」", () => {
+  const deck = readFileSync("public/deck.html", "utf8");
+  assert.match(deck, /#livemap g\[data-cluster\] \{ pointer-events: auto/, "地圖整塊不收點擊，只有那幾個點收（才認得出是按在點上）");
+  assert.match(deck, /onDot: !!e\.target\.closest\("#livemap"\)/, "按下去就記住是不是從點上開始的");
+  assert.match(deck, /tap && !onDot/, "從點上點一下不翻頁（左右滑照舊翻）");
+  assert.match(deck, /\$\("livemap"\)\.addEventListener\(t, \(e\) => e\.stopPropagation\(\), true\)/, "點擊攔在 worldmap 之前：這一頁是投影，放大了縮不回來");
+});
+
 test("母簡報放在 repo 裡：指紋把那個檔也算進去，換了檔案就會重建（不必記得把 run 加一）", async () => {
   const { sourceHash, needsBuild } = await import("../scripts/web-deck/needs-build.mjs");
   const drive = { source: "drive", drive_id: "abc", run: 1 };
