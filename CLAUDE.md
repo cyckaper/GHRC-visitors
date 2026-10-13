@@ -83,16 +83,23 @@ Drive 上的母簡報（暫時的複本） → GitHub Actions（.github/workflow
 - **字型**：母簡報指定、這台沒有的西文字型到 Google Fonts 抓（舊的 user-agent 拿得到 TTF）；中日韓的（微軟正黑體、新細明體…）
   由 workflow 裡的 fontconfig 別名換成 Noto CJK。報告寫在 `deck.json` 的 `build.fonts`。
   **LibreOffice 的排版跟 PowerPoint 不完全一樣**（換行、字寬）：建好要一頁一頁看過；差太多就改走「PowerPoint 另存的 PDF」那一條（build.mjs 要加一個吃 PDF 的入口）。
-- **母簡報改版時**（後台「簡報」分頁最底下也這樣寫：請維護系統的人處理）：
-  1. 在 Drive 把新的母簡報**複製一份**（例如「…（網頁版建置用，建好會刪）」），**只把那一份**開成「知道連結的任何人都能檢視」。
-     **原始的母簡報不要開分享**：講稿裡有上一場來賓的名字，而 ID 會寫進這個公開的 repo。
-  2. `source.json` 的 `source: "drive"`、`drive_id` 換成複本的 ID、`title` 寫母簡報的檔名、`run` 加一，push——Actions 會自己跑、自己 commit。
-  3. 建好了就把複本**丟到垃圾桶**（分享跟著失效，repo 裡那個 ID 指到的是垃圾桶裡的檔案）。
-  4. Actions 用 `GITHUB_TOKEN` 推的 commit **不會觸發 CI**：再推一個 commit（或在 PR 上推任何東西），CI 才會跑。
-  5. **合併到 main 不會再建一次**：push 的 paths 條件只看 source.json 有沒有改，合併時 main 也算改了——以前會在 main 上再建一次、
-     直接 commit 進 main（只差建置時間），複本丟掉之後還會下載失敗、在 main 上掛紅叉。現在 deck.json 記著是從哪一份 source.json 建的
-     （`source.hash`），workflow 第一步（`scripts/web-deck/needs-build.mjs`）看到一樣就整個跳過；要強制重建就在 Actions 頁面手動觸發。
-  開發用的雲端環境連不到 Drive 的下載網址，所以只能在 Actions 上建；`source: "fixture"` 用合成簡報試跑整條管線。
+- **母簡報放在 repo 裡**（2026-10 起；`source.json` 的 `source: "repo"`、`path: public/assets/master/master.pptx`）。
+  **換一版就是換那個檔**：`master.pptx` 換掉、`title` 改成新的檔名，**兩個放同一個 commit** 推上去，
+  Actions 自己重建、自己把圖與 `deck.json` commit 回來。指紋把 `master.pptx` 的內容也算進去
+  （`needs-build.mjs` 的 `sourceHash`），所以 **`run` 不必動**——`run` 只在「檔案沒變、要原地重跑一次」時加一。
+  放進來之前**講稿要先拿掉**（講稿裡有上一場來賓的名字，而 `public/` 由 Netlify 公開發佈，知道網址就載得到）、
+  **影片也要抽掉**（GitHub 一個檔超過 100 MB 擋下；`scripts/slim-master.py`），目標 30 MB 上下。
+  原始的、含講稿與影片的母簡報留在 Drive 當備份，**不要開分享**。
+  - **為什麼改掉 Drive 那一套**（實際踩過）：以前是「在 Drive 複製一份 → 只把複本開成知道連結的任何人都能檢視 →
+    `drive_id` 寫進這個公開的 repo → 建好把複本丟到垃圾桶」。2026-10-12 查的時候，10-07 那一份複本**還在、還開著公開連結**，
+    而它是 381 MB 的完整母簡報、**講稿一頁沒少**——等於照著公開 repo 裡的 ID 就能把整份含導覽腳本的簡報載走。
+    「記得丟垃圾桶」這種每次都要做對的事，遲早會漏掉一次；放進 repo 就沒有這一步。
+    舊的做法留著備用（`source: "drive"` ＋ `drive_id`），`source: "fixture"` 用合成簡報試跑整條管線。
+  - Actions 用 `GITHUB_TOKEN` 推的 commit **不會觸發 CI**：再推一個 commit（或在 PR 上推任何東西），CI 才會跑。
+  - **合併到 main 不會再建一次**：push 的 paths 條件看的是 source.json 與 `public/assets/master/**` 有沒有改，
+    合併時 main 也算改了——以前會在 main 上再建一次、直接 commit 進 main（只差建置時間）。現在 deck.json 記著是從哪一份
+    source.json（與哪一份母簡報）建的（`source.hash`），workflow 第一步（`scripts/web-deck/needs-build.mjs`）看到一樣就整個跳過；
+    要強制重建就在 Actions 頁面手動觸發。
 - **地圖頁是活的**（明確要求：「主辦端網頁中的資料頁中的國際地圖加入簡報中，每次更新，更新後的檔再更新回主辦端的簡報頁」）：
   母簡報有一頁放「訪客來自哪裡」那張世界地圖。**.pptx 裡只能放圖，`/deck` 上那一頁是活的**——
   `build.mjs` 的 `mapBox()` 認母簡報那一頁上名稱叫 **`GHRC_MAP`** 的那張圖，把它的位置記進 `deck.json`

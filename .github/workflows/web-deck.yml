@@ -1,14 +1,14 @@
 # 網頁版簡報 /deck：從母簡報做出每一頁的圖、影片與 public/data/deck.json，做好直接 commit 回同一條分支。
-# 觸發：scripts/web-deck/source.json 有改（換母簡報、改 exclude、或把 run 加一重跑）。
-# 為什麼在這裡跑：要 LibreOffice（pptx → PDF）與 ffmpeg；開發用的雲端環境裡 LibreOffice 開不了 pptx，
-# 也連不到 Google Drive 的下載網址（Drive 的連接一次只能下載 10 MB，母簡報 398 MB）。
-# source 是 "drive" 時，drive_id 是母簡報的**複本**（開成「知道連結的任何人都能檢視」），建好就把複本丟到垃圾桶。
-# 原始的母簡報不要開分享：講稿裡有上一場來賓的名字，而 drive_id 會寫進這個公開的 repo（見 CLAUDE.md「網頁版簡報」）。
+# 觸發：scripts/web-deck/source.json 有改（換母簡報、改 exclude、或把 run 加一重跑），或 repo 裡的母簡報換了檔。
+# 為什麼在這裡跑：要 LibreOffice（pptx → PDF）與 ffmpeg；開發用的雲端環境裡 LibreOffice 開不了 pptx。
+# source 是 "repo"（現行）時，母簡報就在 repo 裡（public/assets/master/），換版＝換那個檔，不必上傳、開分享、記得丟垃圾桶。
+# source 是 "drive"（舊的做法，留著備用）時，drive_id 是母簡報的**複本**（開成「知道連結的任何人都能檢視」），建好就把複本丟到垃圾桶。
+# 放進 repo 的那一份**講稿要先拿掉**：講稿裡有上一場來賓的名字，而 public/ 由 Netlify 公開發佈（見 CLAUDE.md「網頁版簡報」）。
 name: Web deck
 
 on:
   push:
-    paths: ["scripts/web-deck/source.json"]
+    paths: ["scripts/web-deck/source.json", "public/assets/master/**"]
   workflow_dispatch:
 
 permissions:
@@ -55,7 +55,11 @@ jobs:
         run: |
           set -euo pipefail
           SRC=$(python3 -c "import json;print(json.load(open('scripts/web-deck/source.json'))['source'])")
-          if [ "$SRC" = "drive" ]; then
+          if [ "$SRC" = "repo" ]; then
+            P=$(python3 -c "import json;print(json.load(open('scripts/web-deck/source.json'))['path'])")
+            [ -f "$P" ] || { echo "::error::source.json 說母簡報在 ${P}，但 repo 裡沒有這個檔——換母簡報時要把 .pptx 跟 source.json 放在同一個 commit 裡"; exit 1; }
+            cp "$P" "$RUNNER_TEMP/master.pptx"
+          elif [ "$SRC" = "drive" ]; then
             ID=$(python3 -c "import json;print(json.load(open('scripts/web-deck/source.json'))['drive_id'])")
             # gdown 處理大檔的「無法掃毒」確認頁（新版直接吃檔案 ID）；它不行就直接打 Drive 的下載網址再試一次
             gdown --quiet "$ID" -O "$RUNNER_TEMP/master.pptx" \

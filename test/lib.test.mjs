@@ -851,3 +851,25 @@ test("母簡報地圖頁的形狀名稱是約定：build.mjs 認 GHRC_MAP，deck
   const fn = readFileSync("netlify/functions/visitor-map.mts", "utf8");
   for (const leak of ["guests", "email", "purpose", "background"]) assert.ok(!fn.includes(`${leak}:`), `visitor-map 不給 ${leak}`);
 });
+
+test("母簡報放在 repo 裡：指紋把那個檔也算進去，換了檔案就會重建（不必記得把 run 加一）", async () => {
+  const { sourceHash, needsBuild } = await import("../scripts/web-deck/needs-build.mjs");
+  const drive = { source: "drive", drive_id: "abc", run: 1 };
+  assert.equal(sourceHash(drive), sourceHash({ ...drive }), "同一份 source.json 指紋一樣");
+  assert.notEqual(sourceHash(drive), sourceHash({ ...drive, run: 2 }), "run 加一就要重建");
+  // repo：路徑存在時，指紋跟著那個檔走；讀不到就只照 source.json 算（缺檔由 workflow 報錯，這裡不要壞掉）
+  const here = { source: "repo", path: "scripts/web-deck/source.json", run: 1 };
+  const gone = { source: "repo", path: "public/assets/master/沒有這個檔.pptx", run: 1 };
+  assert.notEqual(sourceHash(here), sourceHash({ ...here, path: "package.json" }), "換一個檔就是另一個指紋");
+  assert.equal(sourceHash(gone).length, 12, "缺檔照樣算得出指紋");
+  assert.equal(needsBuild(here, { source: { hash: sourceHash(here) } }), false, "指紋一樣就不建");
+  assert.equal(needsBuild(here, { source: { hash: "x" } }), true);
+
+  const src = JSON.parse(readFileSync("scripts/web-deck/source.json", "utf8"));
+  const wf = readFileSync(".github/workflows/web-deck.yml", "utf8");
+  if (src.source === "repo") {
+    assert.ok(src.path && src.path.startsWith("public/assets/master/"), "母簡報放 public/assets/master/");
+    assert.ok(/paths:.*public\/assets\/master/.test(wf), "換了母簡報也要觸發 workflow");
+    assert.ok(wf.includes('"$SRC" = "repo"'), "workflow 要認得 repo 這一種來源");
+  }
+});
