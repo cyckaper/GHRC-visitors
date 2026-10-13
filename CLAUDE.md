@@ -83,16 +83,36 @@ Drive 上的母簡報（暫時的複本） → GitHub Actions（.github/workflow
 - **字型**：母簡報指定、這台沒有的西文字型到 Google Fonts 抓（舊的 user-agent 拿得到 TTF）；中日韓的（微軟正黑體、新細明體…）
   由 workflow 裡的 fontconfig 別名換成 Noto CJK。報告寫在 `deck.json` 的 `build.fonts`。
   **LibreOffice 的排版跟 PowerPoint 不完全一樣**（換行、字寬）：建好要一頁一頁看過；差太多就改走「PowerPoint 另存的 PDF」那一條（build.mjs 要加一個吃 PDF 的入口）。
-- **母簡報改版時**（後台「簡報」分頁最底下也這樣寫：請維護系統的人處理）：
-  1. 在 Drive 把新的母簡報**複製一份**（例如「…（網頁版建置用，建好會刪）」），**只把那一份**開成「知道連結的任何人都能檢視」。
-     **原始的母簡報不要開分享**：講稿裡有上一場來賓的名字，而 ID 會寫進這個公開的 repo。
-  2. `source.json` 的 `source: "drive"`、`drive_id` 換成複本的 ID、`title` 寫母簡報的檔名、`run` 加一，push——Actions 會自己跑、自己 commit。
-  3. 建好了就把複本**丟到垃圾桶**（分享跟著失效，repo 裡那個 ID 指到的是垃圾桶裡的檔案）。
-  4. Actions 用 `GITHUB_TOKEN` 推的 commit **不會觸發 CI**：再推一個 commit（或在 PR 上推任何東西），CI 才會跑。
-  5. **合併到 main 不會再建一次**：push 的 paths 條件只看 source.json 有沒有改，合併時 main 也算改了——以前會在 main 上再建一次、
-     直接 commit 進 main（只差建置時間），複本丟掉之後還會下載失敗、在 main 上掛紅叉。現在 deck.json 記著是從哪一份 source.json 建的
-     （`source.hash`），workflow 第一步（`scripts/web-deck/needs-build.mjs`）看到一樣就整個跳過；要強制重建就在 Actions 頁面手動觸發。
-  開發用的雲端環境連不到 Drive 的下載網址，所以只能在 Actions 上建；`source: "fixture"` 用合成簡報試跑整條管線。
+- **母簡報放在 repo 裡**（2026-10 起；`source.json` 的 `source: "repo"`、`path: public/assets/master/master.pptx`）。
+  **換一版就是換那個檔**：`master.pptx` 換掉、`title` 改成新的檔名，**兩個放同一個 commit** 推上去，
+  Actions 自己重建、自己把圖與 `deck.json` commit 回來。指紋把 `master.pptx` 的內容也算進去
+  （`needs-build.mjs` 的 `sourceHash`），所以 **`run` 不必動**——`run` 只在「檔案沒變、要原地重跑一次」時加一。
+  放進來之前**講稿要先拿掉**（講稿裡有上一場來賓的名字，而 `public/` 由 Netlify 公開發佈，知道網址就載得到）、
+  **影片也要抽掉**（GitHub 一個檔超過 100 MB 擋下；`scripts/slim-master.py`），目標 30 MB 上下。
+  原始的、含講稿與影片的母簡報留在 Drive 當備份，**不要開分享**。
+  - **為什麼改掉 Drive 那一套**（實際踩過）：以前是「在 Drive 複製一份 → 只把複本開成知道連結的任何人都能檢視 →
+    `drive_id` 寫進這個公開的 repo → 建好把複本丟到垃圾桶」。2026-10-12 查的時候，10-07 那一份複本**還在、還開著公開連結**，
+    而它是 381 MB 的完整母簡報、**講稿一頁沒少**——等於照著公開 repo 裡的 ID 就能把整份含導覽腳本的簡報載走。
+    「記得丟垃圾桶」這種每次都要做對的事，遲早會漏掉一次；放進 repo 就沒有這一步。
+    舊的做法留著備用（`source: "drive"` ＋ `drive_id`），`source: "fixture"` 用合成簡報試跑整條管線。
+  - Actions 用 `GITHUB_TOKEN` 推的 commit **不會觸發 CI**：再推一個 commit（或在 PR 上推任何東西），CI 才會跑。
+  - **合併到 main 不會再建一次**：push 的 paths 條件看的是 source.json 與 `public/assets/master/**` 有沒有改，
+    合併時 main 也算改了——以前會在 main 上再建一次、直接 commit 進 main（只差建置時間）。現在 deck.json 記著是從哪一份
+    source.json（與哪一份母簡報）建的（`source.hash`），workflow 第一步（`scripts/web-deck/needs-build.mjs`）看到一樣就整個跳過；
+    要強制重建就在 Actions 頁面手動觸發。
+- **地圖頁是活的**（明確要求：「主辦端網頁中的資料頁中的國際地圖加入簡報中，每次更新，更新後的檔再更新回主辦端的簡報頁」）：
+  母簡報有一頁放「訪客來自哪裡」那張世界地圖。**.pptx 裡只能放圖，`/deck` 上那一頁是活的**——
+  `build.mjs` 的 `mapBox()` 認母簡報那一頁上名稱叫 **`GHRC_MAP`** 的那張圖，把它的位置記進 `deck.json`
+  （`map`，跟影片一樣是佔投影片寬高的比例）；`deck.html` 照那個位置疊一張真的地圖，資料走**公開**的
+  `/api/visitor-map`（不必登入，只有單位、位置與來過幾次），畫法是同一支 `public/lib/worldmap.mjs`。
+  **所以來訪單位一加進系統，打開 `/deck` 就是最新的，不必為了一張地圖重建整份簡報**；
+  **載不到就維持圖上那一張**（現場網路不一定好，這一頁不該為了一張地圖開天窗）。
+  點旁邊的名稱比網頁上長一點（`mountWorldMap` 的 `labelWidth`，投影出來寬得多；中文 16、英文 30 個字寬），
+  而且**不給點、不給縮放**——現場點一下是翻頁，不是去拖地圖。
+  **.pptx 那一張要更新就重跑 `scripts/map-slide/`**（兩支：`render.mjs` 用無頭瀏覽器把同一支 worldmap.mjs
+  畫成 PNG，`insert.py` 換進母簡報那一頁、順便改底下 `GHRC_MAP_STATS` 那一行數字；位置與大小不動，
+  照圖的真實比例擺——照片不變形是既有標準）。形狀的名稱是三邊的約定，改名字 `build.mjs`、`insert.py` 都要改，
+  `npm test` 盯著。
 - **播放頁** `public/deck.html`（`/deck`）：不從別的伺服器載任何東西。鍵盤與簡報遙控器（PageDown／PageUp、方向鍵、F／F5 全螢幕、
   G 全部頁面、B／. 黑幕、打頁碼再按 Enter）、手機左右滑、點左三分之一上一頁；網址 `#12` 直接到第 12 頁；
   介面的字跟其他頁同一套（預設英文、`?ui=zh`、`ghrc-ui-lang`）。`deck.json` 還沒有就說「還沒建好」，不是一片黑。
@@ -749,6 +769,11 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
   - **畫法在 `public/lib/worldmap.mjs`，中心首頁的「來訪單位」用同一份**（明確要求：「GHRC 介紹首頁加入設定中的世界地圖，
     標出來訪單位」）：投影、放大、拖曳、群集、名稱、細海岸線都在模組裡（`mountWorldMap()`，樣式自帶、在 `.wm` 底下）；
     後台只管自己的事——哪幾場算同一個單位、點下去列出那幾場、還沒查位置的去查、上面那一行數字。兩邊不會各長各的。
+  - **第三個地方是簡報**（明確要求：「主辦端網頁中的資料頁中的國際地圖加入簡報中，每次更新，更新後的檔再更新回主辦端的簡報頁」）：
+    網頁版簡報 `/deck` 的地圖頁直接掛這一支，**是活的**；母簡報 .pptx 裡的那一張是 `scripts/map-slide/render.mjs`
+    用無頭瀏覽器把**同一支模組、同一份 `/api/visitor-map`** 畫出來的 PNG（所以三個地方長得一樣），
+    `scripts/map-slide/insert.py` 換進母簡報那一頁。做法與約定寫在「架構決定」的「網頁版簡報」那一節。
+    `shortLabel(s, max)` 的 `max` 就是為了這個加的：網頁上一欄寬，截 15 個字；投影出來寬得多，放得下正式名稱。
 
 ### 5. 部署
 
@@ -831,7 +856,10 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
   `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，後續提醒）／`visit-list-cron`（每十五分鐘，名單有人加了列就讀進來）／`extract-sweep-cron`（每小時，清掉讀信抽取沒讀成的截圖）； `visit-list`（參訪名單的 Google 試算表：連上、看一次、現在就讀）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive／cdn／visitlist／staged）。`extract` 接受上傳檔（**一個一個先上傳**，工作裡只帶 key，見功能 1 的「申請也會是簡訊、LINE 的手機截圖」）：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF、照片與手機截圖以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
 - `public/lib/pptx.mjs`（網頁版簡報的建置也用它：認頁、清封面、目錄、更正、照片比例）：母簡報子集化核心（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證），零 Node 相依，瀏覽器與 CLI 共用；`cli/lib/pptx.mjs` 只是注入 jszip／xmldom 的 Node 入口；`cli/deck.mjs` 加上 QR（qrcode 套件）與 PDF（LibreOffice）。`--inspect`、`--dump`、`--validate`。
-- `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-world.mjs`：訪客地圖的陸地輪廓與國家落點（`public/data/world.json`），加第三個參數（1:50m）另外產放大用的細海岸線（`world-detail.json`）。畫地圖的是 `public/lib/worldmap.mjs`（後台「資料」分頁與中心首頁共用）。
+- `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-world.mjs`：訪客地圖的陸地輪廓與國家落點（`public/data/world.json`），加第三個參數（1:50m）另外產放大用的細海岸線（`world-detail.json`）。畫地圖的是 `public/lib/worldmap.mjs`（後台「資料」分頁、中心首頁、`/deck` 的地圖頁共用）。
+  `scripts/map-slide/`：母簡報那一頁的世界地圖——`render.mjs`（Playwright 把同一支 worldmap.mjs 畫成 PNG，
+  `--data=` 可以吃先存下來的 `/api/visitor-map`，開發環境連不到站台時用）、`insert.py`（python-pptx 換進母簡報的
+  `GHRC_MAP`，順便改 `GHRC_MAP_STATS` 那一行數字；`add` 是第一次放進去、`update` 是之後每一次更新）。
 - 介面語言：`public/data/i18n-admin.json`（後台英文；鍵＝畫面上那句中文）、`scripts/i18n-scan.mjs`（掃出沒翻的，`npm test` 會跑）、
   `public/data/i18n.json`（來賓端四語）、`slides.json` 的 `title_en`。
 - 測試：`npm test`（單元、API 走本機 dev server、產檔與瘦身走合成簡報）、`npm run test:e2e`（Chromium）。`AI_MOCK=1` 讓所有 AI 呼叫回固定範例，`MAIL_MOCK=1` 讓寄信不真的打 Gmail（信寫進媒體庫 `mail/last.json`，測試再讀出來對內容），`DRIVE_MOCK=1` 讓參訪名單的 Google 試算表存在媒體庫。CI：`.github/workflows/ci.yml` 在每個 PR 與 main 的 push 跑同一套（typecheck → npm test → e2e）。

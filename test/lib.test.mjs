@@ -824,3 +824,52 @@ test("答應提供的資料：網址或上傳的檔案；信裡用完整的網�
   assert.equal(needsSummary(past, [], new Date("2026-02-01")), true);
   assert.equal(needsSummary({ ...past, summary_at: "2026-01-04T00:00:00Z" }, [], new Date("2026-02-01")), false);
 });
+
+test("地圖上點旁邊的名稱：網頁上截在 15 個字寬，畫成簡報那一頁的圖時放得下長一點（labelWidth）", async () => {
+  const { shortLabel } = await import("../public/lib/worldmap.mjs");
+  const en = "Norwegian University of Science and Technology";
+  // 網頁上的地圖只有一欄寬：截短，而且截在字與字之間（不要切在單字中間）
+  assert.ok(shortLabel(en).endsWith("…"));
+  assert.ok(!/\s…$/.test(shortLabel(en)), "截在字與字之間，不留一個空白在刪節號前面");
+  assert.ok(en.startsWith(shortLabel(en).replace("…", "")));
+  // 簡報那一頁的圖寬得多：整個正式名稱放得下，不然滿頁都是「University of…」
+  assert.equal(shortLabel(en, 30), en);
+  // 中日韓字算一個字寬、西文算 0.58
+  assert.equal(shortLabel("訪客來自哪裡", 6), "訪客來自哪裡");
+  assert.ok(shortLabel("訪客來自哪裡", 5).endsWith("…"));
+});
+
+test("母簡報地圖頁的形狀名稱是約定：build.mjs 認 GHRC_MAP，deck.html 才疊得上活的地圖", () => {
+  const build = readFileSync("scripts/web-deck/build.mjs", "utf8");
+  const deck = readFileSync("public/deck.html", "utf8");
+  const insert = readFileSync("scripts/map-slide/insert.py", "utf8");
+  assert.ok(/name="GHRC_MAP"/.test(build), "build.mjs 要認 GHRC_MAP");
+  assert.ok(/MAP_NAME = "GHRC_MAP"/.test(insert), "insert.py 放進去的形狀要叫 GHRC_MAP");
+  assert.ok(/entry\.map = \{/.test(build), "deck.json 要記下地圖那張圖的位置");
+  assert.ok(/s\.map/.test(deck) && /\/api\/visitor-map/.test(deck), "deck.html 要照 map 的位置掛活的地圖");
+  // 公開的那一支：地圖頁只拿得到單位、位置與來過幾次，名單與日期不在裡面（跟首頁同一條規矩）
+  const fn = readFileSync("netlify/functions/visitor-map.mts", "utf8");
+  for (const leak of ["guests", "email", "purpose", "background"]) assert.ok(!fn.includes(`${leak}:`), `visitor-map 不給 ${leak}`);
+});
+
+test("母簡報放在 repo 裡：指紋把那個檔也算進去，換了檔案就會重建（不必記得把 run 加一）", async () => {
+  const { sourceHash, needsBuild } = await import("../scripts/web-deck/needs-build.mjs");
+  const drive = { source: "drive", drive_id: "abc", run: 1 };
+  assert.equal(sourceHash(drive), sourceHash({ ...drive }), "同一份 source.json 指紋一樣");
+  assert.notEqual(sourceHash(drive), sourceHash({ ...drive, run: 2 }), "run 加一就要重建");
+  // repo：路徑存在時，指紋跟著那個檔走；讀不到就只照 source.json 算（缺檔由 workflow 報錯，這裡不要壞掉）
+  const here = { source: "repo", path: "scripts/web-deck/source.json", run: 1 };
+  const gone = { source: "repo", path: "public/assets/master/沒有這個檔.pptx", run: 1 };
+  assert.notEqual(sourceHash(here), sourceHash({ ...here, path: "package.json" }), "換一個檔就是另一個指紋");
+  assert.equal(sourceHash(gone).length, 12, "缺檔照樣算得出指紋");
+  assert.equal(needsBuild(here, { source: { hash: sourceHash(here) } }), false, "指紋一樣就不建");
+  assert.equal(needsBuild(here, { source: { hash: "x" } }), true);
+
+  const src = JSON.parse(readFileSync("scripts/web-deck/source.json", "utf8"));
+  const wf = readFileSync(".github/workflows/web-deck.yml", "utf8");
+  if (src.source === "repo") {
+    assert.ok(src.path && src.path.startsWith("public/assets/master/"), "母簡報放 public/assets/master/");
+    assert.ok(/paths:.*public\/assets\/master/.test(wf), "換了母簡報也要觸發 workflow");
+    assert.ok(wf.includes('"$SRC" = "repo"'), "workflow 要認得 repo 這一種來源");
+  }
+});

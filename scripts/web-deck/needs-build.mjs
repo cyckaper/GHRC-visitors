@@ -7,18 +7,32 @@
 //
 //   node scripts/web-deck/needs-build.mjs   → 印 true（要建）或 false（建過了），理由寫在 stderr
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-/** source.json 的指紋（build.mjs 寫進 deck.json 的 source.hash，這裡拿來比）。 */
-export const sourceHash = (source) => createHash("sha1").update(JSON.stringify(source)).digest("hex").slice(0, 12);
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+
+/**
+ * source.json 的指紋（build.mjs 寫進 deck.json 的 source.hash，這裡拿來比）。
+ *
+ * `source: "repo"` 時母簡報就在 repo 裡，指紋**把那個檔也算進去**：換了母簡報就會重建，
+ * 不必記得把 run 加一（忘了加才是會出事的那一種——站台上的簡報跟 repo 裡的對不起來）。
+ * 讀不到就只照 source.json 算：缺檔由建置那一步報錯，這裡不要跟著壞掉。
+ */
+export const sourceHash = (source) => {
+  const h = createHash("sha1").update(JSON.stringify(source));
+  if (source?.source === "repo" && source.path) {
+    try { h.update(readFileSync(path.join(ROOT, source.path))); } catch { /* 缺檔：建置那一步會說 */ }
+  }
+  return h.digest("hex").slice(0, 12);
+};
 
 /** 要不要建：deck.json 沒有、沒記指紋（舊版）、或指紋對不上就要。 */
 export const needsBuild = (source, deckJson) => deckJson?.source?.hash !== sourceHash(source);
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
   const source = JSON.parse(await readFile(path.join(ROOT, "scripts/web-deck/source.json"), "utf8"));
   let deck = null;
   try {

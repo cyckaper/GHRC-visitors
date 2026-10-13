@@ -318,6 +318,7 @@
       <p class="text-sm" id="deckMeta"></p>
       <p class="muted">講的時候：F 全螢幕 · ← → 或簡報遙控器翻頁 · G 看全部頁面 · B 黑幕 · 打頁碼再按 Enter 跳到那一頁 · 手機、平板左右滑。</p>
       <p class="muted">連結是公開的（不用登入），來賓也看得到；母簡報的講稿、上一場來賓的名字、今日流程那一頁都不在裡面。</p>
+      <p class="muted" id="deckMapNote" hidden>地圖那一頁是活的：跟「資料」分頁上面那張「訪客來自哪裡」同一份資料，來訪單位一加進來，打開簡報就是最新的，不必重新產生。母簡報 .pptx 裡的那一張是圖，要更新請維護系統的人重跑一次。</p>
     </div>
 
     <div class="card space-y-3" id="deckPagesCard" hidden>
@@ -1204,6 +1205,7 @@
       d.built_at ? `<span>產生於</span> <span class="tabular-nums">${esc(String(d.built_at).slice(0, 10))}</span>` : "",
     ].filter(Boolean).join(" · ");
     $("deckPagesCount").textContent = `（共 ${slides.length} 頁）`;
+    $("deckMapNote").hidden = !slides.some((x) => x.map); // 這一份有地圖頁才說（見 scripts/web-deck/build.mjs 的 mapBox）
     const src = (p) => `/${String(p || "").replace(/^\/+/, "")}`;
     $("deckThumbs").innerHTML = slides.map((x, k) => `<a href="/deck#${k + 1}" target="_blank" rel="noopener" class="block rounded-lg border border-stone-200 overflow-hidden hover:border-stone-400 bg-white" title="${esc(x.title || "")}">
         <img src="${esc(src(x.thumb || x.img))}" alt="" loading="lazy" class="block w-full aspect-video object-contain bg-stone-100">
