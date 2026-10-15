@@ -9,7 +9,7 @@
 
 | 階段 | 誰 | 做什麼 | 在哪 |
 |---|---|---|---|
-| 訪前 | 承辦 | 貼上 email 往來、或上傳名單檔（Word／Excel／CSV／PDF／照片）→ AI 抽出單位、名單（含隨行者 email）、目的、興趣 → 確認 → **AI 查訪客背景**（網路上的公開資料 → 可能的參訪目的、可能最想看哪幾間、可以先準備什麼）→ AI 排行程（總體介紹在 302）→ 儲存 → 拿到專屬網址與 QR、確認信草稿、後續提醒 .ics | `admin.html`「訪前」 |
+| 訪前 | 承辦 | 貼上 email 往來、或上傳名單檔（Word／Excel／CSV／PDF／照片）→ AI 抽出單位、名單（含隨行者 email）、目的、興趣 → 確認 → **AI 查訪客背景**（網路上的公開資料 → 可能的參訪目的、可能最想看哪幾間、可以先準備什麼）→ AI 排行程（總體介紹在 302）→ 儲存 → 拿到專屬網址與 QR、確認信草稿、後續提醒 .ics → **A1 歡迎海報**（英文＋來訪者語言，Chrome 存成 PDF 送印） | `admin.html`「訪前」、`poster.html` |
 | 簡報 | 承辦 | 選用頁次 →「產生簡報 .pptx」直接下載當次簡報（瀏覽器裡子集化母簡報；韓／日文版自動翻譯）。**有些參訪不用簡報，只口頭介紹**：勾「這場不用簡報」就整個跳過。母簡報第一次用「上傳母簡報」放上站台即可。備援：`npm run deck -- --visit=<visit_id>`（可另出 PDF） | `admin.html`「簡報」／本機 CLI |
 | 後續 | 主持人 | 拍一張簽名簿（AI 讀字）＋ 三十秒口述（轉文字、抽取），一分鐘；再把簡報 PDF、合照、相關連結放上專屬頁面 | `admin.html`「後續」（.ics 提醒直達） |
 | 現場 | 承辦 | 拿到名片就拍一張 → AI 讀出姓名／職稱／單位／email／電話 → 確認後併進這場的名單（訪後信就寄得到他）；原圖留著可回頭核對 | `admin.html`「資料」 |
@@ -19,8 +19,8 @@
 ## 目錄
 
 ```
-public/            單檔 HTML（Tailwind CDN，無建置）：index.html 來賓端、admin.html 主辦端、data/*.json
-public/lib/        pptx.mjs：母簡報子集化核心（瀏覽器與 CLI 共用，零 Node 相依）
+public/            單檔 HTML（Tailwind CDN，無建置）：index.html 來賓端、admin.html 主辦端、poster.html 歡迎海報（A1）、data/*.json
+public/lib/        pptx.mjs：母簡報子集化核心（瀏覽器與 CLI 共用，零 Node 相依）；poster.mjs：歡迎海報上要印的字（名稱不翻譯的規矩在這裡）
 public/assets/master/  （選用）slim-master.pptx 靜態檔；平常改用後台「上傳母簡報」存進 Blobs，不必進 git
 netlify/functions/ API（.mts）：visits extract plan letter respond signbook cards transcribe summary media materials translate master session drive
                    跑得久的 AI 一律走背景函式（一般函式只有 10 秒）：extract- plan- research- letter- summary- signbook- transcribe- cards- translate-background
@@ -28,7 +28,7 @@ netlify/functions/ API（.mts）：visits extract plan letter respond signbook c
 netlify/lib/       函式共用：store（file／blobs／sheets）、ai（Claude、Whisper、mock）、http、data、types、jobs（背景工作）
 lib/               純 JS 共用：visit（id、匿名化、寄送清單、ICS、開始／結束時間）
 cli/               npm run deck：同一份核心的本機入口 → pptx（＋PDF）
-scripts/           slim-master.py（母簡報瘦身）、make-world.mjs（訪客地圖）、i18n-scan.mjs（後台英文對照）、make-fixture.py（測試用合成簡報）、dev-server.mjs
+scripts/           slim-master.py（母簡報瘦身）、poster-terrain.py（歡迎海報的等高線底紋）、make-world.mjs（訪客地圖）、i18n-scan.mjs（後台英文對照）、make-fixture.py（測試用合成簡報）、dev-server.mjs
 data/visits/       CLI 備援產檔用的參訪 JSON（`/api/visits?id=…` 的 visit 物件）；data/master-text.json 由 --dump 產生
 test/              node:test 單元／API 測試、deck 與 slim 測試、Playwright 冒煙測試
 ```

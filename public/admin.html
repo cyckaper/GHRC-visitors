@@ -139,7 +139,7 @@
 
   <!-- ───────── 訪前 ───────── -->
   <section id="tab-pre" class="space-y-5">
-    <p class="lede text-sm"><b>這一頁：參訪前把六件事做完</b>——讀來信抽出資料、確認欄位、查對方背景、通告研究室、排今日流程，最後把確認信寄出去。寄出的那封信裡就有來賓專頁的網址。填完自己會存，不必找存檔鍵。</p>
+    <p class="lede text-sm"><b>這一頁：參訪前把七件事做完</b>——讀來信抽出資料、確認欄位、查對方背景、通告研究室、排今日流程、寄出確認信，最後做一張歡迎海報送印。寄出的那封信裡就有來賓專頁的網址。填完自己會存，不必找存檔鍵。</p>
     <div class="card space-y-3" id="extractCard">
       <h2 class="font-semibold"><span class="num">1</span>貼上 email、簡訊或 LINE 截圖，AI 抽取背景</h2>
       <p class="muted">單位、人名、職稱、人數、隨行名單與聯絡方式、對口老師、來訪目的、興趣、日期時間。抽出來的東西會填進下面的欄位，你逐項看過再改。</p>
@@ -292,6 +292,18 @@
         <button type="button" class="btn btn-soft" id="confirmMailto" hidden title="把內文複製起來，再開你自己的信件程式（收件人與主旨會帶過去，內文貼上就好）">用自己的信箱寄</button>
         <span class="muted" id="confirmGmailOff" hidden>還沒接 Gmail：按「複製信件」貼到你自己的信箱寄。</span>
         <span id="confirmSendInfo"></span>
+      </div>
+    </div>
+
+    <!-- 歡迎海報（明確要求：「行前加一個製作歡迎海報的功能，A1 大小，設計格調要大方，議程 optional，英語及來訪者雙語」）。
+         海報本身在 /poster.html?visit=（內容規則在 public/lib/poster.mjs）；那一頁按列印會記一筆 visit.poster，
+         之後名稱、日期或印上去的流程改了，這裡與進度線就說要重印（lib/visit.mjs posterFingerprint／staleOutputs）。 -->
+    <div class="card space-y-3" id="posterCard">
+      <h2 class="font-semibold"><span class="num">7</span>歡迎海報 <span class="muted font-normal">A1，來訪前兩個工作天送印</span></h2>
+      <p class="muted">擺在中心入口的 A1 直式海報：<b>英文為主、來訪者的語言為輔</b>（英語來賓配中文），寫單位、主賓與日期；議程、QR 可以不放，色調三選一。字照第 2 步的欄位，<b>不翻譯對方的名稱</b>——單位的當地語名稱要是對方自己的寫法才會印。輸出之後名稱、日期或流程又改了，這裡會說要重印。</p>
+      <div class="flex flex-wrap gap-2 items-center">
+        <button class="btn" id="posterOpen" type="button" title="在新分頁打開這一場的海報：調好議程、主賓、QR、色調，再列印成 A1 的 PDF">打開海報</button>
+        <span class="muted" id="posterInfo"></span>
       </div>
     </div>
 
@@ -1729,6 +1741,7 @@
    * 每次都得自己回想「確認信寄了嗎？口述錄了嗎？」點一格就跳到該做那件事的分頁。
    */
   function renderProgress(v) {
+    renderPoster(v);
     const box = $("progress");
     if (!v?.visit_id || !state.saved) { box.innerHTML = ""; return; }
     const m = v.materials || {};
@@ -1746,6 +1759,7 @@
         ["pre", "背景研判", v.background?.status === "done", "查過對方的公開資料，判斷可能的參訪目的"],
         ["pre", replied ? `通告 ${replied} 間已回` : "通告研究室", !!(v.letters?.notice?.body && replied), v.format === "forum" ? "告訴各研究室哪個單位什麼時候來座談，請各室在支援人力表上選老師能否出席" : "告訴各研究室哪個單位什麼時候來，請各室在支援人力表上填接待人員與共需幾分鐘——填的分鐘會自動排進今日流程"],
         ["pre", stale("confirmation") ? "確認信 行程已改" : v.letters?.confirmation?.sent_at ? "確認信 已寄" : "確認信", !!(v.letters?.confirmation?.sent_at && !stale("confirmation")), stale("confirmation") ? "寄出之後行程又改過，對方手上的時間是舊的" : "跟對方確認日期時間，順便把來賓專頁網址交出去"],
+        ["pre", stale("poster") ? "海報 需重印" : v.poster?.printed_at ? "海報 已輸出" : "歡迎海報", !!(v.poster?.printed_at && !stale("poster")), stale("poster") ? "輸出之後名稱、日期或流程又改過，若已送印需要重印" : "A1 歡迎海報，擺在中心入口；來訪前兩個工作天送印"],
       ]],
       ["當天", [
         wrap("signbook", "簽名簿", !!v.signbook?.photo_key, "實體本子拍一張，AI 讀成留言"),
@@ -1768,6 +1782,38 @@
       .join(`<span class="text-stone-300">｜</span>`);
   }
   $("progress").addEventListener("click", (e) => { const b = e.target.closest("[data-go]"); if (b) showTab(b.dataset.go); });
+  /**
+   * 第 7 步歡迎海報：海報是另一頁（/poster.html?visit=）。在那一頁列印會記一筆 visit.poster（指紋由伺服器蓋），
+   * 之後名稱、日期或印上去的流程改了，伺服器的 stale 就多一筆 poster——這裡說「需要重印」。
+   * 時間照台北時間寫（伺服器存的是 UTC）。
+   */
+  function taipeiStamp(iso) {
+    const d = new Date(Date.parse(iso) + 8 * 3600e3);
+    return Number.isFinite(d.getTime()) ? `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}` : "";
+  }
+  function renderPoster(v) {
+    const p = v?.poster || {};
+    const again = (state.stale || []).find((x) => x.key === "poster");
+    $("posterInfo").innerHTML = !state.saved || !p.printed_at ? ""
+      : again ? `<span class="err">${esc(again.why)}</span>`
+      : `<span class="ok">${esc(`已輸出 ${taipeiStamp(p.printed_at)}${p.programme ? "（含議程）" : ""}`)}</span>`;
+  }
+  // 從海報那一頁回來（剛剛可能印了一次）：重讀這一場的海報紀錄，進度線與第 7 步才跟得上
+  let posterOpened = false;
+  $("posterOpen").onclick = () => {
+    if (!state.saved || !state.visit?.visit_id) return flash("先存成一場（填上單位名稱與日期）才能做海報", "err");
+    posterOpened = true;
+    window.open(`/poster.html?visit=${encodeURIComponent(state.visit.visit_id)}`, "_blank", "noopener");
+  };
+  window.addEventListener("focus", async () => {
+    const id = state.visit?.visit_id;
+    if (!posterOpened || !id || !state.saved) return;
+    const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
+    if (!r.ok || state.visit?.visit_id !== id) return;
+    state.visit.poster = r.visit.poster;
+    state.stale = r.stale || [];
+    renderProgress(state.visit);
+  });
   function showSaved(v) {
     $("afterSave").hidden = false;
     $("pageLink").textContent = v.page_url; $("pageLink").href = v.page_url;

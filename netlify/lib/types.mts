@@ -129,6 +129,11 @@ export interface Visit {
   summary_at?: string;
   /** 後續那四件事裡「這一場本來就不會有」的（例如沒有簽名簿、沒交換名片）：標了就不算未完成。 */
   wrapup?: { na?: string[] };
+  /**
+   * 歡迎海報（A1，`/poster.html?visit=`）最後一次輸出：印了流程沒、印了 QR 沒，與當時的海報指紋（伺服器蓋，
+   * `lib/visit.mjs posterFingerprint`）。之後對不上，`staleOutputs` 就說「需要重印」。只有 `action:"poster"` 在寫。
+   */
+  poster?: { printed_at?: string; programme?: boolean; qr?: boolean; fingerprint?: string };
   /** 自動提醒（reminder-cron）：後續提醒寄出的時間與收件者，一場只寄一次。 */
   reminders?: { wrapup_sent_at?: string; wrapup_to?: string };
   /** Google Drive 備份（/api/drive）：這場參訪在 Drive 上的資料夾。 */

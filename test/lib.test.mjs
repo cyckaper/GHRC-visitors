@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
 import { weekdayOf } from "../public/lib/rota.mjs";
-import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, salutationLine, salutationPeople, settleSalutation, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION, toForumProgramme, labRecipients, labStops, FORUM_TITLES, splitItems, sanitizeDictation, hasDictation, visitRecord, zhNumber, zhDate, promisedItems } from "../lib/visit.mjs";
+import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, salutationLine, salutationPeople, settleSalutation, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, posterFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION, toForumProgramme, labRecipients, labStops, FORUM_TITLES, splitItems, sanitizeDictation, hasDictation, visitRecord, zhNumber, zhDate, promisedItems } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -880,4 +880,29 @@ test("母簡報放在 repo 裡：指紋把那個檔也算進去，換了檔案�
     assert.ok(/paths:.*public\/assets\/master/.test(wf), "換了母簡報也要觸發 workflow");
     assert.ok(wf.includes('"$SRC" = "repo"'), "workflow 要認得 repo 這一種來源");
   }
+});
+
+test("歡迎海報的指紋：只看海報上印的東西；沒印流程的那一版，流程改了不算", () => {
+  const v = {
+    date: "2026-10-07", start_time: "10:00", end_time: "12:30", language: "en",
+    org: { name: "University of Western Australia", name_local: "" },
+    guests: [{ name: "Simon Kilbane", title: "Programme Director", role: "lead" }, { name: "Jane Doe", role: "member" }],
+    programme: [{ start: "10:00", end: "10:20", kind: "briefing", title_en: "Welcome and centre overview", title_2nd: "歡迎與中心總體介紹" }],
+  };
+  const withProg = posterFingerprint(v, true), noProg = posterFingerprint(v, false);
+  const later = { ...v, programme: [{ ...v.programme[0], end: "10:30" }] };
+  assert.notEqual(posterFingerprint(later, true), withProg, "印了流程，流程改了就要重印");
+  assert.equal(posterFingerprint(later, false), noProg, "沒印流程的那一版不受影響");
+  assert.equal(posterFingerprint({ ...v, guests: [...v.guests, { name: "New member", role: "member" }] }, false), noProg, "隨行的人不在海報上");
+  assert.notEqual(posterFingerprint({ ...v, guests: [{ ...v.guests[0], title: "Head of School" }, v.guests[1]] }, false), noProg, "主賓的職稱在海報上");
+  assert.notEqual(posterFingerprint({ ...v, org: { ...v.org, name_local: "西澳大學" } }, false), noProg, "當地語名稱在海報上");
+  assert.equal(posterFingerprint({ ...v, purpose: "研究合作" }, false), noProg, "來訪目的不在海報上");
+
+  const at = "2026-10-01T06:00:00Z";
+  assert.deepEqual(staleOutputs({ ...v, poster: { printed_at: at, programme: true, fingerprint: withProg } }), []);
+  const s = staleOutputs({ ...later, poster: { printed_at: at, programme: true, fingerprint: withProg } });
+  assert.deepEqual(s.map((x) => x.key), ["poster"]);
+  assert.match(s[0].why, /重印/);
+  assert.deepEqual(staleOutputs({ ...later, poster: { printed_at: at, programme: false, fingerprint: noProg } }), [], "沒印流程就不必為了流程重印");
+  assert.deepEqual(staleOutputs({ ...later }), [], "沒輸出過就沒有要重印的");
 });

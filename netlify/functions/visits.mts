@@ -1,7 +1,7 @@
 import { fail, json, nowISO, readJSON, requireAdmin, siteUrl } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
-import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes, needsGeo, sanitizeGeo, sanitizePublic, institutionKeys, visitEndAt, isForum, toForumProgramme, defaultProgramme, hasDictation } from "../../lib/visit.mjs";
+import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, posterFingerprint, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes, needsGeo, sanitizeGeo, sanitizePublic, institutionKeys, visitEndAt, isForum, toForumProgramme, defaultProgramme, hasDictation } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
 import { purgePublicVisits } from "../lib/cdn.mts";
 import { dropDraft, moveDraft } from "./draft.mts";
@@ -13,6 +13,7 @@ import { dropDraft, moveDraft } from "./draft.mts";
  * GET  /api/visits?export=csv&table=visits|responses|slide_performance（admin）
  * POST /api/visits                 新增或更新（admin）。**只寫後台表單管的欄位**：別的端點寫的（KEPT）帶了也不算
  * POST /api/visits {visit_id, action:"wrapup", na:[...]}  後續那四件事標「本次沒有」（只動 wrapup 這一格）
+ * POST /api/visits {visit_id, action:"poster", programme, qr}  歡迎海報輸出了一次（只動 poster 這一格，指紋由伺服器蓋）
  */
 export default async (req: Request) => {
   const url = new URL(req.url);
@@ -59,6 +60,7 @@ export default async (req: Request) => {
     const body = await readJSON<Partial<Visit>>(req);
     if (!body || typeof body !== "object") return fail(400, "需要 JSON body");
     if ((body as any).action === "wrapup") return saveWrapupNA(store, String(body.visit_id || ""), (body as any).na);
+    if ((body as any).action === "poster") return savePoster(store, String(body.visit_id || ""), body as any);
     const previousId = String(body.visit_id || "");
     const current = previousId ? await store.getVisit(previousId) : null;
     let renameBlocked = false;
@@ -179,7 +181,8 @@ function hasHappened(v: Visit): boolean {
 /**
  * 後台表單管不到的欄位——別的端點或背景工作在寫：摘要（summary）、後續提醒（reminder-cron）、Drive 備份、
  * 名片、簽名簿、口述、當天資料（materials）、信件與寄出紀錄（letter）、寄信時跟著改的狀態（status）、
- * 後續那四件事的「本次沒有」（wrapup，走 `action: "wrapup"`）、從以前的名單匯入的來源（imported，匯入時寫的）。
+ * 後續那四件事的「本次沒有」（wrapup，走 `action: "wrapup"`）、從以前的名單匯入的來源（imported，匯入時寫的）、
+ * 歡迎海報輸出的紀錄（poster，走 `action: "poster"`）。
  * 一般存檔**帶了也不算**，一律沿用伺服器上那一份。
  *
  * 以前是「body 沒帶才沿用」，可是後台的 readForm() 一直是把手上那一份**整個**送回來的，這幾格幾乎每次都帶著，
@@ -187,7 +190,7 @@ function hasHappened(v: Visit): boolean {
  * isUnused() 又把網址當成還沒用出去，下一次改日期或代碼就搬家，寄出去的那個連結跟著失效。
  * 提醒紀錄被洗掉則會害後續提醒重寄一次。要改這幾格，走寫它的那一支端點。
  */
-const KEPT = ["summary", "summary_at", "reminders", "drive", "cards", "signbook", "dictation", "letters", "materials", "status", "wrapup", "imported"] as const;
+const KEPT = ["summary", "summary_at", "reminders", "drive", "cards", "signbook", "dictation", "letters", "materials", "status", "wrapup", "imported", "poster"] as const;
 
 /**
  * 訪前功課（background）要保留哪一份。research-background 會把結果寫回存過檔的那一場；
@@ -220,6 +223,23 @@ async function saveWrapupNA(store: ReturnType<typeof getStore>, id: string, na: 
 }
 
 /**
+ * 歡迎海報輸出了一次（海報頁按「列印／存成 PDF」時送來）：**只動 poster 這一格**。
+ * 指紋在這裡蓋（`posterFingerprint`），之後名稱、日期或印上去的流程改了，`staleOutputs` 就說「需要重印」。
+ * 印了 QR 的海報也算網址用出去了（見 isUnused）。
+ */
+async function savePoster(store: ReturnType<typeof getStore>, id: string, sent: { programme?: unknown; qr?: unknown }): Promise<Response> {
+  if (!isValidVisitId(id)) return fail(400, "visit_id 格式不對");
+  const programme = sent.programme === true, qr = sent.qr === true;
+  const saved = await store.updateVisit(id, (v) => {
+    (v as any).poster = { printed_at: nowISO(), programme, qr, fingerprint: posterFingerprint(v, programme) };
+    v.updated_at = nowISO();
+  });
+  if (!saved) return fail(404, "找不到這次參訪");
+  await triggerDriveSync(saved.visit_id);
+  return json({ ok: true, visit: saved, stale: staleOutputs(saved) });
+}
+
+/**
  * **只有 `/api/rota` 在寫**的欄位——各研究室自己在支援人力表上填的接待人員（`presenters`）與
  * 共需幾分鐘（`lab_minutes`）。這幾個**帶了也不算**，一律沿用伺服器上那一份：
  * 後台開著的那一份常常是老師填之前載入的，改一個字觸發自動存檔就會把老師剛填的蓋掉（跟上面 KEPT 同一個道理）。
@@ -239,6 +259,8 @@ async function isUnused(store: ReturnType<typeof getStore>, v: Visit): Promise<b
   if (v.materials?.deck_pdf || v.materials?.photos?.length || v.materials?.links?.length) return false;
   if (v.signbook?.photo_key || hasDictation(v.dictation)) return false;
   if (a.cards?.length || a.drive?.backed_up_at) return false;
+  // 印了 QR 的歡迎海報已經掛在門口：網址再換，掃出來就是找不到
+  if (a.poster?.printed_at && a.poster?.qr) return false;
   return !(await store.listResponses(v.visit_id)).length;
 }
 

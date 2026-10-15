@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>GHRC 歡迎海報</title>
+<!--
+  歡迎海報（A1 直式 594 × 841 mm）。後台「訪前」第 7 步「打開海報」→ /poster.html?visit=<visit_id>。
+  要在主辦端登入過（同一台裝置、同一個瀏覽器）：海報上有來賓的名字，跟後台一樣不公開。
+  輸出：Chrome「列印／存成 PDF」→ 目的地「另存為 PDF」、邊界「無」＝ A1 向量 PDF。按下去會記一筆（POST /api/visits action:"poster"），
+  之後名稱、日期或印上去的流程改了，後台就說「需要重印」。
+  字：英文 Cambria（沒有就用站台上的 Caladea，兩者字寬相容，版面不會跑）；第二語言用這台電腦的黑體
+  （Windows 微軟正黑體＝簡報用的那一套，Mac 蘋方）。都不從外部網域載，QR 的程式也放在站台上。
+  內容怎麼來的（名稱不翻譯、流程第二語言的規矩）在 /lib/poster.mjs。
+-->
+<style id="page-size">@page { size: 594mm 841mm; margin: 0; }</style>
+<style>
+@font-face { font-family: "Caladea"; font-style: normal; font-weight: 400; font-display: block; src: url(/assets/fonts/caladea-latin-ext-400.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Caladea"; font-style: normal; font-weight: 400; font-display: block; src: url(/assets/fonts/caladea-latin-400.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Caladea"; font-style: normal; font-weight: 700; font-display: block; src: url(/assets/fonts/caladea-latin-ext-700.woff2) format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Caladea"; font-style: normal; font-weight: 700; font-display: block; src: url(/assets/fonts/caladea-latin-700.woff2) format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+:root {
+  --serif: Cambria, Caladea, Georgia, serif;
+  --zh: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", "Noto Sans CJK TC", "Heiti TC", sans-serif;
+  --l2: var(--zh);
+  --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  --ui-accent: #0f766e;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+:lang(ko) { word-break: keep-all; }
+:lang(zh), :lang(ja) { line-break: strict; }
+[hidden] { display: none !important; }
+
+/* ── 上面那一列（只在螢幕上） ── */
+body { background: #DCE3DE; font-family: var(--ui); color: #1c1917; }
+.toolbar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 12px 20px; background: #fff; border-bottom: 1px solid #C9D3CD; font-size: 14px; }
+.toolbar h1 { font-size: 15px; margin: 0 8px 0 0; font-weight: 600; }
+.toolbar label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.toolbar input { width: 16px; height: 16px; accent-color: var(--ui-accent); }
+.toolbar select { font: inherit; padding: 3px 6px; border: 1px solid #C9D3CD; border-radius: 5px; background: #fff; }
+.toolbar button { margin-left: auto; font: inherit; font-weight: 600; color: #fff; background: var(--ui-accent); border: 0; border-radius: 6px; padding: 8px 16px; cursor: pointer; }
+.toolbar button:disabled { opacity: .45; cursor: wait; }
+.toolbar button:focus-visible, .toolbar input:focus-visible, .toolbar select:focus-visible { outline: 3px solid #B08640; outline-offset: 2px; }
+.toolbar .hint, .toolbar .status { flex-basis: 100%; margin: 0; color: #57534e; font-size: 13px; }
+.toolbar .status.err { color: #b91c1c; }
+.toolbar .status a { color: inherit; }
+.warnings { flex-basis: 100%; margin: 0; padding: 0; list-style: none; }
+.warnings li { margin-top: 4px; padding: 6px 10px; background: #FBF3E3; border-left: 3px solid #B08640; font-size: 13px; }
+.warnings:empty { display: none; }
+.stage { padding: 24px; display: flex; justify-content: center; }
+.stage-box { position: relative; }
+.stage-box .sheet { position: absolute; top: 0; left: 0; transform-origin: top left; box-shadow: 0 2px 18px rgba(20, 53, 41, .18); }
+
+/* ── 色調：三選一，預設暖綠。海報上每一個顏色都從這裡來，換色調只換變數、版面不動 ── */
+.sheet {
+  --field-bg: #3A4C2C; --field-fg: #FBF4E4; --field-fg-2: #E5CF97; --field-line: #5E7343;  /* 暖綠：茶園的綠、麥金、米白紙 */
+  --line-minor: .6; --line-index: .85;
+  --accent: #D4A54A; --accent-ink: #4A5F33;
+  --paper: #FBF7EF; --ink: #2B2A1E; --stone: #7B735F;
+}
+.sheet[data-theme="sand"] {  /* 米色：淺色主視覺、深綠字 */
+  --field-bg: #EDE1C9; --field-fg: #2F4630; --field-fg-2: #7D6036; --field-line: #CDB88F;
+  --line-minor: .75; --line-index: 1;
+  --accent: #B98A3A; --accent-ink: #3F5A35;
+  --paper: #FBF7EF; --ink: #2B2A1E; --stone: #7B735F;
+}
+.sheet[data-theme="forest"] {  /* 深綠：《GHRC 介紹簡報》的色票 */
+  --field-bg: #143529; --field-fg: #FFFFFF; --field-fg-2: #BCD2C4; --field-line: #2E6B4F;
+  --line-minor: .5; --line-index: .72;
+  --accent: #B08640; --accent-ink: #2E6B4F;
+  --paper: #FFFFFF; --ink: #1B2A22; --stone: #6F7C75;
+}
+
+/* ── 海報本體 ── */
+.sheet {
+  --bleed: 0mm; --side: 48mm;
+  width: calc(594mm + 2 * var(--bleed)); height: calc(841mm + 2 * var(--bleed));
+  background: var(--paper); color: var(--ink);
+  display: flex; flex-direction: column; overflow: hidden;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+:where(.sheet) :where(p, h1, h2, ul, ol, figure) { margin: 0; padding: 0; }
+
+.masthead { flex: none; display: flex; justify-content: space-between; align-items: flex-end; padding: calc(var(--bleed) + 32mm) calc(var(--bleed) + var(--side)) 21mm; }
+.logo { display: block; height: 56mm; width: auto; }
+.host { text-align: right; color: var(--stone); padding-bottom: 3mm; }
+.host-en { font-family: var(--serif); font-size: 7.4mm; line-height: 1.32; }
+.host-zh { margin-top: 2.6mm; font-family: var(--zh); font-size: 6.4mm; letter-spacing: .04em; }
+
+.field { position: relative; flex: 1 1 auto; min-height: 0; background: var(--field-bg); color: var(--field-fg); overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; gap: 18mm; padding: 34mm calc(var(--bleed) + var(--side)) 34mm; }
+.terrain { position: absolute; inset: 0; width: 100%; height: 100%; }
+.terrain path { fill: none; stroke: var(--field-line); stroke-linecap: round; stroke-linejoin: round; }
+.terrain .minor { stroke-width: .75; opacity: var(--line-minor); }
+.terrain .index { stroke-width: 1.6; opacity: var(--line-index); }
+.greeting, .guest { position: relative; }
+.welcome { font-family: var(--serif); font-weight: 400; line-height: .84; letter-spacing: -.012em; white-space: nowrap; }
+.welcome span { display: inline-block; }
+.welcome-l2 { margin-top: 9mm; font-family: var(--l2); font-weight: 300; line-height: 1.12; color: var(--field-fg-2); white-space: nowrap; }
+.welcome-l2 span { display: inline-block; }
+.rule { width: 54mm; height: 1.4mm; background: var(--accent); margin-bottom: 13mm; }
+.name-en { font-family: var(--serif); font-weight: 700; line-height: 1.06; text-wrap: balance; }
+.name-l2 { margin-top: 8mm; font-family: var(--l2); font-weight: 400; line-height: 1.28; text-wrap: balance; }
+.people { list-style: none; margin-top: 10mm; font-family: var(--serif); font-size: 10mm; line-height: 1.38; color: var(--field-fg-2); }
+.people b { color: var(--field-fg); font-weight: 700; }
+.people [lang^="zh"], .people [lang="ko"], .people [lang="ja"] { font-family: var(--l2); } /* 只看自己標了語言的：頁面本身是 zh-Hant，用 :lang() 會整行都換成黑體 */
+.people .pl2 { font-family: var(--l2); font-size: 8mm; margin-left: 3mm; }
+
+.body { flex: none; display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto 1fr; column-gap: 20mm; padding: 24mm calc(var(--bleed) + var(--side)) calc(var(--bleed) + 30mm); }
+.occasion { grid-column: 1; grid-row: 1; }
+.date-en { font-family: var(--serif); font-size: 13mm; line-height: 1.15; }
+.date-l2 { margin-top: 3mm; font-family: var(--l2); font-size: 9mm; color: var(--stone); }
+.programme { grid-column: 1; grid-row: 2; margin-top: 15mm; }
+.programme h2 { display: flex; align-items: baseline; gap: 6mm; margin-bottom: 9mm; font-family: var(--serif); font-weight: 400; font-size: 10.5mm; color: var(--accent-ink); }
+.programme h2 .l2 { font-family: var(--l2); font-size: 8mm; color: var(--stone); }
+.programme ol { list-style: none; display: grid; row-gap: 7mm; }
+.programme li { display: grid; grid-template-columns: 34mm 1fr; column-gap: 6mm; align-items: baseline; }
+.time { font-family: var(--serif); font-size: 12mm; color: var(--accent-ink); font-variant-numeric: tabular-nums lining-nums; }
+.item-en { font-family: var(--serif); font-size: 12mm; line-height: 1.15; }
+.place { color: var(--stone); font-size: 9mm; margin-left: 4mm; white-space: nowrap; }
+.item-l2 { display: block; margin-top: 1.6mm; font-family: var(--l2); font-size: 8.4mm; line-height: 1.3; color: var(--stone); }
+.item-l2 .place { font-size: 7.6mm; }
+.qr { grid-column: 2; grid-row: 1 / span 2; align-self: end; display: flex; align-items: flex-end; gap: 7mm; }
+.qr figcaption { width: 92mm; text-align: right; color: var(--stone); padding-bottom: 1mm; }
+.qr .cap-en { display: block; font-family: var(--serif); font-size: 7.6mm; line-height: 1.3; text-wrap: balance; }
+.qr .cap-l2 { display: block; margin-top: 2.4mm; font-family: var(--l2); font-size: 6.4mm; line-height: 1.35; text-wrap: balance; }
+.qr-code svg { display: block; width: 62mm; height: 62mm; }
+.qr-code path { fill: var(--ink); }
+.qr-code rect { fill: var(--paper); }
+.no-programme .occasion { grid-row: 1 / span 2; align-self: end; }
+
+@media print {
+  body { background: #fff; }
+  .toolbar { display: none; }
+  .stage { padding: 0; display: block; }
+  /* 預覽縮放寫在 inline style，列印時要蓋掉 */
+  .stage-box { width: auto !important; height: auto !important; }
+  .stage-box .sheet { position: static; transform: none !important; box-shadow: none; }
+}
+</style>
+</head>
+<body>
+<div class="toolbar" role="region" aria-label="海報設定">
+  <h1>歡迎海報（A1）</h1>
+  <label><input type="checkbox" id="opt-programme"> <span>議程</span></label>
+  <label><input type="checkbox" id="opt-people"> <span>主賓</span></label>
+  <label><input type="checkbox" id="opt-qr"> <span>QR Code</span></label>
+  <label><input type="checkbox" id="opt-bleed"> <span>3 mm 出血</span></label>
+  <label><span>色調</span> <select id="opt-theme"><option value="tea">暖綠</option><option value="sand">米色</option><option value="forest">深綠</option></select></label>
+  <button type="button" id="print" disabled>列印／存成 PDF</button>
+  <p class="hint" id="hint">用 Chrome：目的地選「另存為 PDF」、邊界選「無」，存下來就是 594 × 841 mm 的向量 PDF。印刷廠要出血再勾「3 mm 出血」。議程還會變的話，先印不放議程的那一版。</p>
+  <p class="status" id="status" role="status">讀取這一場的資料中……</p>
+  <ul class="warnings" id="warnings" aria-live="polite"></ul>
+</div>
+
+<div class="stage"><div class="stage-box" id="stage-box">
+<article class="sheet" id="sheet" hidden>
+  <header class="masthead">
+    <img class="logo" src="/assets/brand/ghrc-logo.png" alt="Green Health Research Center 綠色健康研究中心">
+    <div class="host">
+      <p class="host-en" lang="en">College of Bioresources and Agriculture<br>National Taiwan University</p>
+      <p class="host-zh" lang="zh-Hant-TW">國立臺灣大學生物資源暨農學院</p>
+    </div>
+  </header>
+
+  <section class="field" id="field">
+    <div class="greeting">
+      <h1 class="welcome"><span lang="en" id="welcome-en"></span></h1>
+      <p class="welcome-l2"><span id="welcome-l2"></span></p>
+    </div>
+    <div class="guest">
+      <div class="rule"></div>
+      <p class="name-en" lang="en" id="name-en"></p>
+      <p class="name-l2" id="name-l2"></p>
+      <ul class="people" id="people"></ul>
+    </div>
+  </section>
+
+  <section class="body">
+    <div class="occasion">
+      <p class="date-en" lang="en" id="date-en"></p>
+      <p class="date-l2" id="date-l2"></p>
+    </div>
+    <div class="programme" id="programme">
+      <h2><span lang="en" id="programme-en"></span><span class="l2" id="programme-l2"></span></h2>
+      <ol id="programme-rows"></ol>
+    </div>
+    <figure class="qr" id="qr">
+      <figcaption><span class="cap-en" lang="en" id="cap-en"></span><span class="cap-l2" id="cap-l2"></span></figcaption>
+      <div class="qr-code" id="qr-code"></div>
+    </figure>
+  </section>
+</article>
+</div></div>
+
+<script src="/lib/vendor/qrcode-generator.js"></script>
+<script type="module">
+import { posterContent } from "/lib/poster.mjs";
+
+const MM = 96 / 25.4; // CSS px per mm
+const $ = (id) => document.getElementById(id);
+const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+const LANG_ATTR = { zh: "zh-Hant-TW", ko: "ko", ja: "ja" };
+const FONT = {
+  zh: '"Microsoft JhengHei", "PingFang TC", "Noto Sans TC", "Noto Sans CJK TC", "Heiti TC", sans-serif',
+  ko: '"Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", "Noto Sans CJK KR", sans-serif',
+  ja: '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", "Noto Sans JP", "Noto Sans CJK JP", sans-serif',
+};
+
+// 這一列跟後台用同一個語言設定（後台右上角那一顆）
+const EN_UI = (() => { try { return localStorage.getItem("ghrc-admin-lang") === "en"; } catch (e) { return false; } })();
+const L = (zh, en) => (EN_UI ? en : zh);
+if (EN_UI) {
+  document.documentElement.lang = "en";
+  const words = { "歡迎海報（A1）": "Welcome poster (A1)", "議程": "Programme", "主賓": "Principal guests", "QR Code": "QR code", "3 mm 出血": "3 mm bleed", "色調": "Colour", "暖綠": "Warm green", "米色": "Sand", "深綠": "Forest green", "列印／存成 PDF": "Print / save as PDF" };
+  for (const el of document.querySelectorAll(".toolbar h1, .toolbar label span, .toolbar option, #print")) if (words[el.textContent.trim()]) el.textContent = words[el.textContent.trim()];
+  $("hint").textContent = "Use Chrome: choose “Save as PDF” and margins “None” to get a 594 × 841 mm vector PDF. Tick “3 mm bleed” only if the print shop asks for it. If the programme may still change, print the version without it first.";
+  $("status").textContent = "Loading this visit…";
+}
+
+const id = new URLSearchParams(location.search).get("visit") || "";
+const legacyToken = (() => { try { return localStorage.getItem("ghrc-admin-token") || ""; } catch (e) { return ""; } })();
+async function api(path, body) {
+  const headers = { ...(legacyToken ? { authorization: `Bearer ${legacyToken}` } : {}), ...(body ? { "content-type": "application/json" } : {}) };
+  try {
+    const r = await fetch(path, { method: body ? "POST" : "GET", headers, credentials: "same-origin", body: body ? JSON.stringify(body) : undefined, keepalive: !!body });
+    const out = await r.json().catch(() => ({ ok: false, error: `${r.status}` }));
+    return { status: r.status, ...out };
+  } catch (e) { return { ok: false, error: String(e) }; }
+}
+function status(text, err = false) {
+  const p = $("status");
+  p.innerHTML = text;
+  p.className = "status" + (err ? " err" : "");
+  p.hidden = !text;
+}
+
+// ── 版面：英文歡迎詞放大到剛好一行；名稱由大到小試字級。**不縮到下限以下**——放不下就停在下限並說一聲 ──
+const notes = [];
+const note = (zh, en) => notes.push(L(zh, en));
+function fitOneLine(el, maxMM, minMM, what) {
+  const box = el.closest(".greeting");
+  el.style.fontSize = "100mm";
+  let size = Math.min((100 * box.clientWidth) / el.offsetWidth, maxMM);
+  if (size < minMM) { note(`${what[0]}太長，縮到下限仍放不下一行，請改用較短的寫法。`, `${what[1]} is too long for one line even at the smallest size; please use a shorter form.`); size = minMM; }
+  el.style.fontSize = size + "mm";
+  return size;
+}
+function fitLines(el, steps, lineHeight, maxLines, what) {
+  if (el.hidden) return;
+  for (const s of steps) {
+    el.style.fontSize = s + "mm";
+    const lines = Math.round(el.offsetHeight / (s * MM * lineHeight));
+    if (lines <= maxLines && el.scrollWidth <= el.clientWidth + 1) return;
+  }
+  note(`${what[0]}超過 ${maxLines} 行，已用到最小字級；請在第 2 步改成較短的寫法。`, `${what[1]} runs past ${maxLines} lines at the smallest size; please shorten it in step 2.`);
+}
+
+function formatDate(iso, lang) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+  if (!m) return "";
+  const [y, mo, d] = [+m[1], +m[2], +m[3]];
+  const dt = new Date(y, mo - 1, d);
+  if (lang === "en") return new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(dt);
+  if (lang === "zh") return `${y} 年 ${mo} 月 ${d} 日　${new Intl.DateTimeFormat("zh-Hant-TW", { weekday: "long" }).format(dt)}`; // 與簡報封面同一個寫法
+  return new Intl.DateTimeFormat(lang === "ko" ? "ko-KR" : "ja-JP", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(dt);
+}
+// 人名只在稱謂後斷行（Professor ／ William C. Sullivan），不在名與姓之間
+const HONORIFIC = /^(professor|prof\.?|dr\.?|mr\.?|mrs\.?|ms\.?|miss|dean|president|minister|director|sir|dame|hon\.?|rev\.?)$/i;
+function bindName(s) {
+  const parts = String(s || "").trim().split(/\s+/);
+  if (parts.length > 1 && HONORIFIC.test(parts[0])) return parts[0] + " " + parts.slice(1).join(" ");
+  return parts.join(" ");
+}
+function setText(el, text, lang) {
+  el.textContent = text || "";
+  el.hidden = !text;
+  if (lang) el.lang = lang;
+}
+function layoutPreview() {
+  const sheet = $("sheet"), box = $("stage-box");
+  if (sheet.hidden) return;
+  const w = sheet.offsetWidth, h = sheet.offsetHeight;
+  const avail = window.innerHeight - document.querySelector(".toolbar").offsetHeight - 48;
+  const s = Math.min(avail / h, (window.innerWidth - 48) / w, 1);
+  sheet.style.transform = `scale(${s})`;
+  box.style.width = w * s + "px";
+  box.style.height = h * s + "px";
+}
+
+function render(c, opts) {
+  notes.length = 0;
+  const lang = c.lang, attr = LANG_ATTR[lang];
+  const sheet = $("sheet");
+  sheet.hidden = false;
+  sheet.dataset.theme = opts.theme;
+  document.documentElement.style.setProperty("--l2", FONT[lang]);
+  const bleed = opts.bleed ? 3 : 0;
+  sheet.style.setProperty("--bleed", bleed + "mm");
+  $("page-size").textContent = `@page { size: ${594 + 2 * bleed}mm ${841 + 2 * bleed}mm; margin: 0; }`;
+
+  setText($("welcome-en"), c.welcome.en, "en");
+  setText($("welcome-l2"), c.welcome.l2, attr);
+  setText($("name-en"), c.org.en, "en");
+  setText($("name-l2"), c.org.l2, attr);
+
+  const ul = $("people");
+  ul.innerHTML = "";
+  if (opts.people) {
+    for (const p of c.people) {
+      const li = document.createElement("li");
+      li.lang = p.lang;
+      const b = document.createElement("b");
+      b.textContent = p.lang === "en" ? bindName(p.name) : p.name;
+      b.lang = p.lang;
+      li.append(b);
+      if (p.title) {
+        const t = document.createElement("span");
+        t.lang = p.lang === "en" ? "en" : p.lang;
+        t.textContent = p.lang === "en" ? `, ${p.title}` : `　${p.title}`;
+        li.append(t);
+      }
+      ul.append(li);
+    }
+    if (c.more.count) {
+      const li = document.createElement("li");
+      li.lang = "en";
+      li.textContent = c.more.en;
+      if (c.more.l2) { const s = document.createElement("span"); s.className = "pl2"; s.lang = attr; s.textContent = c.more.l2; li.append(s); }
+      ul.append(li);
+    }
+  }
+  ul.hidden = !ul.children.length;
+
+  setText($("date-en"), formatDate(c.date, "en"), "en");
+  setText($("date-l2"), formatDate(c.date, lang), attr);
+
+  const prog = $("programme");
+  prog.hidden = !(opts.programme && c.programme.length);
+  sheet.classList.toggle("no-programme", prog.hidden);
+  setText($("programme-en"), c.programmeTitle.en, "en");
+  setText($("programme-l2"), c.programmeTitle.l2, attr);
+  const ol = $("programme-rows");
+  ol.innerHTML = "";
+  if (!prog.hidden) {
+    if (c.programme.length > 7) note(`流程有 ${c.programme.length} 段，A1 上最多印 7 段；請在第 5 步合併相近的段落。`, `The programme has ${c.programme.length} parts; at most 7 fit on A1. Please merge some in step 5.`);
+    for (const r of c.programme.slice(0, 7)) {
+      const li = document.createElement("li");
+      const tm = document.createElement("span"); tm.className = "time"; tm.textContent = r.time;
+      const it = document.createElement("span"); it.className = "item-en"; it.lang = "en"; it.textContent = r.en;
+      if (r.place_en) { const pl = document.createElement("span"); pl.className = "place"; pl.textContent = r.place_en; it.append(pl); }
+      if (r.l2) {
+        const l2 = document.createElement("span"); l2.className = "item-l2"; l2.lang = attr; l2.textContent = r.l2;
+        if (r.place_l2) { const pl = document.createElement("span"); pl.className = "place"; pl.textContent = r.place_l2; l2.append(pl); }
+        it.append(l2);
+      }
+      li.append(tm, it);
+      ol.append(li);
+    }
+  }
+
+  const qr = $("qr");
+  qr.hidden = !(opts.qr && c.qr_url && window.qrcode);
+  if (!qr.hidden) {
+    const q = window.qrcode(0, "M");
+    q.addData(c.qr_url);
+    q.make();
+    $("qr-code").innerHTML = q.createSvgTag({ cellSize: 4, margin: 0, scalable: true, title: c.qr_url });
+    setText($("cap-en"), c.caption.en, "en");
+    setText($("cap-l2"), c.caption.l2, attr);
+  }
+
+  const wSize = fitOneLine($("welcome-en"), 132, 70, ["英文歡迎詞", "The English welcome"]);
+  const l2 = $("welcome-l2");
+  l2.style.fontSize = wSize * 0.4 + "mm";
+  if (l2.offsetWidth > l2.closest(".greeting").clientWidth) fitOneLine(l2, wSize * 0.4, 24, ["第二語言的歡迎詞", "The second-language welcome"]);
+  fitLines($("name-en"), prog.hidden ? [48, 44, 40, 35, 31, 27, 24] : [40, 35, 31, 27, 24], 1.06, 2, ["單位名稱（英文）", "The organisation name"]);
+  fitLines($("name-l2"), [20, 18, 16, 14], 1.28, 2, ["單位名稱（當地語）", "The local organisation name"]);
+  const field = $("field");
+  if (field.scrollHeight > field.clientHeight + 1) note("版面太滿：請關掉「主賓」或「議程」，或精簡流程。", "Too much on the poster: turn off the principal guests or the programme, or shorten the programme.");
+
+  const list = $("warnings");
+  list.innerHTML = "";
+  for (const w of [...c.warnings.map((x) => L(x.zh, x.en)), ...notes]) { const li = document.createElement("li"); li.textContent = w; list.append(li); }
+  layoutPreview();
+  document.body.dataset.ready = "1";
+}
+
+async function main() {
+  if (!id) return status(L("網址上少了是哪一場（?visit=…）。請從主辦端「訪前」第 7 步打開。", "This link does not say which visit (?visit=…). Open it from step 7 of the organiser page."), true);
+  const [i18n, r] = await Promise.all([fetch("/data/i18n.json").then((x) => x.json()).catch(() => ({})), api(`/api/visits?id=${encodeURIComponent(id)}`)]);
+  if (r.status === 401) return status(L('這一頁要先在<a href="/admin.html">主辦端</a>登入（同一台電腦、同一個瀏覽器）——海報上有來賓的名字，跟後台一樣不公開。', 'Sign in on the <a href="/admin.html">organiser page</a> first (same computer, same browser): the poster carries the guests’ names, so it is private like the rest of the organiser pages.'), true);
+  if (!r.ok) return status(L(`讀不到這一場：${esc(r.error || r.status)}`, `Could not load this visit: ${esc(r.error || r.status)}`), true);
+  // 主視覺的等高線（景觀規劃的語彙）：一個 SVG 檔，插進來才吃得到色調的顏色、印出來也是向量
+  const terrain = await fetch("/assets/brand/poster-terrain.svg").then((x) => (x.ok ? x.text() : "")).catch(() => "");
+  if (terrain.startsWith("<svg")) $("field").insertAdjacentHTML("afterbegin", terrain);
+  const content = posterContent(r.visit, i18n);
+  const q = new URLSearchParams(location.search);
+  const flag = (k, dflt) => (q.has(k) ? q.get(k) !== "0" : dflt);
+  const storedTheme = (() => { try { return localStorage.getItem("ghrc-poster-theme"); } catch (e) { return null; } })();
+  const theme = ["tea", "sand", "forest"].find((t) => t === (q.get("theme") || storedTheme)) || "tea";
+  const opts = { programme: flag("programme", true), people: flag("people", true), qr: flag("qr", true), bleed: flag("bleed", false), theme };
+  await document.fonts.load("400 40px Caladea").catch(() => {});
+  await document.fonts.load("700 40px Caladea").catch(() => {});
+  await document.fonts.ready;
+  status(printedNote(r.visit.poster, r.stale));
+  for (const k of ["programme", "people", "qr", "bleed"]) {
+    $(`opt-${k}`).checked = opts[k];
+    $(`opt-${k}`).addEventListener("change", (e) => { opts[k] = e.target.checked; render(content, opts); });
+  }
+  $("opt-theme").value = opts.theme;
+  $("opt-theme").addEventListener("change", (e) => { opts.theme = e.target.value; try { localStorage.setItem("ghrc-poster-theme", opts.theme); } catch (er) {} render(content, opts); });
+  $("print").disabled = false;
+  $("print").addEventListener("click", () => window.print());
+  // 不管是按這一顆還是 ⌘P：輸出一次就記一筆（之後名稱、日期或印上去的流程改了，後台會說「需要重印」）
+  window.addEventListener("beforeprint", async () => {
+    const saved = await api("/api/visits", { visit_id: id, action: "poster", programme: !$("programme").hidden, qr: !$("qr").hidden });
+    if (saved.ok) status(printedNote(saved.visit.poster, saved.stale));
+    else status(L(`輸出的紀錄沒存起來（${esc(saved.error || saved.status)}）；海報照樣可以印。`, `The export was not recorded (${esc(saved.error || saved.status)}); the poster still prints.`), true);
+  });
+  window.addEventListener("resize", layoutPreview);
+  render(content, opts);
+}
+function printedNote(p, stale) {
+  if (!p?.printed_at) return "";
+  const when = new Date(p.printed_at).toLocaleString(EN_UI ? "en-GB" : "zh-TW", { timeZone: "Asia/Taipei", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const again = (stale || []).find((x) => x.key === "poster");
+  return again
+    ? L(`上次輸出 ${when}；${esc(again.why)}。`, `Last exported ${when}; the names, date or programme have changed since — reprint if it has gone to the print shop.`)
+    : L(`上次輸出 ${when}${p.programme ? "（含議程）" : ""}。`, `Last exported ${when}${p.programme ? " (with programme)" : ""}.`);
+}
+main();
+</script>
+</body>
+</html>

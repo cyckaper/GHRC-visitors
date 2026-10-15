@@ -1133,6 +1133,45 @@ test("「本次沒有」走自己的那一支：只動 wrapup；一般存檔帶�
   await api(`/api/visits?id=${v.visit_id}`, { method: "DELETE", headers: admin });
 });
 
+test("歡迎海報：輸出一次記一筆（只動 poster、指紋由伺服器蓋）；印上去的東西改了就說要重印；印了 QR 網址就固定", async () => {
+  const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const printed = (body, headers = admin) => api("/api/visits", { method: "POST", headers, body: JSON.stringify({ action: "poster", ...body }) });
+  const programme = [{ start: "10:00", end: "10:20", kind: "briefing", title_en: "Welcome and centre overview", title_2nd: "歡迎與中心總體介紹" }];
+  const v = (await put({ org: { name: "Poster Test University", name_local: "海報測試大學" }, date: "2099-09-01", code: "poster", language: "zh", programme, guests: [{ name: "王大明", title: "院長", email: "w@example.test", role: "lead" }] })).body.visit;
+  assert.equal((await printed({ visit_id: v.visit_id, programme: true }, { "content-type": "application/json" })).status, 401, "要 token");
+  assert.equal((await printed({ visit_id: "2099-01-01-nope" })).status, 404);
+  assert.equal((await printed({ visit_id: "../x" })).status, 400);
+
+  const r = await printed({ visit_id: v.visit_id, programme: true, qr: false });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.ok(r.body.visit.poster.printed_at);
+  assert.deepEqual([r.body.visit.poster.programme, r.body.visit.poster.qr], [true, false]);
+  assert.ok(r.body.visit.poster.fingerprint, "指紋由伺服器蓋");
+  assert.deepEqual(r.body.stale, []);
+
+  // 一般存檔帶什麼 poster 都不算；海報上沒有的欄位改了也不必重印
+  const resaved = await put({ ...r.body.visit, poster: { printed_at: "", fingerprint: "x" }, purpose: "改一個字" });
+  assert.equal(resaved.body.visit.poster.printed_at, r.body.visit.poster.printed_at, "舊分頁蓋不掉");
+  assert.deepEqual(resaved.body.stale, []);
+  // 沒印 QR：網址還能改（還沒掛到門口）
+  const moved = await put({ ...resaved.body.visit, code: "poster2" });
+  assert.equal(moved.body.visit.visit_id, "2099-09-01-poster2");
+  // 印上去的流程改了 → 要重印
+  const edited = await put({ ...moved.body.visit, programme: [{ ...programme[0], title_en: "Welcome and overview" }] });
+  assert.deepEqual(edited.body.stale.map((x) => x.key), ["poster"]);
+  assert.deepEqual((await api(`/api/visits?id=${edited.body.visit.visit_id}`, { headers: admin })).body.stale.map((x) => x.key), ["poster"], "重新打開也看得到");
+  // 再輸出一次（這次印了 QR）就沒事了，而且網址固定——門口的 QR 不能失效
+  assert.deepEqual((await printed({ visit_id: edited.body.visit.visit_id, programme: true, qr: true })).body.stale, []);
+  const renamed = await put({ ...edited.body.visit, code: "changed" });
+  assert.equal(renamed.body.visit.visit_id, "2099-09-01-poster2");
+  assert.equal(renamed.body.url_fixed, true);
+
+  const page = await api("/poster.html");
+  assert.equal(page.status, 200);
+  assert.match(page.body, /noindex/);
+  await api(`/api/visits?id=2099-09-01-poster2`, { method: "DELETE", headers: admin });
+});
+
 test("訪前功課：還沒存檔就查好的跟著存檔進去（查完之前自動存檔先建好這一場也一樣）；舊分頁的那一份蓋不掉新的", async () => {
   const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
   // 查的時候還沒存檔（畫面上連單位名稱都還沒打）：結果只在畫面上，存檔時跟著進去

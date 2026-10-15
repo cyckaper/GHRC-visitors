@@ -1325,6 +1325,23 @@ try {
   check(/0912-345-678/.test(await page.textContent("#confirmRecipients")), "the confirmation card says the contact can only be reached by phone, and how to send it");
   await fetch(`${base}/api/visits?id=${smsId}`, { method: "DELETE", headers: { authorization: "Bearer e2e-token" } });
 
+  // 歡迎海報（訪前第 7 步）：同一個瀏覽器（登入的 cookie）開海報頁，畫得出來、換得了選項，一列印就記一筆。
+  // 放在最後：這一頁直接換到海報頁（測試用的 browser.newPage 沒辦法在同一個 context 再開一頁）
+  const poster = page;
+  await poster.goto(`${base}/poster.html?visit=${VID}`);
+  await poster.waitForFunction(() => document.body.dataset.ready === "1", null, { timeout: 15000 });
+  const visitNow = (await (await fetch(`${base}/api/visits?id=${VID}`, { headers: { authorization: "Bearer e2e-token" } })).json()).visit;
+  check((await poster.textContent("#welcome-en")) === "Welcome" && (await poster.textContent("#name-en")) === visitNow.org.name, "the welcome poster draws this visit: Welcome and the organisation’s name");
+  check(/594mm 841mm/.test(await poster.textContent("#page-size")) && (await poster.locator("#qr-code svg").count()) === 1, "…on an A1 page, with the guest page as a vector QR code");
+  await poster.click("#opt-bleed");
+  check(/600mm 847mm/.test(await poster.textContent("#page-size")), "…3 mm bleed makes the page 600 × 847 mm");
+  await poster.selectOption("#opt-theme", "sand");
+  check((await poster.getAttribute("#sheet", "data-theme")) === "sand", "…and the colour scheme switches");
+  await poster.evaluate(() => window.dispatchEvent(new Event("beforeprint")));
+  await poster.waitForFunction(() => /上次輸出/.test(document.getElementById("status").textContent), null, { timeout: 15000 });
+  const printedVisit = (await (await fetch(`${base}/api/visits?id=${VID}`, { headers: { authorization: "Bearer e2e-token" } })).json()).visit;
+  check(!!printedVisit.poster?.printed_at && !!printedVisit.poster?.fingerprint, "printing the poster records it on the visit (so a later change can say ‘reprint’)");
+
   check(errors.length === 0, `no page errors (${errors.join(" | ")})`);
   console.log("\nSMOKE OK");
 } catch (e) {
