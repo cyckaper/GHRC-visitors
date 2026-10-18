@@ -776,6 +776,41 @@ test("thanks letter: recipients = list + onsite, wording is the 請益 question,
   assert.ok(send.body.mailto.startsWith("mailto:?bcc="));
 });
 
+test("感謝信的合照直接附在信裡（明確指示：「讓照片直接附在信裡」）：用 Gmail 寄的那一封帶著照片，信裡也照實寫附了幾張", async () => {
+  const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const v = (await put({ org: { name: "Attachment University" }, date: "2026-01-15", code: "attach", guests: [{ name: "Ada Lee", title: "Professor", email: "ada@example.edu", role: "lead" }] })).body.visit;
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+  for (const name of ["IMG_8466.jpeg", "合照.png"]) {
+    const up = await api("/api/materials", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: v.visit_id, action: "upload", kind: "photo", name, data: `data:image/png;base64,${png}` }) });
+    assert.equal(up.status, 200, JSON.stringify(up.body));
+  }
+  // 貼的外部連結附不上去：信裡照實寫附了其中幾張
+  await seed(v.visit_id, (x) => { x.materials.photos.push("https://photos.example.org/group.jpg"); });
+  process.env.MAIL_MOCK = "1"; // 不真的打 Gmail：信（含附件）寫進媒體庫
+  try {
+    const d = await runJob("letter", { visit_id: v.visit_id, kind: "thanks", sender: "director" });
+    assert.equal(d.status, 200, JSON.stringify(d.body));
+    assert.ok(d.body.draft.body.includes(`Photos from the visit (3, 2 of them attached to this email) — https://visit.example.test/${v.visit_id}#photos`), d.body.draft.body);
+    const send = await runJob("letter", { visit_id: v.visit_id, action: "send", kind: "thanks", subject: d.body.draft.subject, body: d.body.draft.body, recipients: [{ name: "Ada Lee", email: "ada@example.edu" }] });
+    assert.equal(send.body.sent, true, JSON.stringify(send.body));
+    assert.deepEqual([send.body.photos.attached, send.body.photos.to, send.body.photos.skipped], [2, 1, 1]);
+    const mail = JSON.parse(await readFile(path.join(tmp, "media", "mail", "last.json"), "utf8"));
+    assert.deepEqual(mail.attachments.map((a) => [a.filename, a.contentType]), [["IMG_8466.png", "image/png"], ["合照.png", "image/png"]], "原本的檔名，副檔名跟著實際的格式");
+    const eml = await readFile(path.join(tmp, "media", "mail", "last.eml"), "utf8");
+    assert.match(eml, /Content-Type: multipart\/mixed; boundary="/);
+    assert.match(eml, /filename="photo-2\.png"; filename\*=UTF-8''%E5%90%88%E7%85%A7\.png/, "中文檔名照 RFC 2231 寫");
+    assert.equal((eml.match(/Content-Disposition: attachment/g) || []).length, 2);
+    const after = (await api(`/api/visits?id=${v.visit_id}`, { headers: admin })).body.visit;
+    assert.equal(after.letters.thanks.photos_attached, 2, "寄出紀錄記著附了幾張");
+  } finally {
+    delete process.env.MAIL_MOCK;
+  }
+  // 沒接 Gmail（複製信件、mailto 自己寄）：照片附不上去，信裡就不寫「附在這封信裡」
+  const plain = await runJob("letter", { visit_id: v.visit_id, kind: "thanks", sender: "director" });
+  assert.ok(plain.body.draft.body.includes(`Photos from the visit (3) — https://visit.example.test/${v.visit_id}#photos`), plain.body.draft.body);
+  await getStore().deleteVisit(v.visit_id); // 寄過信的那一場照規矩是固定的，測試自己收掉
+});
+
 test("summary writes visit.summary and slide_performance rows; digest lists suggestions; exports work", async () => {
   const s = await runJob("summary", { visit_id: visitId });
   assert.equal(s.status, 200, JSON.stringify(s.body));

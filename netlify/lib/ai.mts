@@ -348,10 +348,12 @@ export interface LetterContext {
   rotaUrl?: string;
   /** 網頁版簡報（/deck）建好了沒：感謝信自動帶入「當天的簡報」——沒有放上簡報 PDF 時就給這個連結。 */
   webDeck?: boolean;
+  /** 寄出時直接附在信裡的合照張數（用 Gmail 寄才附得上去）：信裡照實寫「也附在這封信裡」。 */
+  attachedPhotos?: number;
 }
 
 /** 感謝信裡一項一行的連結（`lib/visit.mjs thanksItems`：當天的簡報、現場合照、答應提供的資料）。 */
-type LetterItem = { kind?: string; title: string; url: string; file?: boolean; count?: number };
+type LetterItem = { kind?: string; title: string; url: string; file?: boolean; count?: number; attached?: number };
 
 function senderBlock(ctx: LetterContext): string {
   if (ctx.sender === "contact" && ctx.visit.contact_teacher && ctx.visit.contact_teacher !== "張俊彥") {
@@ -412,7 +414,7 @@ export async function draftLetter(ctx: LetterContext): Promise<{ subject: string
   const pageUrl = v.page_url || `${ctx.siteUrl}/${v.visit_id}`;
   const respondUrl = `${pageUrl}#respond`;
   // 感謝信自動帶入：當天的簡報、現場合照（相簿一個連結），再接答應提供給對方的資料——逐項列出，網址一個字都不能改
-  const items = ctx.kind === "thanks" ? (thanksItems(v, ctx.siteUrl, { lang: v.language, webDeck: !!ctx.webDeck }) as LetterItem[]) : [];
+  const items = ctx.kind === "thanks" ? (thanksItems(v, ctx.siteUrl, { lang: v.language, webDeck: !!ctx.webDeck, attached: ctx.attachedPhotos || 0 }) as LetterItem[]) : [];
   // …以及參訪時談到的事（主持人訪後一項一項記下的重點）
   const talked = ctx.kind === "thanks" ? (talkedAbout(v) as Record<string, string[]> | null) : null;
   const internal = ctx.kind === "notice" || ctx.kind === "rundown"; // 寄給中心自己的研究室，不是來賓
@@ -459,7 +461,7 @@ ${CENTER_FACTS}`
    - **只根據 talked_about 裡的項目**：不要加入沒有的事實、數字、人名、評價或客套話；看起來是我們內部的判斷、內部的安排、或對來賓的評語的項目，一律跳過；不要提到「筆記」「紀錄」「主持人記下」；
    - 這一段講的是當天談了什麼，**不是回顧簡報**；老師們的介紹網頁、論文、聯絡方式也不要介紹。
    沒有 talked_about 就整段省略。
-4) 有 items 就**逐項列出**（明確指示：當天的簡報與拍的照片要自動帶入）：先一句引言，只提真的有的那幾種（例如 "Here are the slides and photos from the visit, together with the materials we promised:"／「附上當天的簡報與現場合照，以及答應提供的資料：」），然後一項一行「名稱：網址」——**網址原封不動照抄，一個字都不能改、不能縮短**。名稱照信的語言寫：kind=deck 是當天的簡報；kind=photos 是現場合照、寫出張數（count）——那是專頁上整個相簿的連結；kind=file／link 是當天答應提供給對方的資料，名稱照 title。沒有 items 就整段省略。
+4) 有 items 就**逐項列出**（明確指示：當天的簡報與拍的照片要自動帶入）：先一句引言，只提真的有的那幾種（例如 "Here are the slides and photos from the visit, together with the materials we promised:"／「附上當天的簡報與現場合照，以及答應提供的資料：」），然後一項一行「名稱：網址」——**網址原封不動照抄，一個字都不能改、不能縮短**。名稱照信的語言寫：kind=deck 是當天的簡報；kind=photos 是現場合照、寫出張數（count）——那是專頁上整個相簿的連結；有 attached（明確指示：「讓照片直接附在信裡」）就說照片也附在這封信裡（attached 比 count 少，就照實說附了其中幾張、全部在相簿裡）；kind=file／link 是當天答應提供給對方的資料，名稱照 title。沒有 items 就整段省略。
 5) **原封不動**放入提供的 response_block（三個回應項目，含連結），不要改寫其中任何一句。
 6) 一句收尾。
 7) 署名 sender。
@@ -482,7 +484,7 @@ ${CENTER_FACTS}`;
     briefing_location: briefingLocation,
     page_url: thanks ? undefined : pageUrl,
     // 感謝信：當天的簡報、現場合照（相簿）、答應提供的資料——一項一行；以及參訪時談到的事
-    items: items.length ? items.map((p) => ({ kind: p.kind, title: p.title, url: p.url, ...(p.count ? { count: p.count } : {}) })) : undefined,
+    items: items.length ? items.map((p) => ({ kind: p.kind, title: p.title, url: p.url, ...(p.count ? { count: p.count } : {}), ...(p.attached ? { attached: p.attached } : {}) })) : undefined,
     talked_about: talked || undefined,
     // 行前通告：當天幾點走到哪一間、各幾分鐘、誰負責（通告的主體就是這一份）
     // 行前通告／回報：當天幾點走到哪一間、各幾分鐘、誰負責、各室回覆的簡報人員

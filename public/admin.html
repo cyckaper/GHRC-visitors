@@ -2316,7 +2316,7 @@
     const link = (href, text) => `<a class="underline break-all" target="_blank" rel="noopener" href="${esc(href)}">${esc(text)}</a>`;
     box.innerHTML = [
       row(!!deck, "當天的簡報", deck ? link(deck, m.deck_pdf ? (/^https?:\/\//i.test(m.deck_pdf) ? m.deck_pdf.replace(/^https?:\/\//, "") : "簡報 PDF") : "網頁版簡報") : `<span class="muted">沒有：動作四沒放簡報 PDF，網頁版簡報也還沒建好</span>`),
-      row(n > 0, "現場合照", n ? link(`${(v.page_url || "").replace(/#.*$/, "")}#photos`, `專頁上的相簿（${n} 張）`) : `<span class="muted">還沒有：動作四放上合照就會帶入</span>`),
+      row(n > 0, "現場合照", n ? link(`${(v.page_url || "").replace(/#.*$/, "")}#photos`, `專頁上的相簿（${n} 張）`) + (state.services?.gmail ? `<span>，按「寄出感謝信」時照片也直接附在信裡</span>` : ` <span class="muted">（照片要直接附在信裡，得用 Gmail 寄：到「設定」連上 Google）</span>`) : `<span class="muted">還沒有：動作四放上合照就會帶入</span>`),
       row(count > 0, "參訪時談到的事", count ? `<span>動作三的重點 ${count} 項，AI 寫成一段話</span>` : `<span class="muted">動作三還沒存重點：信裡就不提</span>`),
     ].join("");
   }
@@ -2550,7 +2550,7 @@
     $("thanksSubject").value = t?.subject || ""; $("thanksBody").value = t?.body || "";
     $("sender").value = t?.sender || state.settings?.sender_default || "director";
     if (c?.sender) $("confirmSender").value = c.sender;
-    $("sendInfo").innerHTML = t?.sent_at ? `<span class="ok">已於 ${esc(t.sent_at.slice(0, 16).replace("T", " "))} 寄給 ${t.sent_to?.length || 0} 人</span>` : "";
+    $("sendInfo").innerHTML = t?.sent_at ? `<span class="ok">已於 ${esc(t.sent_at.slice(0, 16).replace("T", " "))} 寄給 ${t.sent_to?.length || 0} 人</span>${t.photos_attached ? `<span class="ok">，附上 ${t.photos_attached} 張合照</span>` : ""}` : "";
     // 哪一封「現在該寄」：參訪還沒到就是確認信，過了就是感謝信；寄過的就不再催
     const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
     const before = (v.visit.date || "") >= today;
@@ -2685,14 +2685,27 @@
       const recipients = checkedRecipients(isThanks ? "thanksRecipients" : "confirmRecipients");
       if (!recipients.length) return flash("沒有勾選收件人", "err");
       if (!$(ids.subject).value.trim() || !$(ids.body).value.trim()) return flash(`${label}還是空的，先按「AI 草擬」`, "err");
-      if (!confirm(t(`把${label}寄給 ${recipients.length} 人？`))) return;
+      const photos = isThanks ? (state.materials?.photos || []).length : 0; // 合照直接附在信裡（明確指示：「讓照片直接附在信裡」）
+      if (!confirm(photos ? t(`把感謝信寄給 ${recipients.length} 人？合照 ${photos} 張會直接附在信裡。`) : t(`把${label}寄給 ${recipients.length} 人？`))) return;
       const note = (m) => { $(ids.info).textContent = m; };
       const r = await runJob("/api/letter", { visit_id: $("visitSelect").value, action: "send", kind, sender: $(ids.sender).value, subject: $(ids.subject).value, body: $(ids.body).value, recipients }, note, `寄送中……一封一封寄，${recipients.length} 人大約要一分鐘。`);
       if (!r) return;
-      if (r.sent) { $(ids.info).innerHTML = `<span class="ok">已寄給 ${r.sent_to.length} 人${r.failed?.length ? `，${r.failed.length} 人失敗：${esc(r.failed.map((f) => f.email).join("、"))}` : ""}</span>`; $(ids.mailto).hidden = true; flash(`${label}已寄出`); rebase([ids.subject, ids.body]); queueDraft(); applyDraft(); loadVisits(); loadRecipients(); }
+      if (r.sent) { $(ids.info).innerHTML = `<span class="ok">已寄給 ${r.sent_to.length} 人${r.failed?.length ? `，${r.failed.length} 人失敗：${esc(r.failed.map((f) => f.email).join("、"))}` : ""}</span>${photoNote(r.photos)}`; $(ids.mailto).hidden = true; flash(`${label}已寄出`); rebase([ids.subject, ids.body]); queueDraft(); applyDraft(); loadVisits(); loadRecipients(); }
       else if (r.reason === "gmail_not_configured") { $(ids.info).innerHTML = `<span class="err">尚未寄出：Gmail 還沒接好（到「設定」分頁按「連上 Google」）。用右邊那顆自己寄，或按「複製信件」貼到你的信箱。</span>`; const m = $(ids.mailto); m.dataset.mailto = r.mailto; m.hidden = false; m.onclick = () => openMailto(m, $(ids.body).value, $(ids.info)); }
       else { $(ids.info).innerHTML = `<span class="err">一封都沒寄成功：${esc((r.failed || []).map((f) => `${f.email}（${f.error}）`).join("；")) || "未知原因"}</span>`; flash("寄送失敗", "err"); }
     });
+  }
+  /**
+   * 寄出感謝信之後，照片的那一句：附了幾張；沒附上的幾張（太大、或是貼的外部連結；信裡的相簿連結有全部）；
+   * 附了照片寄不出去、改成只寄信的那幾位（信照樣寄到，不能為了照片讓感謝信卡住）。
+   */
+  function photoNote(p) {
+    if (!p) return "";
+    const parts = [];
+    if (p.attached) parts.push(`<span class="ok">，附上 ${p.attached} 張合照</span>`);
+    if (p.skipped) parts.push(`<span class="muted">（另 ${p.skipped} 張沒附上，信裡的相簿連結有全部）</span>`);
+    if (p.unattached?.length) parts.push(`<span class="err">照片附不上去，只寄了信：</span><span class="err">${esc(p.unattached.map((u) => u.email).join("、"))}（${esc(p.unattached[0].error)}）</span>`);
+    return parts.join("");
   }
   $("sendBtn").onclick = () => sendLetter("thanks");
   $("confirmSendBtn").onclick = () => sendLetter("confirmation");
@@ -2806,6 +2819,7 @@
       $(copyBtn)?.classList.toggle("btn-soft", gmail);
     }
     for (const id of ["confirmGmailOff", "thanksGmailOff"]) if ($(id)) $(id).hidden = gmail;
+    renderAuto(); // 「照片直接附在信裡」要 Gmail
   }
   /**
    * 老師卡片與介紹頁的內容編輯器（設定分頁）。

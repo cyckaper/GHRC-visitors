@@ -612,11 +612,21 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
      看起來是內部判斷或對來賓評語的項目跳過，不提「筆記」「紀錄」。動作三還沒存重點就整段省略。**這一段講當天談了什麼，不是回顧簡報**——
      提示詞照舊不給流程、動線、來訪目的；老師的介紹網頁、論文、聯絡方式照舊不介紹。
   4. **一項一行的連結**（`lib/visit.mjs thanksItems`）：**當天的簡報**（動作四放上的簡報 PDF 或連結；沒有就是網頁版簡報 `/deck`）、
-     **現場合照**（來賓專頁上的相簿 `<專頁>#photos`，**一個連結**、寫張數——十張照片排十行網址不精簡），
+     **現場合照**（來賓專頁上的相簿 `<專頁>#photos`，**一個連結**、寫張數——十張照片排十行網址不精簡；
+     **用 Gmail 寄的那一封，合照也直接附在信裡**，見下面的「照片直接附在信裡」），
      再接**答應提供的資料**（名稱＋原封不動的網址，見「約定」的「答應提供給對方的資料」）。重複的不列兩次：同一個網址（`sameUrl`），
      或合照裡已經有的那一張（`isPhotoDuplicate`：檔名主幹一樣的圖片，`IMG_8466.jpeg`＝`IMG_8466.jpg`；中文檔名轉成的 photo 這種沒有檔名可比的不算）。
      引言只提真的有的那幾種；AI 漏了任何一個網址就把整段補上（`ai.mts settlePromised`／`promisedBlock`）。
   5. 三個回應項目那一段（原封不動）、一句收尾、署名。主旨一句就好。
+  **照片直接附在信裡**（2026-10-18 明確指示：「讓照片直接附在信裡」）：按「寄出感謝信」（中心的 Gmail）寄的每一封，
+  都附上動作四放上的合照（`mail.mts photoAttachments`：照放上去的順序、原本的檔名、副檔名跟著實際的格式；加起來 `ATTACH_MAX_BYTES` 12 MB 以內，
+  放不下的、貼的外部連結不附——相簿連結裡全部都有）。信的寫法跟著照實寫：草擬時 Gmail 接好了，相簿那一行就是
+  「Photos from the visit (10, also attached to this email)」（附得上去的比較少就寫附了其中幾張；`thanksItems` 的 `attached`）；
+  沒接 Gmail（複製信件、mailto 自己寄）附不上去，就只有相簿連結，卡片上那一行也說要用 Gmail 寄。
+  有附件的信走 Gmail 的**可續傳上傳**（`/upload/gmail/v1/users/me/messages/send?uploadType=resumable`，`message/rfc822`；
+  Google 的說明是 5 MB 以上用這一種，一封最多 35 MB），組信是 `mail.mts buildMime`（multipart/mixed，base64 每 76 字換行，
+  中文檔名用 RFC 2231 的 `filename*`）；沒附件的信照舊。**附了照片寄不出去就改寄沒有附件的那一封**（信裡有相簿連結，
+  不能為了照片讓感謝信卡住），畫面上說是哪幾位、為什麼。寄出紀錄記 `letters.thanks.photos_attached`。MAIL_MOCK 把整封信另存 `mail/last.eml`。
   後台動作五那一張卡片最上面列出「信裡自動帶入」的三樣（有沒有、從哪裡來），按「AI 草擬感謝信」之前就看得到會帶什麼、缺什麼；
   「答應提供的資料」裡跟合照同一張的照片標出來，一顆「拿掉這 N 項」整批拿掉（合照那一份還在）。
   以前信裡會照專頁上有什麼寫一段（`pageContents()`：PDF、合照、論文、老師的聯絡方式……）、點名當天最想看的研究室，都拿掉了；
@@ -993,7 +1003,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - **隱私權政策 `/privacy`**（`public/privacy.html`，`netlify.toml` 一條轉址，排在 `/*` 前面）：Google 的 OAuth 同意畫面
   要發布成「正式版」（不然 refresh token 七天就失效），Branding 頁一定要填首頁與隱私權政策的連結。它同時是寫給來賓看的：
   系統拿了哪些資料（往來信件、公開的專業資訊、名片、簽名簿、照片、主持人口述、留的 email 與回覆、真匿名）、做什麼用、
-  公開頁上會出現什麼、交給哪些服務處理（Netlify、Google、Anthropic、OpenAI）、Google 的兩個權限（`drive.file`、`gmail.send`）
+  公開頁上會出現什麼（合照也會附在寄給那一場來賓的感謝信裡）、交給哪些服務處理（Netlify、Google、Anthropic、OpenAI）、Google 的兩個權限（`drive.file`、`gmail.send`）
   只做什麼，以及 Google 要的 Limited Use 那一句。中英兩份在同一個檔、一次只顯示一種（跟首頁同一套：預設英文、`?ui=zh`、
   `ghrc-ui-lang`）；沒有 JavaScript 時是英文（Google 看的是那一份）。這一頁本身不從別的伺服器載東西（沒有 Tailwind CDN）。
   首頁、來賓專頁、介紹頁、來訪紀錄的頁尾都連過去；首頁那一條寫在 HTML 裡（Google 要首頁連得到它）。

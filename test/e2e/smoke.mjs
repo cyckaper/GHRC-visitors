@@ -381,6 +381,8 @@ try {
   await page.waitForFunction(() => /專頁上的相簿（1 張）/.test(document.getElementById("autoList").textContent), null, { timeout: 15000 });
   const auto = await page.textContent("#autoList");
   check(/網頁版簡報/.test(auto) && /動作三的重點 \d+ 項/.test(auto), `the thank-you card shows what goes into the letter by itself: the slides, the photos, what was talked about (${auto})`);
+  // 照片直接附在信裡要用 Gmail 寄（明確指示：「讓照片直接附在信裡」）；這裡沒接 Gmail，那一行就照實說
+  check(/得用 Gmail 寄/.test(auto), "…and says the photos can only go in as attachments when the letter goes out through Gmail");
   await page.click("#thanksBtn");
   await page.waitForFunction(() => document.getElementById("thanksBody").value.includes("what should we be doing better"), null, { timeout: 60000 });
   await page.waitForFunction(() => document.querySelectorAll("#thanksRecipients input").length === 2);

@@ -111,7 +111,8 @@ export interface Visit {
   letters: {
     // fingerprint＝寄出那一刻的行程指紋：寄出去的信不會跟著網頁更新，行程改了要說一聲
     confirmation?: { subject: string; body: string; sender?: string; drafted_at: string; sent_to?: { name: string; email: string }[]; sent_at?: string; fingerprint?: string };
-    thanks?: { subject: string; body: string; sender: string; drafted_at: string; sent_to?: { name: string; email: string }[]; sent_at?: string; fingerprint?: string };
+    /** photos_attached：寄出時直接附在信裡的合照張數（明確指示：「讓照片直接附在信裡」） */
+    thanks?: { subject: string; body: string; sender: string; drafted_at: string; sent_to?: { name: string; email: string }[]; sent_at?: string; fingerprint?: string; photos_attached?: number };
     /** 行前通告（寄給中心自己的研究室）：哪個單位什麼時候來，請各室安排簡報人員。 */
     notice?: { subject: string; body: string; sender?: string; drafted_at: string; sent_to?: { name: string; email: string }[]; sent_at?: string; fingerprint?: string };
     /** 回報（通告的下一步）：定案的時間、各室的簡報人員與內容。 */
