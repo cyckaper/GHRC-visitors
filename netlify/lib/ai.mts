@@ -5,7 +5,7 @@ import { env } from "./http.mts";
 import { isMock } from "./data.mts";
 import type { DictationExtract, ResponseRow, SignbookEntry, Visit } from "./types.mts";
 import type { Extracted } from "./files.mts";
-import { allocateProgramme, briefingBlockMinutes, endTimeOf, FORUM_TITLES, isForum, labStops, promisedItems, salutationLine, salutationPeople, sanitizeDictation, settleSalutation, zhDate } from "../../lib/visit.mjs";
+import { allocateProgramme, briefingBlockMinutes, endTimeOf, FORUM_TITLES, isForum, labStops, salutationLine, salutationPeople, sanitizeDictation, settleSalutation, talkedAbout, thanksItems, zhDate } from "../../lib/visit.mjs";
 import { parseVisitTable } from "../../lib/import.mjs";
 
 /**
@@ -346,7 +346,12 @@ export interface LetterContext {
   siteUrl: string;
   /** 支援人力表的網址（`/rota?key=…`，自動產生，通告一定有）。通告裡會再接上 `#<visit_id>`，點進去直接跳到那一場。 */
   rotaUrl?: string;
+  /** 網頁版簡報（/deck）建好了沒：感謝信自動帶入「當天的簡報」——沒有放上簡報 PDF 時就給這個連結。 */
+  webDeck?: boolean;
 }
+
+/** 感謝信裡一項一行的連結（`lib/visit.mjs thanksItems`：當天的簡報、現場合照、答應提供的資料）。 */
+type LetterItem = { kind?: string; title: string; url: string; file?: boolean; count?: number };
 
 function senderBlock(ctx: LetterContext): string {
   if (ctx.sender === "contact" && ctx.visit.contact_teacher && ctx.visit.contact_teacher !== "張俊彥") {
@@ -377,17 +382,25 @@ export function responseBlock(lang: string, i18n: any, url: string): string {
 }
 
 /**
- * 感謝信裡「答應提供給對方的資料」那一段（明確指示：「要加入答應提供給對方的資料，如檔案網頁等等」）：
- * 一項一行，名稱＋完整的網址。AI 漏掉任何一個網址時，就用這一段補上（放在三個回應項目之前）。
+ * 感謝信裡一項一行的那一段：**自動帶入的當天的簡報、現場合照**（明確指示：「在後續的回信，要自動帶入，1.當天的簡報，2.拍的照片……」），
+ * 接著是**答應提供給對方的資料**（明確指示：「要加入答應提供給對方的資料，如檔案網頁等等」）。名稱＋完整的網址，
+ * 引言只提真的有的那幾種。AI 漏掉任何一個網址時，就用這一段補上（放在三個回應項目之前）。
  */
-export function promisedBlock(lang: string, items: { title: string; url: string }[]): string {
+export function promisedBlock(lang: string, items: LetterItem[]): string {
   if (!items.length) return "";
   const zh = lang === "zh";
-  return [zh ? "如當天所提，附上答應提供的資料：" : "As promised during the visit, here are the materials we mentioned:", ...items.map((p, i) => `${i + 1}. ${p.title}${zh ? "：" : " — "}${p.url}`)].join("\n");
+  const has = (k: string) => items.some((p) => p.kind === k);
+  const promised = items.some((p) => !p.kind || p.kind === "file" || p.kind === "link");
+  const day = [has("deck") && (zh ? "當天的簡報" : "the slides"), has("photos") && (zh ? "現場合照" : "photos")].filter(Boolean) as string[];
+  const intro = !day.length
+    ? zh ? "如當天所提，附上答應提供的資料：" : "As promised during the visit, here are the materials we mentioned:"
+    : zh ? `附上${day.join("與")}${promised ? "，以及答應提供的資料" : ""}：`
+    : `Here are ${day.join(" and ")} from the visit${promised ? ", together with the materials we promised" : ""}:`;
+  return [intro, ...items.map((p, i) => `${i + 1}. ${p.title}${zh ? "：" : " — "}${p.url}`)].join("\n");
 }
 
 /** 每一個網址都要原封不動出現在信裡；少了就把整段補進去（三個回應項目那一段之前）。 */
-export function settlePromised(body: string, lang: string, items: { title: string; url: string }[]): string {
+export function settlePromised(body: string, lang: string, items: LetterItem[]): string {
   if (!items.length || items.every((p) => body.includes(p.url))) return body;
   const block = promisedBlock(lang, items);
   const at = body.indexOf("────────");
@@ -398,11 +411,13 @@ export async function draftLetter(ctx: LetterContext): Promise<{ subject: string
   const v = ctx.visit;
   const pageUrl = v.page_url || `${ctx.siteUrl}/${v.visit_id}`;
   const respondUrl = `${pageUrl}#respond`;
-  // 答應提供給對方的資料（檔案、圖片、網址）：感謝信裡逐項列出，網址一個字都不能改
-  const promised = ctx.kind === "thanks" ? (promisedItems(v, ctx.siteUrl) as { title: string; url: string; file: boolean }[]) : [];
+  // 感謝信自動帶入：當天的簡報、現場合照（相簿一個連結），再接答應提供給對方的資料——逐項列出，網址一個字都不能改
+  const items = ctx.kind === "thanks" ? (thanksItems(v, ctx.siteUrl, { lang: v.language, webDeck: !!ctx.webDeck }) as LetterItem[]) : [];
+  // …以及參訪時談到的事（主持人訪後一項一項記下的重點）
+  const talked = ctx.kind === "thanks" ? (talkedAbout(v) as Record<string, string[]> | null) : null;
   const internal = ctx.kind === "notice" || ctx.kind === "rundown"; // 寄給中心自己的研究室，不是來賓
   const briefingLocation = v.itinerary?.find((s) => s.room === "briefing")?.location || "302";
-  if (isMock()) return mockLetter(ctx, pageUrl, respondUrl, promised);
+  if (isMock()) return mockLetter(ctx, pageUrl, respondUrl, items, talked);
   const system =
     ctx.kind === "rundown"
       ? `你替 GHRC 草擬一則**回報給中心自己五間研究室**的訊息：通告發出去、各室回覆簡報人員之後，把定案的安排再送回去一次。收信的是同事，**一律用繁體中文**。
@@ -436,17 +451,25 @@ ${CENTER_FACTS}`
       : `你替 GHRC 草擬參訪後的感謝信。語氣：同行學者之間的感謝與請益，不是滿意度調查。用來賓的語言寫（language=zh 用繁體中文；en 用英文；ko／ja 用英文為主並在開頭與結尾附一句該語言問候）。
 **精簡**（明確指示：「不重要的事不用再提，精簡就好」）。照這個順序，只寫這幾段：
 1) 稱呼：照 salutation 寫出**每一位來賓的姓名與頭銜**（明確指示：「要把參訪者名字頭銜加進去」）——主賓排第一，姓名一個字都不要改；頭銜照 title，太長就取最主要的那一個，title 空的就只寫姓名；寫成該語言自然的正式稱呼（例："Dear Professor Simon Kilbane and Dr Jane Doe,"；「Simon Kilbane 教授、王大明院長　您好：」）。more 大於 0 就在最後加 "and colleagues"／「及各位貴賓」。**不要用 "Dear colleagues"／「各位」這種通用稱呼取代名字**。
-2) 一兩句感謝來訪（可以提單位與日期）。**不要回顧當天簡報或參觀講過的內容**，也**不要介紹專頁上有什麼**（老師們的介紹網頁、論文、聯絡方式、照片、簡報一律不提）。
-3) 有 promised_materials（當天答應提供給對方的資料：檔案、圖片或網頁）就**逐項列出**：先一句引言（例如「如當天所提，附上答應提供的資料」），然後一項一行「名稱：網址」——**網址原封不動照抄，一個字都不能改、不能縮短**，名稱可以照信的語言寫；沒有就整段省略。
-4) **原封不動**放入提供的 response_block（三個回應項目，含連結），不要改寫其中任何一句。
-5) 一句收尾。
-6) 署名 sender。
+2) 一兩句感謝來訪（可以提單位與日期）。
+3) **參訪時談到的事**（明確指示：感謝信要自動帶入「參訪提到的事」）：有 talked_about（主持人訪後一項一項記下的重點，多半是中文的短句）就寫**一段，兩到四句**，讓對方看得出我們記得當天談了什麼：
+   - notes（交流重點）與 questions（來賓的提問）挑最有份量的一兩件帶到，用對方讀得懂的完整句子寫，不要逐條照列；
+   - follow_ups 是我們答應要做的事，**每一項都要寫到**（「如當天所談，我們會……」）；答應寄的檔案或連結就在下一段的清單裡，這裡說一句「附在下面」就好，不要重複網址；
+   - cooperation 照實寫、不誇大、不替對方表態（「有興趣」不要寫成「確定合作」，「再談」不要寫成「已有共識」）；
+   - **只根據 talked_about 裡的項目**：不要加入沒有的事實、數字、人名、評價或客套話；看起來是我們內部的判斷、內部的安排、或對來賓的評語的項目，一律跳過；不要提到「筆記」「紀錄」「主持人記下」；
+   - 這一段講的是當天談了什麼，**不是回顧簡報**；老師們的介紹網頁、論文、聯絡方式也不要介紹。
+   沒有 talked_about 就整段省略。
+4) 有 items 就**逐項列出**（明確指示：當天的簡報與拍的照片要自動帶入）：先一句引言，只提真的有的那幾種（例如 "Here are the slides and photos from the visit, together with the materials we promised:"／「附上當天的簡報與現場合照，以及答應提供的資料：」），然後一項一行「名稱：網址」——**網址原封不動照抄，一個字都不能改、不能縮短**。名稱照信的語言寫：kind=deck 是當天的簡報；kind=photos 是現場合照、寫出張數（count）——那是專頁上整個相簿的連結；kind=file／link 是當天答應提供給對方的資料，名稱照 title。沒有 items 就整段省略。
+5) **原封不動**放入提供的 response_block（三個回應項目，含連結），不要改寫其中任何一句。
+6) 一句收尾。
+7) 署名 sender。
 subject 一句就好（例如 "Thank you for visiting the Green Health Research Center"／「感謝蒞臨綠色健康研究中心」），不要再加別的。不要感謝中心自己的老師或同仁。回傳 subject 與純文字 body。
 
 ${CENTER_FACTS}`;
   const thanks = ctx.kind === "thanks";
   const payload = {
-    // 感謝信不回顧當天的內容（明確指示：精簡），所以不給流程、動線與來訪目的——給了就會被寫進去
+    // 感謝信不回顧簡報與參觀的流程（明確指示：精簡），所以不給流程、動線與來訪目的——給了就會被寫進去；
+    // 當天談到的事另外給（talked_about：主持人一項一項記下的重點）
     visit: thanks
       ? { org: v.org, date: v.date, language: v.language }
       : { org: v.org, guests: v.guests.map((g) => ({ name: g.name, title: g.title })), date: v.date, start_time: v.start_time, programme: v.programme, itinerary: v.itinerary, language: v.language, contact_teacher: v.contact_teacher, purpose: v.purpose },
@@ -458,7 +481,9 @@ ${CENTER_FACTS}`;
     attendees: internal && isForum(v) ? forumAttendees(v, ctx.labs) : undefined,
     briefing_location: briefingLocation,
     page_url: thanks ? undefined : pageUrl,
-    promised_materials: promised.length ? promised.map((p) => ({ title: p.title, url: p.url, kind: p.file ? "file" : "link" })) : undefined,
+    // 感謝信：當天的簡報、現場合照（相簿）、答應提供的資料——一項一行；以及參訪時談到的事
+    items: items.length ? items.map((p) => ({ kind: p.kind, title: p.title, url: p.url, ...(p.count ? { count: p.count } : {}) })) : undefined,
+    talked_about: talked || undefined,
     // 行前通告：當天幾點走到哪一間、各幾分鐘、誰負責（通告的主體就是這一份）
     // 行前通告／回報：當天幾點走到哪一間、各幾分鐘、誰負責、各室回覆的簡報人員
     lab_stops: internal
@@ -477,7 +502,7 @@ ${CENTER_FACTS}`;
   if (ctx.kind === "thanks" && !out.body.includes(respondUrl)) {
     out.body = `${out.body.trim()}\n\n${responseBlock(v.language, ctx.i18n, respondUrl)}`;
   }
-  if (ctx.kind === "thanks") out.body = settleSalutation(settlePromised(out.body, v.language, promised), v, v.language);
+  if (ctx.kind === "thanks") out.body = settleSalutation(settlePromised(out.body, v.language, items), v, v.language);
   return out;
 }
 
@@ -987,7 +1012,18 @@ function settleNotice(body: string, route: string, roll: string): string {
   return `${head}\n\n${roll}`;
 }
 
-function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, promised: { title: string; url: string }[] = []): { subject: string; body: string } {
+/** AI_MOCK 的「參訪時談到的事」：照真提示詞的規矩——提一兩件交流重點或提問、合作照實、後續事項每一項都寫到。 */
+function mockTalked(t: Record<string, string[]> | null): string {
+  if (!t) return "";
+  const said = [...(t.notes || []), ...(t.questions || [])].slice(0, 2);
+  return [
+    said.length ? `(AI_MOCK) We enjoyed our conversation about ${said.join("; ")}.` : "",
+    t.cooperation?.length ? `We were glad to talk about ${t.cooperation.join("; ")}.` : "",
+    t.follow_ups?.length ? `As we discussed, we will follow up on: ${t.follow_ups.join("; ")}.` : "",
+  ].filter(Boolean).join(" ");
+}
+
+function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, promised: LetterItem[] = [], talked: Record<string, string[]> | null = null): { subject: string; body: string } {
   const v = ctx.visit;
   const location = v.itinerary?.find((s) => s.room === "briefing")?.location || "302";
   if (ctx.kind === "notice" || ctx.kind === "rundown") {
@@ -1014,11 +1050,13 @@ function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, pro
       body: `Dear colleagues,\n\nWe look forward to welcoming ${v.org?.name || "you"} on ${v.date} at ${v.start_time}. We begin with a short overview in Room ${location}, Landscape Building, 3rd floor, ${isForum(v) ? "followed by a roundtable with the faculty" : "and then walk through the laboratories next door"}.\n\n${isForum(v) ? "Programme and the faculty you will meet" : "Programme and the laboratories you will see"}: ${pageUrl}\n\n${senderBlock(ctx)}`,
     };
   }
-  // 跟真提示詞同一個結構：稱呼（每一位來賓的姓名與頭銜）、一句感謝、答應提供的資料、三個回應項目、署名——別的不提
+  // 跟真提示詞同一個結構：稱呼（每一位來賓的姓名與頭銜）、一句感謝、參訪時談到的事、當天的簡報與合照與答應提供的資料、
+  // 三個回應項目、署名——別的不提
   const block = promisedBlock(v.language, promised);
+  const talk = mockTalked(talked);
   return {
     subject: `(AI_MOCK) Thank you for visiting the Green Health Research Center`,
-    body: `${salutationLine(v, v.language === "zh" ? "zh" : "en")}\n\nThank you for visiting us on ${v.date}.\n\n${block ? `${block}\n\n` : ""}${responseBlock(v.language, ctx.i18n, respondUrl)}\n\nWith thanks,\n${senderBlock(ctx)}`,
+    body: `${salutationLine(v, v.language === "zh" ? "zh" : "en")}\n\nThank you for visiting us on ${v.date}.\n\n${talk ? `${talk}\n\n` : ""}${block ? `${block}\n\n` : ""}${responseBlock(v.language, ctx.i18n, respondUrl)}\n\nWith thanks,\n${senderBlock(ctx)}`,
   };
 }
 

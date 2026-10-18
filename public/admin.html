@@ -423,7 +423,7 @@
     </div>
     <div class="card space-y-3">
       <div class="flex flex-wrap items-baseline gap-2"><h2 class="font-semibold mr-auto">動作四｜當天資料放上專屬頁面</h2><label class="muted flex items-center gap-1" title="這一場本來就沒有這件事（沒有簽名簿、沒交換名片、沒錄口述都很正常）。標了就不算未完成，後續提醒也不會再為它寄信"><input type="checkbox" data-na="materials"> 本次沒有</label></div>
-      <p class="muted">簡報 PDF、合照放上來賓專頁，來賓自己點進去看（感謝信不另外介紹；答應提供給對方的檔案與連結在下面的感謝信那一張，信裡會逐項列出）。專頁：<a id="materialsPageLink" class="underline break-all" target="_blank" rel="noopener"></a></p>
+      <p class="muted">簡報 PDF、合照放上來賓專頁；<b>感謝信會自動附上簡報與合照的連結</b>（沒放簡報 PDF 就附網頁版簡報）。答應提供給對方的檔案與連結在下面的感謝信那一張。專頁：<a id="materialsPageLink" class="underline break-all" target="_blank" rel="noopener"></a></p>
       <p class="text-sm" id="materialsStatus"></p>
       <div class="grid sm:grid-cols-2 gap-4">
         <div class="space-y-2">
@@ -445,10 +445,15 @@
         <h2 class="font-semibold mr-auto">動作五｜感謝信 <span class="muted font-normal">寄給名單上每一個人</span></h2>
         <span class="text-sm px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-900" id="thanksDue" hidden>現在該寄這一封</span>
       </div>
-      <p class="muted">稱呼寫出每一位來賓的姓名與頭銜，附上答應提供的資料，並請他們回三個問題——其他的不提，精簡。<b>名片先讀進名單</b>：稱呼與收件人都照名單。</p>
+      <p class="muted">稱呼寫出每一位來賓的姓名與頭銜，自動帶入當天的簡報、現場合照與參訪時談到的事，附上答應提供的資料，並請他們回三個問題——其他的不提，精簡。<b>名片先讀進名單</b>：稱呼與收件人都照名單。</p>
+      <div class="border rounded-xl p-3 space-y-1" id="autoBox">
+        <h3 class="font-medium">信裡自動帶入 <span class="muted font-normal">照這一場現在的資料，按「AI 草擬感謝信」時帶進去；不必再加到下面</span></h3>
+        <ul class="text-sm space-y-1" id="autoList"></ul>
+      </div>
       <div class="border rounded-xl p-3 space-y-2" id="promisedBox">
         <h3 class="font-medium">答應提供給對方的資料 <span class="muted font-normal">檔案、圖片或連結都可以；信裡會逐項列出，來賓專頁上也有</span></h3>
         <ol id="promisedList" class="items"></ol>
+        <p class="text-sm" id="promisedDup" hidden></p>
         <div class="flex flex-wrap gap-2 items-center">
           <button class="btn btn-soft" id="promisedAddLink" type="button" title="貼一個網址：網頁、雲端資料夾、影片、論文頁面">＋ 連結</button>
           <label class="btn btn-soft cursor-pointer" title="PDF、Word、PowerPoint、Excel、圖片、壓縮檔都可以，一個 4.5 MB 以內；更大的放雲端再貼連結">＋ 上傳檔案或圖片<input type="file" id="promisedFiles" multiple hidden></label>
@@ -457,11 +462,11 @@
       </div>
       <div class="flex flex-wrap gap-2 items-center">
         <div><select id="sender" title="感謝信的署名"><option value="director">中心主任 張俊彥</option><option value="contact">對口老師</option></select></div>
-        <button class="btn" id="thanksBtn" title="草擬感謝信：稱呼寫出每一位來賓的姓名與頭銜，列出答應提供的資料，放進三個回應項目的連結">AI 草擬感謝信</button>
+        <button class="btn" id="thanksBtn" title="草擬感謝信：稱呼寫出每一位來賓的姓名與頭銜，帶入當天的簡報、合照與參訪時談到的事，列出答應提供的資料，放進三個回應項目的連結">AI 草擬感謝信</button>
         <span class="muted" id="thanksInfo"></span>
       </div>
       <input type="text" id="thanksSubject" placeholder="主旨">
-      <textarea id="thanksBody" rows="16" placeholder="感謝信草稿：稱呼（每一位來賓的姓名與頭銜）、一兩句感謝、答應提供的資料（逐項列出）、三個回應項目（含請益語氣的開放建議欄位、可不具名）"></textarea>
+      <textarea id="thanksBody" rows="16" placeholder="感謝信草稿：稱呼（每一位來賓的姓名與頭銜）、一兩句感謝、參訪時談到的事、當天的簡報與合照與答應提供的資料（逐項列出）、三個回應項目（含請益語氣的開放建議欄位、可不具名）"></textarea>
       <p class="muted" id="thanksDraftNote" hidden></p>
       <p class="muted">三個回應項目的措辭固定為請益語氣，且回覆頁支援真匿名；請保留信裡的那一段。</p>
       <div class="flex items-center justify-between">
@@ -2037,7 +2042,7 @@
     if (!r.ok) return flash(r.error, "err");
     for (const [k, v] of dictationPairs(r.dictation?.extracted || extracted)) if ($(k).value !== v && !$(k).matches(":focus")) $(k).value = v; // 伺服器整理過的（拿掉自己打的編號）
     rebase(DICT_FIELDS); queueDraft(); applyDraft();
-    if (state.wrapVisit?.visit_id === id) state.wrapVisit.dictation = r.dictation || state.wrapVisit.dictation;
+    if (state.wrapVisit?.visit_id === id) { state.wrapVisit.dictation = r.dictation || state.wrapVisit.dictation; renderAuto(); }
     $("dictationInfo").textContent = `重點已存（${fmtStamp(r.dictation?.saved_at || new Date().toISOString())}）`;
     if (state.record?.edited && fieldVal("recordText").trim() && !confirm(t("完整紀錄你手改過了。要照現在的重點請 AI 重寫一份嗎？（手改的會被換掉）"))) return flash("重點已存；完整紀錄沒動");
     await writeRecord(id);
@@ -2252,6 +2257,7 @@
     $("pdfInfo").innerHTML = state.materials.deck_pdf ? `<span class="ok">已放上：</span><a class="underline break-all" target="_blank" rel="noopener" href="${esc(mediaUrl(state.materials.deck_pdf))}">${esc(state.materials.deck_pdf.replace(/^materials\/[^/]+\//, ""))}</a> <button type="button" class="muted underline" data-remove-pdf>移除</button>` : `<span class="muted">尚未放上簡報 PDF</span>`;
     $("pdfLink").value = /^https?:\/\//i.test(state.materials.deck_pdf) ? state.materials.deck_pdf : "";
     $("photoList").innerHTML = state.materials.photos.map((p) => `<span class="relative inline-block"><img src="${esc(mediaUrl(p))}" alt="" class="h-20 rounded-lg object-cover"><button type="button" class="absolute -top-2 -right-2 bg-white rounded-full border px-1.5 text-xs" data-remove-photo="${esc(p)}">✕</button></span>`).join("") || `<span class="muted">尚無合照</span>`;
+    markPromisedDuplicates(); renderAuto(); // 合照多了或少了：感謝信會帶幾張、哪幾項跟合照重複，跟著換
   }
   /** 當天資料（PDF、合照）與答應提供的資料各存各的：**只送改了的那一格**，伺服器也只換那一格，兩張卡片不會互相蓋掉。 */
   async function saveMaterials(patch) {
@@ -2286,8 +2292,66 @@
   function renderPromised(links) {
     $("promisedList").innerHTML = (links || []).map(promisedRow).join("");
     numberPromised();
+    markPromisedDuplicates();
     $("promisedInfo").textContent = "";
   }
+  /**
+   * **感謝信自動帶入的三樣**（明確指示：「在後續的回信，要自動帶入，1.當天的簡報，2.拍的照片，3. 參訪提到的事，到感謝信中」）。
+   * 規則在 lib/visit.mjs `thanksItems`／`talkedAbout`（草擬時伺服器照那一份）；這裡讓人在按「AI 草擬」之前看得到會帶什麼、還缺什麼。
+   */
+  const webDeckReady = fetch("/data/deck.json", { method: "HEAD" }).then((r) => r.ok && /json/i.test(r.headers.get("content-type") || "")).catch(() => false);
+  async function renderAuto() {
+    const box = $("autoList");
+    const v = state.wrapVisit;
+    if (!box) return;
+    if (!v) { box.innerHTML = ""; return; }
+    const web = await webDeckReady;
+    if (state.wrapVisit !== v) return; // 等的時候換了一場
+    const m = state.materials || {};
+    const deck = m.deck_pdf ? mediaUrl(m.deck_pdf) : web && !v.deck?.skip ? "/deck" : "";
+    const n = (m.photos || []).length;
+    const d = v.dictation?.extracted || {};
+    const count = ["notes", "questions", "cooperation", "follow_ups"].reduce((sum, k) => sum + (Array.isArray(d[k]) ? d[k].filter((x) => String(x || "").trim()).length : 0), 0);
+    const row = (ok, label, detail) => `<li class="flex gap-2"><span class="${ok ? "ok" : "muted"}" aria-hidden="true">${ok ? "✓" : "–"}</span><span><span class="font-medium">${label}：</span> ${detail}</span></li>`;
+    const link = (href, text) => `<a class="underline break-all" target="_blank" rel="noopener" href="${esc(href)}">${esc(text)}</a>`;
+    box.innerHTML = [
+      row(!!deck, "當天的簡報", deck ? link(deck, m.deck_pdf ? (/^https?:\/\//i.test(m.deck_pdf) ? m.deck_pdf.replace(/^https?:\/\//, "") : "簡報 PDF") : "網頁版簡報") : `<span class="muted">沒有：動作四沒放簡報 PDF，網頁版簡報也還沒建好</span>`),
+      row(n > 0, "現場合照", n ? link(`${(v.page_url || "").replace(/#.*$/, "")}#photos`, `專頁上的相簿（${n} 張）`) : `<span class="muted">還沒有：動作四放上合照就會帶入</span>`),
+      row(count > 0, "參訪時談到的事", count ? `<span>動作三的重點 ${count} 項，AI 寫成一段話</span>` : `<span class="muted">動作三還沒存重點：信裡就不提</span>`),
+    ].join("");
+  }
+  /**
+   * 「答應提供的資料」裡**跟合照同一張的照片**（以前信裡不帶合照，只好一張一張再加進來）：標出來、感謝信不另外列
+   * （合照已經用相簿一個連結帶進去了）。判斷跟 lib/visit.mjs `isPhotoDuplicate` 同一套：檔名主幹一樣的圖片。
+   */
+  const photoStem = (key) => {
+    if (!/^materials\/[\w-]+\/[\w.-]+$/.test(String(key || ""))) return "";
+    const stem = String(key).split("/").pop().replace(/^\d{10,}-/, "").replace(/\.[^.]+$/, "").toLowerCase();
+    return /^(photo|file|image|img|picture|pic|slides)?[-_]?\d{0,3}$/.test(stem) ? "" : stem;
+  };
+  const isDupPhoto = (key) => /\.(jpe?g|png|webp|gif|hei[cf])$/i.test(String(key || "")) && !!photoStem(key) && (state.materials?.photos || []).some((p) => photoStem(p) === photoStem(key));
+  function markPromisedDuplicates() {
+    const dups = promisedRows().filter((li) => li.dataset.key && isDupPhoto(li.dataset.key));
+    for (const li of promisedRows()) {
+      const dup = dups.includes(li);
+      let note = li.querySelector(".p-dup");
+      if (dup && !note) li.querySelector(".p-file")?.insertAdjacentHTML("afterend", `<span class="p-dup muted text-xs sm:col-span-2">跟合照同一張：信裡用相簿連結，不另外列</span>`);
+      if (!dup && note) note.remove();
+    }
+    const p = $("promisedDup");
+    if (!p) return;
+    p.hidden = !dups.length;
+    p.innerHTML = dups.length ? `<span class="muted">有 ${dups.length} 項跟合照是同一張照片：感謝信已經附上相簿連結，這幾項不另外列。</span> <button type="button" class="btn btn-soft" id="promisedDupDrop">拿掉這 ${dups.length} 項</button>` : "";
+  }
+  $("promisedBox").addEventListener("click", async (e) => {
+    if (!e.target.closest("#promisedDupDrop")) return;
+    state.promisedFor = state.promisedFor || $("visitSelect").value;
+    state.promisedVer = (state.promisedVer || 0) + 1;
+    for (const li of promisedRows()) if (li.dataset.key && isDupPhoto(li.dataset.key)) li.remove();
+    numberPromised();
+    markPromisedDuplicates();
+    await savePromised(); // 拿掉的檔案一起刪（合照那一份還在）
+  });
   /** 「www.example.org」這種沒寫 https:// 的，幫他補上（不然存不進去，信裡也點不開）。 */
   const fixUrl = (u) => { const x = String(u || "").trim(); return !x || /^https?:\/\//i.test(x) ? x : /^[\w-]+(\.[\w-]+)+(\/|$)/.test(x) ? `https://${x}` : x; };
   const okUrl = (u) => /^https?:\/\/\S+$/i.test(u);
@@ -2296,7 +2360,10 @@
       .map((li) => {
         const title = li.querySelector(".p-title").value.trim();
         if (li.dataset.key) return { title, url: li.dataset.key, name: li.dataset.name || "" };
-        return { title, url: fixUrl(li.querySelector(".p-url").value) };
+        const url = fixUrl(li.querySelector(".p-url").value);
+        // 網址打在「名稱」那一格、網址那一格空著（iPad 上點「＋ 連結」，游標在名稱那一格）：那就是網址
+        if (!url && okUrl(fixUrl(title))) return { title: "", url: fixUrl(title) };
+        return { title, url };
       })
       .filter((l) => okUrl(l.url) || /^materials\//.test(l.url));
   }
@@ -2321,6 +2388,15 @@
     clearTimeout(savePromised.t);
     savePromised.t = setTimeout(savePromised, 1200);
   });
+  $("promisedList").addEventListener("focusout", (e) => {
+    const title = e.target.closest(".p-title");
+    const li = title?.closest("li");
+    const url = li && !li.dataset.key ? li.querySelector(".p-url") : null;
+    if (!url || url.value.trim() || !okUrl(fixUrl(title.value))) return;
+    url.value = fixUrl(title.value);
+    title.value = "";
+    url.dispatchEvent(new Event("input", { bubbles: true })); // 照一般改動存
+  });
   $("promisedList").addEventListener("click", async (e) => {
     const b = e.target.closest(".del");
     if (!b) return;
@@ -2328,6 +2404,7 @@
     state.promisedVer = (state.promisedVer || 0) + 1;
     b.closest("li").remove();
     numberPromised();
+    markPromisedDuplicates();
     await savePromised(); // 上傳的檔案拿掉就一起刪掉
   });
   $("promisedAddLink").onclick = () => {
@@ -2358,7 +2435,7 @@
         if ($("visitSelect").value === id) {
           state.materials = { ...state.materials, links: r.materials.links };
           const added = r.materials.links.find((l) => l.url === r.key);
-          if (added) { $("promisedList").insertAdjacentHTML("beforeend", promisedRow(added)); numberPromised(); }
+          if (added) { $("promisedList").insertAdjacentHTML("beforeend", promisedRow(added)); numberPromised(); markPromisedDuplicates(); }
         }
         done += 1;
       } catch (e) { failed.push(`${f0.name}：${e.message || e}`); }

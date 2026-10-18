@@ -349,27 +349,49 @@ try {
   await page.fill("#promisedList li:last-child .p-title", "Lab 303 papers");
   await page.fill("#promisedList li:last-child .p-url", "scholar.example/303");
   await page.waitForFunction(() => /已存/.test(document.getElementById("promisedInfo").textContent), null, { timeout: 15000 });
+  // 網址打在「名稱」那一格、網址那一格空著（實際發生過：iPad 上點「＋ 連結」，游標在名稱那一格）：離開那一格就搬到網址那一格，照樣存
+  await page.click("#promisedAddLink");
+  await page.fill("#promisedList li:last-child .p-title", "eco.example.org/app");
+  await page.locator("#promisedList li:last-child .p-title").blur();
+  await page.waitForFunction(() => document.querySelector("#promisedList li:last-child .p-url").value === "https://eco.example.org/app" && /已存/.test(document.getElementById("promisedInfo").textContent), null, { timeout: 15000 });
+  const ecoSaved = (await (await fetch(`${base}/api/visits?id=${VID}`, { headers: { authorization: "Bearer e2e-token" } })).json()).visit.materials.links.some((l) => l.url === "https://eco.example.org/app");
+  check(ecoSaved && !(await page.inputValue("#promisedList li:last-child .p-title")), "a link typed into the name box moves over to the link box and is saved");
   // 中文檔名用 buffer 交給瀏覽器（這台機器上的 Playwright 用路徑選不了中文檔名的檔案；真的瀏覽器選得了）
   await page.setInputFiles("#promisedFiles", { name: "療癒景觀報告.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: Buffer.from("PK\x03\x04 not really a docx") });
   await page.waitForFunction(() => /已放上 1 個/.test(document.getElementById("promisedInfo").textContent), null, { timeout: 20000 });
-  check((await page.locator("#promisedList li").count()) === 2 && /療癒景觀報告\.docx/.test(await page.textContent("#promisedList")), "a promised file is uploaded and listed under its original name");
-  check((await page.textContent("#promisedList li:first-child .no")) === "1." && (await page.textContent("#promisedList li:last-child .no")) === "2.", "…numbered one by one");
+  check((await page.locator("#promisedList li").count()) === 3 && /療癒景觀報告\.docx/.test(await page.textContent("#promisedList")), "a promised file is uploaded and listed under its original name");
+  check((await page.textContent("#promisedList li:first-child .no")) === "1." && (await page.textContent("#promisedList li:last-child .no")) === "3.", "…numbered one by one");
   // 答應提供的照片是 HEIC：對方多半打不開，轉成 JPEG 才放上去（以前只看檔名；Safari 那一條還把 HEIC 原檔照送、被伺服器擋下來）
   await page.setInputFiles("#promisedFiles", { name: "site-visit", mimeType: "application/octet-stream", buffer: await readFile("test/fixtures/card.heic") });
-  await page.waitForFunction(() => /已放上 1 個/.test(document.getElementById("promisedInfo").textContent) && document.querySelectorAll("#promisedList li").length === 3, null, { timeout: 60000 });
+  await page.waitForFunction(() => /已放上 1 個/.test(document.getElementById("promisedInfo").textContent) && document.querySelectorAll("#promisedList li").length === 4, null, { timeout: 60000 });
   check(/site-visit\.jpg/.test(await page.textContent("#promisedList li:last-child")), "a HEIC photo given to the guests is uploaded as a JPEG, even without a .heic name");
   await page.click("#promisedList li:last-child .del");
-  await page.waitForFunction(() => document.querySelectorAll("#promisedList li").length === 2, null, { timeout: 15000 });
+  await page.waitForFunction(() => document.querySelectorAll("#promisedList li").length === 3, null, { timeout: 15000 });
+  // 以前信裡不帶合照，只好把照片一張一張再加進答應提供的資料：合照裡已經有的那一張（檔名一樣）標出來，信裡不另外列
+  // （上面拿掉的是第一張，留下來的是 HEIC 轉的那一張：照伺服器上現在那一張的檔名放一張進去）
+  const keptPhoto = (await (await fetch(`${base}/api/visits?id=${VID}`, { headers: { authorization: "Bearer e2e-token" } })).json()).visit.materials.photos[0];
+  await page.setInputFiles("#promisedFiles", { name: keptPhoto.split("/").pop().replace(/^\d+-/, ""), mimeType: "image/png", buffer: await readFile(pngPath) });
+  await page.waitForFunction(() => /已放上 1 個/.test(document.getElementById("promisedInfo").textContent) && document.querySelectorAll("#promisedList li").length === 4, null, { timeout: 20000 });
+  const dupKey = await page.getAttribute("#promisedList li:last-child", "data-key");
+  check((await page.isVisible("#promisedList li:last-child .p-dup")) && /有 1 項跟合照是同一張照片/.test(await page.textContent("#promisedDup")), `a promised photo that is already among the visit photos is marked: the letter links to the album instead (${dupKey})`);
 
-  // 後續分頁的動作五：感謝信
+  // 後續分頁的動作五：感謝信——自動帶入當天的簡報、現場合照、參訪時談到的事（明確指示）
   await page.click('[data-tab="wrapup"]');
   await page.selectOption("#visitSelect", VID);
+  await page.waitForFunction(() => /專頁上的相簿（1 張）/.test(document.getElementById("autoList").textContent), null, { timeout: 15000 });
+  const auto = await page.textContent("#autoList");
+  check(/網頁版簡報/.test(auto) && /動作三的重點 \d+ 項/.test(auto), `the thank-you card shows what goes into the letter by itself: the slides, the photos, what was talked about (${auto})`);
   await page.click("#thanksBtn");
   await page.waitForFunction(() => document.getElementById("thanksBody").value.includes("what should we be doing better"), null, { timeout: 60000 });
   await page.waitForFunction(() => document.querySelectorAll("#thanksRecipients input").length === 2);
   check(true, "thanks letter drafted with the 請益 wording and 2 recipients");
   const thanks = await page.inputValue("#thanksBody");
   check(thanks.includes("https://scholar.example/303") && new RegExp(`/api/media\\?key=materials/${VID}/\\d+-file\\.docx`).test(thanks), "the letter lists every promised item with a link the guests can open");
+  check(thanks.includes(`/${VID}#photos`) && /\/deck\b/.test(thanks) && /Homework/.test(thanks), "the letter brings in the slides, the photos (one album link) and what was talked about, by itself");
+  check(!thanks.includes(dupKey) && thanks.includes("https://eco.example.org/app"), "…the photo that is already in the album is not listed twice; the link typed into the name box is");
+  await page.click("#promisedDupDrop");
+  await page.waitForFunction(() => document.querySelectorAll("#promisedList li").length === 3 && document.getElementById("promisedDup").hidden, null, { timeout: 15000 });
+  check(true, "one button takes the duplicate photos off the promised list");
   // 「寄出」兩個字看不出寄給誰：按鈕上直接寫人數，旁邊列出名字
   check(/寄出感謝信（2 位）/.test(await page.textContent("#sendBtn")), "the send button says how many people it is about to write to");
   check(/會寄給：/.test(await page.textContent("#thanksWho")), "…and names them");
@@ -1122,6 +1144,12 @@ try {
   check(/療癒景觀報告\s*DOCX/.test(await page.textContent("#linkList")) && (await page.getAttribute("#linkList li:last-child a", "href")).startsWith("/api/media?key=materials%2F"), "…and the promised file, marked with its type");
   check((await page.getAttribute("#photoGrid img", "src")).startsWith("/api/media?key=materials%2F"), "photo comes from the public media endpoint");
   check(await page.isHidden("#deckLink"), "before the visit the web slides are not offered yet — that is what the visit is for");
+  // 感謝信裡的相簿連結（/<visit_id>#photos）：打開就停在現場合照
+  await page.goto(`${base}/${VID}?phase=after#photos`);
+  await page.waitForFunction(() => { const el = document.getElementById("photosRow"); if (!el || el.hidden) return false; const r = el.getBoundingClientRect(); return scrollY > 0 && Math.abs(r.top) < 80; }, null, { timeout: 15000 });
+  check(true, "the album link in the thank-you letter (#photos) lands on the visit photos");
+  await page.goto(`${base}/${VID}#email`);
+  await page.waitForSelector("#emailSec:not([hidden])");
   await page.locator("#lab-303").scrollIntoViewIfNeeded();
   await page.waitForFunction(() => document.querySelector("#lab-303").classList.contains("in"));
   check(await page.isVisible("#lab-303"), "reveal animation runs when a card scrolls into view and leaves it visible");

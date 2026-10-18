@@ -283,7 +283,12 @@
   };
   const want = applySections();
   // 有人在頁面上點到 #email／#respond 連結時（只改 hash 不重載）也要跟著開
-  addEventListener("hashchange", () => { const w = applySections(); if (w === "email" || w === "respond") $(w === "email" ? "emailSec" : "respond").scrollIntoView({ behavior: "smooth" }); });
+  addEventListener("hashchange", () => { const w = applySections(); if (w === "email" || w === "respond") $(w === "email" ? "emailSec" : "respond").scrollIntoView({ behavior: "smooth" }); if (w === "photos") showPhotos(); });
+  // 感謝信裡的相簿連結（/<visit_id>#photos）：直接跳到現場合照。當天資料是讀完參訪資料才畫的，瀏覽器自己跳不到，要自己捲過去
+  function showPhotos() {
+    const at = !$("photosRow").hidden ? $("photosRow") : !$("materialsSec").hidden ? $("materialsSec") : null;
+    if (at) requestAnimationFrame(() => at.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
   if (visit) {
     $("orgLine").textContent = [visit.org && visit.org.name, visit.org && visit.org.name_local].filter(Boolean).join(" · ");
     $("dateLine").textContent = formatDate(visit.date, visit.start_time, visit.end_time);
@@ -359,6 +364,7 @@
       }).join("");
     }
   }
+  if (want === "photos") showPhotos();
 
   // 五間研究室的老師卡片：先排今天的動線，其餘放後面；標題依階段用「將參訪／今天參訪／參訪過」，
   // 沒有參訪代碼的首頁沒有「今天」可言，用中性的「五間研究室」。

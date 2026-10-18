@@ -1,5 +1,5 @@
 import { nowISO, siteUrl } from "../lib/http.mts";
-import { loadPublicData } from "../lib/data.mts";
+import { loadPublicData, webDeckReady } from "../lib/data.mts";
 import { getStore } from "../lib/store.mts";
 import { draftLetter } from "../lib/ai.mts";
 import { backgroundHandler } from "../lib/jobs.mts";
@@ -72,7 +72,9 @@ export default backgroundHandler<Input>("信件", async (input, req) => {
   // 通告裡一定帶著支援人力表的連結（**自動產生**，主辦端不必先去設定按什麼）；
   // 只有通告要，回報與來賓信用不到——不為了它們去產一個連結
   const rotaUrl = kind === "notice" ? `${siteUrl(req)}/rota?key=${await ensureRotaKey()}` : "";
-  const draft = await draftLetter({ kind, visit, labs, i18n, sender, siteUrl: siteUrl(req), rotaUrl });
+  // 感謝信自動帶入當天的簡報：沒有放上簡報 PDF 就給網頁版簡報的連結（建好了才給）
+  const webDeck = kind === "thanks" ? await webDeckReady() : false;
+  const draft = await draftLetter({ kind, visit, labs, i18n, sender, siteUrl: siteUrl(req), rotaUrl, webDeck });
   // AI 草擬要一兩分鐘：寫回去的時候只動 letters 這一格，而且寫進最新的那一份
   await store.updateVisit(visit.visit_id, (v) => {
     v.letters = v.letters || ({} as Visit["letters"]);

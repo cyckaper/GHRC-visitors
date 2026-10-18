@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
 import { weekdayOf } from "../public/lib/rota.mjs";
-import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, salutationLine, salutationPeople, settleSalutation, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, posterFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION, toForumProgramme, labRecipients, labStops, FORUM_TITLES, splitItems, sanitizeDictation, hasDictation, visitRecord, zhNumber, zhDate, promisedItems } from "../lib/visit.mjs";
+import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, salutationLine, salutationPeople, settleSalutation, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, posterFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION, toForumProgramme, labRecipients, labStops, FORUM_TITLES, splitItems, sanitizeDictation, hasDictation, visitRecord, zhNumber, zhDate, promisedItems, thanksItems, talkedAbout, photoStem, isPhotoDuplicate, sameUrl } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -823,6 +823,65 @@ test("答應提供的資料：網址或上傳的檔案；信裡用完整的網�
   const past = { visit_id: "v", date: "2026-01-01", start_time: "10:00", duration_minutes: 60, summary: "舊的", summary_at: "2026-01-02T00:00:00Z", dictation: { extracted: { notes: ["a"] }, saved_at: "2026-01-03T00:00:00Z" } };
   assert.equal(needsSummary(past, [], new Date("2026-02-01")), true);
   assert.equal(needsSummary({ ...past, summary_at: "2026-01-04T00:00:00Z" }, [], new Date("2026-02-01")), false);
+});
+
+test("感謝信自動帶入：當天的簡報、現場合照（一個相簿連結）、再接答應提供的資料；重複的不再列", () => {
+  // 明確指示：「在後續的回信，要自動帶入，1.當天的簡報，2.拍的照片，3. 參訪提到的事，到感謝信中」
+  const site = "https://visit.healsdesign.org";
+  const id = "2026-10-15-western";
+  const base = { visit_id: id, page_url: `${site}/${id}`, language: "en" };
+  // 什麼都沒放：網頁版簡報建好了就給 /deck，還沒建好就不給（不要寄一個打開是「還沒建好」的連結）
+  assert.deepEqual(thanksItems(base, site, { webDeck: true }).map((i) => [i.kind, i.title, i.url]), [["deck", "Slides from the day", `${site}/deck`]]);
+  assert.deepEqual(thanksItems(base, site, { webDeck: false }), []);
+  assert.deepEqual(thanksItems({ ...base, deck: { skip: true } }, site, { webDeck: true }), [], "舊資料標了「這場不用簡報」就不給");
+  const photos = [`materials/${id}/1760500000001-IMG_8466.jpg`, `materials/${id}/1760500000002-IMG_8465.jpg`, `materials/${id}/1760500000003-photo.jpg`];
+  const m = {
+    deck_pdf: "https://visit.healsdesign.org/deck",
+    photos,
+    links: [
+      { title: "", url: "https://www.visit.healsdesign.org/deck/?ui=zh" }, // 又把簡報加了一次
+      { title: "IMG_8466", url: `materials/${id}/1760500000100-IMG_8466.jpeg`, name: "IMG_8466.jpeg" }, // 合照裡已經有這一張
+      { title: "group", url: `materials/${id}/1760500000101-photo.jpg`, name: "合照.jpg" }, // 沒有檔名可比：照列
+      { title: "ENVI-met paper", url: `materials/${id}/1760500000102-IMG_8465.pdf`, name: "IMG_8465.pdf" }, // 檔名一樣但不是照片：照列
+      { title: "Eco app", url: "https://eco.example.org/app" },
+    ],
+  };
+  const items = thanksItems({ ...base, materials: m }, site, { webDeck: true });
+  assert.deepEqual(items.map((i) => i.kind), ["deck", "photos", "file", "file", "link"]);
+  assert.equal(items[0].url, "https://visit.healsdesign.org/deck", "放了簡報 PDF（或貼了連結）就用那一個");
+  assert.deepEqual([items[1].title, items[1].url, items[1].count], ["Photos from the visit (3)", `${site}/${id}#photos`, 3], "合照是專頁上的相簿：一個連結，十張照片不排十行網址");
+  assert.deepEqual(items.slice(2).map((i) => i.title), ["group", "ENVI-met paper", "Eco app"], "同一個網址、合照裡已經有的那一張，不再列一次");
+  assert.equal(items[3].url, `${site}/api/media?key=materials/${id}/1760500000102-IMG_8465.pdf`, "上傳的檔案是站台上點得開的網址");
+  // 上傳的簡報 PDF 也是站台上的網址；中文信用中文的名稱
+  const zh = thanksItems({ ...base, language: "zh", materials: { ...m, deck_pdf: `materials/${id}/1760500000009-slides.pdf` } }, site, { lang: "zh", webDeck: true });
+  assert.deepEqual(zh.slice(0, 2).map((i) => [i.title, i.url]), [["當天的簡報", `${site}/api/media?key=materials/${id}/1760500000009-slides.pdf`], ["現場合照（3 張）", `${site}/${id}#photos`]]);
+  // 專頁的網址還沒存（舊資料）：用站台＋代碼
+  assert.equal(thanksItems({ visit_id: id, materials: { photos } }, site).find((i) => i.kind === "photos").url, `${site}/${id}#photos`);
+
+  // 照片是不是同一張：看檔名主幹（iPhone 的 IMG_8466），沒有檔名可比的不算
+  assert.equal(photoStem(`materials/${id}/1760500000001-IMG_8466.jpg`), "img_8466");
+  for (const generic of ["photo", "photo-2", "image", "file", "12", "img"]) assert.equal(photoStem(`materials/${id}/1760500000001-${generic}.jpg`), "", generic);
+  assert.equal(photoStem("https://example.org/IMG_8466.jpg"), "", "只比站台上的檔案");
+  assert.ok(isPhotoDuplicate({ url: `materials/${id}/1760500000200-img_8466.HEIC` }, photos));
+  assert.ok(!isPhotoDuplicate({ url: `materials/${id}/1760500000200-IMG_9999.jpg` }, photos));
+  // 網址比對：主機不分大小寫與 www、結尾的斜線與介面語言不算；其他查詢參數算（兩支 YouTube 影片只差 v=）
+  assert.equal(sameUrl("https://WWW.Visit.healsdesign.org/deck/?ui=zh"), sameUrl("https://visit.healsdesign.org/deck"));
+  assert.notEqual(sameUrl("https://youtube.com/watch?v=a"), sameUrl("https://youtube.com/watch?v=b"));
+  assert.notEqual(sameUrl(`${site}/${id}#photos`), sameUrl(`${site}/${id}#respond`));
+
+  // 網址打在「名稱」那一格、網址那一格空著（實際發生過）：那就是網址
+  assert.deepEqual(sanitizeMaterials({ links: [{ title: "https://visit.healsdesign.org/deck", url: "" }] }).links, [{ title: "visit.healsdesign.org/deck", url: "https://visit.healsdesign.org/deck" }]);
+});
+
+test("感謝信裡「參訪時談到的事」：主持人一項一項記下的重點；誰來、最想看哪一間不算", () => {
+  assert.equal(talkedAbout({}), null);
+  assert.equal(talkedAbout({ dictation: { extracted: { who_came: "院長與兩位教授", most_wanted_rooms: ["303"] } } }), null, "只有誰來、最想看哪一間：信裡不寫這一段");
+  assert.deepEqual(talkedAbout({ dictation: { extracted: { notes: "1. Homework：思考如何量測接觸不同野生物種\n2. 在生態 app 中加入 ESG", questions: [], cooperation: "想派研究生來做 VR 實驗", follow_ups: ["寄 ENVI-met 論文"] } } }), {
+    notes: ["Homework：思考如何量測接觸不同野生物種", "在生態 app 中加入 ESG"],
+    questions: [],
+    cooperation: ["想派研究生來做 VR 實驗"],
+    follow_ups: ["寄 ENVI-met 論文"],
+  }, "舊資料一句話、自己打的編號，照重點的規則整理");
 });
 
 test("地圖上點旁邊的名稱：網頁上截在 15 個字寬，畫成簡報那一頁的圖時放得下長一點（labelWidth）", async () => {

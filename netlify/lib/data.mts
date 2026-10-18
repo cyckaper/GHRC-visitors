@@ -27,7 +27,7 @@ async function readCandidates(rel: string): Promise<string | null> {
   return null;
 }
 
-export async function loadPublicData(name: "labs" | "slides" | "i18n"): Promise<any> {
+export async function loadPublicData(name: "labs" | "slides" | "i18n" | "deck"): Promise<any> {
   if (cache.has(name)) return cache.get(name);
   const rel = `public/data/${name}.json`;
   let text = await readCandidates(rel);
@@ -40,6 +40,19 @@ export async function loadPublicData(name: "labs" | "slides" | "i18n"): Promise<
   const parsed = JSON.parse(text);
   cache.set(name, parsed);
   return parsed;
+}
+
+/**
+ * 網頁版簡報（/deck）建好了沒：`public/data/deck.json` 有頁才算。感謝信自動帶入「當天的簡報」——
+ * 沒有放上簡報 PDF 時給 /deck 的連結；還沒建好就不給（不要寄一個打開是「還沒建好」的連結）。
+ */
+export async function webDeckReady(): Promise<boolean> {
+  try {
+    const deck = await loadPublicData("deck");
+    return Array.isArray(deck?.slides) && deck.slides.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 /** data/master-text.json：CLI `--dump` 產出的母簡報文字（選用）。 */

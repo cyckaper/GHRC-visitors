@@ -453,7 +453,9 @@ test("signbook: photo stored, OCR entries returned, then saved as responses", as
 test("materials: upload photo and PDF, public media, links", async () => {
   const before = await runJob("letter", { visit_id: visitId, kind: "thanks", sender: "director" });
   assert.equal(before.status, 200, JSON.stringify(before.body));
-  assert.ok(!/PDF|photo/i.test(before.body.draft.body), "the thanks letter does not talk about slides or photos");
+  // 感謝信自動帶入當天的簡報（明確指示）：還沒放簡報 PDF 就是網頁版簡報（repo 裡有 deck.json）；還沒有合照就沒有相簿那一行
+  assert.ok(before.body.draft.body.includes("Slides from the day — https://visit.example.test/deck"), before.body.draft.body);
+  assert.ok(!before.body.draft.body.includes("#photos"), "no photos yet, so no album link");
   assert.ok(before.body.draft.body.includes(`https://visit.example.test/${visitId}#respond`));
 
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
@@ -733,6 +735,9 @@ test("訪後重點一項一項存；AI 寫成完整紀錄（日期、人員、�
 test("thanks letter: recipients = list + onsite, wording is the 請益 question, send without Gmail reports sent:false", async () => {
   const rec = await api("/api/letter", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "recipients" }) });
   assert.deepEqual(rec.body.recipients.map((r) => r.email).sort(), ["jane.doe@uwa.edu.au", "kim.lee@uwa.edu.au", "simon.kilbane@uwa.edu.au", "walkin@example.org"]);
+  // 參訪時談到的事（明確指示：感謝信要自動帶入「參訪提到的事」）：主持人一項一項記下的重點
+  const noted = await api("/api/transcribe", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "save", extracted: { notes: ["Homework：思考如何量測接觸不同野生物種"], questions: ["經費從哪裡來"], cooperation: [], follow_ups: ["在生態 app 中加入 ESG"] } }) });
+  assert.equal(noted.status, 200, JSON.stringify(noted.body));
   const d = await runJob("letter", { visit_id: visitId, kind: "thanks", sender: "contact" });
   assert.equal(d.status, 200, JSON.stringify(d.body));
   assert.ok(d.body.draft.body.includes("From your perspective, what should we be doing better?"));
@@ -745,12 +750,19 @@ test("thanks letter: recipients = list + onsite, wording is the 請益 question,
   const firstLine = d.body.draft.body.split("\n")[0];
   assert.ok(guests.slice(0, 6).every((g) => firstLine.includes(g.name) && (!g.title || firstLine.includes(g.title))), `the salutation names every guest with their title: ${firstLine}`);
   assert.ok(!lead || firstLine.indexOf(lead.name) === Math.min(...guests.slice(0, 6).map((g) => firstLine.indexOf(g.name))), "…the principal guest first");
+  // 自動帶入（明確指示：「1.當天的簡報，2.拍的照片，3. 參訪提到的事」）：當天的簡報（放上的簡報 PDF）、現場合照（專頁上的相簿，一個連結）、
+  // 參訪時談到的事（交流重點或提問挑一兩件、後續事項每一項都寫到）
+  const letter = d.body.draft.body;
+  const mat = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit.materials;
+  assert.ok(letter.includes(`Slides from the day — https://visit.example.test/api/media?key=${mat.deck_pdf}`), "the slides that were put up (the PDF) go in by themselves");
+  assert.ok(letter.includes(`Photos from the visit (${mat.photos.length}) — https://visit.example.test/${visitId}#photos`), "…and the photos, as one link to the album on the visit page");
+  assert.ok(letter.includes("在生態 app 中加入 ESG") && letter.includes("Homework"), "…and what was talked about: the follow-ups and a point or two from the host's notes");
+  assert.ok(letter.indexOf("Homework") < letter.indexOf("Slides from the day") && letter.indexOf("Slides from the day") < letter.indexOf("#respond"), "order: what we talked about, then the links, then the three questions");
   // 答應提供的資料逐項列出：名稱＋點得開的完整網址（上傳的檔案換成站台上的網址）
-  const promised = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit.materials.links;
-  // 精簡（明確指示）：簡報講過的、專頁上有什麼（老師的網頁、論文、聯絡方式、照片、簡報）都不提——
-  // 答應提供的那幾項（名稱是主辦端自己取的）與三個回應項目以外，信裡沒有別的
-  const prose = d.body.draft.body.split("────────")[0].split("\n").filter((line) => !promised.some((l) => line.includes(l.title))).join("\n");
-  assert.ok(!/slides|PDF|photos|contact details|papers|visit page|laborator(y|ies) you saw/i.test(prose), `the letter does not tour the visit page or recap the day: ${prose}`);
+  const promised = mat.links;
+  // 精簡（明確指示）：簡報講過的、老師的網頁、論文、聯絡方式都不介紹——一項一行的連結與三個回應項目以外，只有幾句話
+  const prose = letter.split("────────")[0].split("\n").filter((line) => !/^\d+\. /.test(line) && !/^Here are /.test(line)).join("\n");
+  assert.ok(!/contact details|papers|visit page|laborator(y|ies) you saw/i.test(prose), `the letter does not tour the visit page or recap the slides: ${prose}`);
   assert.ok(promised.length >= 2);
   for (const l of promised) {
     const url = /^https?:/.test(l.url) ? l.url : `https://visit.example.test/api/media?key=${l.url}`;
