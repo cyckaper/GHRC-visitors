@@ -641,9 +641,14 @@ try {
   // 站台說那一格已經清掉了、這一份比它舊，就丟掉——選「＋ 新的一場」是乾淨的
   await page.click('[data-tab="pre"]');
   await page.evaluate(() => localStorage.setItem("ghrc-draft:new", JSON.stringify({ id: "new", saved_at: new Date(Date.now() - 2 * 86400e3).toISOString(), fields: { emailText: "Dear Professor Chang, we have just arrived in Taipei.", form: { org: { name: "Stale Copy University" } } } })));
+  const newDraftRead = page.waitForResponse((r) => r.url().includes("/api/draft?id=new") && r.request().method() === "GET", { timeout: 15000 });
   await page.selectOption("#visitSelect", "");
-  await page.waitForFunction(() => !localStorage.getItem("ghrc-draft:new"), null, { timeout: 15000 });
-  check((await page.inputValue("#emailText")) === "" && (await page.inputValue("#orgName")) === "" && (await page.isHidden("#draftRestore")), "a stale copy left on this device after the draft was finished elsewhere is thrown away, not brought back");
+  await newDraftRead;
+  await page.waitForFunction(() => document.getElementById("preStatus").textContent === "" && !localStorage.getItem("ghrc-draft:new"), null, { timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(500); // 載完之後才把暫存擺回去（applyDraft）：等它跑完再看
+  const slot = await (await fetch(`${base}/api/draft?id=new`, { headers: { authorization: "Bearer e2e-token" } })).json();
+  const seen = await page.evaluate(() => ({ email: document.getElementById("emailText").value.slice(0, 40), org: document.getElementById("orgName").value, offer: !document.getElementById("draftRestore").hidden, local: (localStorage.getItem("ghrc-draft:new") || "").slice(0, 80), select: document.getElementById("visitSelect").value }));
+  check(!seen.email && !seen.org && !seen.offer && !seen.local, `a stale copy left on this device after the draft was finished elsewhere is thrown away, not brought back (${JSON.stringify({ ...seen, server: { draft: !!slot.draft, saved_at: slot.draft?.saved_at, cleared_at: slot.cleared_at } })})`);
 
   // 建錯的那一場：直接刪掉（不必先想「要不要存」）
   await page.click('[data-tab="pre"]');
