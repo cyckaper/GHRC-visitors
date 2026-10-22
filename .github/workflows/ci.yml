@@ -43,7 +43,9 @@ jobs:
         run: npm test
 
       - name: Browser smoke test (Chromium)
+        # 失敗的那一行也寫成註記（::error::）：在 PR 與 commit 的檢查結果上直接看得到是哪一項沒過，不必翻整份記錄
         run: |
+          set -o pipefail
           npm install --no-save playwright@1.56.1
-          npx playwright install --with-deps chromium
-          npm run test:e2e
+          npx playwright install --with-deps chromium 2>&1 | tee pw-install.log || { tail -n 5 pw-install.log | sed 's/^/::error::playwright install: /'; exit 1; }
+          npm run test:e2e 2>&1 | tee e2e.log || { grep -E "FAIL|Error|Timeout" e2e.log | head -n 5 | sed 's/^/::error::/'; tail -n 3 e2e.log | sed 's/^/::error::(last) /'; exit 1; }
