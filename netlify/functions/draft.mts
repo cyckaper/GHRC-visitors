@@ -6,7 +6,7 @@ import { isValidVisitId } from "../../lib/visit.mjs";
  * 暫存還沒交出去的東西（貼進來的 email、打好的逐字稿、手改過的信件、還沒有單位名稱所以存不成一場的表單）。
  * 一關網頁就沒了的東西不該存在——後台其他地方都自己存了，只剩這幾個大方框沒有。
  *
- * GET    /api/draft?id=<visit_id|new>        → {draft: {id, saved_at, fields} | null}
+ * GET    /api/draft?id=<visit_id|new>        → {draft: {id, saved_at, fields} | null, cleared_at?}
  * POST   /api/draft {id, fields}             → 存起來（fields 全空就等於刪掉）
  * DELETE /api/draft?id=<visit_id|new>        → 刪掉整筆
  *
@@ -15,6 +15,11 @@ import { isValidVisitId } from "../../lib/visit.mjs";
  *
  * `fields` 是「畫面上的值」減去「伺服器剛給的值」——也就是真的只有還沒交出去的部分。
  * 所以草擬完、寄出、存入之後前端重新比對一次，這一筆自然就空了（POST 空的 fields 會把它刪掉）。
+ *
+ * **刪掉不是真的刪，是留一個「什麼時候清掉的」記號**（`cleared_at`）：每一台瀏覽器自己也留一份，
+ * 這一台清掉了（存成一場、寄出、按「不要這份草稿」），別台手上那一份不知道，下一次打開又帶回來——
+ * 實際發生過：手機上留著一封早就建成一場的來信，選「＋ 新的一場」又冒出來。前端拿到 `cleared_at`，
+ * 比它舊的那一份就丟掉。
  */
 const MAX_FIELD = 200000;
 const MAX_TOTAL = 1500 * 1024; // 貼一封 20 萬字的長信（UTF-8 約 600 KB）也要塞得下
@@ -34,19 +39,26 @@ const draftId = (given: unknown) => {
   return id === "new" || isValidVisitId(id) ? id : "";
 };
 
-export async function loadDraft(id: string): Promise<Draft | null> {
+/** 暫存那一格現在的樣子：一份還沒交出去的東西，或「什麼時候清掉的」記號。 */
+async function readSlot(id: string): Promise<{ draft: Draft | null; cleared_at?: string }> {
   try {
     const m = await getStore().getMedia(mediaKey(id));
-    if (!m) return null;
-    const d = JSON.parse(new TextDecoder().decode(m.bytes)) as Draft;
-    return d?.fields && typeof d.fields === "object" ? d : null;
+    if (!m) return { draft: null };
+    const d = JSON.parse(new TextDecoder().decode(m.bytes)) as Partial<Draft> & { cleared_at?: string };
+    const real = d?.fields && typeof d.fields === "object" && Object.keys(d.fields).length ? (d as Draft) : null;
+    return { draft: real, ...(!real && d?.cleared_at ? { cleared_at: String(d.cleared_at) } : {}) };
   } catch {
-    return null;
+    return { draft: null };
   }
 }
 
+export async function loadDraft(id: string): Promise<Draft | null> {
+  return (await readSlot(id)).draft;
+}
+
+/** 清掉：留一個記號，別台瀏覽器手上那一份比它舊就不再帶回來（見最上面的說明）。 */
 export async function dropDraft(id: string): Promise<void> {
-  await getStore().deleteMedia(mediaKey(id)).catch(() => {});
+  await getStore().putMedia(mediaKey(id), new TextEncoder().encode(JSON.stringify({ id, cleared_at: nowISO() })), "application/json").catch(() => {});
 }
 
 /** 改網址代碼或日期＝換一個 visit_id：暫存跟著走，不然手上打的東西會跟著舊網址不見。 */
@@ -88,7 +100,7 @@ export default async (req: Request) => {
   if (req.method === "GET") {
     const id = draftId(url.searchParams.get("id"));
     if (!id) return fail(400, "需要 id（visit_id 或 new）");
-    return json({ ok: true, draft: await loadDraft(id) });
+    return json({ ok: true, ...(await readSlot(id)) });
   }
 
   if (req.method === "POST") {
@@ -105,7 +117,7 @@ export default async (req: Request) => {
     const id = draftId(url.searchParams.get("id"));
     if (!id) return fail(400, "需要 id（visit_id 或 new）");
     await dropDraft(id);
-    return json({ ok: true, draft: null });
+    return json({ ok: true, draft: null, cleared_at: nowISO() });
   }
 
   return fail(405, "method not allowed");

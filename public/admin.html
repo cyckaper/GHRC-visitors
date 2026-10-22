@@ -130,6 +130,7 @@
     <select id="visitSelect" class="!w-auto"><option value="">＋ 新的一場</option></select>
     <span class="muted" id="preStatus"></span>
     <span class="muted mr-auto" id="saveInfo"></span>
+    <button class="btn btn-soft" id="draftRestore" title="把那一份沒填完的草稿擺回表單，接著填" hidden>帶回來</button>
     <button class="btn btn-soft" id="draftDiscard" title="把這一份還沒存成一場的草稿清掉，表單回到空白" hidden>不要這份草稿</button>
     <button class="btn btn-soft" id="deleteBtn" title="整場刪掉：來賓專頁跟著消失。已經有人回覆或已寄出感謝信的不給刪；Drive 備份不動" hidden>刪掉這一場</button>
     <div class="w-full flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" id="progress"></div>
@@ -1015,7 +1016,7 @@
     $("code").value = v.visit_id ? v.visit_id.slice(11) : ""; $("code").disabled = !!state.urlFixed;
     $("preStatus").textContent = state.saved ? v.visit_id : "";
     $("deleteBtn").hidden = !state.saved;
-    $("draftDiscard").hidden = state.saved || !state.draft?.fields?.form;
+    $("draftDiscard").hidden = state.saved || !(state.draft?.fields?.form || state.draftOffer);
     if (!state.saved) $("saveInfo").textContent = "";
     $("forumMode").checked = v.format === "forum"; // 要在畫流程之前：空的流程照這個排預設的那一份
     $("forumNote").hidden = true;
@@ -1621,6 +1622,7 @@
   }
   function queueDraft() {
     const id = draftId();
+    if (id === "new" && state.draftOffer) { state.draftOffer = null; $("draftRestore").hidden = true; $("draftDiscard").hidden = true; $("saveInfo").textContent = ""; } // 沒帶回來就開始打新的：舊的那一份讓位
     const draft = { id, saved_at: new Date().toISOString(), fields: collectDraft() };
     state.draft = draft;
     localWrite(id, someDraft(draft) ? draft : null); // 立刻寫這一台：關掉網頁的那一瞬間也不會掉
@@ -1639,13 +1641,47 @@
     clearTimeout(queueDraft.t);
     await pushDraft(state.draft?.id || draftId(), state.draft?.fields || {});
   }
-  /** 這一場的暫存：站台一份、這台瀏覽器一份，取時間新的那一份。 */
+  /**
+   * 這一場的暫存：站台一份、這台瀏覽器一份，取時間新的那一份。
+   * **站台說這一份已經清掉了（`cleared_at`）、這台那一份比它舊，就丟掉**：別台電腦已經存成一場、寄出、
+   * 或按了「不要這份草稿」，這一台不知道，下一次打開又帶回來（實際回報：「我選了新的一場，但舊的資料還在」——
+   * 手機上留著一封早就建成一場的來信）。差兩分鐘以內的不算，兩台的時鐘不會剛好一樣。
+   */
+  const CLOCK_SLACK = 2 * 60 * 1000;
   async function loadDraft(id) {
-    const local = localRead(id);
+    let local = localRead(id);
     const r = await api(`/api/draft?id=${encodeURIComponent(id)}`);
     const remote = r.ok ? r.draft : null;
+    const cleared = r.ok ? Date.parse(r.cleared_at || "") || 0 : 0;
+    if (local && cleared && (Date.parse(local.saved_at) || 0) < cleared - CLOCK_SLACK) { localWrite(id, null); local = null; }
     const pick = !remote || (local && String(local.saved_at) > String(remote.saved_at)) ? local : remote;
     state.draft = someDraft(pick) ? pick : null;
+    state.draftOffer = null;
+    // 「＋ 新的一場」：一小時內的（重新整理、不小心關掉）才直接擺回去；更早的只說一聲、問要不要帶回來——
+    // 選「新的一場」就是要從空白開始，幾天前沒填完的那一份不該自己填進表單
+    if (id === "new" && state.draft && Date.now() - (Date.parse(state.draft.saved_at) || 0) > DRAFT_FRESH) {
+      state.draftOffer = state.draft;
+      state.draft = null;
+    }
+  }
+  const DRAFT_FRESH = 60 * 60 * 1000;
+  /** 那一份沒填完的草稿是什麼：單位名稱，沒有就是貼進來那封信的第一行。 */
+  function draftLabel(d) {
+    const f = d?.fields || {};
+    const org = String(f.form?.org?.name || "").trim();
+    if (org) return org;
+    const line = String(f.emailText || "").split(/\r?\n/).map((x) => x.trim()).find(Boolean) || "";
+    return line.length > 40 ? `${line.slice(0, 40)}…` : line;
+  }
+  /** 沒有自己填進去的那一份：「有一份 10/2 08:15 沒填完的草稿：…」＋「帶回來」「不要這份草稿」。 */
+  function renderDraftOffer() {
+    const d = !state.saved && draftId() === "new" ? state.draftOffer : null;
+    $("draftRestore").hidden = !d;
+    if (!d) return;
+    const label = draftLabel(d);
+    const norm = (x) => String(x || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const made = label && (state.visits || []).find((x) => norm(x.org) === norm(label)); // 同一個單位已經有一場：多半就是它建成的
+    $("saveInfo").innerHTML = `<span>有一份還沒存成一場的草稿</span> <span>（${esc(fmtStamp(d.saved_at))}${label ? ` · ${esc(label)}` : ""}）</span>${made ? `<span>，看起來已經建成這一場：</span><span>${esc(made.visit_id)}</span>` : ""}`;
   }
   /** 把還沒交出去的東西擺回畫面。各分頁載完（伺服器那一份填好）之後才做，不然會被蓋掉。 */
   function applyDraft() {
@@ -1660,7 +1696,8 @@
       if (note) { note.hidden = !g.fields.some((id) => fields[id]); note.textContent = note.hidden ? "" : g.text; }
     }
     if (fields.recordText) $("recordBox").hidden = false; // 改到一半的完整紀錄要看得到才改得動
-    $("draftDiscard").hidden = state.saved || !fields.form;
+    $("draftDiscard").hidden = state.saved || !(fields.form || state.draftOffer);
+    renderDraftOffer();
   }
   async function clearDraft(id) {
     clearTimeout(queueDraft.t);
@@ -1687,9 +1724,19 @@
     if (!queueDraft.pending || !someDraft(state.draft)) return;
     try { navigator.sendBeacon("/api/draft", new Blob([JSON.stringify({ id: state.draft.id, fields: state.draft.fields })], { type: "application/json" })); } catch (e) {}
   });
+  $("draftRestore").onclick = () => {
+    const d = state.draftOffer;
+    if (!d) return;
+    state.draftOffer = null;
+    state.draft = d;
+    applyDraft();
+    queueDraft(); // 接著填的就是這一份：時間換成現在，下一次打開直接擺回來
+    flash("草稿帶回來了");
+  };
   $("draftDiscard").onclick = () => busy($("draftDiscard"), async () => {
     if (!confirm(t("清掉這一份還沒存成一場的草稿？表單會回到空白。"))) return;
     await clearDraft("new");
+    state.draftOffer = null;
     for (const id of DRAFT_FIELDS) { const el = $(id); if (el) el.value = ""; }
     draftBase = {};
     fillForm(emptyVisit());

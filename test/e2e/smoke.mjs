@@ -85,6 +85,19 @@ try {
   await page.waitForFunction(() => /場參訪/.test(document.getElementById("backendInfo").textContent));
   check(await page.isHidden("#token") && await page.isVisible("#authOk"), "still signed in after a reload — nothing to paste again");
 
+  // 「＋ 新的一場」：幾小時前沒填完的那一份不自己填進表單（實際回報：「我選了新的一場，但舊的資料還在」），
+  // 只說一聲、問要不要帶回來；一小時內的（重新整理、不小心關掉）才直接擺回去
+  await page.evaluate(() => localStorage.setItem("ghrc-draft:new", JSON.stringify({ id: "new", saved_at: new Date(Date.now() - 3 * 3600e3).toISOString(), fields: { emailText: "Dear Prof. Chang, an email from this morning", form: { org: { name: "Earlier Draft University" } } } })));
+  await page.reload();
+  await page.waitForFunction(() => /有一份還沒存成一場的草稿/.test(document.getElementById("saveInfo").textContent), null, { timeout: 20000 });
+  check((await page.inputValue("#emailText")) === "" && (await page.inputValue("#orgName")) === "" && /Earlier Draft University/.test(await page.textContent("#saveInfo")), "a draft from hours ago is offered, not filled into the new visit by itself");
+  await page.click("#draftRestore");
+  check((await page.inputValue("#orgName")) === "Earlier Draft University" && /this morning/.test(await page.inputValue("#emailText")), "…and “bring it back” puts it into the form");
+  page.once("dialog", (d) => d.accept());
+  await page.click("#draftDiscard");
+  await page.waitForFunction(() => document.getElementById("orgName").value === "" && document.getElementById("emailText").value === "" && !localStorage.getItem("ghrc-draft:new"), null, { timeout: 15000 });
+  check(await page.isHidden("#draftRestore"), "…and “discard” empties the form for good");
+
   await page.click('[data-tab="pre"]');
   await page.fill("#emailText", `Dear Prof. Chang,\n\nWe would like to visit on ${VISIT_DATE} at 10:00. My colleague Jane Doe <jane@uwa.edu.au> joins me.\n\nSimon Kilbane, University of Western Australia\nsimon@uwa.edu.au`);
   await page.click("#extractBtn");
@@ -623,6 +636,14 @@ try {
   check(true, "…and the address saves itself like every other setting");
   check(!(await page.textContent("#statusList")).includes("e2e-signal"), "…without ever showing the keys themselves");
   check((await page.$("#masterRow")) === null && !/母簡報/.test(await page.textContent("#statusList")), "settings no longer asks for a master deck — the web deck is built from the one on Drive");
+
+  // 別台電腦早就建成一場、這台還留著的那一份「新的一場」草稿（實際回報：手機上留著一封早就建成一場的來信）：
+  // 站台說那一格已經清掉了、這一份比它舊，就丟掉——選「＋ 新的一場」是乾淨的
+  await page.click('[data-tab="pre"]');
+  await page.evaluate(() => localStorage.setItem("ghrc-draft:new", JSON.stringify({ id: "new", saved_at: new Date(Date.now() - 2 * 86400e3).toISOString(), fields: { emailText: "Dear Professor Chang, we have just arrived in Taipei.", form: { org: { name: "Stale Copy University" } } } })));
+  await page.selectOption("#visitSelect", "");
+  await page.waitForFunction(() => !localStorage.getItem("ghrc-draft:new"), null, { timeout: 15000 });
+  check((await page.inputValue("#emailText")) === "" && (await page.inputValue("#orgName")) === "" && (await page.isHidden("#draftRestore")), "a stale copy left on this device after the draft was finished elsewhere is thrown away, not brought back");
 
   // 建錯的那一場：直接刪掉（不必先想「要不要存」）
   await page.click('[data-tab="pre"]');

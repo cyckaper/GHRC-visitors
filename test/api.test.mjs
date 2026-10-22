@@ -1337,6 +1337,11 @@ test("暫存：還沒交出去的東西存得住，改網址跟著走，刪掉�
   // 交出去了（寄了、存了）＝前端重新比對，送上來的就是空的 → 這一筆刪掉
   assert.equal((await save(renamed.visit_id, {})).body.draft, null);
   assert.equal((await get(renamed.visit_id)).body.draft, null);
+  // 刪掉留一個「什麼時候清掉的」記號：別台瀏覽器手上那一份比它舊，就知道不要再帶回來
+  // （實際回報：手機上留著一封早就建成一場的來信，選「＋ 新的一場」又冒出來）
+  const cleared = (await get(renamed.visit_id)).body.cleared_at;
+  assert.ok(cleared && Date.parse(cleared) > Date.now() - 60000, `cleared_at: ${cleared}`);
+  assert.ok((await get(v.visit_id)).body.cleared_at, "改網址搬走的那一份，舊網址底下也留記號");
 
   // 一格最多 20 萬字（貼一封長信的上限，跟 /api/extract 一致），整筆太大就不收——
   // 但要講清楚（前端只在這種情形才吵人，其他失敗有本機那一份頂著）
@@ -1352,6 +1357,13 @@ test("暫存：還沒交出去的東西存得住，改網址跟著走，刪掉�
   assert.equal((await get(renamed.visit_id)).body.draft, null);
   assert.equal((await api(`/api/draft?id=new`, { method: "DELETE", headers: admin })).status, 200);
   assert.equal((await get("new")).body.draft, null);
+  assert.ok((await get("new")).body.cleared_at, "按「不要這份草稿」也留記號");
+  // 之後又打了新的一份：那一份照常存，記號就不在了
+  await save("new", { emailText: "又一封新的信" });
+  const again = (await get("new")).body;
+  assert.equal(again.draft.fields.emailText, "又一封新的信");
+  assert.equal(again.cleared_at, undefined);
+  await api(`/api/draft?id=new`, { method: "DELETE", headers: admin });
 });
 
 test("參訪清單帶得出「以前做過的」那一列要講的話：選了幾頁、有沒有摘要", async () => {
