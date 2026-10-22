@@ -650,6 +650,24 @@ try {
   const seen = await page.evaluate(() => ({ email: document.getElementById("emailText").value.slice(0, 40), org: document.getElementById("orgName").value, offer: !document.getElementById("draftRestore").hidden, local: (localStorage.getItem("ghrc-draft:new") || "").slice(0, 80), select: document.getElementById("visitSelect").value }));
   check(!seen.email && !seen.org && !seen.offer && !seen.local, `a stale copy left on this device after the draft was finished elsewhere is thrown away, not brought back (${JSON.stringify({ ...seen, server: { draft: !!slot.draft, saved_at: slot.draft?.saved_at, cleared_at: slot.cleared_at } })})`);
 
+  // 換一場的時候，上一場的分頁可能還在重新整理（慢一點的機器、網路）：它跑完才擺暫存，那時候手上的還是上一場的——
+  // 上一場貼的信不能因此填進新的這一場（CI 上抓到的）。讀「新的一場」的暫存慢兩秒，讓上一場的重新整理先跑完
+  await page.selectOption("#visitSelect", VID);
+  await page.waitForFunction((v) => document.getElementById("preStatus").textContent === v, VID, { timeout: 30000 });
+  await page.fill("#emailText", "Leftover email that belongs to the previous visit");
+  await page.route(/\/api\/draft\?id=new/, async (route) => { await new Promise((r) => setTimeout(r, 2000)); await route.continue(); });
+  await page.click('[data-tab="wrapup"]');
+  await page.click('[data-tab="pre"]');
+  await page.selectOption("#visitSelect", "");
+  await page.waitForTimeout(3500);
+  await page.unroute(/\/api\/draft\?id=new/);
+  check((await page.inputValue("#emailText")) === "", `switching visits while the previous tab is still reloading does not carry its pasted email into the new visit (${await page.inputValue("#emailText")})`);
+  await page.selectOption("#visitSelect", VID);
+  await page.waitForFunction((v) => document.getElementById("preStatus").textContent === v, VID, { timeout: 30000 });
+  await page.waitForFunction(() => /Leftover email/.test(document.getElementById("emailText").value), null, { timeout: 15000 });
+  check(true, "…and that email is still waiting under the visit it belongs to");
+  await page.fill("#emailText", "");
+
   // 建錯的那一場：直接刪掉（不必先想「要不要存」）
   await page.click('[data-tab="pre"]');
   await page.selectOption("#visitSelect", "");

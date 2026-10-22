@@ -1685,7 +1685,10 @@
   }
   /** 把還沒交出去的東西擺回畫面。各分頁載完（伺服器那一份填好）之後才做，不然會被蓋掉。 */
   function applyDraft() {
-    const fields = state.draft?.fields || {};
+    // 只擺**現在選的這一場**的：換一場的時候，上一場的分頁可能還在重新整理，它跑完才叫這一支——
+    // 那時候手上的 state.draft 還是上一場的，照擺就把上一場貼的信填進新的這一場（CI 上抓到的）
+    const mine = state.draft && (!state.draft.id || state.draft.id === draftId());
+    const fields = mine ? state.draft.fields || {} : {};
     if (fields.form && !state.saved && !$("orgName").value.trim() && !$("guestTable").tBodies[0].rows.length) {
       fillForm({ ...emptyVisit(), ...fields.form, visit_id: "" });
       $("saveInfo").textContent = "上次沒填完的內容留著了";
