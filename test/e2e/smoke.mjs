@@ -880,32 +880,6 @@ try {
     for (const v of [bare, only301, over]) await fetch(`${base}/api/visits?id=${encodeURIComponent(v)}`, { method: "DELETE", headers: auth });
   }
 
-  // ── 通告卡片：換一場之後，不能拿上一場的收件人來畫 ──
-  // （實際發生過：西澳大學那一場的卡片上列著惇陽工程那一場的 301／304／303 與時段）
-  {
-    const auth = { authorization: "Bearer e2e-token", "content-type": "application/json" };
-    const mk = async (code, date, room) => (await (await fetch(`${base}/api/visits`, { method: "POST", headers: auth, body: JSON.stringify({ org: { name: `Notice ${code}` }, date, code, start_time: "10:00", end_time: "11:30", programme: [{ kind: "briefing", start: "10:00", end: "10:20" }, { kind: "tour", start: "10:20", end: "11:00" }, { kind: "discussion", start: "11:00", end: "11:30" }], itinerary: [{ room: "briefing", minutes: 20 }, { room, minutes: 20 }] }) })).json()).visit.visit_id;
-    const a = await mk("noticea", "2099-11-01", "301"); // 301 沒有信箱
-    const b = await mk("noticeb", "2099-11-02", "305"); // 305 有（老師自己 CV 上印的那一個）
-    await page.goto(`${base}/admin.html`);
-    await page.waitForSelector("#authOk:not([hidden])");
-    await page.click('[data-tab="pre"]');
-    // 等到收件人是「那一場自己的」（最多 15 秒），再看最後停在什麼
-    const recipientsFor = async (id, has305) => {
-      await page.selectOption("#visitSelect", id);
-      await page.waitForFunction((v) => document.getElementById("preStatus").textContent === v, id, { timeout: 30000 });
-      await page.waitForFunction((want) => /305/.test(document.getElementById("noticeRecipients").textContent) === want && /沒有信箱|305/.test(document.getElementById("noticeRecipients").textContent), has305, { timeout: 15000 }).catch(() => {});
-      return (await page.textContent("#noticeRecipients")).trim();
-    };
-    const gotA = await recipientsFor(a, false);
-    check(!/305/.test(gotA) && /沒有信箱/.test(gotA), `the notice card lists this visit's labs (got ${gotA || "nothing"})`);
-    const gotB = await recipientsFor(b, true);
-    check(/305/.test(gotB), `switching visits redraws the notice card with that visit's labs (got ${gotB || "nothing"})`);
-    const backA = await recipientsFor(a, false);
-    check(!/305/.test(backA), `…and switching back does not keep the previous visit's labs (got ${backA || "nothing"})`);
-    for (const id of [a, b]) await fetch(`${base}/api/visits?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: auth });
-  }
-
   // ── 座談的場次（明確指示：「有一些單位參訪是跟老師們座談，不用介紹各研究室」）──
   // 勾了流程就換成「總體介紹 → 座談」；支援人力表上那一場五間都只下拉選老師「可參加／無法參加」
   // （明確指示：「各研究室老師都是固定的，就不用再填寫表單了」），不填名字、不問分鐘
@@ -925,6 +899,9 @@ try {
     await page.selectOption("#visitSelect", id);
     await page.waitForFunction((v) => document.getElementById("preStatus").textContent === v, id, { timeout: 30000 });
     check((await page.locator("#programmeView .room").count()) === 5 && !(await page.isChecked("#forumMode")), "a new visit starts as a laboratory tour");
+    // 通告與回報只擬好、複製貼到 LINE 群組（明確指示：卡片上的 email 收件人那一區「這部份不用了」）
+    const noticeButtons = await page.$$eval("#noticeCard button", (els) => els.map((b) => b.id).join());
+    check(noticeButtons === "noticeBtn,copyNotice,rundownBtn,copyRundown" && (await page.locator("#noticeCard input[type=text], #noticeRecipients").count()) === 0, `the notice card only drafts and copies for LINE: no recipients, subject line or send buttons (${noticeButtons})`);
     // 那個勾在第 4 步、擬通告之前（明確指示：「要移到通告前各研究室才知如何參與」）
     check(await page.$eval("#forumMode", (el) => !!el.closest("#noticeCard") && !!(el.compareDocumentPosition(document.getElementById("noticeBtn")) & Node.DOCUMENT_POSITION_FOLLOWING)), "the roundtable tick sits in step 4, before drafting the notice");
     const endBefore = await page.evaluate(() => [...document.querySelectorAll("#programmeTable tbody tr:not([data-rooms-row])")].pop().cells[1].firstChild.value);
@@ -967,9 +944,6 @@ try {
     await page.uncheck("#forumMode");
     await unsaved;
     check(!(await page.isHidden("#forumNote")) && /改回參觀.*重新按「AI 擬通告」/.test(await page.textContent("#forumNote")), "unticking after the notice was drafted says the notice has to be drafted again");
-    // 通告底下的收件人也跟著換回參觀的時段（座談時 305 寫的是整段座談 14:20–16:35）
-    await until(async () => { const t = await page.textContent("#noticeRecipients"); return /305/.test(t) && !/14:20–16:35/.test(t); }, "the notice recipients to show the tour slots again");
-    check(true, "…and the notice recipients switch back to the tour slots");
     const back = await visitOf(id);
     check((await page.locator("#programmeView .room").count()) === 5 && /研究室參訪/.test(await page.textContent("#programmeView")) && back.format === "tour", "unticking it goes back to the laboratory tour");
     check((await page.locator("#programmeView [data-from-lab]").count()) === 1 && back.itinerary.find((s) => s.room === "301")?.minutes === 30, `…with the minutes a lab had already filled in put back on the schedule (${JSON.stringify(back.itinerary.map((s) => [s.room, s.minutes]))})`);

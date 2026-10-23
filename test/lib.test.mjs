@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
 import { weekdayOf } from "../public/lib/rota.mjs";
-import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, salutationLine, salutationPeople, settleSalutation, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, posterFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION, toForumProgramme, labRecipients, labStops, FORUM_TITLES, splitItems, sanitizeDictation, hasDictation, visitRecord, zhNumber, zhDate, promisedItems, thanksItems, talkedAbout, photoStem, isPhotoDuplicate, sameUrl } from "../lib/visit.mjs";
+import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, salutationLine, salutationPeople, settleSalutation, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, posterFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION, toForumProgramme, labStops, FORUM_TITLES, splitItems, sanitizeDictation, hasDictation, visitRecord, zhNumber, zhDate, promisedItems, thanksItems, talkedAbout, photoStem, isPhotoDuplicate, sameUrl } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -492,11 +492,10 @@ test("座談的場次：總體介紹 → 座談、沒有研究室參訪；換成
   assert.equal(conv[1].title_2nd, FORUM_TITLES.title_2nd);
   assert.deepEqual(toForumProgramme(tour.filter((b) => b.kind !== "discussion"), "10:00").map((b) => b.kind), ["briefing", "forum", "photo"], "沒有綜合討論就在總體介紹後面補一段座談");
   assert.deepEqual(toForumProgramme(conv, "10:00"), conv, "已經是座談的再換一次不變");
-  // 支援人力表：五間都列、每一間只問出席的老師；通告五間都寄、時間寫座談那一段；動線上沒有研究室
+  // 支援人力表：五間都列、每一間只問出席的老師；動線上沒有研究室
   const labs = { labs: ["301", "302", "303", "304", "305"].map((room) => ({ room, name_zh: `${room} 室`, lead: { name_zh: `老師${room}` } })) };
   const v = { format: "forum", programme: conv, itinerary: [{ room: "briefing", minutes: 20 }] };
   assert.deepEqual(rotaRooms(v, labs), { rooms: ["301", "302", "303", "304", "305"], planned: true, forum: true });
-  assert.deepEqual(labRecipients(v, labs).map((r) => [r.room, r.start, r.end]), ["301", "302", "303", "304", "305"].map((room) => [room, "10:20", "12:25"]));
   assert.deepEqual(labStops({ ...v, itinerary: [{ room: "briefing", minutes: 20 }, { room: "301", minutes: 20 }] }, labs), [], "座談不參觀研究室：動線上殘留研究室也不算");
   assert.equal(rotaRooms({ itinerary: [{ room: "briefing", minutes: 20 }] }, labs).forum, undefined, "照常參觀的場次不受影響");
 });

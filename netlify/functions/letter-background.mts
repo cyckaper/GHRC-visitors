@@ -3,7 +3,7 @@ import { loadPublicData, webDeckReady } from "../lib/data.mts";
 import { getStore } from "../lib/store.mts";
 import { draftLetter } from "../lib/ai.mts";
 import { backgroundHandler } from "../lib/jobs.mts";
-import { labRecipients, recipientList, sanitizeMaterials, scheduleFingerprint } from "../../lib/visit.mjs";
+import { recipientList, sanitizeMaterials, scheduleFingerprint } from "../../lib/visit.mjs";
 import { ensureRotaKey } from "./settings.mts";
 import { triggerDriveSync } from "../lib/drive.mts";
 import { gmailReady, gmailSend, photoAttachments, type MailAttachment } from "../lib/mail.mts";
@@ -30,8 +30,10 @@ export default backgroundHandler<Input>("信件", async (input, req) => {
   const responses = await store.listResponses(visit.visit_id);
   const KINDS = ["confirmation", "thanks", "notice", "rundown"] as const;
   const kind = (KINDS as readonly string[]).includes(input.kind) ? input.kind : "thanks";
+  const internal = kind === "notice" || kind === "rundown"; // 給中心自己的：只草擬，複製貼到 LINE 群組
 
   if (input.mode === "send") {
+    if (internal) throw new Error("通告與回報是複製貼到 LINE 群組的，不寄 email"); // /api/letter 那一關就擋了，這裡再保險一次
     const recipients = (input.recipients || []).filter((r) => r?.email);
     const subject = String(input.subject || "");
     const text = String(input.body || "");
@@ -64,11 +66,7 @@ export default backgroundHandler<Input>("信件", async (input, req) => {
     // 信寄完才記（寄信不能重來，所以放在 updateVisit 外面）；記的時候只動 letters／status，寫進最新的那一份
     await store.updateVisit(visit.visit_id, (v) => {
       v.letters = v.letters || ({} as Visit["letters"]);
-      if (kind === "notice" || kind === "rundown") {
-        // 內部通告：寄 email 只是備援（多半是複製到 LINE 群組），一樣記下寄給誰、什麼時候寄的
-        const prev = v.letters[kind];
-        v.letters[kind] = { subject, body: text, sender: input.sender || prev?.sender || "director", drafted_at: prev?.drafted_at || nowISO(), sent_to: [...(prev?.sent_to || []), ...sent], sent_at: nowISO() };
-      } else if (kind === "thanks") {
+      if (kind === "thanks") {
         v.letters.thanks = { subject, body: text, sender: input.sender || v.letters.thanks?.sender || "director", drafted_at: v.letters.thanks?.drafted_at || nowISO(), sent_to: [...(v.letters.thanks?.sent_to || []), ...sent], sent_at: nowISO(), ...(attachments.length && withPhotos ? { photos_attached: attachments.length } : {}) };
         if (!failed.length) v.status = "done";
       } else {
@@ -103,13 +101,13 @@ export default backgroundHandler<Input>("信件", async (input, req) => {
   // AI 草擬要一兩分鐘：寫回去的時候只動 letters 這一格，而且寫進最新的那一份
   await store.updateVisit(visit.visit_id, (v) => {
     v.letters = v.letters || ({} as Visit["letters"]);
-    if (kind === "notice" || kind === "rundown") {
+    if (internal) {
       const prev = v.letters[kind];
-      v.letters[kind] = { ...draft, sender, drafted_at: nowISO(), sent_to: prev?.sent_to, sent_at: prev?.sent_at };
+      v.letters[kind] = { ...draft, sender, drafted_at: nowISO(), sent_to: prev?.sent_to, sent_at: prev?.sent_at }; // 以前用 email 寄過的紀錄留著
     } else if (kind === "thanks") v.letters.thanks = { ...draft, sender, drafted_at: nowISO(), sent_to: v.letters.thanks?.sent_to, sent_at: v.letters.thanks?.sent_at };
     else v.letters.confirmation = { ...draft, drafted_at: nowISO() };
     v.updated_at = nowISO();
   });
-  const recipients = kind === "notice" || kind === "rundown" ? labRecipients(visit, labs) : recipientList(visit, responses);
-  return { kind, sender, draft, recipients };
+  // 通告與回報沒有收件人（貼到 LINE 群組）；來賓信回傳寄送清單，後台照著畫勾選
+  return internal ? { kind, sender, draft } : { kind, sender, draft, recipients: recipientList(visit, responses) };
 });

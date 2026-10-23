@@ -2,23 +2,24 @@ import { env, fail, json, nowISO, readJSON, requireAdmin } from "../lib/http.mts
 import { getStore } from "../lib/store.mts";
 import { gmailReady } from "../lib/mail.mts";
 import { pollJob, startBackground } from "../lib/jobs.mts";
-import { labRecipients, recipientList } from "../../lib/visit.mjs";
-import { loadPublicData } from "../lib/data.mts";
+import { recipientList } from "../../lib/visit.mjs";
 
 /**
  * 訪後信／確認信。草擬要 Claude 寫一整封雙語信、寄出要一個一個打 Gmail API，
  * 兩件事都常常超過一般函式的 10 秒（回 504），所以都交給 letter-background。
  *
- * 四種 kind：寄給來賓的 confirmation（訪前確認）與 thanks（訪後感謝）；寄給**中心自己**各研究室的
+ * 四種 kind：寄給來賓的 confirmation（訪前確認）與 thanks（訪後感謝）；給**中心自己**各研究室的
  * notice（行前通告：哪個單位什麼時候來，請各室安排簡報人員）與 rundown（回報：定案的時間、
- * 簡報人員與內容）。內部那兩則預設是**貼到 LINE 群組**用的，寄 email 只是備援。
+ * 簡報人員與內容）。內部那兩則**只草擬**，由後台複製貼到 LINE 群組——以前還能用 email 寄給
+ * 動線上有信箱的老師，明確指示拿掉了（「這部份不用了」），所以那兩種沒有收件人、也不寄。
  *
  * GET  /api/letter?job=<id>                                                          → 進度與結果
  * POST /api/letter {visit_id, kind: confirmation|thanks|notice|rundown, sender}       → 202 {job_id}；草稿存在 visit.letters
- * POST /api/letter {visit_id, action: "recipients", kind}                             → 寄送清單（不花時間，當場回）
- *   來賓那兩種＝名單全員＋現場留信箱；內部那兩種＝這一場動線上的研究室老師（信箱在「設定」）
+ * POST /api/letter {visit_id, action: "recipients", kind}                             → 寄送清單（不花時間，當場回）：名單全員＋現場留信箱
  * POST /api/letter {visit_id, action: "send", subject, body, recipients:[{name,email}]} → 202 {job_id}；逐一寄出（Gmail API），未設定則回 sent:false 與 mailto
  */
+/** 通告與回報不寄 email（還開著舊版後台的分頁按了「寄出」，得到的是這一句）。 */
+const LINE_ONLY = "通告與回報是複製貼到 LINE 群組的，不寄 email";
 export default async (req: Request) => {
   const denied = requireAdmin(req);
   if (denied) return denied;
@@ -35,14 +36,13 @@ export default async (req: Request) => {
   const internal = kind === "notice" || kind === "rundown";
 
   if (body.action === "recipients") {
-    if (internal) {
-      return json({ ok: true, recipients: labRecipients(visit, await loadPublicData("labs")) });
-    }
+    if (internal) return fail(400, LINE_ONLY);
     const responses = await store.listResponses(visit.visit_id);
     return json({ ok: true, recipients: recipientList(visit, responses) });
   }
 
   if (body.action === "send") {
+    if (internal) return fail(400, LINE_ONLY);
     const recipients: { name: string; email: string }[] = Array.isArray(body.recipients) ? body.recipients.filter((r: any) => r?.email) : [];
     const subject = String(body.subject || "").trim();
     const text = String(body.body || "").trim();

@@ -190,7 +190,7 @@
     </div>
 
     <div class="card space-y-3" id="noticeCard">
-      <h2 class="font-semibold"><span class="num">4</span>通告研究室 <span class="muted font-normal">多半是貼到 LINE 群組</span></h2>
+      <h2 class="font-semibold"><span class="num">4</span>通告研究室 <span class="muted font-normal">貼到 LINE 群組</span></h2>
       <p class="muted">查完背景就先告訴各研究室哪個單位什麼時候來，<b>請各室填接待人員與共需幾分鐘</b>——通告最後附支援人力表的連結，老師點進去填。<b>各室填的分鐘會自動排進下面的今日流程</b>，也會出現在來賓專頁；定案之後再回報一次。<b>座談的場次</b>（勾下面的「這場是座談」）只問老師能否出席。<br>這幾則是寫給中心同事看的，所以一律中文、條列、不署名，貼得進 LINE。</p>
       <!-- 座談的場次（明確指示：有些單位是來跟老師們座談，不用介紹各研究室）。**放在擬通告之前**（明確指示：「要移到通告前各研究室才知如何參與」）：
            通告怎麼寫跟著它走——座談只問老師能否出席。勾了流程就換成「總體介紹 → 座談」，動線上只剩總體介紹；
@@ -204,17 +204,13 @@
           <button class="btn" id="noticeBtn" title="依這一場的流程擬一則通告：哪個單位什麼時候來、當天動線，最後附支援人力表的連結">AI 擬通告</button>
           <span class="muted" id="noticeInfo"></span>
         </div>
-        <input type="text" id="noticeSubject" placeholder="主旨（寄 email 才用得到）">
+        <!-- 通告與回報只有「複製（貼到 LINE）」：以前還能用 email 寄給動線上有信箱的老師（只有 305 有），
+             卡片上列著收件人、主旨與「寄出」——明確指示拿掉了（「這部份不用了」），中心本來就是在 LINE 群組通知 -->
         <textarea id="noticeBody" rows="12" placeholder="通告內容會出現在這裡，可以直接改"></textarea>
         <p class="muted" id="noticeDraftNote" hidden></p>
         <div class="flex flex-wrap gap-2 items-center">
           <button class="btn" id="copyNotice" title="複製整則通告，貼到 LINE 群組">複製（貼到 LINE）</button>
-          <button class="btn btn-soft" id="noticeSendBtn" title="用中心的 Gmail 寄給下面勾選的老師。沒設定 Gmail 時會給你 mailto 自己寄">寄出通告</button>
-          <button type="button" class="btn btn-soft" id="noticeMailto" hidden title="把內文複製起來，再開你自己的信件程式（收件人與主旨會帶過去，內文貼上就好）">用自己的信箱寄</button>
-          <span id="noticeSendInfo"></span>
         </div>
-        <div id="noticeRecipients" class="space-y-1"></div>
-        <p class="muted" id="noticeWho"></p>
       </div>
 
       <div class="space-y-2">
@@ -223,14 +219,10 @@
           <button class="btn" id="rundownBtn" title="把定案的動線與簡報人員整理成一則訊息，回報給各研究室">AI 擬回報</button>
           <span class="muted" id="rundownInfo"></span>
         </div>
-        <input type="text" id="rundownSubject" placeholder="主旨（寄 email 才用得到）">
         <textarea id="rundownBody" rows="10" placeholder="回報內容會出現在這裡"></textarea>
         <p class="muted" id="rundownDraftNote" hidden></p>
         <div class="flex flex-wrap gap-2 items-center">
           <button class="btn" id="copyRundown" title="複製整則回報，貼到 LINE 群組">複製（貼到 LINE）</button>
-          <button class="btn btn-soft" id="rundownSendBtn" title="用中心的 Gmail 寄給上面勾選的老師">寄出回報</button>
-          <button type="button" class="btn btn-soft" id="rundownMailto" hidden title="把內文複製起來，再開你自己的信件程式（收件人與主旨會帶過去，內文貼上就好）">用自己的信箱寄</button>
-          <span id="rundownSendInfo"></span>
         </div>
       </div>
     </div>
@@ -1524,8 +1516,6 @@
     if (!v.date) { showDateMissing(); return queueDraft(); } // 讀信讀不到日期：不要拿今天建一場，等人填
     if (saveVisit.running) { scheduleSave.t = setTimeout(saveVisit, AUTOSAVE_DELAY); return; } // 上一次還沒回來，等一下再存
     saveVisit.running = true;
-    // 存之前的流程與座談與否：存完對不上就重讀通告的收件人（各室的時段、座談的五間都跟著這兩樣）
-    const was = JSON.stringify([state.visit?.format, state.visit?.programme]);
     try {
       const r = await api("/api/visits", { method: "POST", body: v });
       if (!r.ok) { $("saveInfo").textContent = ""; return flash(`存不起來：${r.error}`, "err"); }
@@ -1537,7 +1527,6 @@
       const focused = document.activeElement;
       fillForm(r.visit);
       if (focused && focused.id) $(focused.id)?.focus?.(); // 重畫表單不要把游標從手上搶走
-      if (JSON.stringify([r.visit.format, r.visit.programme]) !== was) loadLabRecipients(); // 勾了座談、改了時間：收件人那幾行的時段跟著換
       if (first || r.renamed_from) await migrateDraft(first ? "new" : r.renamed_from, r.visit.visit_id);
       if (first) flash(`建好這一場了：${r.visit.visit_id}`);
       else if (r.renamed_from) flash(`網址改成 ${r.visit.visit_id}`);
@@ -1569,14 +1558,14 @@
    * 信寄出去、口述存入回饋之後重新比對一次，這一筆就自然空了，不必到處記得清。
    * 存兩份：這台瀏覽器（立刻，關掉網頁也還在）＋站台 /api/draft（換台機器打開接得回來）。
    */
-  const LETTER_FIELDS = ["confirmSubject", "confirmBody", "thanksSubject", "thanksBody", "noticeSubject", "noticeBody", "rundownSubject", "rundownBody"];
+  const LETTER_FIELDS = ["confirmSubject", "confirmBody", "thanksSubject", "thanksBody", "noticeBody", "rundownBody"];
   const DICT_FIELDS = ["transcript", "dWho", "dRooms", "dNotes", "dQuestions", "dCoop", "dFollow"];
   const DRAFT_GROUPS = [
     { note: "emailDraftNote", fields: ["emailText"], text: "上次貼進來、還沒抽取的內容留著。不要的話整段刪掉就好。" },
     { note: "confirmDraftNote", fields: ["confirmSubject", "confirmBody"], text: "手改過、還沒寄出的確認信帶回來了。按「AI 草擬」會換成新的一份。" },
     { note: "thanksDraftNote", fields: ["thanksSubject", "thanksBody"], text: "手改過、還沒寄出的感謝信帶回來了。按「AI 草擬」會換成新的一份。" },
-    { note: "noticeDraftNote", fields: ["noticeSubject", "noticeBody"], text: "手改過、還沒發出的通告帶回來了。按「AI 擬通告」會換成新的一份。" },
-    { note: "rundownDraftNote", fields: ["rundownSubject", "rundownBody"], text: "手改過、還沒發出的回報帶回來了。按「AI 擬回報」會換成新的一份。" },
+    { note: "noticeDraftNote", fields: ["noticeBody"], text: "手改過、還沒發出的通告帶回來了。按「AI 擬通告」會換成新的一份。" },
+    { note: "rundownDraftNote", fields: ["rundownBody"], text: "手改過、還沒發出的回報帶回來了。按「AI 擬回報」會換成新的一份。" },
     { note: "dictationDraftNote", fields: DICT_FIELDS, text: "上次打的重點留著；按「存入」才算收進這一場。" },
     { note: "recordDraftNote", fields: ["recordText"], text: "上次改到一半的完整紀錄帶回來了（還沒存到站台，等一下會自己存）。" },
   ];
@@ -2606,14 +2595,8 @@
     const before = (v.visit.date || "") >= today;
     $("confirmDue").hidden = !(before && !c?.sent_at);
     $("thanksDue").hidden = !(!before && !t?.sent_at);
-    // 研究室通告與回報（寫給中心自己的，多半是貼 LINE）
-    for (const kind of ["notice", "rundown"]) {
-      const l = v.visit.letters?.[kind];
-      $(`${kind}Subject`).value = l?.subject || "";
-      $(`${kind}Body`).value = l?.body || "";
-      $(`${kind}SendInfo`).innerHTML = l?.sent_at ? `<span class="ok">已於 ${esc(l.sent_at.slice(0, 16).replace("T", " "))} 寄給 ${l.sent_to?.length || 0} 人</span>` : "";
-    }
-    await loadLabRecipients();
+    // 研究室通告與回報（寫給中心自己的，複製貼到 LINE 群組）
+    for (const kind of ["notice", "rundown"]) $(`${kind}Body`).value = v.visit.letters?.[kind]?.body || "";
     rebase(LETTER_FIELDS); // 伺服器上這一版才是基準；手改過還沒寄的那一版由 applyDraft 擺回來
   }
   /**
@@ -2631,49 +2614,6 @@
     const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
     if (r.ok) syncLetters(r.visit);
   }
-  /**
-   * 通告的收件人＝**這一場動線上的那幾間**的老師（不是五間全寄）。信箱只有 labs.json 上那個公開的
-   * （設定分頁的「研究室老師的信箱」明確指示拿掉了——通告本來就是貼 LINE 群組）；沒有信箱的照樣列出來、
-   * 標明「沒有信箱」——少寄一個人比看不出來少寄好。
-   */
-  async function loadLabRecipients() {
-    const id = $("visitSelect").value;
-    const box = $("noticeRecipients");
-    if (!box) return;
-    if (!id) { box.innerHTML = `<p class="muted">請先在上面選一場參訪。</p>`; state.labRecipients = []; return; }
-    const r = await api("/api/letter", { method: "POST", body: { visit_id: id, action: "recipients", kind: "notice" } });
-    // 等的時候換了一場：這一份是上一場的，不要畫上去（實際發生過：西澳大學那一場的通告卡片上
-    // 列著惇陽工程那一場的 301／304／303 與時段）
-    if ($("visitSelect").value !== id) return;
-    state.labRecipients = r.ok ? r.recipients : [];
-    renderLabRecipients();
-  }
-  function renderLabRecipients() {
-    const list = state.labRecipients || [];
-    const box = $("noticeRecipients");
-    if (!box) return;
-    const withEmail = list.filter((r) => r.email);
-    const without = list.filter((r) => !r.email);
-    box.innerHTML = !list.length
-      ? `<p class="muted">行程上還沒排研究室——通告複製到 LINE 群組就好，五間都會看到。</p>`
-      : [
-          ...list.map((r, i) => (r.email ? `<label class="flex gap-2 items-center"><input type="checkbox" checked data-i="${i}"><span>${esc(r.name)} <span class="muted">${esc(r.room)} · ${esc(r.email)} · ${esc(r.start)}–${esc(r.end)}</span></span></label>` : "")).filter(Boolean),
-          // 沒信箱的合成一句：同一句講五遍只是雜訊，重點是「這幾間要自己貼 LINE」
-          without.length ? `<p class="muted">${!withEmail.length ? "這幾間都" : `${esc(without.map((r) => r.room).join("、"))} `}沒有信箱——把上面那一則貼到 LINE 群組就好。</p>` : "",
-        ].filter(Boolean).join("");
-    updateLabSendCounts();
-  }
-  function updateLabSendCounts() {
-    for (const kind of ["notice", "rundown"]) {
-      const picked = checkedLabRecipients();
-      const btn = $(`${kind}SendBtn`);
-      if (btn) btn.disabled = !picked.length;
-    }
-    const picked = checkedLabRecipients();
-    const anyEmail = (state.labRecipients || []).some((r) => r.email);
-    $("noticeWho").textContent = picked.length ? `${t("會寄給：")}${picked.map((r) => r.name).join("、")}` : anyEmail ? t("沒有勾到任何有信箱的老師——複製到 LINE 群組就好") : "";
-  }
-  const checkedLabRecipients = () => [...document.querySelectorAll('#noticeRecipients input[type="checkbox"]:checked')].map((i) => state.labRecipients[Number(i.dataset.i)]).filter(Boolean);
   /** 兩封信各自一份收件人清單（確認信在「訪前」、感謝信在「後續」）。 */
   const recipientBoxes = () => [$("confirmRecipients"), $("thanksRecipients")].filter(Boolean);
   /**
@@ -2760,40 +2700,21 @@
   $("sendBtn").onclick = () => sendLetter("thanks");
   $("confirmSendBtn").onclick = () => sendLetter("confirmation");
 
-  // ── 研究室通告與回報（寫給中心自己的，多半是貼 LINE，寄 email 只是備援）──
+  // ── 研究室通告與回報（寫給中心自己的：AI 擬好、複製貼到 LINE 群組。以前還能寄 email，明確指示拿掉了）──
   const draftInternal = (kind) => busy($(`${kind}Btn`), async () => {
     await flushSave(); // 剛勾的「這場是座談」要先存到，擬出來才是座談的寫法
     const id = $("visitSelect").value;
     if (!id) return flash("請先選一場參訪", "err");
     const r = await runJob("/api/letter", { visit_id: id, kind }, noteInto(`${kind}Info`), "AI 擬稿中……大約一分鐘。");
     if (!r) return;
-    $(`${kind}Subject`).value = r.draft.subject; $(`${kind}Body`).value = r.draft.body;
-    if (r.recipients) state.labRecipients = r.recipients;
+    $(`${kind}Body`).value = r.draft.body;
     if (kind === "notice") $("forumNote").hidden = true; // 重擬過了，「要重擬」那一句收起來
-    renderLabRecipients();
     rebase(LETTER_FIELDS); queueDraft(); applyDraft(); refreshLetters(id);
   });
   $("noticeBtn").onclick = () => draftInternal("notice");
   $("rundownBtn").onclick = () => draftInternal("rundown");
   $("copyNotice").onclick = () => copy($("noticeBody").value);
   $("copyRundown").onclick = () => copy($("rundownBody").value);
-  $("noticeRecipients").addEventListener("change", updateLabSendCounts);
-  /** 寄出通告／回報：跟兩封來賓信同一支端點，只差 kind 與收件人來源。 */
-  const sendInternal = (kind) => busy($(`${kind}SendBtn`), async () => {
-    const recipients = checkedLabRecipients();
-    if (!recipients.length) return flash("沒有勾選收件人（也可以直接複製貼到 LINE）", "err");
-    if (!$(`${kind}Subject`).value.trim() || !$(`${kind}Body`).value.trim()) return flash("內容還是空的，先按上面那顆 AI", "err");
-    const label = kind === "notice" ? "通告" : "回報";
-    if (!confirm(t(`把${label}寄給 ${recipients.length} 位老師？`))) return;
-    const note = (m) => { $(`${kind}SendInfo`).textContent = m; };
-    const r = await runJob("/api/letter", { visit_id: $("visitSelect").value, action: "send", kind, subject: $(`${kind}Subject`).value, body: $(`${kind}Body`).value, recipients }, note, `寄送中……${recipients.length} 位。`);
-    if (!r) return;
-    if (r.sent) { $(`${kind}SendInfo`).innerHTML = `<span class="ok">已寄給 ${r.sent_to.length} 人</span>`; $(`${kind}Mailto`).hidden = true; flash(`${label}已寄出`); rebase(LETTER_FIELDS); queueDraft(); applyDraft(); loadVisits(); refreshLetters($("visitSelect").value); }
-    else if (r.reason === "gmail_not_configured") { $(`${kind}SendInfo`).innerHTML = `<span class="err">尚未寄出：Netlify 沒有設定 Gmail。用右邊那顆自己寄，或直接複製貼到 LINE 群組。</span>`; const m = $(`${kind}Mailto`); m.dataset.mailto = r.mailto; m.hidden = false; m.onclick = () => openMailto(m, $(`${kind}Body`).value, $(`${kind}SendInfo`)); }
-    else { $(`${kind}SendInfo`).innerHTML = `<span class="err">一封都沒寄成功：${esc((r.failed || []).map((f) => `${f.email}（${f.error}）`).join("；")) || "未知原因"}</span>`; flash("寄送失敗", "err"); }
-  });
-  $("noticeSendBtn").onclick = () => sendInternal("notice");
-  $("rundownSendBtn").onclick = () => sendInternal("rundown");
 
   // ── 資料 ──
 
@@ -2827,7 +2748,7 @@
    * **系統答應要自己做、但少了某個外部服務就不會做的事，要在答應的那一句旁邊講出來。**
    * 目前只有一件：結束時間一到的後續提醒信要 Gmail。沒接的話那封信不會寄，而畫面上
    * 「不必記得」那一句仍然寫著——等於答應了一件不會發生的事（「留 email」那個洞就是這樣來的）。
-   * 寄信與通告按下去當場就會說沒接 Gmail，所以不必再多一句。
+   * 寄信按下去當場就會說沒接 Gmail，所以不必再多一句。
    */
   /**
    * Google（Drive 備份、參訪名單、寄信共用那一組授權）連上了沒、哪個帳號、現在能不能用。
@@ -2863,7 +2784,7 @@
     const el = $("reminderOff");
     if (el) el.hidden = gmail;
     // 沒接 Gmail 時「寄出」按下去只會說沒接，真正會用的是「複製信件」——那就讓複製當主鈕。
-    // （通告與回報本來就是複製優先：那兩則是貼到 LINE 群組的。）
+    // （通告與回報只有複製：那兩則是貼到 LINE 群組的。）
     for (const [send, copyBtn] of [["confirmSendBtn", "copyConfirm"], ["sendBtn", "copyThanks"]]) {
       $(send)?.classList.toggle("btn-soft", !gmail);
       $(copyBtn)?.classList.toggle("btn-soft", gmail);

@@ -329,21 +329,25 @@ test("confirmation letter draft is stored on the visit", async () => {
   assert.ok(v.body.visit.letters.confirmation.subject);
 });
 
-test("行前通告：收件人是這一場動線上的研究室，內容照動線寫；簡報人員回填後回報那一則帶著走", async () => {
+test("行前通告：內容照動線寫、只複製貼到 LINE（不寄 email）；簡報人員回填後回報那一則帶著走", async () => {
   const put = (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
   const before = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit;
-
-  // 收件人＝動線上那幾間的老師（不是五間全寄）
-  const rec = await api("/api/letter", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "recipients", kind: "notice" }) });
-  assert.equal(rec.status, 200, JSON.stringify(rec.body));
-  const rooms = rec.body.recipients.map((r) => r.room);
   const onRoute = before.itinerary.filter((s) => s.room !== "briefing" && s.minutes > 0).map((s) => s.room);
-  assert.deepEqual(rooms, onRoute, "只寄給這一場會走到的那幾間");
-  assert.ok(rec.body.recipients.every((r) => r.start && r.end), "每一間都帶自己的時段，通告才寫得出來");
+
+  // 通告與回報沒有收件人、也不寄 email（明確指示：卡片上的 email 收件人那一區「這部份不用了」）——
+  // 還開著舊版後台的分頁按了「寄出」，得到的是一句話，不會真的寄出去
+  for (const kind of ["notice", "rundown"]) {
+    const rec = await api("/api/letter", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "recipients", kind }) });
+    assert.equal(rec.status, 400, JSON.stringify(rec.body));
+    assert.match(rec.body.error, /LINE/);
+    const send = await api("/api/letter", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: visitId, action: "send", kind, subject: "通告", body: "各位老師好：", recipients: [{ name: "鄭佳昆", email: "chiakuen@ntu.edu.tw" }] }) });
+    assert.equal(send.status, 400, JSON.stringify(send.body));
+  }
 
   // 通告：中文、條列、貼得進 LINE；動線每一間都在
   const notice = await runJob("letter", { visit_id: visitId, kind: "notice", sender: "director" });
   assert.equal(notice.status, 200, JSON.stringify(notice.body));
+  assert.equal(notice.body.recipients, undefined, "草擬也不回收件人：後台沒有要勾的");
   const body = notice.body.draft.body;
   assert.ok(body.startsWith("各位老師好："), "開頭固定這一句");
   // 結尾就是「一句話＋支援人力表的連結」（明確指示，字照給的寫）——後面沒有接龍、回覆期限、署名
@@ -2111,9 +2115,7 @@ test("座談的場次：存檔時換成總體介紹 → 座談；支援人力表
   const resaved = (await put({ ...after, attendance: { 301: "yes" } })).body.visit;
   assert.deepEqual(resaved.attendance, { 302: "no", 303: "yes" });
 
-  // 通告：五間都寄；最後一段問的是老師能否出席；沒有研究室參訪那一句
-  const rec = await api("/api/letter", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: v.visit_id, action: "recipients", kind: "notice" }) });
-  assert.deepEqual(rec.body.recipients.map((r) => r.room), rooms);
+  // 通告：最後一段問的是老師能否出席；沒有研究室參訪那一句
   const notice = (await runJob("letter", { visit_id: v.visit_id, kind: "notice" })).body.draft.body;
   assert.match(notice, new RegExp(`\\n請各研究室回覆，老師能否出席座談\\nhttps://visit\\.example\\.test/rota\\?key=[a-z0-9]{24}#${v.visit_id}$`));
   assert.ok(notice.includes("與中心老師座談") && !/研究室參訪|尚未分配到各室/.test(notice), notice);
