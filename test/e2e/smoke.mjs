@@ -1089,6 +1089,13 @@ try {
   check((await page.textContent("#labsTitle")).includes("will visit") && (await page.isHidden("#respond")) && (await page.isVisible("#emailSec")), "before the visit: future tense, no thank-you form, but the box offering the slides and papers is already there");
   check((await page.isHidden("#emailEmail")) && /^We already have your email, so after the visit we will send you the slides, the papers of the laboratories you found most interesting, and the contact details of their leads\.$/.test(await page.textContent("#emailBody")), `…without asking again for an email we already have; what it offers to send is worded as before (${await page.textContent("#emailBody")})`);
   check((await page.textContent("#emailTitle")).includes("afterwards"), "…and it says the slides come after the visit, not “today's”");
+  // 行前資料就給中心簡介折頁（明確指示：「行前資料就給這個」），就在這一格裡
+  {
+    const href = await page.getAttribute("#brochureLink", "href");
+    const pdf = await fetch(`${base}${href}`);
+    const head = Buffer.from(await pdf.arrayBuffer()).subarray(0, 5).toString("latin1");
+    check((await page.isVisible("#brochureLink")) && /^Centre brochure \(PDF/.test(await page.textContent("#brochureLink")) && pdf.ok && /application\/pdf/.test(pdf.headers.get("content-type") || "") && head === "%PDF-", `…and gives the centre's brochure right there before the visit (${href} → ${pdf.status} ${pdf.headers.get("content-type")})`);
+  }
   // 要寄什麼、安排什麼照樣問：名字對得到名單的，伺服器照名單直接填入他的 email
   await page.click("#emailSend");
   check(await page.evaluate(() => document.activeElement?.id === "emailNote"), "sending with nothing written stays on “anything you would like us to send”, instead of sending an empty row");

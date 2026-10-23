@@ -131,6 +131,8 @@
   <section class="card space-y-3 reveal" id="emailSec">
     <h2 class="text-lg font-semibold"><span id="emailTitle"></span></h2>
     <p class="text-stone-600 text-sm" id="emailBody"></p>
+    <!-- 行前資料（明確指示：「行前資料就給這個」）：中心簡介折頁（A4 三摺、中英日韓四語），這一格在的時候就給。換一版就換那個檔 -->
+    <p><a class="btn btn-soft" id="brochureLink" href="/assets/brochure/GHRC-brochure.pdf" target="_blank" rel="noopener"><span aria-hidden="true">▤</span> <span id="brochureLabel"></span></a></p>
     <form id="emailForm" class="space-y-2">
       <input type="text" name="name" id="emailName" autocomplete="name">
       <input type="email" name="email" id="emailEmail" autocomplete="email" required>
@@ -428,6 +430,7 @@
   // 留信箱（現場）
   // 訪前的措辭不一樣：那時候還沒有「今天的簡報」，要說「參訪之後會寄給您」
   $("emailTitle").textContent = bi(phase === "before" ? "leave_email_title_before" : "leave_email_title");
+  $("brochureLabel").textContent = bi("brochure");
   $("emailName").placeholder = T("name_optional");
   $("emailEmail").placeholder = T("email");
   $("emailNote").placeholder = T("note_optional");
