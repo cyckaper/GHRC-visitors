@@ -4,7 +4,7 @@ import { guestEmailFor, isValidVisitId, sanitizeResponse } from "../../lib/visit
 import { triggerDriveSync } from "../lib/drive.mts";
 
 /**
- * POST /api/respond  來賓端回覆（訪後信三個項目、現場留信箱）。公開端點。
+ * POST /api/respond  來賓端回覆（訪後信三個項目；source onsite 是以前專頁上「留信箱」那一格送的，那一格拿掉了，還開著舊版專頁的分頁照收）。公開端點。
  *
  * 真匿名：anonymous=true 時，姓名與 email 在 sanitizeResponse 就被清空，
  * 後端不記錄 IP、不記錄 user agent、時間只留日期，也不得從別的欄位補回身分。

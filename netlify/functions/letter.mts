@@ -15,7 +15,7 @@ import { recipientList } from "../../lib/visit.mjs";
  *
  * GET  /api/letter?job=<id>                                                          → 進度與結果
  * POST /api/letter {visit_id, kind: confirmation|thanks|notice|rundown, sender}       → 202 {job_id}；草稿存在 visit.letters
- * POST /api/letter {visit_id, action: "recipients", kind}                             → 寄送清單（不花時間，當場回）：名單全員＋現場留信箱
+ * POST /api/letter {visit_id, action: "recipients", kind}                             → 寄送清單（不花時間，當場回）：名單全員＋在專頁回覆時留了 email 的人
  * POST /api/letter {visit_id, action: "send", subject, body, recipients:[{name,email}]} → 202 {job_id}；逐一寄出（Gmail API），未設定則回 sent:false 與 mailto
  */
 /** 通告與回報不寄 email（還開著舊版後台的分頁按了「寄出」，得到的是這一句）。 */

@@ -247,7 +247,7 @@
           <div><div id="qr"></div><p class="muted mt-1 max-w-[128px] leading-snug">同一個網址的 QR</p></div>
           <div class="space-y-2 min-w-0">
             <div><div class="f mb-0">來賓專頁</div><a id="pageLink" class="underline break-all" target="_blank" rel="noopener"></a></div>
-            <p class="muted">這一場專屬的頁面：當天的流程、五間老師卡片，<b>來賓從現在就可以在上面留 email</b>（參訪之後寄簡報與論文給他）。<b>QR 是拿來印或投影的</b>——放在門口或簡報最後一頁，來賓自己掃就打得開，不必個別傳網址。產生簡報時也會自動加一頁一樣的 QR。</p>
+            <p class="muted">這一場專屬的頁面：當天的流程、五間老師卡片。<b>QR 是拿來印或投影的</b>——放在門口或簡報最後一頁，來賓自己掃就打得開，不必個別傳網址。產生簡報時也會自動加一頁一樣的 QR。</p>
             <div class="flex flex-wrap gap-2">
               <button class="btn" id="copyLink" title="複製來賓專頁網址，貼到信裡或 LINE 給對方">複製網址</button>
               <button class="btn btn-soft" id="downloadIcs" title="把這一場加進行事曆，結束時間跳出來提醒你拍簽名簿、講三十秒口述。系統本來就會在那個時間寄一封提醒信，這顆是給想在行事曆上也看到的人">下載後續提醒 .ics</button>
@@ -275,7 +275,7 @@
       <p class="muted" id="confirmDraftNote" hidden></p>
       <div class="flex items-center justify-between">
         <div class="f mb-0">收件人 <span class="muted font-normal">名單上每一個人</span></div>
-        <button class="btn btn-soft" id="confirmRecipientsRefresh" title="重讀收件人清單（名單上每個人 ＋ 當天在專頁留信箱的人）" type="button">重新整理</button>
+        <button class="btn btn-soft" id="confirmRecipientsRefresh" title="重讀收件人清單（名單上每個人）" type="button">重新整理</button>
       </div>
       <div id="confirmRecipients" class="space-y-1"></div>
       <p class="muted" id="confirmWho"></p>
@@ -348,7 +348,7 @@
     </div>
 
     <div class="card space-y-2">
-      <h2 class="font-semibold">來賓專頁的三個連結 <span class="muted font-normal">同一個頁面，三種用法</span></h2>
+      <h2 class="font-semibold">來賓專頁的兩個連結 <span class="muted font-normal">同一個頁面，兩種用法</span></h2>
       <p class="muted">都是這一場的專屬頁面，差別只在打開後停在哪一段。<b>什麼時候用哪一個</b>：</p>
       <div id="wrapLinks" class="space-y-2 text-sm"></div>
     </div>
@@ -463,8 +463,8 @@
       <p class="muted" id="thanksDraftNote" hidden></p>
       <p class="muted">三個回應項目的措辭固定為請益語氣，且回覆頁支援真匿名；請保留信裡的那一段。</p>
       <div class="flex items-center justify-between">
-        <div class="f mb-0">收件人 <span class="muted font-normal">名單上每一個人 ＋ 當天在專頁留信箱的人</span></div>
-        <button class="btn btn-soft" id="thanksRecipientsRefresh" title="重讀收件人清單（名單上每個人 ＋ 當天在專頁留信箱的人）" type="button">重新整理</button>
+        <div class="f mb-0">收件人 <span class="muted font-normal">名單上每一個人</span></div>
+        <button class="btn btn-soft" id="thanksRecipientsRefresh" title="重讀收件人清單（名單上每個人）" type="button">重新整理</button>
       </div>
       <div id="thanksRecipients" class="space-y-1"></div>
       <p class="muted">寄出之後就不必再回來按什麼了：來賓的回覆會自己進「資料」分頁，<b>一頁摘要每天凌晨自己產</b>（回覆陸續進來就自己重寫一份），Drive 備份也是自動的。</p>
@@ -2269,11 +2269,10 @@
     renderSavedSignbook(r.visit.signbook || {});
     renderSavedDictation(r.visit.dictation || {});
     $("materialsPageLink").textContent = r.visit.page_url; $("materialsPageLink").href = r.visit.page_url;
-    // 同一個頁面三種用法：訪前給的網址（QR）、當天的留信箱、訪後的三個回應項目。
-    // 後兩個是行程走完才用得到的，所以列在「後續」而不是訪前。
+    // 同一個頁面兩種用法：訪前給的網址（QR）、訪後的三個回應項目。回應表單是行程走完才用得到的，所以列在「後續」而不是訪前。
+    // 以前還有第三個：當天的留信箱（#email）——專頁上那一格明確指示拿掉了（「我看這一塊就全部拿掉」），連結跟著拿掉
     $("wrapLinks").innerHTML = [
       ["", "專頁網址", "訪前就能給，門口的 QR 也是這一個。打開是今日流程與五間老師卡片。"],
-      ["email", "留信箱", "<b>參訪當天用</b>：桌卡或投影出來，名單以外的人留 email，訪後信才寄得到他。"],
       ["respond", "回應表單", "<b>訪後用</b>：放進感謝信。三個問題——想合作哪幾間、希望我們做什麼、開放建議（可不具名）。"],
     ]
       .map(([k, label, why]) => {
@@ -2627,7 +2626,7 @@
     const list = state.thanksRecipients;
     const anyContact = list.some((r) => r.contact);
     const phoneOnly = (state.visit?.guests || []).filter((g) => g.contact && !g.email && g.phone);
-    const row = (r, i, checked) => `<label class="flex gap-2 items-center"><input type="checkbox" ${checked ? "checked" : ""} data-i="${i}"><span>${esc(r.name)} <span class="muted">${esc(r.email)} · <span>${r.from === "list" ? "名單" : "現場留信箱"}</span>${r.contact ? " · <span>聯絡人</span>" : ""}</span></span></label>`;
+    const row = (r, i, checked) => `<label class="flex gap-2 items-center"><input type="checkbox" ${checked ? "checked" : ""} data-i="${i}"><span>${esc(r.name)} <span class="muted">${esc(r.email)} · <span>${r.from === "list" ? "名單" : "專頁上留的"}</span>${r.contact ? " · <span>聯絡人</span>" : ""}</span></span></label>`;
     const empty = `<p class="muted">名單上沒有 email。請回「訪前」補上隨行名單的聯絡方式。</p>`;
     const phoneNote = phoneOnly.length ? `<p class="muted"><span>聯絡人只有電話、沒有 email：確認信按「複製信件」，貼回簡訊或 LINE 給他。</span> ${esc(phoneOnly.map((g) => `${g.name || ""} ${g.phone}`.trim()).join("、"))}</p>` : "";
     const hint = anyContact || phoneOnly.length ? "" : `<p class="muted">名單上還沒標「聯絡人」（訪前分頁那張表最後一欄），所以先全部勾起來。</p>`;

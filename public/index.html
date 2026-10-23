@@ -127,21 +127,8 @@
     <div class="space-y-4" id="labs"></div>
   </section>
 
-  <!-- 互動層放最後，不搶戲（工作包 4.7） -->
-  <section class="card space-y-3 reveal" id="emailSec">
-    <h2 class="text-lg font-semibold"><span id="emailTitle"></span></h2>
-    <p class="text-stone-600 text-sm" id="emailBody"></p>
-    <!-- 行前資料（明確指示：「行前資料就給這個」）：中心簡介折頁（A4 三摺、中英日韓四語），這一格在的時候就給。換一版就換那個檔 -->
-    <p><a class="btn btn-soft" id="brochureLink" href="/assets/brochure/GHRC-brochure.pdf" target="_blank" rel="noopener"><span aria-hidden="true">▤</span> <span id="brochureLabel"></span></a></p>
-    <form id="emailForm" class="space-y-2">
-      <input type="text" name="name" id="emailName" autocomplete="name">
-      <input type="email" name="email" id="emailEmail" autocomplete="email" required>
-      <textarea name="note" id="emailNote" rows="2"></textarea>
-      <button class="btn btn-accent" type="submit" id="emailSend"></button>
-      <p class="text-sm text-emerald-700" id="emailDone" hidden></p>
-    </form>
-  </section>
-
+  <!-- 互動層放最後，不搶戲（工作包 4.7）。以前這裡還有一格「留信箱」（訪前與當天：想收到簡報與論文嗎、留 email、希望我們寄什麼），
+       明確指示整格拿掉了（「我看這一塊就全部拿掉」）——名單上的 email 往來信件裡就有，簡報與合照跟著感謝信寄給名單上每一位 -->
   <section class="card space-y-4 reveal" id="respond">
     <h2 class="text-xl font-semibold"><span id="respondTitle"></span></h2>
     <p class="text-stone-600" id="respondIntro"></p>
@@ -239,7 +226,7 @@
 
   // 切語言＝記住選擇再重讀一次頁面。打到一半的欄位與捲動位置先收起來，回來再放回去——
   // 來賓可能正在打「還可以做得更好」那一欄，換個語言就不見了最糟。
-  const KEEP = ["emailName", "emailEmail", "emailNote", "rName", "rEmail", "suggestion", "nextOther"];
+  const KEEP = ["rName", "rEmail", "suggestion", "nextOther"];
   const KEEP_KEY = "ghrc-form-keep";
   function switchLang() {
     const box = { y: window.scrollY, hash: location.hash, fields: {}, checks: [] };
@@ -271,24 +258,16 @@
   const welcomeKey = phase === "after" ? "welcome_after" : "welcome";
   $("welcome").textContent = T(welcomeKey);
   if (T2(welcomeKey)) $("welcome").insertAdjacentHTML("beforeend", `<span class="block text-lg font-normal text-stone-600 mt-1">${esc(T2(welcomeKey))}</span>`);
-  // 留信箱與回應表單各有自己的連結，帶連結進來就一定看得到：
-  //   /<visit_id>#email    現場留信箱（QR、桌卡用）
-  //   /<visit_id>#respond  訪後三個回應項目（感謝信用）
+  // 回應表單有自己的連結，帶連結進來就一定看得到：/<visit_id>#respond（訪後三個回應項目，感謝信用）。
+  // 以前還有 /<visit_id>#email（現場留信箱）——那一格拿掉了，舊的桌卡、連結打開就是一般的專頁
   const applySections = () => {
     const w = (location.hash.replace("#", "") || qs.get("mode") || "").toLowerCase();
-    // 留信箱：**訪前就要看得到**。專頁的網址是寫在訪前的確認信裡寄出去的，對方點進來時
-    // 參訪還沒發生——以前只有當天才顯示，所以那個連結點進去根本沒有地方可以留信箱。
-    // 訪後不放（那時候該填的是三個回應項目），要用還是可以帶 #email 進來。
-    // 名單上每一位都已經有 email 的那幾場**照樣放**：這一格是行前要問他的、以及要給他的資料（明確指示），
-    // 只是不再問 email（見下面的 emailMode）
-    $("emailSec").hidden = !(w === "email" || (visit && phase !== "after"));
-    emailMode();
     $("respond").hidden = !(w === "respond" || phase !== "before");
     return w;
   };
   const want = applySections();
-  // 有人在頁面上點到 #email／#respond 連結時（只改 hash 不重載）也要跟著開
-  addEventListener("hashchange", () => { const w = applySections(); if (w === "email" || w === "respond") $(w === "email" ? "emailSec" : "respond").scrollIntoView({ behavior: "smooth" }); if (w === "photos") showPhotos(); });
+  // 有人在頁面上點到 #respond 連結時（只改 hash 不重載）也要跟著開
+  addEventListener("hashchange", () => { const w = applySections(); if (w === "respond") $("respond").scrollIntoView({ behavior: "smooth" }); if (w === "photos") showPhotos(); });
   // 感謝信裡的相簿連結（/<visit_id>#photos）：直接跳到現場合照。當天資料是讀完參訪資料才畫的，瀏覽器自己跳不到，要自己捲過去
   function showPhotos() {
     const at = !$("photosRow").hidden ? $("photosRow") : !$("materialsSec").hidden ? $("materialsSec") : null;
@@ -427,41 +406,6 @@
       </article>`;
   }).join("");
 
-  // 留信箱（現場）
-  // 訪前的措辭不一樣：那時候還沒有「今天的簡報」，要說「參訪之後會寄給您」
-  $("emailTitle").textContent = bi(phase === "before" ? "leave_email_title_before" : "leave_email_title");
-  $("brochureLabel").textContent = bi("brochure");
-  $("emailName").placeholder = T("name_optional");
-  $("emailEmail").placeholder = T("email");
-  $("emailNote").placeholder = T("note_optional");
-  $("emailSend").textContent = T("send");
-  /**
-   * 名單上每一位都已經有 email（明確指示：「都已經有email 了不要再問，直接填入」）：這一格照樣在，只是不問 email——
-   * email 欄收起來（disabled：不送出、也不擋表單的 required），說明那一句開頭換成「您的信箱我們已經有了」，伺服器照名字直接填入。
-   * 要寄給他的那些資料一個字都不改（明確指示：「這個是行前要問他的以及給他的資料」）。
-   * 帶 #email 進來的（當天的桌卡、投影：給名單以外、當天才加入的人）照樣問 email。
-   */
-  function emailMode() {
-    const w = (location.hash.replace("#", "") || qs.get("mode") || "").toLowerCase();
-    const known = !!(visit && visit.emails_on_file) && w !== "email";
-    $("emailEmail").hidden = known;
-    $("emailEmail").disabled = known;
-    const key = phase === "before" ? "leave_email_body_before" : "leave_email_body";
-    $("emailBody").textContent = bi(known ? `${key}_known` : key, "\n");
-  }
-  $("emailForm").addEventListener("submit", async (ev) => {
-    ev.preventDefault();
-    if (!visit) return showNotice("This page is not linked to a visit. 這個頁面沒有連到參訪。");
-    const known = $("emailEmail").disabled;
-    // 不問 email 的時候，要送的就是「希望我們寄什麼或安排什麼」：空的就停在那一欄，不送一筆什麼都沒有的
-    if (known && !$("emailNote").value.trim()) return $("emailNote").focus();
-    $("emailSend").disabled = true;
-    const r = await post("/api/respond", { visit_id: visit.visit_id, source: "onsite", name: $("emailName").value, email: known ? "" : $("emailEmail").value, note: $("emailNote").value });
-    $("emailSend").disabled = false;
-    if (r.ok) { $("emailDone").textContent = T("thanks"); $("emailDone").hidden = false; $("emailForm").reset(); }
-    else showNotice(r.error || "error");
-  });
-
   // 訪後三個回應項目（工作包 4.6）
   $("respondTitle").textContent = bi("respond_title");
   $("respondIntro").textContent = bi("respond_intro", "\n");
@@ -512,7 +456,7 @@
     } else { $("respondErr").textContent = r.error || "error"; $("respondErr").hidden = false; }
   });
   restoreForm();
-  if (want === "respond" || want === "email") setTimeout(() => $(want === "email" ? "emailSec" : "respond").scrollIntoView({ behavior: "smooth" }), 200);
+  if (want === "respond") setTimeout(() => $("respond").scrollIntoView({ behavior: "smooth" }), 200);
 
   // 進場動畫：捲到哪、哪裡浮現（不支援 IntersectionObserver 就全部直接顯示）
   const reveal = document.querySelectorAll(".reveal");
