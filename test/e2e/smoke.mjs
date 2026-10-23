@@ -1084,19 +1084,34 @@ try {
   // ── 來賓端（日期在未來 → 訪前措辭） ──
   await page.goto(`${base}/${VID}`);
   await page.waitForSelector("#lab-303");
-  // 這一場名單上每一位都已經有 email：留信箱那一格不出現（明確指示：「都已經有email 了不要再問，直接填入」）
-  check((await page.textContent("#labsTitle")).includes("will visit") && (await page.isHidden("#respond")) && (await page.isHidden("#emailSec")), "before the visit: future tense, no thank-you form, and no email box — everyone on the list already has an email");
+  // 留信箱那一格訪前就要在：專頁網址是寫在訪前的確認信裡寄出去的，那一格是行前要問他的、以及要給他的資料（明確指示）。
+  // 這一場名單上每一位都已經有 email：照樣在，只是不再問 email（明確指示：「都已經有email 了不要再問，直接填入」）
+  check((await page.textContent("#labsTitle")).includes("will visit") && (await page.isHidden("#respond")) && (await page.isVisible("#emailSec")), "before the visit: future tense, no thank-you form, but the box offering the slides and papers is already there");
+  check((await page.isHidden("#emailEmail")) && /^We already have your email, so after the visit we will send you the slides, the papers of the laboratories you found most interesting, and the contact details of their leads\.$/.test(await page.textContent("#emailBody")), `…without asking again for an email we already have; what it offers to send is worded as before (${await page.textContent("#emailBody")})`);
+  check((await page.textContent("#emailTitle")).includes("afterwards"), "…and it says the slides come after the visit, not “today's”");
+  // 要寄什麼、安排什麼照樣問：名字對得到名單的，伺服器照名單直接填入他的 email
+  await page.click("#emailSend");
+  check(await page.evaluate(() => document.activeElement?.id === "emailNote"), "sending with nothing written stays on “anything you would like us to send”, instead of sending an empty row");
+  {
+    const listed = (await (await fetch(`${base}/api/visits?id=${VID}`, { headers: { authorization: "Bearer e2e-token" } })).json()).visit.guests.find((g) => g.email);
+    await page.fill("#emailName", listed.name);
+    await page.fill("#emailNote", "Please send the CAVE paper before the visit");
+    await page.click("#emailSend");
+    await page.waitForSelector("#emailDone:not([hidden])");
+    const row = JSON.parse(await readFile(path.join(tmp, "responses.json"), "utf8")).find((r) => r.note === "Please send the CAVE paper before the visit");
+    check(row?.source === "onsite" && row.email === listed.email.toLowerCase(), `…and what they ask for is kept with the email we already have for that name (${listed.name} → ${row?.email})`);
+  }
   await page.goto(`${base}/${VID}#email`);
   await page.waitForSelector("#emailSec:not([hidden])");
-  check(await page.isHidden("#respond"), "#email link still opens the email box on its own (for people who are not on the list), even before the visit");
-  check((await page.textContent("#emailTitle")).includes("afterwards"), "…and it says the slides come after the visit, not “today's”");
+  await page.waitForFunction(() => document.getElementById("emailBody").textContent.length > 0);
+  check((await page.isHidden("#respond")) && (await page.isVisible("#emailEmail")) && /^Leave your email now/.test(await page.textContent("#emailBody")), "#email link (for people who are not on the list) opens the box on its own and asks for an email, even before the visit");
   {
-    // 名單上還有人沒有 email（六位要來、名單上只有一位）：留信箱那一格訪前就在——專頁網址是寫在訪前的確認信裡寄出去的
+    // 名單上還有人沒有 email（六位要來、名單上只有一位）：照舊請他們留 email
     const auth = { authorization: "Bearer e2e-token", "content-type": "application/json" };
     const gap = (await (await fetch(`${base}/api/visits`, { method: "POST", headers: auth, body: JSON.stringify({ org: { name: "Email Gap University" }, date: VISIT_DATE, code: "emailgap", start_time: "10:00", end_time: "11:30", headcount: 6, guests: [{ name: "Ada Lee", email: "ada@example.edu", role: "lead" }] }) })).json()).visit.visit_id;
     await page.goto(`${base}/${gap}`);
     await page.waitForSelector("#lab-303");
-    check((await page.isVisible("#emailSec")) && (await page.textContent("#emailTitle")).includes("afterwards"), "when someone's email is still missing, the email box is there before the visit");
+    check((await page.isVisible("#emailSec")) && (await page.isVisible("#emailEmail")) && /^Leave your email now/.test(await page.textContent("#emailBody")), "when someone's email is still missing, the box asks for an email as before");
     await page.goto(`${base}/${gap}?phase=after#respond`);
     await page.waitForFunction(() => document.getElementById("labsTitle").textContent.length > 0);
     check(await page.isVisible("#rEmail"), "…and the reply form after the visit still asks for an email");
@@ -1188,11 +1203,11 @@ try {
   await page.waitForFunction(() => document.querySelector("#lab-303").classList.contains("in"));
   check(await page.isVisible("#lab-303"), "reveal animation runs when a card scrolls into view and leaves it visible");
 
-  // 當天：備援按鍵出現；名單上每一位都有 email，留信箱那一格照樣不出現
+  // 當天：備援按鍵出現；名單上每一位都有 email，留信箱那一格在、但不問 email
   await page.goto(`${base}/${VID}?phase=today`);
   // #emailSec 在 HTML 裡本來就沒有 hidden，要等腳本把標題填好才算渲染完
   await page.waitForFunction(() => document.getElementById("labsTitle").textContent.length > 0);
-  check((await page.textContent("#labsTitle")).includes("Today") && (await page.isHidden("#emailSec")), "on the day: today's laboratories, and still no email box when everyone's email is on file");
+  check((await page.textContent("#labsTitle")).includes("Today") && (await page.isVisible("#emailSec")) && (await page.isHidden("#emailEmail")) && /^We already have your email, so we will send you/.test(await page.textContent("#emailBody")), "on the day: today's laboratories; the box is there, still without asking for an email we already have");
   await page.waitForSelector("#deckLink:not([hidden])");
   check((await page.getAttribute("#deckLink", "href")) === "/deck" && /Presentation slides/.test(await page.textContent("#deckLink")), "on the day the visit page links to the web slides (the same deck for every visit)");
   // 名單以外、當天才加入的人：桌卡或投影出來的 #email 連結

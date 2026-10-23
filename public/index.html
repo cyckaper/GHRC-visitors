@@ -277,9 +277,10 @@
     // 留信箱：**訪前就要看得到**。專頁的網址是寫在訪前的確認信裡寄出去的，對方點進來時
     // 參訪還沒發生——以前只有當天才顯示，所以那個連結點進去根本沒有地方可以留信箱。
     // 訪後不放（那時候該填的是三個回應項目），要用還是可以帶 #email 進來。
-    // **名單上每一位都已經有 email 就不放**（明確指示：「都已經有email 了不要再問，直接填入」）：簡報與合照本來就跟著感謝信
-    // 寄給名單上每一位。帶 #email 進來的（當天的桌卡、投影）照樣看得到，給名單以外的人用
-    $("emailSec").hidden = !(w === "email" || (visit && phase !== "after" && !visit.emails_on_file));
+    // 名單上每一位都已經有 email 的那幾場**照樣放**：這一格是行前要問他的、以及要給他的資料（明確指示），
+    // 只是不再問 email（見下面的 emailMode）
+    $("emailSec").hidden = !(w === "email" || (visit && phase !== "after"));
+    emailMode();
     $("respond").hidden = !(w === "respond" || phase !== "before");
     return w;
   };
@@ -427,16 +428,32 @@
   // 留信箱（現場）
   // 訪前的措辭不一樣：那時候還沒有「今天的簡報」，要說「參訪之後會寄給您」
   $("emailTitle").textContent = bi(phase === "before" ? "leave_email_title_before" : "leave_email_title");
-  $("emailBody").textContent = bi(phase === "before" ? "leave_email_body_before" : "leave_email_body", "\n");
   $("emailName").placeholder = T("name_optional");
   $("emailEmail").placeholder = T("email");
   $("emailNote").placeholder = T("note_optional");
   $("emailSend").textContent = T("send");
+  /**
+   * 名單上每一位都已經有 email（明確指示：「都已經有email 了不要再問，直接填入」）：這一格照樣在，只是不問 email——
+   * email 欄收起來（disabled：不送出、也不擋表單的 required），說明那一句開頭換成「您的信箱我們已經有了」，伺服器照名字直接填入。
+   * 要寄給他的那些資料一個字都不改（明確指示：「這個是行前要問他的以及給他的資料」）。
+   * 帶 #email 進來的（當天的桌卡、投影：給名單以外、當天才加入的人）照樣問 email。
+   */
+  function emailMode() {
+    const w = (location.hash.replace("#", "") || qs.get("mode") || "").toLowerCase();
+    const known = !!(visit && visit.emails_on_file) && w !== "email";
+    $("emailEmail").hidden = known;
+    $("emailEmail").disabled = known;
+    const key = phase === "before" ? "leave_email_body_before" : "leave_email_body";
+    $("emailBody").textContent = bi(known ? `${key}_known` : key, "\n");
+  }
   $("emailForm").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     if (!visit) return showNotice("This page is not linked to a visit. 這個頁面沒有連到參訪。");
+    const known = $("emailEmail").disabled;
+    // 不問 email 的時候，要送的就是「希望我們寄什麼或安排什麼」：空的就停在那一欄，不送一筆什麼都沒有的
+    if (known && !$("emailNote").value.trim()) return $("emailNote").focus();
     $("emailSend").disabled = true;
-    const r = await post("/api/respond", { visit_id: visit.visit_id, source: "onsite", name: $("emailName").value, email: $("emailEmail").value, note: $("emailNote").value });
+    const r = await post("/api/respond", { visit_id: visit.visit_id, source: "onsite", name: $("emailName").value, email: known ? "" : $("emailEmail").value, note: $("emailNote").value });
     $("emailSend").disabled = false;
     if (r.ok) { $("emailDone").textContent = T("thanks"); $("emailDone").hidden = false; $("emailForm").reset(); }
     else showNotice(r.error || "error");

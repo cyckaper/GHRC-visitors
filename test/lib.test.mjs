@@ -232,7 +232,7 @@ test("recipient list = everyone on the list + onsite emails, deduplicated, anony
   assert.deepEqual(r.filter((x) => x.contact).map((x) => x.email), ["office@uwa.example"]);
 });
 
-test("名單上每一位都已經有 email：來賓專頁不再問（明確指示：「都已經有email 了不要再問，直接填入」）", () => {
+test("名單上每一位都已經有 email：來賓專頁不再問 email（明確指示：「都已經有email 了不要再問，直接填入」）", () => {
   // 名單上有人沒有 email（這一份的 No Email）：還是要問
   assert.equal(emailsOnFile(visit), false);
   assert.equal(publicVisit(visit).emails_on_file, false);
