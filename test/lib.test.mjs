@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
 import { weekdayOf } from "../public/lib/rota.mjs";
-import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, salutationLine, salutationPeople, settleSalutation, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, posterFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION, toForumProgramme, labStops, FORUM_TITLES, splitItems, sanitizeDictation, hasDictation, visitRecord, zhNumber, zhDate, promisedItems, thanksItems, talkedAbout, photoStem, isPhotoDuplicate, sameUrl } from "../lib/visit.mjs";
+import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, salutationLine, salutationPeople, settleSalutation, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, posterFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION, toForumProgramme, labStops, FORUM_TITLES, splitItems, sanitizeDictation, hasDictation, visitRecord, zhNumber, zhDate, promisedItems, thanksItems, talkedAbout, photoStem, isPhotoDuplicate, sameUrl, emailsOnFile, guestEmailFor } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -230,6 +230,32 @@ test("recipient list = everyone on the list + onsite emails, deduplicated, anony
   assert.deepEqual(r.map((x) => x.email), ["simon@uwa.example", "office@uwa.example", "companion@uwa.example", "walkin@x.example"]);
   // 確認信只寄給「聯絡人」：協調參訪的人不一定等於參加參訪的人
   assert.deepEqual(r.filter((x) => x.contact).map((x) => x.email), ["office@uwa.example"]);
+});
+
+test("名單上每一位都已經有 email：來賓專頁不再問（明確指示：「都已經有email 了不要再問，直接填入」）", () => {
+  // 名單上有人沒有 email（這一份的 No Email）：還是要問
+  assert.equal(emailsOnFile(visit), false);
+  assert.equal(publicVisit(visit).emails_on_file, false);
+  const all = { ...visit, guests: visit.guests.filter((g) => g.email) };
+  assert.equal(emailsOnFile(all), true);
+  assert.equal(publicVisit(all).emails_on_file, true, "來賓專頁只拿到是或否");
+  assert.ok(!JSON.stringify(publicVisit(all)).includes("uwa.example"), "…不帶任何 email");
+  assert.equal(emailsOnFile({ ...all, headcount: 3 }), true, "人數跟名單一樣多");
+  assert.equal(emailsOnFile({ ...all, headcount: 6 }), false, "人數比名單多：有人不在名單上，他的 email 還沒有");
+  assert.equal(emailsOnFile({ ...all, headcount: 0 }), true, "人數沒填（0＝不知道）不算");
+  assert.equal(emailsOnFile({ ...all, guests: [...all.guests, { name: "簡訊聯絡人", email: "", phone: "0912-345-678" }] }), false, "只有電話的（簡訊、LINE 來的）還沒有 email");
+  assert.equal(emailsOnFile({ ...all, guests: [...all.guests, { name: "", email: "", phone: "", title: "" }] }), true, "空的那一列不算一個人");
+  assert.equal(emailsOnFile({ ...visit, guests: [] }), false, "名單是空的：一個 email 都沒有");
+
+  // 具名回覆沒寫 email：名單上同名的那一位，直接填入他的 email
+  assert.equal(guestEmailFor(visit, "simon kilbane"), "simon@uwa.example", "大小寫、空白不算");
+  assert.equal(guestEmailFor(visit, "A Companion"), "companion@uwa.example", "句點不算");
+  assert.equal(guestEmailFor(visit, "No Email"), "", "名單上那一位本來就沒有 email");
+  assert.equal(guestEmailFor(visit, "Someone Else"), "", "不在名單上的不猜");
+  assert.equal(guestEmailFor(visit, ""), "");
+  const twins = { guests: [{ name: "Lee", email: "a@x.example" }, { name: "Lee", email: "b@x.example" }, { name: "Kim", email: "k@x.example" }, { name: "Kim", email: "K@x.example" }] };
+  assert.equal(guestEmailFor(twins, "Lee"), "", "同名的對到兩個不同的 email：寧可空著，也不要記到別人頭上");
+  assert.equal(guestEmailFor(twins, "Kim"), "k@x.example", "同一個 email 列了兩次還是同一個人");
 });
 
 test("csv escapes commas and quotes; ics has an alarm at the end time", () => {

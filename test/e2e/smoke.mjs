@@ -1084,12 +1084,26 @@ try {
   // ── 來賓端（日期在未來 → 訪前措辭） ──
   await page.goto(`${base}/${VID}`);
   await page.waitForSelector("#lab-303");
-  // 留信箱訪前就要在：專頁網址是寫在訪前的確認信裡寄出去的，對方點進來時參訪還沒發生
-  check((await page.textContent("#labsTitle")).includes("will visit") && (await page.isHidden("#respond")) && (await page.isVisible("#emailSec")), "before the visit: future tense, no thank-you form, but the email box is already there");
-  check((await page.textContent("#emailTitle")).includes("afterwards"), "…and it says the slides come after the visit, not “today's”");
+  // 這一場名單上每一位都已經有 email：留信箱那一格不出現（明確指示：「都已經有email 了不要再問，直接填入」）
+  check((await page.textContent("#labsTitle")).includes("will visit") && (await page.isHidden("#respond")) && (await page.isHidden("#emailSec")), "before the visit: future tense, no thank-you form, and no email box — everyone on the list already has an email");
   await page.goto(`${base}/${VID}#email`);
   await page.waitForSelector("#emailSec:not([hidden])");
-  check(await page.isHidden("#respond"), "#email link opens the on-site email box on its own, even before the visit");
+  check(await page.isHidden("#respond"), "#email link still opens the email box on its own (for people who are not on the list), even before the visit");
+  check((await page.textContent("#emailTitle")).includes("afterwards"), "…and it says the slides come after the visit, not “today's”");
+  {
+    // 名單上還有人沒有 email（六位要來、名單上只有一位）：留信箱那一格訪前就在——專頁網址是寫在訪前的確認信裡寄出去的
+    const auth = { authorization: "Bearer e2e-token", "content-type": "application/json" };
+    const gap = (await (await fetch(`${base}/api/visits`, { method: "POST", headers: auth, body: JSON.stringify({ org: { name: "Email Gap University" }, date: VISIT_DATE, code: "emailgap", start_time: "10:00", end_time: "11:30", headcount: 6, guests: [{ name: "Ada Lee", email: "ada@example.edu", role: "lead" }] }) })).json()).visit.visit_id;
+    await page.goto(`${base}/${gap}`);
+    await page.waitForSelector("#lab-303");
+    check((await page.isVisible("#emailSec")) && (await page.textContent("#emailTitle")).includes("afterwards"), "when someone's email is still missing, the email box is there before the visit");
+    await page.goto(`${base}/${gap}?phase=after#respond`);
+    await page.waitForFunction(() => document.getElementById("labsTitle").textContent.length > 0);
+    check(await page.isVisible("#rEmail"), "…and the reply form after the visit still asks for an email");
+    await fetch(`${base}/api/visits?id=${encodeURIComponent(gap)}`, { method: "DELETE", headers: auth });
+  }
+  await page.goto(`${base}/${VID}#email`);
+  await page.waitForSelector("#emailSec:not([hidden])");
   check((await page.textContent("#lab-301")).includes("seven-workstation"), "301 describes a seven-workstation array");
 
   // 老師介紹頁：卡片點過去就是那一間的整頁介紹（內容在後台「設定」改，改完這裡立刻跟著變）
@@ -1174,13 +1188,17 @@ try {
   await page.waitForFunction(() => document.querySelector("#lab-303").classList.contains("in"));
   check(await page.isVisible("#lab-303"), "reveal animation runs when a card scrolls into view and leaves it visible");
 
-  // 當天：留信箱與備援按鍵出現
+  // 當天：備援按鍵出現；名單上每一位都有 email，留信箱那一格照樣不出現
   await page.goto(`${base}/${VID}?phase=today`);
   // #emailSec 在 HTML 裡本來就沒有 hidden，要等腳本把標題填好才算渲染完
   await page.waitForFunction(() => document.getElementById("labsTitle").textContent.length > 0);
-  check((await page.textContent("#labsTitle")).includes("Today") && (await page.isVisible("#emailSec")), "on the day: today's laboratories, on-site email box shown");
+  check((await page.textContent("#labsTitle")).includes("Today") && (await page.isHidden("#emailSec")), "on the day: today's laboratories, and still no email box when everyone's email is on file");
   await page.waitForSelector("#deckLink:not([hidden])");
   check((await page.getAttribute("#deckLink", "href")) === "/deck" && /Presentation slides/.test(await page.textContent("#deckLink")), "on the day the visit page links to the web slides (the same deck for every visit)");
+  // 名單以外、當天才加入的人：桌卡或投影出來的 #email 連結
+  await page.goto(`${base}/${VID}?phase=today#email`);
+  await page.waitForSelector("#emailSec:not([hidden])");
+  await page.waitForFunction(() => document.getElementById("emailTitle").textContent.length > 0);
   await page.fill("#emailEmail", "walkin@example.org");
   await page.click("#emailSend");
   await page.waitForSelector("#emailDone:not([hidden])");
@@ -1190,6 +1208,7 @@ try {
   await page.goto(`${base}/${VID}#respond`);
   await page.waitForFunction(() => document.getElementById("labsTitle").textContent.length > 0);
   check((await page.textContent("#labsTitle")).includes("visited") && (await page.textContent("#welcome")).includes("Thank you") && (await page.isHidden("#emailSec")), "after the visit: past tense, thank-you heading, no on-site email box");
+  check((await page.isHidden("#rEmail")) && (await page.isVisible("#rName")), "…and the reply form asks only for a name: everyone's email is already on file (filled in on our side)");
   check((await page.textContent("#qBetter")) === "From your perspective, what should we be doing better?", "open-suggestion wording is the 請益 question");
   await page.check("#anonymous");
   check(await page.isHidden("#identity"), "identity fields hidden when anonymous");

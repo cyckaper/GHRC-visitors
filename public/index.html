@@ -277,7 +277,9 @@
     // 留信箱：**訪前就要看得到**。專頁的網址是寫在訪前的確認信裡寄出去的，對方點進來時
     // 參訪還沒發生——以前只有當天才顯示，所以那個連結點進去根本沒有地方可以留信箱。
     // 訪後不放（那時候該填的是三個回應項目），要用還是可以帶 #email 進來。
-    $("emailSec").hidden = !(w === "email" || (visit && phase !== "after"));
+    // **名單上每一位都已經有 email 就不放**（明確指示：「都已經有email 了不要再問，直接填入」）：簡報與合照本來就跟著感謝信
+    // 寄給名單上每一位。帶 #email 進來的（當天的桌卡、投影）照樣看得到，給名單以外的人用
+    $("emailSec").hidden = !(w === "email" || (visit && phase !== "after" && !visit.emails_on_file));
     $("respond").hidden = !(w === "respond" || phase !== "before");
     return w;
   };
@@ -449,6 +451,8 @@
   $("oneSentence").textContent = T("one_sentence"); $("oneSentence2").textContent = T2("one_sentence");
   $("anonLabel").textContent = T("anonymous"); $("anonLabel2").textContent = T2("anonymous"); $("anonNote").textContent = T("anonymous_note");
   $("rName").placeholder = T("name_optional"); $("rEmail").placeholder = T("email");
+  // 名單上每一位都已經有 email：具名寫名字就好，不再問 email（伺服器照名單直接填入）
+  if (visit && visit.emails_on_file) { $("rEmail").hidden = true; $("rName").classList.add("sm:col-span-2"); }
   $("nextOther").placeholder = T("next_other_hint");
   $("respondSend").textContent = T("send");
   $("coopChoices").innerHTML = labsData.labs.map((lab) => `<label class="choice" style="--tone:${roomTone(lab.room)}"><input type="checkbox" name="coop" value="${lab.room}"><span><span class="font-medium">Lab ${lab.room}</span> ${esc(labName(lab))}<br><span class="text-sm text-stone-500">${esc((lab.lead || {}).name_zh || "")} ${esc((lab.lead || {}).name_en || "")}</span></span></label>`).join("");

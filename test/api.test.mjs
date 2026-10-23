@@ -831,6 +831,34 @@ test("summary writes visit.summary and slide_performance rows; digest lists sugg
   assert.equal(list.body.visits.length, 1);
 });
 
+test("名單上每一位都已經有 email：來賓專頁不再問；具名回覆照名單直接填入 email，不具名的不補", async () => {
+  // 明確指示（指著來賓專頁的留信箱那一格）：「都已經有email 了不要再問，直接填入」。
+  // 這裡留下的回覆會算進跨場次彙整的建議數（那一場刪掉了，回覆還在），所以排在 summary 那一則之後
+  const put = (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const made = await put({ org: { name: "Emails On File University" }, date: "2099-12-01", code: "onfile", start_time: "10:00", end_time: "11:30", headcount: 2, guests: [{ name: "Ada Lee", title: "Professor", email: "ada@example.edu", role: "lead" }, { name: "Bo Chen", email: "bo@example.edu" }] });
+  assert.equal(made.status, 200, JSON.stringify(made.body));
+  const v = made.body.visit;
+  const pub = (await api(`/api/visits?id=${v.visit_id}&public=1`)).body.visit;
+  assert.equal(pub.emails_on_file, true);
+  assert.ok(!JSON.stringify(pub).includes("@"), "公開的那一份只說有沒有，不帶 email");
+  // 人數比名單多：有人不在名單上，還是要問
+  const more = (await put({ ...v, headcount: 5 })).body.visit;
+  assert.equal((await api(`/api/visits?id=${more.visit_id}&public=1`)).body.visit.emails_on_file, false);
+  await put({ ...more, headcount: 2 });
+
+  const send = (body) => api("/api/respond", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ visit_id: v.visit_id, ...body }) });
+  assert.equal((await send({ name: "ada lee", suggestion: "直接填入的那一份" })).status, 200);
+  assert.equal((await send({ anonymous: true, name: "Bo Chen", suggestion: "不具名的那一份" })).status, 200);
+  assert.equal((await send({ name: "Someone Else", suggestion: "名單以外的那一份" })).status, 200);
+  assert.equal((await send({ name: "Ada Lee" })).status, 400, "只有名字、沒有內容的照樣不收（填入的 email 不算內容）");
+  const rows = JSON.parse(await readFile(path.join(tmp, "responses.json"), "utf8")).filter((r) => r.visit_id === v.visit_id);
+  assert.equal(rows.find((r) => r.suggestion === "直接填入的那一份").email, "ada@example.edu", "具名、沒寫 email：名單上已經有，直接填入");
+  const anon = rows.find((r) => r.suggestion === "不具名的那一份");
+  assert.ok(anon.anonymous && anon.name === "" && anon.email === "", "不具名的不補（真匿名：後端不得補回身分）");
+  assert.equal(rows.find((r) => r.suggestion === "名單以外的那一份").email, "", "不在名單上的不猜");
+  await getStore().deleteVisit(v.visit_id); // 有回覆的那一場照規矩不給刪，測試自己收掉
+});
+
 test("drive backup: lists everything the archive folder should get; refuses to upload until Google is configured", async () => {
   assert.equal((await api(`/api/drive?id=${visitId}`)).status, 401, "needs the admin token");
   const r = await api(`/api/drive?id=${visitId}`, { headers: admin });
