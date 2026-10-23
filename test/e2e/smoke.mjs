@@ -1094,7 +1094,7 @@ try {
     const href = await page.getAttribute("#brochureLink", "href");
     const pdf = await fetch(`${base}${href}`);
     const head = Buffer.from(await pdf.arrayBuffer()).subarray(0, 5).toString("latin1");
-    check((await page.isVisible("#brochureLink")) && /^Centre brochure \(PDF/.test(await page.textContent("#brochureLink")) && pdf.ok && /application\/pdf/.test(pdf.headers.get("content-type") || "") && head === "%PDF-", `…and gives the centre's brochure right there before the visit (${href} → ${pdf.status} ${pdf.headers.get("content-type")})`);
+    check((await page.isVisible("#brochureLink")) && /^Centre brochure \(PDF/.test(await page.textContent("#brochureLabel")) && pdf.ok && /application\/pdf/.test(pdf.headers.get("content-type") || "") && head === "%PDF-", `…and gives the centre's brochure right there before the visit (${href} → ${pdf.status} ${pdf.headers.get("content-type")})`);
   }
   // 要寄什麼、安排什麼照樣問：名字對得到名單的，伺服器照名單直接填入他的 email
   await page.click("#emailSend");
