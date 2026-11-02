@@ -36,7 +36,7 @@ const $ = (id) => document.getElementById(id);
 const key = new URLSearchParams(location.search).get("key") || "";
 const q = `/api/rota?key=${encodeURIComponent(key)}`;
 // 研究室照片的上傳頁用同一把鑰匙（各室當天拍的照片，傳上去只有中心看得到）
-$("photosLink").href = `/photos?key=${encodeURIComponent(key)}`;
+$("photosLink").href = `/photos?key=${encodeURIComponent(key)}&openExternalBrowser=1`;
 const api = (path, init) => fetch(path, { credentials: "same-origin", ...init }).then((r) => r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` })));
 const status = (msg, isError) => { $("status").textContent = msg; $("status").className = isError ? "err" : "muted"; };
 // 通告裡的連結帶著 #<visit_id>：點進來直接跳到那一場

@@ -455,7 +455,7 @@
         <button class="btn btn-soft" id="labPhotosCopy" type="button" title="研究室的人點這個連結就能上傳（不必登入，跟支援人力表同一把鑰匙）：貼到 LINE 群組">複製上傳連結</button>
         <button class="btn btn-soft" id="labPhotosZip" type="button" title="這一場的研究室照片全部下載成一個 zip（照研究室分資料夾）" disabled>全部下載</button>
       </div>
-      <p class="muted">研究室的人用上面那個連結傳（手機一次選很多張，HEIC 也收），選好是哪一間、誰拍的。勾幾張按<b>放上專頁</b>：來賓專頁的合照與感謝信就有；其他的留在照片庫（「資料」分頁），Drive 也一起備份。</p>
+      <p class="muted">研究室的人用上面那個連結傳（手機一次選很多張，HEIC 也收），選好是哪一間、誰拍的；傳完也能一鍵轉進 LINE 群組。勾幾張按<b>放上專頁</b>：來賓專頁的合照與感謝信就有；其他的留在照片庫（「資料」分頁），Drive 也一起備份。</p>
       <p class="text-sm" id="labPhotosInfo"></p>
       <div id="labPhotosGrid" class="space-y-3"></div>
       <div class="flex flex-wrap items-center gap-2 text-sm border-t pt-3" id="labPhotosBar" hidden>
@@ -2391,7 +2391,8 @@
   const roomTitle = (room) => (room === "center" ? t("中心（總體介紹、合照）") : `${room} ${labNameOf(room)}`.trim());
   const roomFolder = (room) => (room === "center" ? "中心" : room);
   const authHeader = () => (token() ? { authorization: `Bearer ${token()}` } : {});
-  const photosLink = (visitId) => `${location.origin}/photos?key=${encodeURIComponent(state.settings?.rota_key || "")}${visitId ? `#${visitId}` : ""}`;
+  // openExternalBrowser=1：從 LINE 群組點下去用手機的瀏覽器打開（LINE 裡面直接開的網頁叫不出分享選單，就沒有「也傳到 LINE 群組」那一顆）
+  const photosLink = (visitId) => `${location.origin}/photos?key=${encodeURIComponent(state.settings?.rota_key || "")}&openExternalBrowser=1${visitId ? `#${visitId}` : ""}`;
   const whoCount = (rows) => {
     const by = new Map();
     for (const p of rows) by.set(p.by || "", (by.get(p.by || "") || 0) + 1);

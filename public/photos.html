@@ -12,6 +12,7 @@
   /* 不靠 Tailwind 也排得對（Tailwind 從 CDN 載，現場網路不好時可能還沒到）：寬度含邊框與內距，fieldset 不要預設的框 */
   *, *::before, *::after { box-sizing: border-box; }
   fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+  [hidden] { display: none !important; } /* 底下有 display:flex 的按鈕，hidden 才蓋得過 */
   legend { padding: 0; }
   :root { --ink: #1c1917; --c301: #047857; --c302: #0369a1; --c303: #6d28d9; --c304: #b45309; --c305: #a21caf; --ccenter: #44403c; }
   body::before { content: ""; position: fixed; top: 0; left: 0; right: 0; height: 5px; z-index: 60; background: linear-gradient(90deg, var(--c301), var(--c302) 25%, var(--c303) 50%, var(--c304) 75%, var(--c305)); }
@@ -37,6 +38,8 @@
   .thumbs img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: .6rem; background: #e7e5e4; }
   .thumbs button { position: absolute; top: -.4rem; right: -.4rem; width: 1.9rem; height: 1.9rem; border-radius: 999px; border: 1px solid #d6d3d1; background: #fff; font-size: .9rem; }
   .thumbs figcaption { font-size: .72rem; color: #78716c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .line-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; padding: .9rem 1rem; border: 0; border-radius: 1rem; background: #06c755; color: #fff; font-size: 17px; font-weight: 600; cursor: pointer; }
+  .line-btn small { font-size: .82rem; font-weight: 500; }
 </style>
 </head>
 <body class="min-h-screen">
@@ -68,6 +71,10 @@
       <p id="progress" class="text-sm"></p>
     </div>
     <ul id="failed" class="text-sm err list-disc pl-5"></ul>
+    <div id="lineBox" class="space-y-1" hidden>
+      <button type="button" class="line-btn" id="lineShare">也傳到 LINE 群組</button>
+      <p class="muted" id="lineNote"></p>
+    </div>
   </form>
 
   <section id="summaryBox" class="space-y-1" hidden>
@@ -192,6 +199,9 @@ $("files").addEventListener("change", async () => {
   busy = true;
   $("pick").setAttribute("aria-disabled", "true");
   $("failed").innerHTML = "";
+  shareFiles = [];
+  renderShare();
+  const uploaded = [];
   $("progressBox").hidden = false;
   status("");
   let done = 0;
@@ -206,6 +216,7 @@ $("files").addEventListener("change", async () => {
       $("progress").textContent = `${label}：上傳中……`;
       await upload(visitId, room, by, shot);
       done += 1;
+      uploaded.push(new File([shot.file], shot.name, { type: "image/jpeg" }));
     } catch (e) {
       failed.push(`${f.name || label}：${e?.message || e}`);
     }
@@ -216,9 +227,68 @@ $("files").addEventListener("change", async () => {
   $("failed").innerHTML = failed.map((m) => `<li>${esc(m)}</li>`).join("");
   busy = false;
   $("pick").removeAttribute("aria-disabled");
+  // 剛剛傳成功的那幾張，接著可以「也傳到 LINE 群組」
+  shareFiles = uploaded;
+  shareAt = 0;
+  renderShare();
   // 這一批傳完了：整場備份到 Drive 一次
   if (done) api(q(), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "done", visit_id: visitId }) });
   await refresh();
+});
+
+/**
+ * **也傳到 LINE 群組**（2026-11-02 明確指示：「上傳頁傳完多一顆『也傳到 LINE』」）：用手機的分享選單（Web Share），
+ * 選 LINE、再選中心的群組——照片是本人從自己的 LINE 傳的，系統不經手、不花 LINE 的訊息費。
+ * 交出去的是剛剛這一批傳成功的那幾張（長邊 2560 的那一份）；一次最多 10 張（多了 LINE 的分享畫面不一定吃得下），多的分幾次按。
+ * 分享選單一定要在按下去的那一刻叫（瀏覽器的規定），所以照片在傳的時候就準備好了，按下去之前不能再等別的東西。
+ * 叫不出分享選單的（電腦、在 LINE 裡面直接打開的網頁）不給這一顆，說一聲：照片庫照樣收到了，要放進群組就直接從 LINE 傳。
+ * 後台複製的上傳連結帶 `openExternalBrowser=1`，從 LINE 群組點下去會用手機的瀏覽器打開，就叫得出分享選單。
+ */
+const SHARE_BATCH = 10;
+let shareFiles = [];
+let shareAt = 0;
+const inLine = /\bLine\//.test(navigator.userAgent);
+function canShareFiles(files) {
+  try {
+    return !!(navigator.share && navigator.canShare && navigator.canShare({ files }));
+  } catch (e) {
+    return false;
+  }
+}
+function renderShare() {
+  const total = shareFiles.length;
+  $("lineBox").hidden = !total;
+  if (!total) return;
+  const batch = shareFiles.slice(shareAt, shareAt + SHARE_BATCH);
+  if (!batch.length) {
+    $("lineShare").hidden = true;
+    $("lineNote").textContent = `${total} 張都交給 LINE 了。`;
+    return;
+  }
+  if (!canShareFiles(batch)) {
+    $("lineShare").hidden = true;
+    $("lineNote").textContent = inLine
+      ? "在 LINE 裡面打開的網頁叫不出分享選單。照片庫已經收到了；要放進群組，請在 LINE 群組裡直接傳。"
+      : "這台裝置叫不出分享選單。照片庫已經收到了；要放進 LINE 群組，請直接從 LINE 傳。";
+    return;
+  }
+  $("lineShare").hidden = false;
+  if (total <= SHARE_BATCH) $("lineShare").textContent = `也傳到 LINE 群組（${total} 張）`;
+  else $("lineShare").innerHTML = `也傳到 LINE 群組<small>第 ${shareAt + 1}–${shareAt + batch.length} 張，共 ${total} 張</small>`;
+  $("lineNote").textContent = shareAt ? `前 ${shareAt} 張已經交給 LINE；再按一次，傳下一批。` : "會跳出手機的分享選單：選 LINE，再選中心的群組。";
+}
+$("lineShare").addEventListener("click", async () => {
+  const batch = shareFiles.slice(shareAt, shareAt + SHARE_BATCH);
+  if (!batch.length) return;
+  try {
+    await navigator.share({ files: batch });
+  } catch (e) {
+    if (e?.name === "AbortError") return; // 自己按了取消
+    $("lineNote").textContent = `沒有叫出分享選單（${e?.message || e}）。照片庫已經收到了；要放進群組，請直接從 LINE 傳。`;
+    return;
+  }
+  shareAt += batch.length;
+  renderShare();
 });
 
 /** 傳一張；好幾個人同時在傳撞在一起（503）或網路斷一下，等一下自己再傳，最多四次。 */

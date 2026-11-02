@@ -1443,9 +1443,15 @@ try {
     await page.waitForFunction(() => /上傳連結已複製/.test(document.getElementById("flash").textContent), null, { timeout: 15000 });
     const link = await page.evaluate(() => navigator.clipboard.readText());
     const key = (await (await fetch(`${base}/api/settings`, { headers: auth })).json()).settings.rota_key;
-    check(link === `${base}/photos?key=${encodeURIComponent(key)}#${pv}`, `“copy the upload link” gives the photo page with the staffing table’s key, opened on this visit (${link})`);
+    check(link === `${base}/photos?key=${encodeURIComponent(key)}&openExternalBrowser=1#${pv}`, `“copy the upload link” gives the photo page with the staffing table’s key, opened on this visit and in the phone’s own browser when tapped in LINE (${link})`);
 
     const phone = await browser.newContext({ viewport: { width: 375, height: 800 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+    // 手機的分享選單（Web Share）：Chromium 在 Linux 上沒有，換成一個記下交出去什麼的替身
+    await phone.addInitScript(() => {
+      window.__shared = [];
+      Navigator.prototype.canShare = (d) => !!(d && d.files && d.files.length && d.files.every((f) => f instanceof File && /^image\//.test(f.type)));
+      Navigator.prototype.share = async (d) => { window.__shared.push(d.files.map((f) => ({ name: f.name, type: f.type, size: f.size }))); };
+    });
     const mp = await phone.newPage();
     const mpErrors = [];
     mp.on("pageerror", (e) => mpErrors.push(e.message));
@@ -1473,6 +1479,13 @@ try {
     let stored = (await (await fetch(`${base}/api/visits?id=${pv}`, { headers: auth })).json()).visit.lab_photos;
     check(stored.length === 2 && stored.every((p) => p.room === "303" && p.by === "王小明" && /\.jpg$/.test(p.key)) && stored.some((p) => p.taken === "2026-11-02T10:23:45") && stored.some((p) => p.name === "IMG_2001.jpg"), "…stored as JPEGs with the room, the photographer and the capture time from EXIF (the HEIC was converted on the phone)");
     check(await mp.evaluate(() => localStorage.getItem("ghrc-photo-by") === "王小明" && localStorage.getItem("ghrc-photo-room") === "303"), "the phone remembers the name and the room for next time");
+    // 也傳到 LINE 群組（明確指示：「上傳頁傳完多一顆『也傳到 LINE』」）：剛剛那兩張交給手機的分享選單
+    await mp.waitForSelector("#lineShare:not([hidden])");
+    check((await mp.textContent("#lineShare")) === "也傳到 LINE 群組（2 張）" && /選 LINE，再選中心的群組/.test(await mp.textContent("#lineNote")), "after the upload there is “also send to the LINE group”, for the photos just sent");
+    await mp.click("#lineShare");
+    await mp.waitForFunction(() => /都交給 LINE 了/.test(document.getElementById("lineNote").textContent));
+    const shared = await mp.evaluate(() => window.__shared);
+    check(shared.length === 1 && shared[0].length === 2 && shared[0].every((f) => f.type === "image/jpeg" && f.size > 0) && shared[0].map((f) => f.name).sort().join() === "IMG_2001.jpg,exif.jpg" && (await mp.isHidden("#lineShare")), `…it hands those photos to the phone’s share sheet (JPEGs, the HEIC already converted) and then says they went to LINE (${JSON.stringify(shared)})`);
     mp.once("dialog", (d) => d.accept());
     await mp.click("#mine button[data-del]");
     await mp.waitForFunction(() => document.querySelectorAll("#mine img").length === 1, null, { timeout: 15000 });
@@ -1480,6 +1493,24 @@ try {
     check(stored.length === 1, "a photo sent by mistake can be deleted from the same phone");
     check(!mpErrors.length, `…without page errors (${mpErrors.join(" | ")})`);
     await phone.close();
+    // 在 LINE 裡面直接打開的網頁（叫不出分享選單）：沒有那一顆，說一聲照片庫已經收到、要放進群組請直接從 LINE 傳
+    const inLine = await browser.newContext({ viewport: { width: 375, height: 800 }, userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari Line/15.19.0" });
+    await inLine.addInitScript(() => { delete Navigator.prototype.share; delete Navigator.prototype.canShare; });
+    const lp = await inLine.newPage();
+    await lp.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+    await lp.goto(link);
+    await lp.waitForSelector("#form:not([hidden])");
+    await lp.click('label.room:has(input[value="301"])');
+    await lp.fill("#by", "李大華");
+    await lp.setInputFiles("#files", { name: "line.jpg", mimeType: "image/jpeg", buffer: await readFile("test/fixtures/exif.jpg") });
+    await lp.waitForFunction(() => /傳好了 1 張/.test(document.getElementById("progress").textContent), null, { timeout: 60000 });
+    await lp.waitForSelector("#lineBox:not([hidden])");
+    check((await lp.isHidden("#lineShare")) && /在 LINE 裡面打開的網頁叫不出分享選單/.test(await lp.textContent("#lineNote")) && /照片庫已經收到了/.test(await lp.textContent("#lineNote")), "inside LINE’s own browser (no share sheet) there is no button, just a line saying the library has them and to post from LINE");
+    lp.once("dialog", (d) => d.accept());
+    await lp.waitForSelector("#mine button[data-del]");
+    await lp.click("#mine button[data-del]");
+    await lp.waitForFunction(() => !document.querySelector("#mine img"), null, { timeout: 15000 });
+    await inLine.close();
 
     // 主辦端：看得到、挑一張放上專頁（來賓專頁的合照與感謝信就有）、整場下載
     await page.click('[data-tab="pre"]');
