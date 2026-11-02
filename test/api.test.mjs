@@ -2225,3 +2225,135 @@ kito@design.kyushu-u.example`;
 
   await api(`/api/visits?id=${v.visit_id}`, { method: "DELETE", headers: admin });
 });
+
+test("研究室照片：研究室的人用支援人力表那把鑰匙上傳（不必登入），只有主辦端看得到；放上專頁、移到別場、刪自己的；一般存檔洗不掉、整場刪不掉", async () => {
+  // 明確要求：「要加一個不同人各個研究室拍的照片可以上傳的方法，作為資料庫可以後續使用」
+  const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+  const mk = async (code, date) => {
+    const r = await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ org: { name: `Photo ${code} University` }, date, code, start_time: "00:00", end_time: "23:59", guests: [] }) });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    return r.body.visit.visit_id;
+  };
+  const a = await mk("photoa", today);
+  const b = await mk("photob", today);
+  const future = await mk("photofuture", "2099-01-02");
+  const key = (await api("/api/settings", { headers: admin })).body.settings.rota_key;
+  assert.ok(key, "支援人力表的鑰匙是自動產生的");
+  const JPEG = Buffer.from("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFhEYIx8lJCIfIiEmKzcvJik0KSEiMEExNDk7Pj4+JS5ESUM8SDc9Pjv/2wBDAQoLCw4NDhwQEBw7KCIoOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozv/wAARCAAMABADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDn6KKK8k/QD//Z", "base64");
+  const dev1 = "devoneabcdefghijk1234567";
+  const dev2 = "devtwoabcdefghijk1234567";
+  const send = (fields, { k = key, bytes = JPEG, thumb = JPEG, headers = {} } = {}) => {
+    const fd = new FormData();
+    for (const [n, v] of Object.entries({ visit_id: a, room: "303", by: "王小明", device: dev1, name: "IMG_0001.jpg", w: "16", h: "12", ...fields })) if (v !== undefined) fd.append(n, v);
+    fd.append("file", new Blob([bytes], { type: "image/jpeg" }), "IMG_0001.jpg");
+    if (thumb) fd.append("thumb", new Blob([thumb], { type: "image/jpeg" }), "thumb.jpg");
+    return api(`/api/labphotos${k ? `?key=${encodeURIComponent(k)}` : ""}`, { method: "POST", body: fd, headers });
+  };
+  const json = (body, k = key, headers = { "content-type": "application/json" }) => api(`/api/labphotos${k ? `?key=${encodeURIComponent(k)}` : ""}`, { method: "POST", headers, body: JSON.stringify(body) });
+
+  // 鑰匙不對、沒有鑰匙也沒登入：打不開
+  assert.equal((await api("/api/labphotos?key=nope")).status, 403);
+  assert.equal((await api("/api/labphotos")).status, 403);
+  assert.equal((await send({}, { k: "nope" })).status, 403);
+
+  // 哪一場：已經到了的（今天與以前的），還沒到的不列；預設停在今天
+  const choices = (await api(`/api/labphotos?key=${encodeURIComponent(key)}`)).body;
+  assert.ok(choices.visits.some((v) => v.visit_id === a) && choices.visits.some((v) => v.visit_id === b));
+  assert.ok(!choices.visits.some((v) => v.visit_id === future), "還沒到的場次不列");
+  assert.ok([a, b].includes(choices.default), choices.default);
+  assert.deepEqual(choices.rooms, ["301", "302", "303", "304", "305", "center"]);
+
+  // 上傳一張
+  const up = await send({ taken: "2026-11-02T10:23:45" });
+  assert.equal(up.status, 200, JSON.stringify(up.body));
+  assert.equal(up.body.stats.total, 1);
+  const id1 = up.body.photo.id;
+  // 擋下來的：還沒到的場次、房號不對、沒寫名字、HEIC、不是照片
+  assert.equal((await send({ visit_id: future })).status, 409);
+  assert.equal((await send({ room: "306" })).status, 400);
+  assert.equal((await send({ by: "  " })).status, 400);
+  assert.equal((await send({}, { bytes: await readFile("test/fixtures/card.heic") })).status, 415, "HEIC 要先在瀏覽器裡轉成 JPEG");
+  assert.equal((await send({}, { bytes: Buffer.from("not a photo") })).status, 415);
+
+  // 這一場收到幾張、這台手機傳的那幾張；縮圖只給傳的那一台（別人拍的照片只有主辦端看得到）
+  const seen = (await api(`/api/labphotos?key=${encodeURIComponent(key)}&visit_id=${a}&device=${dev1}`)).body;
+  assert.deepEqual(seen.stats.rooms, { "303": 1 });
+  assert.deepEqual(seen.stats.by, [{ name: "王小明", n: 1 }]);
+  assert.deepEqual(seen.mine.map((p) => p.id), [id1]);
+  assert.equal((await api(`/api/labphotos?key=${encodeURIComponent(key)}&visit_id=${a}&device=${dev2}`)).body.mine.length, 0);
+  const thumb = await api(`/api/labphotos?key=${encodeURIComponent(key)}&visit_id=${a}&device=${dev1}&thumb=${id1}`);
+  assert.equal(thumb.status, 200);
+  assert.equal(thumb.headers.get("content-type"), "image/jpeg");
+  assert.equal((await api(`/api/labphotos?key=${encodeURIComponent(key)}&visit_id=${a}&device=${dev2}&thumb=${id1}`)).status, 404, "別台手機看不到");
+  const stored = (await api(`/api/visits?id=${a}`, { headers: admin })).body.visit.lab_photos;
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0].by, "王小明");
+  assert.equal(stored[0].taken, "2026-11-02T10:23:45");
+  assert.match(stored[0].key, new RegExp(`^labphotos/${a}/303-${id1}\\.jpg$`));
+  assert.equal((await api(`/api/media?key=${encodeURIComponent(stored[0].key)}`)).status, 401, "照片庫不公開");
+  assert.equal((await api(`/api/media?key=${encodeURIComponent(stored[0].key)}`, { headers: admin })).status, 200);
+  // 來賓專頁拿不到
+  assert.equal((await api(`/api/visits?id=${a}&public=1`)).body.visit.lab_photos, undefined);
+
+  // 刪：別台手機刪不了，自己的可以
+  assert.equal((await json({ action: "delete", visit_id: a, ids: [id1], device: dev2 })).status, 403);
+  assert.equal((await json({ action: "delete", visit_id: a, ids: [id1], device: dev1 })).status, 200);
+  assert.equal((await api(`/api/visits?id=${a}`, { headers: admin })).body.visit.lab_photos.length, 0);
+  assert.equal((await api(`/api/media?key=${encodeURIComponent(stored[0].key)}`, { headers: admin })).status, 404, "檔案也一起刪");
+
+  // 五個人同時各傳一張：一張都不會被蓋掉
+  const many = await Promise.all(["301", "302", "303", "304", "center"].map((room, i) => send({ room, by: `拍照的人${i}`, device: `device${i}abcdefghij` })));
+  assert.ok(many.every((r) => r.status === 200), JSON.stringify(many.map((r) => r.body)));
+  let list = (await api(`/api/visits?id=${a}`, { headers: admin })).body.visit.lab_photos;
+  assert.equal(list.length, 5);
+
+  // 一般存檔帶了別的 lab_photos 也不算；網址用出去了（有照片）就不跟著代碼搬家；整場刪不掉
+  const form = (await api(`/api/visits?id=${a}`, { headers: admin })).body.visit;
+  const resaved = await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ ...form, lab_photos: [], code: "photoa-renamed" }) });
+  assert.equal(resaved.status, 200, JSON.stringify(resaved.body));
+  assert.equal(resaved.body.visit.visit_id, a, "有照片了，網址固定");
+  assert.equal(resaved.body.visit.lab_photos.length, 5);
+  const del = await api(`/api/visits?id=${a}`, { method: "DELETE", headers: admin });
+  assert.equal(del.status, 409);
+  assert.match(del.body.error, /研究室傳上來的照片（5 張）/);
+
+  // 傳錯場：移到另一場（後台才行）
+  const wrong = list.find((p) => p.room === "302");
+  assert.equal((await json({ action: "move", visit_id: a, ids: [wrong.id], to: b })).status, 403, "研究室的連結不能移");
+  const moved = await json({ action: "move", visit_id: a, ids: [wrong.id], to: b }, "", admin);
+  assert.equal(moved.status, 200, JSON.stringify(moved.body));
+  assert.equal((await api(`/api/visits?id=${a}`, { headers: admin })).body.visit.lab_photos.length, 4);
+  const inB = (await api(`/api/visits?id=${b}`, { headers: admin })).body.visit.lab_photos;
+  assert.deepEqual(inB.map((p) => p.id), [wrong.id]);
+  assert.equal((await api(`/api/media?key=${encodeURIComponent(inB[0].key)}`, { headers: admin })).status, 200, "照片檔不必搬");
+
+  // 放上專頁：後台縮好之後走當天資料的上傳，帶 lab_photo——專頁上是另一份（公開），照片庫記下它
+  const pub = await api("/api/materials", { method: "POST", headers: admin, body: JSON.stringify({ visit_id: b, action: "upload", kind: "photo", name: "IMG_0001.jpg", data: `data:image/jpeg;base64,${JPEG.toString("base64")}`, lab_photo: wrong.id }) });
+  assert.equal(pub.status, 200, JSON.stringify(pub.body));
+  const vb = (await api(`/api/visits?id=${b}`, { headers: admin })).body.visit;
+  assert.equal(vb.lab_photos[0].published, pub.body.key);
+  assert.ok(vb.materials.photos.includes(pub.body.key));
+  assert.equal((await api(`/api/media?key=${encodeURIComponent(pub.body.key)}`)).status, 200, "放上專頁的那一份是公開的");
+
+  // 照片庫（後台）：每一場的照片，帶著是哪一場；上傳的手機代號不給
+  assert.equal((await api(`/api/labphotos?key=${encodeURIComponent(key)}&all=1`)).status, 403);
+  const lib = (await api("/api/labphotos?all=1", { headers: admin })).body.photos;
+  assert.equal(lib.filter((p) => p.visit_id === a).length, 4);
+  assert.ok(lib.every((p) => p.date && p.org && !("device" in p)));
+
+  // Drive：照片放在「研究室照片／<房號>」，檔名是「誰拍的_原本的檔名」；備份過的不再傳
+  const { plan, needsSync } = await import("../netlify/lib/drive.mts");
+  const va = (await api(`/api/visits?id=${a}`, { headers: admin })).body.visit;
+  const items = plan(va).filter((i) => i.lab);
+  assert.equal(items.length, 4);
+  assert.deepEqual(items.find((i) => i.folder[1] === "303"), { key: va.lab_photos.find((p) => p.room === "303").key, name: "拍照的人2_IMG_0001.jpg", folder: ["研究室照片", "303"], lab: va.lab_photos.find((p) => p.room === "303").id });
+  assert.ok(items.some((i) => i.folder[1] === "中心"));
+  await seed(a, (v) => { v.drive = { backed_up_at: new Date(Date.now() + 60000).toISOString(), lab_done: v.lab_photos.map((p) => p.id) }; });
+  const vDone = (await api(`/api/visits?id=${a}`, { headers: admin })).body.visit;
+  assert.equal(plan(vDone).filter((i) => i.lab).length, 0, "備份過的不再傳");
+  assert.equal(needsSync(vDone, []), false);
+  assert.equal((await send({ room: "305" })).status, 200);
+  assert.equal(needsSync((await api(`/api/visits?id=${a}`, { headers: admin })).body.visit, []), true, "新傳上來的照片要備份");
+  // 一批傳完：備份一次（這裡沒接 Drive，就只是 200）
+  assert.equal((await json({ action: "done", visit_id: a })).status, 200);
+});

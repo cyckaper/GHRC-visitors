@@ -1,6 +1,6 @@
 import { env, nowISO, siteUrl } from "./http.mts";
 import { getStore } from "./store.mts";
-import { toCSV } from "../../lib/visit.mjs";
+import { labPhotoFileName, labPhotoRoomLabel, labPhotosPending, toCSV } from "../../lib/visit.mjs";
 import { apiDisabled, googleAccessToken, googleReady } from "./google.mts";
 import type { ResponseRow, Visit } from "./types.mts";
 
@@ -20,6 +20,10 @@ const ROOT_FOLDER = "GHRC 參訪";
 export interface DriveItem {
   key: string;
   name: string;
+  /** 放在這一場資料夾底下的哪一層（研究室照片：["研究室照片", "303"]）；沒有就是這一場的資料夾本身 */
+  folder?: string[];
+  /** 研究室照片的 id：備份過就記進 visit.drive.lab_done，下一次不再傳 */
+  lab?: string;
 }
 
 export function driveConfig() {
@@ -71,6 +75,17 @@ async function ensureFolder(name: string, parent: string): Promise<string> {
 export async function ensureVisitFolder(visit: Visit): Promise<string> {
   const root = await ensureFolder(ROOT_FOLDER, driveConfig().parent);
   return ensureFolder(`${visit.date} ${visit.org?.name || visit.visit_id}`.slice(0, 100), root);
+}
+
+/** 這一場資料夾底下的子資料夾（研究室照片／303），一層一層建；同一次備份裡建過的記在 cache，不必每一張都問一次 Drive。 */
+export async function ensureSubfolder(base: string, path: string[] = [], cache: Map<string, string> = new Map()): Promise<string> {
+  let parent = base;
+  for (let i = 0; i < path.length; i += 1) {
+    const at = path.slice(0, i + 1).join("/");
+    if (!cache.has(at)) cache.set(at, await ensureFolder(path[i], parent));
+    parent = cache.get(at)!;
+  }
+  return parent;
 }
 
 export const folderUrl = (id: string) => `https://drive.google.com/drive/folders/${id}`;
@@ -146,6 +161,20 @@ export function plan(visit: Visit): DriveItem[] {
     const who = (c.names || []).filter(Boolean).join("、").slice(0, 60);
     items.push({ key: c.key, name: unique(`名片${who ? `-${who}` : ""}.${ext(c.key) || "jpg"}`) });
   }
+  // 研究室拍的照片：「研究室照片／<房號>／誰拍的_原本的檔名」。照片傳上來就不會再變，**備份過的不再傳**
+  // （一場可能上百張，每一次備份都整批重傳太慢）；同一個資料夾裡同名的加序號
+  const usedIn = new Map<string, Set<string>>();
+  for (const p of labPhotosPending(visit)) {
+    const room = p.room === "center" ? "中心" : labPhotoRoomLabel(p.room);
+    const names = usedIn.get(room) || new Set<string>();
+    usedIn.set(room, names);
+    const base = labPhotoFileName(p);
+    const dot = base.lastIndexOf(".");
+    let name = base;
+    for (let n = 2; names.has(name); n += 1) name = `${base.slice(0, dot)}-${n}${base.slice(dot)}`;
+    names.add(name);
+    items.push({ key: p.key, name, folder: ["研究室照片", room], lab: p.id });
+  }
   return items;
 }
 
@@ -161,10 +190,11 @@ export async function itemBytes(visit: Visit, responses: ResponseRow[], key: str
   return { bytes: m.bytes, mime: m.contentType || MIME[ext(key)] || "application/octet-stream" };
 }
 
-/** 自上次備份後有沒有新東西（參訪本身或回覆）。 */
+/** 自上次備份後有沒有新東西（參訪本身、回覆，或研究室剛傳上來、還沒備份的照片）。 */
 export function needsSync(visit: Visit, responses: { submitted_at?: string }[] = []): boolean {
   const last = Date.parse((visit as any).drive?.backed_up_at || "") || 0;
   if (!last) return true;
+  if (labPhotosPending(visit).length) return true;
   const times = [Date.parse(visit.updated_at || "") || 0, ...responses.map((r) => Date.parse(r.submitted_at || "") || 0)];
   return Math.max(0, ...times) > last;
 }
@@ -182,6 +212,8 @@ export async function syncVisit(visitId: string, { force = false } = {}): Promis
   const folder = await ensureVisitFolder(visit);
   const uploaded: string[] = [];
   const failed: string[] = [];
+  const labDone: string[] = [];
+  const folders = new Map<string, string>();
   for (const item of plan(visit)) {
     try {
       const payload = await itemBytes(visit, responses, item.key);
@@ -189,16 +221,19 @@ export async function syncVisit(visitId: string, { force = false } = {}): Promis
         failed.push(`${item.name}（媒體庫找不到 ${item.key}）`);
         continue;
       }
-      await uploadItem(folder, item.name, payload.mime, payload.bytes);
+      await uploadItem(item.folder?.length ? await ensureSubfolder(folder, item.folder, folders) : folder, item.name, payload.mime, payload.bytes);
       uploaded.push(item.name);
+      if (item.lab) labDone.push(item.lab);
     } catch (e: any) {
       failed.push(`${item.name}：${e?.message || e}`);
     }
   }
-  // 只寫 drive 這一格，而且寫進最新的那一份：上傳要好幾秒，這段時間裡別人存的（研究室剛填的接待人員）不能被蓋掉
-  const drive = { folder_id: folder, url: folderUrl(folder), backed_up_at: nowISO(), items: uploaded.length, ...(failed.length ? { failed } : {}) };
+  // 只寫 drive 這一格，而且寫進最新的那一份：上傳要好幾秒，這段時間裡別人存的（研究室剛填的接待人員）不能被蓋掉。
+  // 研究室照片備份過哪幾張要**接在原本那一份後面**（同時有兩次備份在跑，各自記的都要留著）
   await store.updateVisit(visitId, (fresh) => {
-    (fresh as any).drive = drive;
+    const before = (fresh as any).drive?.lab_done || [];
+    const done = [...new Set([...before, ...labDone])];
+    (fresh as any).drive = { folder_id: folder, url: folderUrl(folder), backed_up_at: nowISO(), items: uploaded.length, ...(failed.length ? { failed } : {}), ...(done.length ? { lab_done: done } : {}) };
   });
   return { skipped: false, uploaded, failed, folder_id: folder, url: folderUrl(folder) };
 }

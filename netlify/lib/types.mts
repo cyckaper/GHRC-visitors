@@ -51,6 +51,26 @@ export interface TextEdit {
   replace: string;
 }
 
+/** 研究室照片一張（`room`：301–305，或 center＝總體介紹、合照）。 */
+export interface LabPhoto {
+  id: string;
+  room: string;
+  by: string;
+  name: string;
+  key: string;
+  thumb: string;
+  type: string;
+  bytes: number;
+  w: number;
+  h: number;
+  at: string;
+  /** 拍攝時間（EXIF，相機上的時間，沒有時區）；讀不到就空字串 */
+  taken?: string;
+  device: string;
+  /** 放上來賓專頁的那一份（materials/<visit_id>/…）；從專頁拿掉之後這一格還在，看 materials.photos 有沒有它才算數 */
+  published?: string;
+}
+
 export interface Visit {
   visit_id: string;
   date: string; // YYYY-MM-DD
@@ -97,6 +117,8 @@ export interface Visit {
   };
   /** 訪客名片原圖（/api/cards）：讀錯時回頭核對用，Drive 備份會一起帶走。 */
   cards?: { key: string; names: string[]; read_at: string }[];
+  /** 各研究室拍的照片（/api/labphotos，研究室的人從 /photos 上傳；只有主辦端看得到，見 lib/visit.mjs sanitizeLabPhotos）。 */
+  lab_photos?: LabPhoto[];
   materials: Materials;
   // skip=true：這場不用簡報，只口頭介紹（後台「簡報」分頁勾的）
   // skip=true：這場不用簡報；fingerprint＝產檔那一刻的行程指紋（行程之後改了就知道這份 .pptx 是舊的）
@@ -144,7 +166,7 @@ export interface Visit {
   /** 自動提醒（reminder-cron）：後續提醒寄出的時間與收件者，一場只寄一次。 */
   reminders?: { wrapup_sent_at?: string; wrapup_to?: string };
   /** Google Drive 備份（/api/drive）：這場參訪在 Drive 上的資料夾。 */
-  drive?: { folder_id?: string; url?: string; backed_up_at?: string; items?: number };
+  drive?: { folder_id?: string; url?: string; backed_up_at?: string; items?: number; failed?: string[]; /** 已經備份過的研究室照片（照片不會再變，備份過的不再傳一次） */ lab_done?: string[] };
   /**
    * 從以前的參訪名單匯入的（/api/import）：哪一個檔、第幾列；原表同一列拆成好幾個單位時 group 相同＝同一場。
    * people／companions 是原表「來訪人員」「同行單位」那兩格照抄（沒有名字的職稱、師生、同仁）。

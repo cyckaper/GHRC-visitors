@@ -37,6 +37,12 @@
   to = "/rota.html"
   status = 200
 
+# 研究室照片的上傳頁 /photos → photos.html（研究室的人從 LINE 點開，跟支援人力表同一把鑰匙；照片只有主辦端看得到）
+[[redirects]]
+  from = "/photos"
+  to = "/photos.html"
+  status = 200
+
 # 來訪紀錄 /visits → visits.html（中心首頁的「來訪單位」連過來，一場一段說明）
 [[redirects]]
   from = "/visits"
@@ -60,6 +66,10 @@
 # （public/assets/deck/<版本>/），內容不會變，瀏覽器可以一直留著；deck.json 每一次都問一下有沒有新版
 [[headers]]
   for = "/deck.html"
+  [headers.values]
+    X-Robots-Tag = "noindex"
+[[headers]]
+  for = "/photos.html"
   [headers.values]
     X-Robots-Tag = "noindex"
 [[headers]]

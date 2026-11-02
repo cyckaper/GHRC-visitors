@@ -162,6 +162,9 @@ export default async (req: Request) => {
     // 來賓的回覆與寄出去的信不是我們的東西，有這些就不給刪
     if ((await store.listResponses(id)).length) return fail(409, "這一場已經有來賓回覆了，不刪。要清掉請直接改 Google Sheet 或聯絡管理者。");
     if (visit.letters?.thanks?.sent_at) return fail(409, "這一場的感謝信已經寄出去了，不刪。");
+    // 研究室的人傳上來的照片是照片庫的一部分（大家拍的），不跟著一場一起消失：傳錯場的先移過去，不要的先刪
+    const labPhotos = ((visit as any).lab_photos || []).length;
+    if (labPhotos) return fail(409, `這一場有研究室傳上來的照片（${labPhotos} 張），不刪。傳錯場的請先在「後續」分頁移到對的那一場，不要的先刪掉。`);
     for (const key of mediaKeys(visit)) await store.deleteMedia(key).catch(() => {});
     await dropDraft(id);
     await store.deleteVisit(id);
@@ -182,7 +185,7 @@ function hasHappened(v: Visit): boolean {
  * 後台表單管不到的欄位——別的端點或背景工作在寫：摘要（summary）、後續提醒（reminder-cron）、Drive 備份、
  * 名片、簽名簿、口述、當天資料（materials）、信件與寄出紀錄（letter）、寄信時跟著改的狀態（status）、
  * 後續那四件事的「本次沒有」（wrapup，走 `action: "wrapup"`）、從以前的名單匯入的來源（imported，匯入時寫的）、
- * 歡迎海報輸出的紀錄（poster，走 `action: "poster"`）。
+ * 歡迎海報輸出的紀錄（poster，走 `action: "poster"`）、各研究室上傳的照片（lab_photos，只有 /api/labphotos 在寫）。
  * 一般存檔**帶了也不算**，一律沿用伺服器上那一份。
  *
  * 以前是「body 沒帶才沿用」，可是後台的 readForm() 一直是把手上那一份**整個**送回來的，這幾格幾乎每次都帶著，
@@ -190,7 +193,7 @@ function hasHappened(v: Visit): boolean {
  * isUnused() 又把網址當成還沒用出去，下一次改日期或代碼就搬家，寄出去的那個連結跟著失效。
  * 提醒紀錄被洗掉則會害後續提醒重寄一次。要改這幾格，走寫它的那一支端點。
  */
-const KEPT = ["summary", "summary_at", "reminders", "drive", "cards", "signbook", "dictation", "letters", "materials", "status", "wrapup", "imported", "poster"] as const;
+const KEPT = ["summary", "summary_at", "reminders", "drive", "cards", "signbook", "dictation", "letters", "materials", "status", "wrapup", "imported", "poster", "lab_photos"] as const;
 
 /**
  * 訪前功課（background）要保留哪一份。research-background 會把結果寫回存過檔的那一場；
@@ -259,6 +262,8 @@ async function isUnused(store: ReturnType<typeof getStore>, v: Visit): Promise<b
   if (v.materials?.deck_pdf || v.materials?.photos?.length || v.materials?.links?.length) return false;
   if (v.signbook?.photo_key || hasDictation(v.dictation)) return false;
   if (a.cards?.length || a.drive?.backed_up_at) return false;
+  // 研究室的人已經在上傳照片（照片頁上選的就是這一場）
+  if (a.lab_photos?.length) return false;
   // 印了 QR 的歡迎海報已經掛在門口：網址再換，掃出來就是找不到
   if (a.poster?.printed_at && a.poster?.qr) return false;
   return !(await store.listResponses(v.visit_id)).length;
@@ -267,7 +272,7 @@ async function isUnused(store: ReturnType<typeof getStore>, v: Visit): Promise<b
 /** 這一場自己的檔案（簽名簿、口述、名片、當天資料）——刪掉這一場就一起清掉。 */
 function mediaKeys(v: Visit): string[] {
   const a = v as any;
-  const keys = [v.signbook?.photo_key, v.dictation?.audio_key, v.materials?.deck_pdf, ...(v.materials?.photos || []), ...(v.materials?.links || []).map((l) => l.url), ...((a.cards || []) as { key: string }[]).map((c) => c.key)];
+  const keys = [v.signbook?.photo_key, v.dictation?.audio_key, v.materials?.deck_pdf, ...(v.materials?.photos || []), ...(v.materials?.links || []).map((l) => l.url), ...((a.cards || []) as { key: string }[]).map((c) => c.key), ...((a.lab_photos || []) as { key: string; thumb?: string }[]).flatMap((p) => [p.key, p.thumb])];
   return keys.filter((k): k is string => typeof k === "string" && !!k && !/^https?:/i.test(k));
 }
 

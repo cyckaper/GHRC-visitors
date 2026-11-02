@@ -1,6 +1,6 @@
 import { fail, json, nowISO, readJSON, requireAdmin } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
-import { DRIVE_HINT, driveConfig, driveReady, ensureVisitFolder, folderUrl, itemBytes, plan, uploadItem } from "../lib/drive.mts";
+import { DRIVE_HINT, driveConfig, driveReady, ensureSubfolder, ensureVisitFolder, folderUrl, itemBytes, plan, uploadItem } from "../lib/drive.mts";
 
 /**
  * 後台的手動備份（自動備份走 drive-sync-background，見 lib/drive.mts）。
@@ -51,9 +51,12 @@ export default async (req: Request) => {
     const payload = await itemBytes(visit, responses, key);
     if (!payload) return fail(404, `媒體庫裡找不到 ${key}`);
     const folder = await ensureVisitFolder(visit);
-    const file = await uploadItem(folder, item.name, payload.mime, payload.bytes);
+    const file = await uploadItem(item.folder?.length ? await ensureSubfolder(folder, item.folder) : folder, item.name, payload.mime, payload.bytes);
     const saved = await store.updateVisit(visit.visit_id, (v) => {
-      (v as any).drive = { ...((v as any).drive || {}), folder_id: folder, url: folderUrl(folder) };
+      const prev = (v as any).drive || {};
+      // 研究室照片備份過就記下來，下一次不再傳
+      const labDone = item.lab ? [...new Set([...(prev.lab_done || []), item.lab])] : prev.lab_done;
+      (v as any).drive = { ...prev, folder_id: folder, url: folderUrl(folder), ...(labDone ? { lab_done: labDone } : {}) };
     });
     return json({ ok: true, file: { name: item.name, id: file.id, url: file.webViewLink, bytes: payload.bytes.length }, drive: (saved as any)?.drive || null });
   } catch (e: any) {

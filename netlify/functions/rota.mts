@@ -1,5 +1,5 @@
 import { fail, json, nowISO, readJSON, requireAdmin } from "../lib/http.mts";
-import { loadSettings } from "./settings.mts";
+import { rotaKeyOk } from "./settings.mts";
 import { loadLabs } from "./labs.mts";
 import { getStore } from "../lib/store.mts";
 import { isForum, retimeProgramme, rotaRooms, visitEndAt, withLabMinutes } from "../../lib/visit.mjs";
@@ -66,17 +66,10 @@ function rotaVisit(v: Visit, labs: any, now: Date) {
   };
 }
 
-async function allowed(req: Request): Promise<boolean> {
-  const key = new URL(req.url).searchParams.get("key") || "";
-  const want = (await loadSettings()).rota_key || "";
-  // 空的 key 不算通過——不然還沒產生連結之前，任何人都打得開
-  return !!want && key === want;
-}
-
 export default async (req: Request) => {
   // 登入的後台（主辦端）：過去的場次也改得了。只帶連結裡的 key 的（研究室老師）：過去的只給看
   const admin = !requireAdmin(req);
-  if (!admin && !(await allowed(req))) return fail(403, "這個連結不對，或是已經換過了。請跟中心要新的網址。");
+  if (!admin && !(await rotaKeyOk(req))) return fail(403, "這個連結不對，或是已經換過了。請跟中心要新的網址。");
   const store = getStore();
 
   if (req.method === "GET") {

@@ -20,6 +20,7 @@
   <header>
     <h1 class="text-2xl font-semibold">GHRC 支援人力表</h1>
     <p class="muted mt-1">請在貴室那一格填：<b>接待人員</b>、<b>共需幾分鐘</b>。填完自己會存。</p>
+    <p class="mt-2"><a id="photosLink" class="underline" href="/photos">參訪當天拍的照片，傳到這裡 →</a></p>
   </header>
   <p id="status" class="muted"></p>
   <div id="rows"></div>
@@ -34,6 +35,8 @@ import { mountRota, focusVisit } from "/lib/rota.mjs";
 const $ = (id) => document.getElementById(id);
 const key = new URLSearchParams(location.search).get("key") || "";
 const q = `/api/rota?key=${encodeURIComponent(key)}`;
+// 研究室照片的上傳頁用同一把鑰匙（各室當天拍的照片，傳上去只有中心看得到）
+$("photosLink").href = `/photos?key=${encodeURIComponent(key)}`;
 const api = (path, init) => fetch(path, { credentials: "same-origin", ...init }).then((r) => r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` })));
 const status = (msg, isError) => { $("status").textContent = msg; $("status").className = isError ? "err" : "muted"; };
 // 通告裡的連結帶著 #<visit_id>：點進來直接跳到那一場

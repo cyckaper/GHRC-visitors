@@ -62,6 +62,16 @@ export async function ensureRotaKey(): Promise<string> {
 }
 
 /**
+ * 連結裡的 `?key=` 對不對（支援人力表 `/rota` 與研究室照片 `/photos` 共用同一把鑰匙：都是給中心自己人從 LINE 點開用的）。
+ * **空的 key 不算通過**——不然還沒產生連結之前，任何人都打得開。
+ */
+export async function rotaKeyOk(req: Request): Promise<boolean> {
+  const key = new URL(req.url).searchParams.get("key") || "";
+  const want = (await loadSettings()).rota_key || "";
+  return !!want && key === want;
+}
+
+/**
  * 後續提醒寄到哪裡（reminder-cron 用）：後台「設定」填的優先，沒填就用 Netlify 的
  * `REMINDER_TO`，再沒有就寄給寄信的那個帳號自己（`gmailAccount()`：後台連上 Google 的那一個，或 `GMAIL_SENDER`）——
  * 設定分頁那一格寫的就是「留空就用寄信那個帳號」。以前只看 `GMAIL_SENDER`，在後台連上 Google 的站台

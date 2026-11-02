@@ -94,6 +94,14 @@
   #flash { position: fixed; left: 50%; transform: translateX(-50%); bottom: 1rem; z-index: 50; max-width: min(42rem, calc(100% - 2rem)); padding: .55rem .9rem; border-radius: .7rem; font-size: .9rem; color: #fff; background: #1c1917; box-shadow: 0 10px 30px rgba(0,0,0,.22); }
   #flash.ok { background: #047857; color: #fff; } #flash.err { background: #b91c1c; color: #fff; }
   .slide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: .25rem .75rem; font-size: .85rem; }
+  /* 研究室拍的照片（後續分頁那一張與「資料」分頁的照片庫）：縮圖一格一格，左上角勾選、右上角「專頁」 */
+  .ph-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr)); gap: .5rem; }
+  .ph { position: relative; margin: 0; min-width: 0; }
+  .ph img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: .6rem; background: #f5f5f4; }
+  .ph input[type=checkbox] { position: absolute; top: .35rem; left: .35rem; width: 1.2rem; height: 1.2rem; accent-color: var(--tab); cursor: pointer; }
+  .ph .pub { position: absolute; top: .35rem; right: .35rem; font-size: .68rem; font-weight: 600; padding: .05rem .45rem; border-radius: 9999px; background: #047857; color: #fff; }
+  .ph figcaption { font-size: .72rem; color: #78716c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ph:has(input:checked) img { outline: 3px solid var(--tab); outline-offset: 1px; }
 </style>
 </head>
 <body class="bg-stone-50 text-stone-900">
@@ -440,6 +448,25 @@
         </div>
       </div>
     </div>
+
+    <div class="card space-y-3" id="labPhotosCard">
+      <div class="flex flex-wrap items-center gap-2">
+        <h2 class="font-semibold mr-auto">研究室拍的照片 <span class="muted font-normal">各研究室的人自己傳；只有主辦端看得到</span></h2>
+        <button class="btn btn-soft" id="labPhotosCopy" type="button" title="研究室的人點這個連結就能上傳（不必登入，跟支援人力表同一把鑰匙）：貼到 LINE 群組">複製上傳連結</button>
+        <button class="btn btn-soft" id="labPhotosZip" type="button" title="這一場的研究室照片全部下載成一個 zip（照研究室分資料夾）" disabled>全部下載</button>
+      </div>
+      <p class="muted">研究室的人用上面那個連結傳（手機一次選很多張，HEIC 也收），選好是哪一間、誰拍的。勾幾張按<b>放上專頁</b>：來賓專頁的合照與感謝信就有；其他的留在照片庫（「資料」分頁），Drive 也一起備份。</p>
+      <p class="text-sm" id="labPhotosInfo"></p>
+      <div id="labPhotosGrid" class="space-y-3"></div>
+      <div class="flex flex-wrap items-center gap-2 text-sm border-t pt-3" id="labPhotosBar" hidden>
+        <span class="font-medium mr-1" id="labPhotosPicked"></span>
+        <button class="btn" id="labPhotosPublish" type="button" title="複製一份（縮到長邊 1600）放上來賓專頁的合照；感謝信也會帶">放上專頁</button>
+        <button class="btn btn-soft" id="labPhotosUnpublish" type="button" title="從來賓專頁的合照拿掉（照片庫裡那一張還在）">從專頁拿掉</button>
+        <span class="inline-flex items-center gap-1"><select id="labPhotosMoveTo" class="!w-56" title="傳錯場的：移到對的那一場"></select><button class="btn btn-soft" id="labPhotosMove" type="button">移過去</button></span>
+        <button class="btn btn-soft" id="labPhotosDelete" type="button" title="從照片庫刪掉（放上專頁的那一份，在動作四的合照那裡拿掉）">刪掉</button>
+        <button class="muted underline" id="labPhotosClear" type="button">不選了</button>
+      </div>
+    </div>
   
     <div class="card space-y-3" id="thanksCard">
       <div class="flex flex-wrap items-center gap-2">
@@ -546,6 +573,20 @@
       <pre class="wrap text-sm" id="summary"></pre>
       <h3 class="font-medium">來賓回覆</h3>
       <table id="responsesTable"><thead><tr><th>來源</th><th>姓名</th><th>email</th><th>最想看</th><th>想合作</th><th>希望我們</th><th>簽名簿／建議／備註</th><th>時間</th></tr></thead><tbody></tbody></table>
+    </div>
+    <div class="card space-y-3" id="libraryCard">
+      <div class="flex flex-wrap items-center gap-2">
+        <h2 class="font-semibold mr-auto">照片庫 <span class="muted font-normal">各研究室歷次參訪拍的照片；點一張看原圖</span></h2>
+        <button class="btn btn-soft" id="libZip" type="button" title="把下面這些照片下載成一個 zip（照場次與研究室分資料夾）" disabled>下載這些</button>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 text-sm">
+        <select id="libRoom" class="!w-auto" title="只看這一間"><option value="">全部研究室</option></select>
+        <select id="libYear" class="!w-auto" title="只看這一年"><option value="">全部年份</option></select>
+        <input type="text" id="libWho" class="!w-40" placeholder="誰拍的" title="只看這個人拍的">
+        <span class="muted" id="libInfo"></span>
+      </div>
+      <div id="libGrid" class="space-y-4"></div>
+      <button class="btn btn-soft" id="libMore" type="button" hidden>再多顯示一些</button>
     </div>
     <div class="card space-y-3">
       <div class="flex flex-wrap gap-2 items-center"><h2 class="font-semibold mr-auto">跨場次彙整：開放建議裡重複出現的問題</h2><button class="btn" id="digestBtn" title="把歷次「開放建議」一起讀過，找出重複出現的問題（例如某一間反覆被說聽不懂）">AI 彙整</button></div>
@@ -2009,59 +2050,21 @@
    * - 一張 12 MP 大約五秒，轉的時候 `note` 說一聲；兩分鐘還沒好就放棄、講一句人話。
    *   轉不過來**不要把 HEIC 原檔送上去**（送上去也讀不出來、來賓專頁上也看不到）：丟出來的錯誤帶 `heic: true`，呼叫的地方照這個判斷。
    */
-  const HEVC_BRANDS = new Set(["heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs"]);
+  // 認 HEIC、轉 JPEG 的那一套在 /lib/photos.mjs（研究室照片上傳頁 /photos 也用同一份）；這裡只是接過去
   const isHeic = (f) => /^image\/hei[cf]/i.test(f?.type || "") || /\.(hei[cf]|hif)$/i.test(f?.name || "");
-  /** 檔案開頭的 ftyp 是不是 HEIF（跟伺服器 http.mts 的 isHeifBytes 同一套：HEVC 的 brand，或只寫 mif1／msf1 又不是 AVIF）。 */
+  let photoMod = null;
+  const photoLib = () => (photoMod = photoMod || import("/lib/photos.mjs").catch((e) => { photoMod = null; throw e; }));
   async function looksHeif(f) {
-    try {
-      const b = new Uint8Array(await f.slice(0, 64).arrayBuffer());
-      if (b.length < 16) return false;
-      const tag = (at) => String.fromCharCode(b[at], b[at + 1], b[at + 2], b[at + 3]);
-      if (tag(4) !== "ftyp") return false;
-      const size = Math.min(b.length, ((b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]) >>> 0 || 16);
-      const brands = [tag(8)];
-      for (let at = 16; at + 4 <= size; at += 4) brands.push(tag(at));
-      return brands.some((x) => HEVC_BRANDS.has(x)) || ((brands[0] === "mif1" || brands[0] === "msf1") && !brands.some((x) => x === "avif" || x === "avis"));
-    } catch (e) { return false; }
+    try { return await (await photoLib()).looksHeif(f); } catch (e) { return false; }
   }
-  // 面積上限 16 MP（iPad 的 canvas 是照面積算的）、長邊上限 16384：又高又窄的捲動截圖保留原本的寬度，第 1 步才切得清楚
-  const HEIC_AREA = 16e6, HEIC_EDGE = 16384, HEIC_WAIT = 120000;
-  let heicLib = null, heicLoads = 0; // 轉檔程式只載一次；載失敗就清掉，下一張換一個網址再試（瀏覽器會記住載失敗的那一個網址）
   async function decodableImage(file, note = () => {}) {
-    if (!isHeic(file) && !(await looksHeif(file))) return file;
-    const name = file.name || "這張照片";
-    const heicError = (msg) => Object.assign(new Error(msg), { heic: true });
-    let bmp = null, late = false;
-    try { bmp = await createImageBitmap(file); } catch (e) { /* 這個瀏覽器看不懂 HEIC，交給轉檔程式 */ }
-    try {
-      if (!bmp) {
-        note("HEIC 照片轉成 JPEG 中……一張大約五秒。");
-        const work = (async () => {
-          heicLib = heicLib || import(`/lib/vendor/heic-to.js${heicLoads++ ? `?r=${Date.now()}` : ""}`).catch((e) => { heicLib = null; throw e; });
-          const { heicTo } = await heicLib.catch(() => { throw heicError("HEIC 的轉檔程式沒有載入成功（網路不穩？）：請重新整理後台再試一次"); });
-          return await heicTo({ blob: file, type: "bitmap" });
-        })();
-        work.then((b) => { if (late) b?.close?.(); }, () => {}); // 等太久放棄了，晚到的那一張也要收掉
-        let timer;
-        const slow = new Promise((_, reject) => { timer = setTimeout(() => { late = true; reject(heicError(`${name} 轉了兩分鐘還沒好：請重新整理後台再試一次，或在相簿裡把它匯出成 JPEG`)); }, HEIC_WAIT); });
-        try { bmp = await Promise.race([work, slow]); } finally { clearTimeout(timer); }
-      }
-      const s = Math.min(1, Math.sqrt(HEIC_AREA / (bmp.width * bmp.height)), HEIC_EDGE / Math.max(bmp.width, bmp.height));
-      const c = document.createElement("canvas");
-      c.width = Math.max(1, Math.round(bmp.width * s)); c.height = Math.max(1, Math.round(bmp.height * s));
-      const g = c.getContext("2d");
-      g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
-      g.drawImage(bmp, 0, 0, c.width, c.height);
-      const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", 0.92));
-      c.width = c.height = 1; // 大張的 canvas 馬上放掉（iPad 的記憶體）
-      if (!blob) throw new Error("canvas");
-      return new File([blob], `${String(file.name || "photo").replace(/\.[a-z0-9]{1,5}$/i, "")}.jpg`, { type: "image/jpeg" });
-    } catch (e) {
-      if (e?.heic) throw e;
-      throw heicError(`${name} 是 HEIC，轉不成 JPEG：請在相簿裡把它匯出成 JPEG 再選一次`);
-    } finally {
-      try { bmp?.close?.(); } catch (e) { /* 已經關了 */ }
+    let lib;
+    try { lib = await photoLib(); } catch (e) {
+      // 連 /lib/photos.mjs 都載不到（網路不穩）：HEIC 就講一句人話，其他照片原樣往下走
+      if (isHeic(file)) throw Object.assign(new Error("HEIC 的轉檔程式沒有載入成功（網路不穩？）：請重新整理後台再試一次"), { heic: true });
+      return file;
     }
+    return lib.decodableImage(file, note, { reload: "請重新整理後台再試一次" });
   }
   async function downscale(file, maxEdge, quality, note) {
     file = await decodableImage(file, note);
@@ -2327,7 +2330,7 @@
     if (state.promisedFor) await savePromised(); // 換場之前：上一場改到一半的答應提供資料先存掉
     let id = $("visitSelect").value;
     if (!id && !(state.visits || []).length) { await loadVisits(); id = $("visitSelect").value; }
-    if (!id) return mnote(state.authed ? "請先在上面選一場參訪（還沒有任何參訪就先到「訪前」建一場）。" : "這台裝置還沒登入：請到頁面最上方貼 ADMIN_TOKEN 登入。", "err");
+    if (!id) { state.wrapVisit = null; renderLabPhotos(null); return mnote(state.authed ? "請先在上面選一場參訪（還沒有任何參訪就先到「訪前」建一場）。" : "這台裝置還沒登入：請到頁面最上方貼 ADMIN_TOKEN 登入。", "err"); }
     const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
     if (!r.ok) { mnote(`讀不到這場參訪：${r.error}`, "err"); return flash(r.error, "err"); }
     mnote("");
@@ -2356,6 +2359,7 @@
       .join("");
     renderMaterials(r.visit.materials || { deck_pdf: "", photos: [], links: [] });
     renderPromised(state.materials.links);
+    renderLabPhotos(r.visit);
   }
   function renderMaterials(m) {
     state.materials = { deck_pdf: m.deck_pdf || "", photos: m.photos || [], links: m.links || [] };
@@ -2374,7 +2378,202 @@
   }
   $("pdfLinkSave").onclick = () => busy($("pdfLinkSave"), async () => { const url = $("pdfLink").value.trim(); if (!/^https?:\/\//i.test(url)) return flash("請貼完整的 https:// 連結", "err"); await saveMaterials({ deck_pdf: url }); });
   $("pdfInfo").addEventListener("click", async (e) => { if (!e.target.closest("[data-remove-pdf]")) return; await saveMaterials({ deck_pdf: "" }); });
-  $("photoList").addEventListener("click", async (e) => { const b = e.target.closest("[data-remove-photo]"); if (!b) return; await saveMaterials({ photos: state.materials.photos.filter((p) => p !== b.dataset.removePhoto) }); });
+  $("photoList").addEventListener("click", async (e) => { const b = e.target.closest("[data-remove-photo]"); if (!b) return; await saveMaterials({ photos: state.materials.photos.filter((p) => p !== b.dataset.removePhoto) }); renderLabPhotos(state.wrapVisit); });
+
+  /**
+   * **研究室拍的照片**（2026-11-02 明確要求：「要加一個不同人各個研究室拍的照片可以上傳的方法，作為資料庫可以後續使用」）。
+   * 研究室的人從 /photos 上傳（跟支援人力表同一把鑰匙；連結在這裡複製、貼到 LINE 群組），清單在 visit.lab_photos（/api/labphotos）。
+   * 只有主辦端看得到。勾幾張「放上專頁」＝縮到長邊 1600、走當天資料的上傳（帶 lab_photo）：來賓專頁的合照與感謝信就有，
+   * 照片庫裡那一張不動。傳錯場的「移過去」；不要的「刪掉」。每一場的照片合起來是「資料」分頁的照片庫。
+   */
+  const PHOTO_ROOMS = ["301", "302", "303", "304", "305", "center"];
+  const labNameOf = (room) => (state.labs?.labs || []).find((l) => l.room === room)?.name_zh || "";
+  const roomTitle = (room) => (room === "center" ? t("中心（總體介紹、合照）") : `${room} ${labNameOf(room)}`.trim());
+  const roomFolder = (room) => (room === "center" ? "中心" : room);
+  const authHeader = () => (token() ? { authorization: `Bearer ${token()}` } : {});
+  const photosLink = (visitId) => `${location.origin}/photos?key=${encodeURIComponent(state.settings?.rota_key || "")}${visitId ? `#${visitId}` : ""}`;
+  const whoCount = (rows) => {
+    const by = new Map();
+    for (const p of rows) by.set(p.by || "", (by.get(p.by || "") || 0) + 1);
+    return [...by].sort((a, b) => b[1] - a[1]).map(([name, n]) => `${name || t("沒寫名字")} ${n}`).join("、");
+  };
+  /** 一格：縮圖（點了看原圖）、勾選、放上專頁的標「已上專頁」、底下寫誰拍的與拍攝時間。 */
+  function photoCell(p, { pub = null, pick = true, room = false } = {}) {
+    const on = !!(pub && p.published && pub.has(p.published));
+    const when = (p.taken || "").slice(11, 16);
+    return `<figure class="ph" data-photo="${esc(p.id)}"><a href="${esc(mediaUrl(p.key))}" target="_blank" rel="noopener" title="${esc(`${p.by || ""} · ${p.name || ""}`)}"><img loading="lazy" alt="" src="${esc(mediaUrl(p.thumb || p.key))}"></a>${pick ? `<input type="checkbox" data-pick="${esc(p.id)}" aria-label="${esc(t("選這一張"))}">` : ""}${on ? `<span class="pub">${esc(t("已上專頁"))}</span>` : ""}<figcaption>${room ? `${esc(roomFolder(p.room))} · ` : ""}${esc(p.by || t("沒寫名字"))}${when ? ` · ${esc(when)}` : ""}</figcaption></figure>`;
+  }
+  function renderLabPhotos(v) {
+    const list = Array.isArray(v?.lab_photos) ? v.lab_photos : [];
+    state.labPhotos = list;
+    const pub = new Set(state.materials?.photos || []);
+    $("labPhotosZip").disabled = !list.length;
+    const onPage = list.filter((p) => p.published && pub.has(p.published)).length;
+    $("labPhotosInfo").innerHTML = !v ? "" : list.length ? esc(`共 ${list.length} 張，${onPage} 張已放上專頁`) : `<span class="muted">${esc(t("還沒有研究室傳照片：參訪當天把上傳連結貼到 LINE 群組。"))}</span>`;
+    $("labPhotosGrid").innerHTML = PHOTO_ROOMS.filter((room) => list.some((p) => p.room === room))
+      .map((room) => {
+        const rows = list.filter((p) => p.room === room).sort((a, b) => String(a.taken || a.at).localeCompare(String(b.taken || b.at)));
+        return `<section class="space-y-1" style="--tone: var(--c${room}, #57534e)"><h3 class="text-sm font-medium"><span class="dotc"></span>${esc(roomTitle(room))} <span class="muted font-normal"><span>${esc(`${rows.length} 張`)}</span>（${esc(whoCount(rows))}）</span></h3><div class="ph-grid">${rows.map((p) => photoCell(p, { pub })).join("")}</div></section>`;
+      })
+      .join("");
+    // 移到哪一場：別的場次（換一場才重畫這一格，勾選的時候不動它）
+    const cur = v?.visit_id || "";
+    $("labPhotosMoveTo").innerHTML = `<option value="">${esc(t("移到另一場……"))}</option>` + (state.visits || []).filter((x) => x.visit_id !== cur).map((x) => `<option value="${esc(x.visit_id)}">${esc(`${x.date} ${x.org || ""}`)}</option>`).join("");
+    renderLabPhotoBar();
+  }
+  const pickedIds = () => [...$("labPhotosGrid").querySelectorAll("input[data-pick]:checked")].map((b) => b.dataset.pick);
+  const pickedPhotos = () => { const ids = new Set(pickedIds()); return (state.labPhotos || []).filter((p) => ids.has(p.id)); };
+  function renderLabPhotoBar() {
+    const picked = pickedPhotos();
+    $("labPhotosBar").hidden = !picked.length;
+    if (!picked.length) return;
+    const pub = new Set(state.materials?.photos || []);
+    const onPage = picked.filter((p) => p.published && pub.has(p.published)).length;
+    $("labPhotosPicked").textContent = `選了 ${picked.length} 張`;
+    $("labPhotosPublish").disabled = onPage === picked.length;
+    $("labPhotosUnpublish").disabled = !onPage;
+  }
+  $("labPhotosGrid").addEventListener("change", (e) => { if (e.target.closest("[data-pick]")) renderLabPhotoBar(); });
+  $("labPhotosClear").onclick = () => { $("labPhotosGrid").querySelectorAll("input[data-pick]").forEach((b) => (b.checked = false)); renderLabPhotoBar(); };
+  /** 動作之後重讀這一場（照片清單與當天資料一起換），換場了就不畫。 */
+  async function reloadLabPhotos() {
+    const id = state.wrapVisit?.visit_id;
+    if (!id) return;
+    const r = await api(`/api/visits?id=${encodeURIComponent(id)}`);
+    if (!r.ok || state.wrapVisit?.visit_id !== id) return;
+    state.wrapVisit = r.visit;
+    renderMaterials(r.visit.materials || { deck_pdf: "", photos: [], links: [] });
+    renderLabPhotos(r.visit);
+  }
+  $("labPhotosCopy").onclick = async () => {
+    if (!state.settings?.rota_key) { const r = await api("/api/settings"); if (r.ok) state.settings = r.settings; }
+    if (!state.settings?.rota_key) return flash(t("上傳連結還沒產生：請到「設定」分頁看一下"), "err");
+    if (await copy(photosLink(state.wrapVisit?.visit_id))) flash(t("上傳連結已複製：貼到 LINE 群組，研究室的人點開就能傳"));
+  };
+  $("labPhotosPublish").onclick = () => busy($("labPhotosPublish"), async () => {
+    const v = state.wrapVisit;
+    if (!v) return;
+    const pub = new Set(state.materials?.photos || []);
+    const todo = pickedPhotos().filter((p) => !(p.published && pub.has(p.published)));
+    if (!todo.length) return;
+    if ((state.materials?.photos || []).length + todo.length > 30) return flash(t("專頁的合照最多 30 張：少選幾張，或先在動作四拿掉幾張"), "err");
+    let done = 0;
+    for (const p of todo) {
+      $("labPhotosInfo").textContent = `放上專頁中……${done + 1}／${todo.length}`;
+      try {
+        const got = await fetch(mediaUrl(p.key), { credentials: "same-origin", headers: authHeader() });
+        if (!got.ok) throw new Error(`${got.status}`);
+        const blob = await got.blob();
+        const data = await downscale(new File([blob], p.name || "photo.jpg", { type: blob.type || "image/jpeg" }), 1600, 0.85);
+        const r = await api("/api/materials", { method: "POST", body: { visit_id: v.visit_id, action: "upload", kind: "photo", name: p.name || "photo.jpg", data, lab_photo: p.id } });
+        if (!r.ok) { flash(r.error, "err"); break; }
+        done += 1;
+      } catch (e) { flash(`${p.name || ""} ${t("沒放上去")}：${e.message || e}`, "err"); break; }
+    }
+    await reloadLabPhotos();
+    if (done) flash(`放上專頁了 ${done} 張：來賓專頁的合照與感謝信都有`);
+  });
+  $("labPhotosUnpublish").onclick = () => busy($("labPhotosUnpublish"), async () => {
+    const keys = new Set(pickedPhotos().map((p) => p.published).filter(Boolean));
+    if (!keys.size) return;
+    await saveMaterials({ photos: (state.materials?.photos || []).filter((k) => !keys.has(k)) });
+    await reloadLabPhotos();
+  });
+  $("labPhotosMove").onclick = () => busy($("labPhotosMove"), async () => {
+    const to = $("labPhotosMoveTo").value;
+    if (!to) return flash(t("先選要移到哪一場"), "err");
+    const ids = pickedIds();
+    const r = await api("/api/labphotos", { method: "POST", body: { action: "move", visit_id: state.wrapVisit?.visit_id, ids, to } });
+    if (!r.ok) return flash(r.error, "err");
+    flash(`移過去了 ${r.moved.length} 張`);
+    await reloadLabPhotos();
+  });
+  $("labPhotosDelete").onclick = () => busy($("labPhotosDelete"), async () => {
+    const ids = pickedIds();
+    if (!ids.length || !confirm(t(`從照片庫刪掉這 ${ids.length} 張？刪了就找不回來。`))) return;
+    const r = await api("/api/labphotos", { method: "POST", body: { action: "delete", visit_id: state.wrapVisit?.visit_id, ids } });
+    if (!r.ok) return flash(r.error, "err");
+    flash(`刪掉了 ${r.deleted.length} 張`);
+    await reloadLabPhotos();
+  });
+  /**
+   * 下載成一個 zip（/lib/photos.mjs 的 zipStore，不壓縮——照片本來就壓過了）。一張一張拿原圖，檔名是「誰拍的_原本的檔名」，
+   * 照 `folderOf` 分資料夾；同一個資料夾裡同名的加序號。
+   */
+  async function downloadPhotos(list, zipName, folderOf, note) {
+    const { zipStore, safeName } = await photoLib();
+    const files = [];
+    const used = new Set();
+    let missing = 0;
+    for (const [i, p] of list.entries()) {
+      note(`打包中……${i + 1}／${list.length}`);
+      const got = await fetch(mediaUrl(p.key), { credentials: "same-origin", headers: authHeader() }).catch(() => null);
+      if (!got || !got.ok) { missing += 1; continue; }
+      const ext = (/\.([a-z0-9]{2,5})$/i.exec(p.key)?.[1] || "jpg").toLowerCase();
+      const stem = `${safeName(p.by) ? `${safeName(p.by)}_` : ""}${safeName(String(p.name || "").replace(/\.[a-z0-9]{1,5}$/i, "")) || p.id}`;
+      let name = `${folderOf(p)}/${stem}.${ext}`;
+      for (let n = 2; used.has(name); n += 1) name = `${folderOf(p)}/${stem}-${n}.${ext}`;
+      used.add(name);
+      files.push({ name, bytes: new Uint8Array(await got.arrayBuffer()), date: new Date(p.taken || p.at) });
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(zipStore(files));
+    a.download = zipName;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+    note(missing ? `下載好了 ${files.length} 張，${missing} 張讀不到` : `下載好了 ${files.length} 張`);
+  }
+  $("labPhotosZip").onclick = () => busy($("labPhotosZip"), async () => {
+    const v = state.wrapVisit;
+    if (!v || !state.labPhotos?.length) return;
+    // zip 的檔名只用英數字：中文的 download 檔名有些瀏覽器會換成「download」（連副檔名都沒有）；zip 裡面的資料夾與檔名照樣是中文
+    await downloadPhotos(state.labPhotos, `GHRC-photos-${v.visit_id}.zip`, (p) => roomFolder(p.room), (m) => ($("labPhotosInfo").textContent = m));
+  });
+
+  // ── 資料：照片庫（每一場的研究室照片；/api/labphotos?all=1） ──
+  const LIB_PAGE = 240;
+  async function loadLibrary() {
+    const r = await api("/api/labphotos?all=1");
+    if (!r.ok) { $("libInfo").textContent = r.error || ""; return; }
+    state.library = r.photos || [];
+    state.libShown = LIB_PAGE;
+    const years = [...new Set(state.library.map((p) => String(p.date).slice(0, 4)))].sort().reverse();
+    const keepYear = $("libYear").value, keepRoom = $("libRoom").value;
+    $("libYear").innerHTML = `<option value="">${esc(t("全部年份"))}</option>` + years.map((y) => `<option value="${esc(y)}">${esc(y)}</option>`).join("");
+    $("libYear").value = years.includes(keepYear) ? keepYear : "";
+    $("libRoom").innerHTML = `<option value="">${esc(t("全部研究室"))}</option>` + PHOTO_ROOMS.map((room) => `<option value="${room}">${esc(roomTitle(room))}</option>`).join("");
+    $("libRoom").value = keepRoom;
+    renderLibrary();
+  }
+  function libFiltered() {
+    const room = $("libRoom").value, year = $("libYear").value, who = $("libWho").value.trim().toLowerCase();
+    return (state.library || []).filter((p) => (!room || p.room === room) && (!year || String(p.date).startsWith(year)) && (!who || String(p.by || "").toLowerCase().includes(who)));
+  }
+  function renderLibrary() {
+    const all = state.library || [];
+    const list = libFiltered();
+    const shown = list.slice(0, state.libShown || LIB_PAGE);
+    $("libZip").disabled = !list.length;
+    $("libInfo").textContent = !all.length ? t("還沒有照片：參訪當天把「後續」分頁的上傳連結貼到 LINE 群組，研究室的人就能傳。") : list.length === all.length ? `${all.length} 張` : `${list.length} 張（共 ${all.length} 張）`;
+    const groups = new Map();
+    for (const p of shown) { if (!groups.has(p.visit_id)) groups.set(p.visit_id, []); groups.get(p.visit_id).push(p); }
+    $("libGrid").innerHTML = [...groups]
+      .map(([, ps]) => `<section class="space-y-1"><h3 class="text-sm font-medium">${esc(ps[0].date)} ${esc(ps[0].org)} <span class="muted font-normal">${esc(`${ps.length} 張`)}</span></h3><div class="ph-grid">${ps.map((p) => photoCell(p, { pick: false, room: true })).join("")}</div></section>`)
+      .join("");
+    $("libMore").hidden = list.length <= shown.length;
+  }
+  for (const id of ["libRoom", "libYear"]) $(id).addEventListener("change", () => { state.libShown = LIB_PAGE; renderLibrary(); });
+  $("libWho").addEventListener("input", () => { state.libShown = LIB_PAGE; renderLibrary(); });
+  $("libMore").onclick = () => { state.libShown = (state.libShown || LIB_PAGE) + LIB_PAGE; renderLibrary(); };
+  $("libZip").onclick = () => busy($("libZip"), async () => {
+    const list = libFiltered();
+    if (!list.length) return;
+    const { safeName } = await photoLib();
+    const room = $("libRoom").value, year = $("libYear").value;
+    await downloadPhotos(list, `GHRC-photos${year ? `-${year}` : ""}${room ? `-${room}` : ""}.zip`, (p) => `${safeName(`${p.date} ${p.org}`)}/${roomFolder(p.room)}`, (m) => ($("libInfo").textContent = m));
+  });
 
   /**
    * **答應提供給對方的資料**（明確指示：「要加入答應提供給對方的資料，如檔案網頁等等」「能夠接受不同格式的檔案圖片或是檔案連結」）：
@@ -3203,6 +3402,7 @@
     await loadVisits();
     renderWorldMap();
     loadVisitList().then(() => checkVisitList()); // 名單有人加了列就自己讀進來（不必等，清單先畫）
+    loadLibrary(); // 照片庫（各研究室傳的照片）
     $("visitsTable").tBodies[0].innerHTML = state.visits.map((v) => `<tr class="cursor-pointer hover:bg-stone-50" data-id="${esc(v.visit_id)}"><td>${esc(v.date)}</td><td>${esc(v.org)}</td><td>${typeTag(v.type) || esc(v.type)}</td><td>${esc(v.country)}</td><td>${Number(v.headcount) > 0 ? esc(v.headcount) : ""}</td><td>${esc(v.status)}</td></tr>`).join("");
   }
   $("visitsTable").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-id]"); if (tr) showDetail(tr.dataset.id); });

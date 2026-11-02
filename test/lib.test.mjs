@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
 import { weekdayOf } from "../public/lib/rota.mjs";
+import { LAB_PHOTO_ROOMS, sanitizeLabPhotos, labPhotoStats, labPhotosPending, labPhotoFileName, photoVisitChoices, isLabPhotoKey } from "../lib/visit.mjs";
+import { exifTaken, zipStore, looksHeif } from "../public/lib/photos.mjs";
 import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, salutationLine, salutationPeople, settleSalutation, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, posterFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION, toForumProgramme, labStops, FORUM_TITLES, splitItems, sanitizeDictation, hasDictation, visitRecord, zhNumber, zhDate, promisedItems, thanksItems, talkedAbout, photoStem, isPhotoDuplicate, sameUrl, emailsOnFile, guestEmailFor, guestTalkPlan, guestTalks, guestTalkZh, sanitizeSpecialNotes, DEFAULT_GUEST_MINUTES, GUEST_TITLES, SPECIAL_NOTES_MAX } from "../lib/visit.mjs";
 
 const visit = {
@@ -1043,4 +1045,53 @@ test("歡迎海報的指紋：只看海報上印的東西；沒印流程的那�
   assert.match(s[0].why, /重印/);
   assert.deepEqual(staleOutputs({ ...later, poster: { printed_at: at, programme: false, fingerprint: noProg } }), [], "沒印流程就不必為了流程重印");
   assert.deepEqual(staleOutputs({ ...later }), [], "沒輸出過就沒有要重印的");
+});
+
+test("研究室照片：哪一場預設今天（正在進行的那一場）、還沒到的不列；清單整理、統計、Drive 檔名、哪幾張還沒備份", () => {
+  const now = new Date("2026-11-02T03:30:00Z"); // 台北 11:30
+  const visits = [
+    { visit_id: "2026-11-02-early", date: "2026-11-02", start_time: "09:00", end_time: "10:30", org: { name: "Early" } },
+    { visit_id: "2026-11-02-kyushu", date: "2026-11-02", start_time: "11:00", end_time: "12:30", org: { name: "Kyushu University", name_local: "九州大学" }, lab_photos: [{}, {}] },
+    { visit_id: "2026-10-07-uwa", date: "2026-10-07", start_time: "10:00", org: { name: "UWA" } },
+    { visit_id: "2026-11-03-next", date: "2026-11-03", start_time: "10:00", org: { name: "Tomorrow" } },
+  ];
+  const c = photoVisitChoices(visits, now);
+  assert.equal(c.today, "2026-11-02");
+  assert.equal(c.default, "2026-11-02-kyushu", "今天有兩場：挑正在進行的那一場");
+  assert.deepEqual(c.visits.map((v) => v.visit_id), ["2026-11-02-kyushu", "2026-11-02-early", "2026-10-07-uwa"], "還沒到的不列，新的在前");
+  assert.equal(c.visits[0].photos, 2);
+  assert.equal(c.visits[0].org_local, "九州大学");
+  assert.equal(photoVisitChoices(visits, new Date("2026-11-02T08:00:00Z")).default, "2026-11-02-kyushu", "今天都結束了：挑開始時間最近的");
+  assert.equal(photoVisitChoices(visits.slice(2, 3), now).default, "2026-10-07-uwa", "今天沒有：最近過去的那一場");
+  assert.equal(photoVisitChoices([], now).default, "");
+
+  assert.deepEqual(LAB_PHOTO_ROOMS, ["301", "302", "303", "304", "305", "center"]);
+  assert.ok(isLabPhotoKey("labphotos/2026-11-02-kyushu/303-abc123-t.jpg") && !isLabPhotoKey("materials/x/y.jpg") && !isLabPhotoKey("labphotos/../x"));
+  const list = sanitizeLabPhotos([
+    { id: "abc123", room: "303", by: " 王小明 ", name: "IMG_1.jpg", key: "labphotos/v/303-abc123.jpg", thumb: "labphotos/v/303-abc123-t.jpg", at: "2026-11-02T03:00:00Z", taken: "2026-11-02T10:23:45", device: "d1", published: "materials/v/1-IMG_1.jpg" },
+    { id: "def456", room: "center", by: "", name: "IMG_2.jpg", key: "labphotos/v/center-def456.jpg", taken: "bad" },
+    { id: "zzz999", room: "306", key: "labphotos/v/306-zzz999.jpg" },
+    { id: "yyy888", room: "301", key: "materials/v/x.jpg" },
+  ]);
+  assert.deepEqual(list.map((p) => p.id), ["abc123", "def456"], "房號、key 不對的丟掉");
+  assert.equal(list[0].by, "王小明");
+  assert.equal(list[0].published, "materials/v/1-IMG_1.jpg");
+  assert.equal(list[1].taken, "");
+  assert.deepEqual(labPhotoStats(list), { total: 2, rooms: { "303": 1, center: 1 }, by: [{ name: "", n: 1 }, { name: "王小明", n: 1 }] });
+  assert.equal(labPhotoFileName(list[0]), "王小明_IMG_1.jpg");
+  assert.equal(labPhotoFileName({ id: "x1", key: "labphotos/v/301-x1.jpg", name: "a/b:c.HEIC", by: "" }), "a_b_c.jpg", "路徑字元換掉，副檔名照存的那一份");
+  assert.deepEqual(labPhotosPending({ lab_photos: list, drive: { lab_done: ["abc123"] } }).map((p) => p.id), ["def456"]);
+});
+
+test("照片的瀏覽器工具（/lib/photos.mjs）：拍攝時間從 EXIF 讀、zip 打得開、HEIC 看檔案開頭認", async () => {
+  assert.equal(await exifTaken(new Blob([readFileSync("test/fixtures/exif.jpg")])), "2026-11-02T10:23:45", "DateTimeOriginal 優先");
+  assert.equal(await exifTaken(new Blob([Buffer.from("not a jpeg")])), "");
+  assert.equal(await looksHeif(new Blob([readFileSync("test/fixtures/card.heic")])), true);
+  assert.equal(await looksHeif(new Blob([readFileSync("test/fixtures/exif.jpg")])), false);
+  const zip = zipStore([{ name: "2026-11-02 九州大學/303/王小明_IMG_1.jpg", bytes: new Uint8Array(readFileSync("test/fixtures/exif.jpg")) }, { name: "a.txt", bytes: new TextEncoder().encode("hello") }]);
+  const { default: JSZip } = await import("jszip");
+  const z = await JSZip.loadAsync(await zip.arrayBuffer());
+  assert.deepEqual(Object.keys(z.files), ["2026-11-02 九州大學/303/王小明_IMG_1.jpg", "a.txt"], "中文檔名照樣讀得出來（UTF-8）");
+  assert.equal(await z.file("a.txt").async("string"), "hello");
+  assert.equal((await z.file("2026-11-02 九州大學/303/王小明_IMG_1.jpg").async("uint8array")).length, readFileSync("test/fixtures/exif.jpg").length);
 });

@@ -13,6 +13,9 @@ import { triggerDriveSync } from "../lib/drive.mts";
  * POST multipart（visit_id, kind=file, file, title?）                                              → 答應提供的檔案：各種文件、圖片、壓縮檔，進 links[]
  * POST /api/materials {visit_id, action:"save", materials:{deck_pdf?, photos?, links?}}             → **只換帶來的那幾格**（拿掉的檔案一起刪）
  * POST /api/materials {visit_id, action:"remove", key}                                            → 拿掉並刪檔
+ *
+ * 研究室拍的照片（/api/labphotos，只有主辦端看得到）放上專頁也走 photo 這一條：後台把那一張縮到長邊 1600 再傳上來，
+ * 帶 `lab_photo: <id>`——專頁上的是另一個檔（公開），照片庫裡那一張記下它（`published`），之後才看得出哪幾張已經放上去了。
  */
 const MAX_BYTES = 4.5 * 1024 * 1024;
 const MAX_LINKS = 30;
@@ -182,6 +185,9 @@ export default async (req: Request) => {
         full = cur.photos.length >= 30;
         if (full) return false;
         next.photos = [...cur.photos, key];
+        // 從照片庫放上專頁的那一張：照片庫裡記下專頁上的是哪一份
+        const labId = String(body.lab_photo || "");
+        if (labId && Array.isArray((v as any).lab_photos)) (v as any).lab_photos = (v as any).lab_photos.map((p: any) => (p && p.id === labId ? { ...p, published: key } : p));
       }
       v.materials = sanitizeMaterials(next);
       v.updated_at = nowISO();

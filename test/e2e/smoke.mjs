@@ -1425,6 +1425,89 @@ try {
   check(/0912-345-678/.test(await page.textContent("#confirmRecipients")), "the confirmation card says the contact can only be reached by phone, and how to send it");
   await fetch(`${base}/api/visits?id=${smsId}`, { method: "DELETE", headers: { authorization: "Bearer e2e-token" } });
 
+  // ── 研究室照片（明確要求：「要加一個不同人各個研究室拍的照片可以上傳的方法，作為資料庫可以後續使用」）──
+  // 研究室的人：手機、沒登入，從後台複製、貼到 LINE 群組的那個連結進來；傳上來的只有主辦端看得到，挑幾張放上專頁
+  {
+    const auth = { authorization: "Bearer e2e-token", "content-type": "application/json" };
+    const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+    const made = await (await fetch(`${base}/api/visits`, { method: "POST", headers: auth, body: JSON.stringify({ org: { name: "Photo Day University" }, date: today, code: "photoday", start_time: "00:00", end_time: "23:59", guests: [{ name: "Ada", email: "ada@photo.example", role: "lead" }] }) })).json();
+    const pv = made.visit.visit_id;
+    await page.reload();
+    await page.waitForFunction((id) => [...document.querySelectorAll("#visitSelect option")].some((o) => o.value === id), pv, { timeout: 20000 });
+    await page.selectOption("#visitSelect", pv);
+    await page.click('[data-tab="wrapup"]');
+    await page.waitForFunction(() => /還沒有研究室傳照片/.test(document.getElementById("labPhotosInfo").textContent), null, { timeout: 20000 });
+    check(true, "the follow-up tab has a card for the laboratories' photos, empty until someone uploads");
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: base });
+    await page.click("#labPhotosCopy");
+    await page.waitForFunction(() => /上傳連結已複製/.test(document.getElementById("flash").textContent), null, { timeout: 15000 });
+    const link = await page.evaluate(() => navigator.clipboard.readText());
+    const key = (await (await fetch(`${base}/api/settings`, { headers: auth })).json()).settings.rota_key;
+    check(link === `${base}/photos?key=${encodeURIComponent(key)}#${pv}`, `“copy the upload link” gives the photo page with the staffing table’s key, opened on this visit (${link})`);
+
+    const phone = await browser.newContext({ viewport: { width: 375, height: 800 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+    const mp = await phone.newPage();
+    const mpErrors = [];
+    mp.on("pageerror", (e) => mpErrors.push(e.message));
+    await mp.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+    await mp.goto(`${base}/photos?key=nope`);
+    await mp.waitForFunction(() => /連結不對/.test(document.getElementById("status").textContent), null, { timeout: 15000 });
+    check(await mp.isHidden("#form"), "a wrong key gets a plain sentence, no form");
+    await mp.goto(link);
+    await mp.waitForSelector("#form:not([hidden])");
+    check((await mp.inputValue("#visit")) === pv && /今天 Photo Day University/.test(await mp.textContent("#visit option:checked")), "the photo page opens on today’s visit");
+    const fit = await mp.evaluate(() => ({ inner: innerWidth, scroll: document.documentElement.scrollWidth, px: parseFloat(getComputedStyle(document.getElementById("by")).fontSize) }));
+    check(fit.scroll <= fit.inner && fit.px >= 16, `on a phone it fits the screen with 16px boxes (${JSON.stringify(fit)})`);
+    await mp.click("#pick");
+    check(/請先選是哪一間/.test(await mp.textContent("#status")), "it asks which laboratory before opening the photo library");
+    await mp.click('label.room:has(input[value="303"])');
+    await mp.fill("#by", "王小明");
+    // 一張帶 EXIF 拍攝時間的 JPEG ＋一張 iPhone 的 HEIC（10-bit、沒有副檔名）：HEIC 在手機上先轉成 JPEG
+    await mp.setInputFiles("#files", [
+      { name: "exif.jpg", mimeType: "image/jpeg", buffer: await readFile("test/fixtures/exif.jpg") },
+      { name: "IMG_2001", mimeType: "application/octet-stream", buffer: await readFile("test/fixtures/tenbit.heic") },
+    ]);
+    await mp.waitForFunction(() => /傳好了 2 張/.test(document.getElementById("progress").textContent), null, { timeout: 120000 });
+    await mp.waitForFunction(() => document.querySelectorAll("#mine img").length === 2, null, { timeout: 15000 });
+    check(/共 2 張：303 2 張（王小明 2）/.test(await mp.textContent("#summary")), "two photos go up, counted under 303 and the photographer’s name");
+    let stored = (await (await fetch(`${base}/api/visits?id=${pv}`, { headers: auth })).json()).visit.lab_photos;
+    check(stored.length === 2 && stored.every((p) => p.room === "303" && p.by === "王小明" && /\.jpg$/.test(p.key)) && stored.some((p) => p.taken === "2026-11-02T10:23:45") && stored.some((p) => p.name === "IMG_2001.jpg"), "…stored as JPEGs with the room, the photographer and the capture time from EXIF (the HEIC was converted on the phone)");
+    check(await mp.evaluate(() => localStorage.getItem("ghrc-photo-by") === "王小明" && localStorage.getItem("ghrc-photo-room") === "303"), "the phone remembers the name and the room for next time");
+    mp.once("dialog", (d) => d.accept());
+    await mp.click("#mine button[data-del]");
+    await mp.waitForFunction(() => document.querySelectorAll("#mine img").length === 1, null, { timeout: 15000 });
+    stored = (await (await fetch(`${base}/api/visits?id=${pv}`, { headers: auth })).json()).visit.lab_photos;
+    check(stored.length === 1, "a photo sent by mistake can be deleted from the same phone");
+    check(!mpErrors.length, `…without page errors (${mpErrors.join(" | ")})`);
+    await phone.close();
+
+    // 主辦端：看得到、挑一張放上專頁（來賓專頁的合照與感謝信就有）、整場下載
+    await page.click('[data-tab="pre"]');
+    await page.click('[data-tab="wrapup"]');
+    await page.waitForFunction(() => document.querySelectorAll("#labPhotosGrid .ph").length === 1, null, { timeout: 20000 });
+    check(/303/.test(await page.textContent("#labPhotosGrid h3")) && /王小明/.test(await page.textContent("#labPhotosGrid")), "the host sees the photo under 303 with who took it");
+    await page.check("#labPhotosGrid input[data-pick]");
+    await page.waitForSelector("#labPhotosBar:not([hidden])");
+    await page.click("#labPhotosPublish");
+    await page.waitForFunction(() => document.querySelectorAll("#labPhotosGrid .pub").length === 1 && document.querySelectorAll("#photoList img").length === 1, null, { timeout: 30000 });
+    const pubVisit = (await (await fetch(`${base}/api/visits?id=${pv}`, { headers: auth })).json()).visit;
+    check(pubVisit.materials.photos.length === 1 && pubVisit.lab_photos[0].published === pubVisit.materials.photos[0], "“put on the visit page” copies it into the guests’ photo album (and so the thank-you letter)");
+    check((await fetch(`${base}/api/media?key=${encodeURIComponent(pubVisit.lab_photos[0].key)}`)).status === 401 && (await fetch(`${base}/api/media?key=${encodeURIComponent(pubVisit.materials.photos[0])}`)).status === 200, "…the library photo stays private; only the copy on the visit page is public");
+    const dl = page.waitForEvent("download");
+    await page.click("#labPhotosZip");
+    const zip = await dl;
+    const zipBytes = await readFile(await zip.path());
+    check(zip.suggestedFilename() === `GHRC-photos-${pv}.zip` && zipBytes.subarray(0, 2).toString() === "PK" && zipBytes.includes(Buffer.from("303/王小明_")), `“download all” gives one zip, a folder per laboratory (${zip.suggestedFilename()})`);
+    // 「資料」分頁的照片庫：每一場的照片，照研究室篩
+    await page.click('[data-tab="data"]');
+    await page.waitForFunction((id) => [...document.querySelectorAll("#libGrid h3")].some((h) => h.textContent.includes("Photo Day University")), pv, { timeout: 20000 });
+    check(/303 · 王小明/.test(await page.textContent("#libGrid")), "the photo library on the data tab has it, with the room and the photographer");
+    await page.selectOption("#libRoom", "301");
+    check((await page.locator("#libGrid .ph").count()) === 0 && /0 張/.test(await page.textContent("#libInfo")), "…and filters by laboratory");
+    await page.selectOption("#libRoom", "");
+    await page.click('[data-tab="pre"]');
+  }
+
   // 歡迎海報（訪前第 7 步）：同一個瀏覽器（登入的 cookie）開海報頁，畫得出來、換得了選項，一列印就記一筆。
   // 放在最後：這一頁直接換到海報頁（測試用的 browser.newPage 沒辦法在同一個 context 再開一頁）
   const poster = page;

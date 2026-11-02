@@ -3,7 +3,7 @@
  * 本機開發伺服器（不需 Netlify CLI）。
  *  - 靜態檔：public/
  *  - /api/<name> 與 /.netlify/functions/<name> → netlify/functions/<name>.mts（Node 22 原生執行 TypeScript）
- *  - / → center.html（中心首頁）、/lab/<房號> → lab.html、/rota → rota.html、/<visit_id> → index.html（模擬 netlify.toml 的 redirect 與 fallback）
+ *  - / → center.html（中心首頁）、/lab/<房號> → lab.html、/rota → rota.html、/<visit_id> → index.html（/photos 之類的照 <檔名>.html）（模擬 netlify.toml 的 redirect 與 fallback）
  *  - 提供 Netlify 全域物件的最小替身（Netlify.env）
  * 環境：STORE_BACKEND 預設 file；ADMIN_TOKEN 未設時用 "dev"；AI_MOCK 未設時提示。
  */

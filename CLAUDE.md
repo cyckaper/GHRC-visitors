@@ -647,6 +647,31 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
 - **訪客名片**：現場拿到名片就拍一張（後台**「後續」分頁的動作二**——拍名片是現場的事，跟簽名簿、口述放在一起，
   不在翻舊帳的「資料」分頁；手機直接開相機，可連拍）。AI 讀出姓名、職稱、單位、email、電話，**人逐欄確認後**才併進這場的名單（`/api/cards`）——訪後信就會寄給他。併入規則 `lib/visit.mjs mergeGuests`：email 相同（不分大小寫）或「姓名＋單位」相同視為同一人，**只補空欄位、不覆寫已確認的資料**，也不會把主賓降級；同一張再存一次是 no-op。看不清楚的字一律留空不猜（email 猜錯比留空更糟）。原圖存 `cards/<visit_id>/<ts>.jpg`（**有個資，`/api/media` 只給 admin**），Drive 備份用名片主人的名字當檔名。
 - **簽名簿**：實體本子，主持人拍照上傳，AI 讀手寫字歸檔（原圖保留）
+- **研究室拍的照片（照片庫）**（2026-11-02 明確要求：「要加一個不同人各個研究室拍的照片可以上傳的方法，作為資料庫可以後續使用」）：
+  參訪當天各研究室的人用手機拍的照片，**各自傳上來**，累積成中心的照片庫。
+  - **上傳頁 `/photos?key=…`**（`public/photos.html`）：**跟支援人力表同一把鑰匙**（`settings.rota_key`，`settings.mts rotaKeyOk()` 兩邊共用）——
+    中心自己人從 LINE 點開就能傳，不必登入；登入的後台也打得開。選**哪一場**（已經到了的，新的在前；預設今天這一場，今天有好幾場挑正在進行的，
+    `lib/visit.mjs photoVisitChoices`；連結帶 `#<visit_id>` 就停在那一場）、**哪一間**（301–305，或「中心」＝總體介紹、合照）、
+    **你的名字**（記在這台手機），再一次選很多張。手機是瓶頸，一張一張傳；撞在一起（503）或網路斷一下自己重試。
+    傳錯的那幾張按 ✕ 刪掉——**只刪得了這台手機傳的**（`device`：那一台自己產的亂數，存在照片那一筆，不給別人看），
+    也只看得到自己傳的縮圖；別人拍的照片只有主辦端看得到。一批傳完送一次 `done`，整場備份到 Drive 一次（一張一張觸發的話，一百張就是一百次整場備份）。
+    手機版照支援人力表的規矩：不必左右捲、欄位的字至少 16px；排版不靠 Tailwind（CDN 還沒到也排得對）。
+  - **照片在瀏覽器裡就整理好**（`public/lib/photos.mjs`，後台也用這一份）：HEIC 轉 JPEG（`decodableImage`，後台那一套搬過來的，見「約定」的
+    「照片讀得了 HEIC」）、**長邊 2560 的 JPEG**（印 A4、放簡報、做年報都夠，一張一 MB 上下；原檔還在拍的人手機裡）＋**長邊 480 的縮圖**、
+    拍攝時間從 EXIF 讀（`exifTaken`，照片庫照這個排）。
+  - **存法**：清單在 `visit.lab_photos`（一張一筆：房號、誰拍的、原本的檔名、key、縮圖、寬高、上傳時間、拍攝時間、device、放上專頁的那一份），
+    **只有 `/api/labphotos` 在寫**（列在 `visits.mts` 的 KEPT，一般存檔帶了也不算），一律 `store.updateVisit`——五間同時在傳，一張都不會被蓋掉。
+    照片檔在媒體庫 `labphotos/<visit_id>/<房號>-<id>.jpg`（縮圖 `…-t.jpg`），**不公開**（`/api/media` 只給 admin）。一場最多 600 張。
+    還沒到的場次不收（照片是當天拍的）。有照片的那一場網址就固定（`isUnused`）、**整場刪不掉**（照片是大家拍的；傳錯場的先移過去，不要的先刪）。
+  - **後台「後續」分頁「研究室拍的照片」**（動作四後面）：「複製上傳連結」（貼到 LINE 群組）、一間一段的縮圖（誰拍的、幾點拍的），
+    勾幾張可以——**放上專頁**（瀏覽器縮到長邊 1600、走當天資料的上傳，帶 `lab_photo`：來賓專頁的合照與感謝信就有，照片庫裡那一張記下
+    `published`；專頁上的是**另一份、公開的**，照片庫那一張照樣不公開）、從專頁拿掉、**移到另一場**（傳錯場的；清單換一場記，照片檔不必搬）、刪掉；
+    「全部下載」是一個 zip（`zipStore`，不壓縮，一間一個資料夾，檔名「誰拍的_原本的檔名」；zip 的檔名只用英數字——中文的 download 檔名
+    有些瀏覽器會換成「download」，連副檔名都沒有）。
+  - **「資料」分頁「照片庫」**：每一場的研究室照片（`GET /api/labphotos?all=1`），一場一段、新的在前，照研究室、年份、誰拍的篩，篩出來的整批下載。
+  - **Drive**：每一場的資料夾底下「研究室照片／<房號>／誰拍的_原本的檔名」。照片傳上來就不會再變，**備份過的不再傳**（`visit.drive.lab_done`；
+    一場上百張，每一次備份都整批重傳太慢）。
+  - 支援人力表（`/rota`）上面一行連到上傳頁（同一把鑰匙）。隱私權政策兩種語言都寫了：照片庫只有中心同仁看得到，挑幾張放上專頁、附進感謝信。
 - **主持人三十秒口述**：參訪結束後由主持人口述，Whisper 轉文字後抽取
   （誰來、最想看哪一間、問了什麼、有無合作意願）。**依議程結束時間提醒＝寄一封信**（`reminder-cron`，見功能 4 底下那一段）
   - **重點一項一項打，AI 寫成完整紀錄**（明確指示：「輸入簡要說明要分項次，之後由 AI 產生出完整紀錄」；
@@ -698,7 +723,7 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
 ### 4. 長期檔案與回饋下一次簡報
 
 - **每場自動備份到 Google Drive**：中心 Drive 的 `GHRC 參訪/<日期> <單位>/` 一場一個資料夾，
-  放參訪資料.json、回覆.csv、動線.csv、一頁摘要.md、簽名簿照片、主持人口述音檔、當天簡報.pdf、現場合照（**用原始檔名**，例如 IMG_0696.jpg；同名的加序號。不用流水號，否則刪掉中間一張時編號往前遞補會蓋掉別張的內容）。
+  放參訪資料.json、回覆.csv、動線.csv、一頁摘要.md、簽名簿照片、主持人口述音檔、當天簡報.pdf、現場合照（**用原始檔名**，例如 IMG_0696.jpg；同名的加序號。不用流水號，否則刪掉中間一張時編號往前遞補會蓋掉別張的內容）、研究室拍的照片（`研究室照片/<房號>/`，備份過的不再傳，見功能 3）。
   **不必手動按**：資料寫進去的端點（`visits` 存檔、`signbook`、`transcribe`、`materials`、`letter` 寄出、`summary`、
   來賓的 `respond`）都會呼叫 `lib/drive.mts triggerDriveSync()`，觸發背景函式 `drive-sync-background`
   （Netlify 背景函式，15 分鐘上限，一次把整場搬完；一般函式 10 秒不夠）。`drive-cron` 每晚台北時間兩點掃一次補漏。
@@ -909,10 +934,11 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - `public/index.html`：專屬網址 `/<visit_id>`；整頁一種語言（預設英文，`?ui=zh` 換中文；ko／ja 來賓才另外附他們的語言）；流程（參訪當天標出「現在」；研究室參訪底下一間一行、各自的時段）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、備援按鍵，最後是三個回應項目（請益措辭、一句話就好；名字可以不填，「不具名送出」2026-11-02 拿掉了）。留信箱那一格 2026-10-23 整格拿掉了（見「約定」的「來賓端依階段換措辭」）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
 - `public/deck.html`：**網頁版簡報 `/deck`**——每一場同一份；圖與影片在 `public/assets/deck/<版本>/`、頁序在 `public/data/deck.json`，由 `scripts/web-deck/build.mjs` 在 GitHub Actions 上從 Drive 的母簡報產生（見「架構決定」的「網頁版簡報」）。
 - `public/visits.html`：**來訪紀錄 `/visits`**——已經來過的每一場（日期、單位、來訪人員、交流重點、去了哪幾間）＋同一張世界地圖，首頁的「來訪單位」連過來（見「約定」的「中心首頁」）。
+- `public/photos.html`：**研究室照片上傳 `/photos`**——各研究室的人用支援人力表那把鑰匙、從手機傳當天拍的照片（見功能 3 的「研究室拍的照片」）；`public/lib/photos.mjs` 是它與後台共用的照片處理（HEIC、縮圖、EXIF、zip）。
 - `public/privacy.html`：**隱私權政策 `/privacy`**——Google 的同意畫面要發布成正式版時 Branding 頁要填的那一個連結，也是寫給來賓看的（見「約定」的「隱私權政策」）。
 - `public/center.html`：**中心首頁 `/`**——中心簡介、三大任務、沿革、國際平台、來訪單位（世界地圖）、外部肯定、組織架構、五間研究室（卡片，各連到 `/lab/<房號>`）、聯絡；字在 `public/data/center.json`（見「約定」的「中心首頁」）。
 - `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `google-auth`（連上 Google：Drive、名單試算表、寄信共用的授權） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`record-background`（完整紀錄）／`cards-background`／`translate-background`／`geo-background`／`import-background`／`visit-list-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`；`geo` 查訪客地圖上各單位在哪裡；`import` 讀以前的參訪名單；`visit-list` 讀 Google 試算表名單裡新加的列）`drive` `drive-sync-background`（自動備份）；**五支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
-  `rota`（支援人力表，各研究室自己填）； `visitor-map`（**公開**：中心首頁的來訪單位地圖，只有單位、位置與來過幾次）； `import`（匯入以前的參訪名單：預覽與寫入，規則在 `lib/import.mjs`）； `visit-log`（**公開**：`/visits` 來訪紀錄頁；admin 用 POST 改公開說明與「不公開」）；
+  `rota`（支援人力表，各研究室自己填）； `labphotos`（研究室照片：研究室的人用支援人力表那把鑰匙上傳，照片庫只給後台）； `visitor-map`（**公開**：中心首頁的來訪單位地圖，只有單位、位置與來過幾次）； `import`（匯入以前的參訪名單：預覽與寫入，規則在 `lib/import.mjs`）； `visit-log`（**公開**：`/visits` 來訪紀錄頁；admin 用 POST 改公開說明與「不公開」）；
   `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，後續提醒）／`visit-list-cron`（每十五分鐘，名單有人加了列就讀進來）／`extract-sweep-cron`（每小時，清掉讀信抽取沒讀成的截圖）； `visit-list`（參訪名單的 Google 試算表：連上、看一次、現在就讀）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive／cdn／visitlist／staged）。`extract` 接受上傳檔（**一個一個先上傳**，工作裡只帶 key，見功能 1 的「申請也會是簡訊、LINE 的手機截圖」）：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF、照片與手機截圖以 document／image block 直接交給 Claude；.doc／.xls 不支援。
 - 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。回覆在 `lib/visit.mjs sanitizeResponse` 整理：帶 `anonymous: true` 的（以前專頁上有「不具名送出」，舊版的分頁還送得出來）姓名、email 清空、時間只留日期，後端不補回。
 - `public/lib/pptx.mjs`（網頁版簡報的建置也用它：認頁、清封面、目錄、更正、照片比例）：母簡報子集化核心（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證），零 Node 相依，瀏覽器與 CLI 共用；`cli/lib/pptx.mjs` 只是注入 jszip／xmldom 的 Node 入口；`cli/deck.mjs` 加上 QR（qrcode 套件）與 PDF（LibreOffice）。`--inspect`、`--dump`、`--validate`。
@@ -944,7 +970,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
   （一句話、簡介、專長、設備、學經歷、論文、照片、`confirmed`）存在資料層的 `labs.json`，讀的時候疊上去。
   站台上的後台寫不進 repo，而老師要修自己那一句話不該走 GitHub——**待確認事項 1 因此不必再等程式改版**。
   按「改回原稿」就把那一間的覆寫刪掉。`confirmed=false` 時介紹頁最底下標明「這一段是草稿」；
-  照片存 `labs/<房號>/<ts>.jpg`（**公開**，`/api/media` 對 `labs/` 與 `materials/` 開放，名片與簽名簿仍要 token），
+  照片存 `labs/<房號>/<ts>.jpg`（**公開**，`/api/media` 對 `labs/` 與 `materials/` 開放，名片、簽名簿、研究室照片庫（`labphotos/`）仍要 token），
   上傳前在瀏覽器縮到長邊 800px（照片牆 1600px）。
 - **照片有兩種：老師本人一張（`photo`）＋介紹頁的照片牆（`photos[]`，一張一個圖說）**。
   值有三種寫法，三個頁面同一套判斷：`assets/labs/<房號>/<檔名>`（repo 裡的站台檔，跟 `labs.json` 一起進版控）、
@@ -1009,7 +1035,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
     （含中心成立前的成果）、參訪規則與名額。那些是那一場的簡報內容，不是中心的門面。
 - **隱私權政策 `/privacy`**（`public/privacy.html`，`netlify.toml` 一條轉址，排在 `/*` 前面）：Google 的 OAuth 同意畫面
   要發布成「正式版」（不然 refresh token 七天就失效），Branding 頁一定要填首頁與隱私權政策的連結。它同時是寫給來賓看的：
-  系統拿了哪些資料（往來信件與信裡提到要安排的事、主辦端寫的特殊狀況、公開的專業資訊、名片、簽名簿、照片、主持人口述、回覆（具名的照名單填入 email；名字可以不寫，但不再說「可以不具名」））、做什麼用、
+  系統拿了哪些資料（往來信件與信裡提到要安排的事、主辦端寫的特殊狀況、公開的專業資訊、名片、簽名簿、照片（含各研究室傳進照片庫的，只有中心同仁看得到）、主持人口述、回覆（具名的照名單填入 email；名字可以不寫，但不再說「可以不具名」））、做什麼用、
   公開頁上會出現什麼（合照也會附在寄給那一場來賓的感謝信裡）、交給哪些服務處理（Netlify、Google、Anthropic、OpenAI）、Google 的兩個權限（`drive.file`、`gmail.send`）
   只做什麼，以及 Google 要的 Limited Use 那一句。中英兩份在同一個檔、一次只顯示一種（跟首頁同一套：預設英文、`?ui=zh`、
   `ghrc-ui-lang`）；沒有 JavaScript 時是英文（Google 看的是那一份）。這一頁本身不從別的伺服器載東西（沒有 Tailwind CDN）。
@@ -1072,7 +1098,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - **沒有「存檔」這個動作**：訪前分頁任何欄位改動都會在 1.2 秒後自己存（`scheduleSave`／`saveVisit`），
   AI 抽取、查背景做完也各存一次。畫面上只有一行「已存 14:32」與「刪掉這一場」。
   建錯的那一場就刪掉：`DELETE /api/visits?id=`，順手清掉這一場自己的檔案（簽名簿、口述、名片、當天資料）；
-  **已經有來賓回覆、或感謝信已經寄出去的不給刪**（那不是我們的東西），Drive 上的備份也不動。
+  **已經有來賓回覆、或感謝信已經寄出去的不給刪**（那不是我們的東西）；**有研究室傳上來的照片也不給刪**（照片庫是大家拍的，傳錯場的先移過去）。Drive 上的備份也不動。
 - **還沒交出去的東西也自己存**（`/api/draft`，存在媒體庫 `drafts/<visit_id|new>.json`）：後台幾個最花時間打的方框
   ——貼進來的 email、打好的逐字稿、手改過還沒寄出的信件、**還沒有單位名稱（算不出 visit_id、存不成一場）的整份表單**
   ——一關網頁就沒了。現在同時存兩份：**這台瀏覽器（`localStorage` 的 `ghrc-draft:<id>`，輸入當下就寫）**
@@ -1133,7 +1159,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
     因為官方附的本機伺服器讀的時候不給版本號、條件寫入也不是一次完成的，測不出「同時存」；
     同一支假伺服器上以前的寫法確實會掉格子（對照組），所以「全部留下來」不是運氣。
 - **一般存檔只寫後台表單管的欄位，別的端點寫的帶了也不算**：`POST /api/visits` 是整筆覆寫，但後台表單管不到的欄位
-  （`summary`／`summary_at`／`reminders`／`drive`／`cards`／`signbook`／`dictation`／`letters`／`materials`／`status`／`wrapup`／`imported`，
+  （`summary`／`summary_at`／`reminders`／`drive`／`cards`／`signbook`／`dictation`／`letters`／`materials`／`status`／`wrapup`／`imported`／`poster`／`lab_photos`，
   `visits.mts` 的 `KEPT`）**一律沿用伺服器上那一份，body 帶什麼都不算**；新的一場就從空的開始（拿別場的整份當底建一場，
   也不會把那一場的信件與檔案 key 帶過來——不然刪掉這一場會連那一場的照片、簽名簿一起刪）。要改這幾格就走寫它的那一支端點；
   「本次沒有」走 `POST /api/visits {visit_id, action:"wrapup", na}`（只動這一格）。
