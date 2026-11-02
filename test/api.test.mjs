@@ -748,6 +748,8 @@ test("thanks letter: recipients = list + onsite, wording is the 請益 question,
   assert.ok(d.body.draft.body.includes("A single sentence is plenty."));
   assert.ok(d.body.draft.body.includes("#respond"));
   assert.ok(!/satisf|rate us|rating/i.test(d.body.draft.body));
+  // 不再寫「可以不具名」（2026-11-02 明確指示：「不可能能匿名」，專頁上那個勾也拿掉了）
+  assert.ok(!/anonym|不具名|匿名/i.test(d.body.draft.body), d.body.draft.body);
   // 稱呼寫出每一位來賓的姓名與頭銜，主賓排第一（明確指示：「要把參訪者名字頭銜加進去」）
   const guests = (await api(`/api/visits?id=${visitId}`, { headers: admin })).body.visit.guests.filter((g) => g.name);
   const lead = guests.find((g) => g.role === "lead");

@@ -1,5 +1,5 @@
 /**
- * 瀏覽器冒煙測試（Playwright + Chromium）：主辦端建一次參訪 → 來賓端頁面 → 匿名回覆。
+ * 瀏覽器冒煙測試（Playwright + Chromium）：主辦端建一次參訪 → 來賓端頁面 → 回覆。
  * 用 file 後端（暫存目錄）與 AI_MOCK。playwright 優先用專案的，沒有就找全域安裝。
  *   node test/e2e/smoke.mjs
  */
@@ -1200,15 +1200,16 @@ try {
   check((await page.textContent("#labsTitle")).includes("visited") && (await page.textContent("#welcome")).includes("Thank you") && (await noEmailBox()), "after the visit: past tense, thank-you heading, no leave-your-email box");
   check((await page.isHidden("#rEmail")) && (await page.isVisible("#rName")), "…and the reply form asks only for a name: everyone's email is already on file (filled in on our side)");
   check((await page.textContent("#qBetter")) === "From your perspective, what should we be doing better?", "open-suggestion wording is the 請益 question");
-  await page.check("#anonymous");
-  check(await page.isHidden("#identity"), "identity fields hidden when anonymous");
+  // 「不具名送出」拿掉了（2026-11-02 明確指示：「這一段就不用了，因為不可能能匿名」）
+  check((await page.locator("#anonymous, #anonLabel, #anonNote").count()) === 0 && !/anonym/i.test(await page.textContent("#respond")), "the reply form no longer offers to send anonymously");
+  await page.fill("#rName", "Jane"); // 讀信時名單上記的就是「Jane」（AI_MOCK 只取名字）
   await page.check('input[name="coop"][value="302"]');
   await page.fill("#suggestion", "Room 302 was hard to follow.");
   await page.click("#respondSend");
   await page.waitForSelector("#respondDone:not([hidden])");
   const rows = JSON.parse(await readFile(path.join(tmp, "responses.json"), "utf8"));
-  const anon = rows.find((r) => r.suggestion === "Room 302 was hard to follow.");
-  check(anon && anon.anonymous && anon.name === "" && anon.email === "" && anon.submitted_at.length === 10, "anonymous response stored without identity");
+  const named = rows.find((r) => r.suggestion === "Room 302 was hard to follow.");
+  check(named && !named.anonymous && named.name === "Jane" && named.email === "jane@uwa.edu.au", `…and a reply with a name is stored with that guest's email from the list (${JSON.stringify(named && { name: named.name, email: named.email })})`);
 
   // ── 來賓端：中文為主（右上角那顆鍵，或網址帶 ?ui=zh）──
   await page.goto(`${base}/${VID}?phase=today&ui=zh`);

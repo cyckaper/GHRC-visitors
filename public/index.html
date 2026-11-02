@@ -148,7 +148,6 @@
         <p class="text-sm text-stone-500"><span id="oneSentence"></span> <span class="second" id="oneSentence2"></span></p>
         <textarea id="suggestion" rows="3"></textarea>
       </fieldset>
-      <label class="choice"><input type="checkbox" id="anonymous"><span><span id="anonLabel"></span> <span class="second" id="anonLabel2"></span><br><span class="text-xs text-stone-500" id="anonNote"></span></span></label>
       <div class="grid sm:grid-cols-2 gap-2" id="identity">
         <input type="text" id="rName" autocomplete="name">
         <input type="email" id="rEmail" autocomplete="email">
@@ -414,7 +413,6 @@
   $("qNext").textContent = T("next"); $("qNext2").textContent = T2("next");
   $("qBetter").textContent = T("ask_better"); $("qBetter2").textContent = T2("ask_better");
   $("oneSentence").textContent = T("one_sentence"); $("oneSentence2").textContent = T2("one_sentence");
-  $("anonLabel").textContent = T("anonymous"); $("anonLabel2").textContent = T2("anonymous"); $("anonNote").textContent = T("anonymous_note");
   $("rName").placeholder = T("name_optional"); $("rEmail").placeholder = T("email");
   // 名單上每一位都已經有 email：具名寫名字就好，不再問 email（伺服器照名單直接填入）
   if (visit && visit.emails_on_file) { $("rEmail").hidden = true; $("rName").classList.add("sm:col-span-2"); }
@@ -423,24 +421,18 @@
   $("coopChoices").innerHTML = labsData.labs.map((lab) => `<label class="choice" style="--tone:${roomTone(lab.room)}"><input type="checkbox" name="coop" value="${lab.room}"><span><span class="font-medium">Lab ${lab.room}</span> ${esc(labName(lab))}<br><span class="text-sm text-stone-500">${esc((lab.lead || {}).name_zh || "")} ${esc((lab.lead || {}).name_en || "")}</span></span></label>`).join("");
   $("nextChoices").innerHTML = ["papers", "meeting", "exchange", "other"].map((k) => `<label class="choice"><input type="checkbox" name="next" value="${k}"><span>${esc(T("next_" + k))}${T2("next_" + k) ? `<span class="second block">${esc(T2("next_" + k))}</span>` : ""}</span></label>`).join("");
   $("nextChoices").addEventListener("change", () => { $("nextOther").hidden = !$("nextChoices").querySelector('input[value="other"]').checked; });
-  $("anonymous").addEventListener("change", () => {
-    const anon = $("anonymous").checked;
-    $("identity").hidden = anon;
-    if (anon) { $("rName").value = ""; $("rEmail").value = ""; }
-  });
   const doneKey = visit ? `ghrc-responded-${visit.visit_id}` : "";
   try { if (doneKey && localStorage.getItem(doneKey)) { $("respondDone").textContent = T("already_sent"); $("respondDone").hidden = false; } } catch (e) {}
   $("respondForm").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     $("respondErr").hidden = true;
     if (!visit) { $("respondErr").textContent = "This page is not linked to a visit."; $("respondErr").hidden = false; return; }
-    const anonymous = $("anonymous").checked;
+    // 不再有「不具名送出」（2026-11-02 明確指示：一團就那幾個人，不可能匿名）；名字照樣可以不填
     const payload = {
       visit_id: visit.visit_id,
       source: "letter",
-      anonymous,
-      name: anonymous ? "" : $("rName").value,
-      email: anonymous ? "" : $("rEmail").value,
+      name: $("rName").value,
+      email: $("rEmail").value,
       cooperate_rooms: [...document.querySelectorAll('input[name="coop"]:checked')].map((i) => i.value),
       next_actions: [...document.querySelectorAll('input[name="next"]:checked')].map((i) => i.value),
       next_other: $("nextOther").hidden ? "" : $("nextOther").value,
@@ -452,7 +444,7 @@
     if (r.ok) {
       $("respondDone").textContent = T("respond_thanks") + (T2("respond_thanks") ? "\n" + T2("respond_thanks") : "");
       $("respondDone").hidden = false;
-      $("respondForm").reset(); $("identity").hidden = false; $("nextOther").hidden = true;
+      $("respondForm").reset(); $("nextOther").hidden = true;
       try { if (doneKey) localStorage.setItem(doneKey, "1"); } catch (e) {}
     } else { $("respondErr").textContent = r.error || "error"; $("respondErr").hidden = false; }
   });

@@ -467,9 +467,9 @@
         <span class="muted" id="thanksInfo"></span>
       </div>
       <input type="text" id="thanksSubject" placeholder="主旨">
-      <textarea id="thanksBody" rows="16" placeholder="感謝信草稿：稱呼（每一位來賓的姓名與頭銜）、一兩句感謝、參訪時談到的事、當天的簡報與合照與答應提供的資料（逐項列出）、三個回應項目（含請益語氣的開放建議欄位、可不具名）"></textarea>
+      <textarea id="thanksBody" rows="16" placeholder="感謝信草稿：稱呼（每一位來賓的姓名與頭銜）、一兩句感謝、參訪時談到的事、當天的簡報與合照與答應提供的資料（逐項列出）、三個回應項目（含請益語氣的開放建議欄位）"></textarea>
       <p class="muted" id="thanksDraftNote" hidden></p>
-      <p class="muted">三個回應項目的措辭固定為請益語氣，且回覆頁支援真匿名；請保留信裡的那一段。</p>
+      <p class="muted">三個回應項目的措辭固定為請益語氣；請保留信裡的那一段。</p>
       <div class="flex items-center justify-between">
         <div class="f mb-0">收件人 <span class="muted font-normal">名單上每一個人</span></div>
         <button class="btn btn-soft" id="thanksRecipientsRefresh" title="重讀收件人清單（名單上每個人）" type="button">重新整理</button>
@@ -2340,7 +2340,7 @@
     // 以前還有第三個：當天的留信箱（#email）——專頁上那一格明確指示拿掉了（「我看這一塊就全部拿掉」），連結跟著拿掉
     $("wrapLinks").innerHTML = [
       ["", "專頁網址", "訪前就能給，門口的 QR 也是這一個。打開是今日流程與五間老師卡片。"],
-      ["respond", "回應表單", "<b>訪後用</b>：放進感謝信。三個問題——想合作哪幾間、希望我們做什麼、開放建議（可不具名）。"],
+      ["respond", "回應表單", "<b>訪後用</b>：放進感謝信。三個問題——想合作哪幾間、希望我們做什麼、開放建議。"],
     ]
       .map(([k, label, why]) => {
         const url = r.visit.page_url + (k ? `#${k}` : "");

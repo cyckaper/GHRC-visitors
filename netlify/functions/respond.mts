@@ -6,8 +6,10 @@ import { triggerDriveSync } from "../lib/drive.mts";
 /**
  * POST /api/respond  來賓端回覆（訪後信三個項目；source onsite 是以前專頁上「留信箱」那一格送的，那一格拿掉了，還開著舊版專頁的分頁照收）。公開端點。
  *
- * 真匿名：anonymous=true 時，姓名與 email 在 sanitizeResponse 就被清空，
- * 後端不記錄 IP、不記錄 user agent、時間只留日期，也不得從別的欄位補回身分。
+ * 專頁上的「不具名送出」2026-11-02 拿掉了（明確指示：一團就那幾個人，「不可能能匿名」）。
+ * 但還開著舊版專頁的分頁照樣送得出 anonymous=true——那一頁答應過對方，就照答應的做：
+ * 姓名與 email 在 sanitizeResponse 就被清空，時間只留日期，也不從別的欄位補回身分。
+ * 後端本來就不記錄 IP、不記錄 user agent。
  */
 export default async (req: Request) => {
   if (req.method !== "POST") return fail(405, "method not allowed");
@@ -23,7 +25,7 @@ export default async (req: Request) => {
   if (!hasContent) return fail(400, "沒有內容");
   if (!row.anonymous && row.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) return fail(400, "email 格式不對");
   // 具名、沒寫 email：名單上已經有他的 email 就直接填入（明確指示：「都已經有email 了不要再問，直接填入」——
-  // 名單上每一位都有 email 的那幾場，來賓專頁本來就不問）。**不具名的不補**：真匿名，後端不得補回身分
+  // 名單上每一位都有 email 的那幾場，來賓專頁本來就不問）。**不具名的不補**（舊版專頁送來的）：照當時答應的，後端不得補回身分
   if (!row.anonymous && row.name && !row.email) row.email = guestEmailFor(visit, row.name);
   await store.appendResponse(row);
   // 來賓的回覆也自動備份（不具名的內容在 sanitizeResponse 就已經沒有身分）

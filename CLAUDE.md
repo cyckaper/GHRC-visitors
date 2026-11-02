@@ -298,8 +298,9 @@ Google Sheet 一份四個工作表（或等價的 JSON 檔），靠 `visit_id` �
 想合作的研究室（複選）、希望我們做什麼、自填內容、簽名簿留言、**開放建議內容**、
 **是否具名**、填答時間、來源（口述抽取／簽名簿／訪後信／現場自填）
 
-> 開放建議欄位若選擇不具名，**姓名與 email 必須留空，後端不得補回**。
-> 這不是介面裝飾，是這條管道能不能收到真話的前提。
+> **專頁上不再有「不具名送出」**（2026-11-02 明確指示：「這一段就不用了，因為不可能能匿名」——一團就那幾個人，
+> 勾了也猜得出是誰，那個勾等於答應了一件做不到的事）。名字照樣可以不填。以前不具名送出的那幾筆、
+> 還開著舊版專頁的分頁送來的 `anonymous: true`，**照當時答應的處理**：姓名與 email 留空、時間只留日期，後端不補回（`sanitizeResponse` 不變）。
 
 > **現場動線訊號（timeline 表、NFC 貼紙、簡報捷徑、來賓自按）已整套移除**（明確指示：暫時都不用）。
 > 當天實際走到哪一間、待多久不再記錄；一頁摘要的「看了哪幾間」改用當天排定的動線（`visit.itinerary`）。
@@ -642,7 +643,7 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
 - **開放建議欄位的措辭必須是請益語氣，不是滿意度語氣**：
   「以您的專業，中心哪一部分還可以做得更好？」／
   "From your perspective, what should we be doing better?"
-  並加一句「一句話就好」，且**可不具名送出**
+  並加一句「一句話就好」。**不再有「不具名送出」**（2026-11-02 拿掉，見資料模型 responses 那一段）
 - **訪客名片**：現場拿到名片就拍一張（後台**「後續」分頁的動作二**——拍名片是現場的事，跟簽名簿、口述放在一起，
   不在翻舊帳的「資料」分頁；手機直接開相機，可連拍）。AI 讀出姓名、職稱、單位、email、電話，**人逐欄確認後**才併進這場的名單（`/api/cards`）——訪後信就會寄給他。併入規則 `lib/visit.mjs mergeGuests`：email 相同（不分大小寫）或「姓名＋單位」相同視為同一人，**只補空欄位、不覆寫已確認的資料**，也不會把主賓降級；同一張再存一次是 no-op。看不清楚的字一律留空不猜（email 猜錯比留空更糟）。原圖存 `cards/<visit_id>/<ts>.jpg`（**有個資，`/api/media` 只給 admin**），Drive 備份用名片主人的名字當檔名。
 - **簽名簿**：實體本子，主持人拍照上傳，AI 讀手寫字歸檔（原圖保留）
@@ -728,7 +729,7 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
   留空時 `ensureFolder("GHRC 參訪", "root")` 會自己在雲端硬碟根目錄建一個並沿用（設定步驟見 `docs/DEPLOY.md` 6.5）。
 - **每場產出一頁摘要——不必人記得按**（`summary-cron`，每晚台北時間凌晨一點）：參訪過完、有回饋可寫的
   就自己產一份（`lib/visit.mjs needsSummary`）；回覆是好幾天內陸續進來的，所以**比最新那筆回覆舊就重寫一次**。
-  不具名的回覆只有日期，一律當那天的最後一刻——寧可多寫一次，也不要漏掉匿名建議。排在 `drive-cron`（兩點）之前，
+  以前不具名送出的回覆只有日期，一律當那天的最後一刻——寧可多寫一次，也不要漏掉那一則建議。排在 `drive-cron`（兩點）之前，
   當晚的備份就帶到新的摘要。後台那顆「AI 產一頁摘要」留給「現在就要」用。
 - **後續提醒（`reminder-cron`，每十五分鐘看一次）**：參訪的結束時間（`lib/visit.mjs visitEndAt`：今日流程最後一段
   與「開始＋總分鐘」取晚的那一個）一到，用中心的 Gmail **寄一封信給中心自己**——簽名簿、名片、口述、當天資料
@@ -905,7 +906,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 **已完成（P1–P4 最小可用系統 ＋ P5 捷徑 ＋ P6 產檔 ＋ P7 摘要／彙整）**
 
 - `public/admin.html`：最上面一個共用的「這一場」（全站同一個選擇）；訪前（貼信、簡訊／LINE 的手機截圖或上傳名單檔抽取 → 確認 → **AI 查訪客背景（可能的參訪目的）** → **通告研究室（跟老師們座談、不參觀研究室的先勾「這場是座談」；各室在支援人力表上填的分鐘自動排進行程）** → **今日流程（自動排好，平常只看；要改再點開；最上面一格「特殊狀況」寫給 AI 看；對方要報告的排在總體介紹後面）** → 自動存 → QR／.ics → **確認信（草擬、寄出或 mailto）**，**最底下列出「以前做過的參訪」**）、**簡報（網頁版簡報：打開、複製連結、每一頁的縮圖、母簡報裡沒放進來的頁；跟「這一場」無關）**、後續（動作一 簽名簿讀字、**動作二 拍名片讀成名單**、動作三 三十秒口述或一項一項打重點 → **AI 寫成完整紀錄**、動作四 當天資料放上專頁、**動作五 感謝信（含答應提供給對方的檔案與連結）**）、資料（歷次參訪、**匯入以前的參訪**、回覆、摘要、跨場次彙整、CSV、Drive）、**設定（預設值、支援人力表、外部服務狀態與「連上 Google」、老師卡片）**。登入 token 存瀏覽器，登入後收起只留「已登入／登出」。
-- `public/index.html`：專屬網址 `/<visit_id>`；整頁一種語言（預設英文，`?ui=zh` 換中文；ko／ja 來賓才另外附他們的語言）；流程（參訪當天標出「現在」；研究室參訪底下一間一行、各自的時段）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、備援按鍵，最後是三個回應項目（請益措辭、一句話就好、真匿名）。留信箱那一格 2026-10-23 整格拿掉了（見「約定」的「來賓端依階段換措辭」）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
+- `public/index.html`：專屬網址 `/<visit_id>`；整頁一種語言（預設英文，`?ui=zh` 換中文；ko／ja 來賓才另外附他們的語言）；流程（參訪當天標出「現在」；研究室參訪底下一間一行、各自的時段）、當天資料（PDF／合照／連結，有才顯示）、五間老師卡片（303 只列陳惠美；有 email 才顯示聯絡方式）、備援按鍵，最後是三個回應項目（請益措辭、一句話就好；名字可以不填，「不具名送出」2026-11-02 拿掉了）。留信箱那一格 2026-10-23 整格拿掉了（見「約定」的「來賓端依階段換措辭」）。進場動畫與 hover 尊重 `prefers-reduced-motion`。
 - `public/deck.html`：**網頁版簡報 `/deck`**——每一場同一份；圖與影片在 `public/assets/deck/<版本>/`、頁序在 `public/data/deck.json`，由 `scripts/web-deck/build.mjs` 在 GitHub Actions 上從 Drive 的母簡報產生（見「架構決定」的「網頁版簡報」）。
 - `public/visits.html`：**來訪紀錄 `/visits`**——已經來過的每一場（日期、單位、來訪人員、交流重點、去了哪幾間）＋同一張世界地圖，首頁的「來訪單位」連過來（見「約定」的「中心首頁」）。
 - `public/privacy.html`：**隱私權政策 `/privacy`**——Google 的同意畫面要發布成正式版時 Branding 頁要填的那一個連結，也是寫給來賓看的（見「約定」的「隱私權政策」）。
@@ -913,7 +914,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
 - `netlify/functions/*.mts`：`visits` `extract` `research`（訪前功課） `plan` `letter` `respond` `signbook` `cards`（訪客名片） `transcribe` `summary` `media` `materials` `translate` `master` `draft`（暫存還沒交出去的東西） `session`（登入） `google-auth`（連上 Google：Drive、名單試算表、寄信共用的授權） `extract-background`／`plan-background`／`research-background`／`letter-background`／`summary-background`／`signbook-background`／`transcribe-background`／`record-background`（完整紀錄）／`cards-background`／`translate-background`／`geo-background`／`import-background`／`visit-list-background`（**跑得久的 AI 一律走背景函式**，見 `netlify/lib/jobs.mts`；`geo` 查訪客地圖上各單位在哪裡；`import` 讀以前的參訪名單；`visit-list` 讀 Google 試算表名單裡新加的列）`drive` `drive-sync-background`（自動備份）；**五支排程**（`export const config = { schedule }`，都走 `requireCron`：Netlify 排程器的 `{next_run}` 或 ADMIN_TOKEN 才打得動）
   `rota`（支援人力表，各研究室自己填）； `visitor-map`（**公開**：中心首頁的來訪單位地圖，只有單位、位置與來過幾次）； `import`（匯入以前的參訪名單：預覽與寫入，規則在 `lib/import.mjs`）； `visit-log`（**公開**：`/visits` 來訪紀錄頁；admin 用 POST 改公開說明與「不公開」）；
   `drive-cron`（兩點，備份補漏）／`summary-cron`（一點，自己產一頁摘要）／`reminder-cron`（每十五分鐘，後續提醒）／`visit-list-cron`（每十五分鐘，名單有人加了列就讀進來）／`extract-sweep-cron`（每小時，清掉讀信抽取沒讀成的截圖）； `visit-list`（參訪名單的 Google 試算表：連上、看一次、現在就讀）；`media` 對 `materials/` 開頭的 key 公開（來賓端直接連），其餘要 token；共用在 `netlify/lib/`（store／ai／http／data／types／files／jobs／mail／history／drive／cdn／visitlist／staged）。`extract` 接受上傳檔（**一個一個先上傳**，工作裡只帶 key，見功能 1 的「申請也會是簡訊、LINE 的手機截圖」）：.docx／.xlsx／.pptx／.csv／.txt 在 `files.mts` 轉純文字（UTF-8 失敗退 Big5），PDF、照片與手機截圖以 document／image block 直接交給 Claude；.doc／.xls 不支援。
-- 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。真匿名在 `lib/visit.mjs sanitizeResponse`：不具名時姓名、email 清空、時間只留日期，後端不補回。
+- 資料層 `netlify/lib/store.mts`：`file`（本機）、`blobs`（Netlify 預設）、`sheets`（Google Sheet，服務帳戶）。回覆在 `lib/visit.mjs sanitizeResponse` 整理：帶 `anonymous: true` 的（以前專頁上有「不具名送出」，舊版的分頁還送得出來）姓名、email 清空、時間只留日期，後端不補回。
 - `public/lib/pptx.mjs`（網頁版簡報的建置也用它：認頁、清封面、目錄、更正、照片比例）：母簡報子集化核心（選頁重排、複製頁、逐字取代、流程表填值、第二語言換字、QR 頁、清孤兒、驗證），零 Node 相依，瀏覽器與 CLI 共用；`cli/lib/pptx.mjs` 只是注入 jszip／xmldom 的 Node 入口；`cli/deck.mjs` 加上 QR（qrcode 套件）與 PDF（LibreOffice）。`--inspect`、`--dump`、`--validate`。
 - `scripts/slim-master.py`：抽影片成海報＋連結、縮圖、清媒體。`scripts/make-world.mjs`：訪客地圖的陸地輪廓與國家落點（`public/data/world.json`），加第三個參數（1:50m）另外產放大用的細海岸線（`world-detail.json`）。畫地圖的是 `public/lib/worldmap.mjs`（後台「資料」分頁、中心首頁、`/deck` 的地圖頁共用）。
   `scripts/map-slide/`：母簡報那一頁的世界地圖——`render.mjs`（Playwright 把同一支 worldmap.mjs 畫成 PNG，
@@ -1008,7 +1009,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
     （含中心成立前的成果）、參訪規則與名額。那些是那一場的簡報內容，不是中心的門面。
 - **隱私權政策 `/privacy`**（`public/privacy.html`，`netlify.toml` 一條轉址，排在 `/*` 前面）：Google 的 OAuth 同意畫面
   要發布成「正式版」（不然 refresh token 七天就失效），Branding 頁一定要填首頁與隱私權政策的連結。它同時是寫給來賓看的：
-  系統拿了哪些資料（往來信件與信裡提到要安排的事、主辦端寫的特殊狀況、公開的專業資訊、名片、簽名簿、照片、主持人口述、回覆（具名的照名單填入 email）、真匿名）、做什麼用、
+  系統拿了哪些資料（往來信件與信裡提到要安排的事、主辦端寫的特殊狀況、公開的專業資訊、名片、簽名簿、照片、主持人口述、回覆（具名的照名單填入 email；名字可以不寫，但不再說「可以不具名」））、做什麼用、
   公開頁上會出現什麼（合照也會附在寄給那一場來賓的感謝信裡）、交給哪些服務處理（Netlify、Google、Anthropic、OpenAI）、Google 的兩個權限（`drive.file`、`gmail.send`）
   只做什麼，以及 Google 要的 Limited Use 那一句。中英兩份在同一個檔、一次只顯示一種（跟首頁同一套：預設英文、`?ui=zh`、
   `ghrc-ui-lang`）；沒有 JavaScript 時是英文（Google 看的是那一份）。這一頁本身不從別的伺服器載東西（沒有 Tailwind CDN）。
@@ -1275,7 +1276,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
   裡面給行前資料的折頁），最後是整格不要。簡報與合照照舊跟著感謝信寄給名單上每一位（email 在往來信件裡就有）。
   **回應表單照樣不問已經有的 email**（明確指示：「都已經有email 了不要再問，直接填入」；`lib/visit.mjs emailsOnFile`，
   `publicVisit` 只帶 `emails_on_file` 是或否、不帶名單）：名單上每一位都有 email，具名的只寫名字，`/api/respond` 照名單**直接填入**
-  那個名字的 email（`guestEmailFor`：大小寫、空白、句點不算，同名對到兩個不同的 email 就不填）；**不具名的照舊一律留空，後端不補**。
+  那個名字的 email（`guestEmailFor`：大小寫、空白、句點不算，同名對到兩個不同的 email 就不填）；以前不具名送出的那幾筆照舊一律留空，後端不補。
   名單是空的、有人只有電話或只有名字（簡訊、LINE 來的申請）、或人數比名單多（有人不在名單上），就照舊問。
   `/api/respond` 仍收 `source: "onsite"`（還開著舊版專頁的分頁送來的），以前留的那幾筆照舊列進感謝信的收件人。
   **中心簡介折頁的檔案還在** `public/assets/brochure/GHRC-brochure.pdf`（「行前資料就給這個」那時放上去的），專頁上已經沒有連結；

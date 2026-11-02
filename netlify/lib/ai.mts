@@ -399,7 +399,6 @@ export function responseBlock(lang: string, i18n: any, url: string): string {
     `2. ${bi("next")}`,
     `3. ${bi("ask_better")}`,
     `   ${bi("one_sentence")}`,
-    `   ${bi("anonymous")}`,
     "",
     `→ ${url}`,
     "────────",
