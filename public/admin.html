@@ -229,11 +229,19 @@
 
     <div class="card space-y-3" id="programmeCard">
       <h2 class="font-semibold"><span class="num">5</span>今日流程 <span class="muted font-normal">自動排好，看一眼就好</span></h2>
-      <p class="muted">不必自己排：各研究室在支援人力表上填的分鐘會自動排進來，時間照著往後推算。這一份會印在簡報第 2 頁，也會出現在來賓專頁。</p>
+      <p class="muted">不必自己排：各研究室在支援人力表上填的分鐘會自動排進來，時間照著往後推算；對方說他們也要報告的，讀信時就排在總體介紹後面。這一份會印在簡報第 2 頁，也會出現在來賓專頁。</p>
+      <!-- 特殊狀況（明確指示：「在行程要加入一個特殊狀況，說明像是有時候要併團，有時候有特別的要求，有時候是主辦方要強調特別貴賓的這種要求，
+           來指導後面 AI 的回覆」）：通告、回報、確認信、感謝信、參訪紀錄、一頁摘要的 AI 都照這一格寫。只給主辦端與 AI 看，不進來賓專頁 -->
+      <div>
+        <label class="f" for="specialNotes">特殊狀況 <span class="muted font-normal">寫給 AI 看：通告、確認信、感謝信、參訪紀錄都照這一格寫</span></label>
+        <textarea id="specialNotes" rows="3" placeholder="例如：與另一所學校同一時段併團接待；對方想多看 VR 設備；主賓是大會主席，信裡要特別致意"></textarea>
+        <p class="muted mt-1">讀信時 AI 會先把信裡提到的填進來，你再增刪。只有主辦端看得到，不會出現在來賓專頁。已經擬好的通告與信，要再按一次「AI 擬」才會照著改。</p>
+        <p class="text-sm text-amber-700 mt-1" id="guestTalkHint" hidden>這裡提到來賓要報告，今日流程裡還沒有這一段。 <button class="btn btn-soft" id="addGuestTalk" type="button" title="在總體介紹後面排一段來賓報告，時間從綜合討論扣">排進流程</button></p>
+      </div>
       <div id="programmeView" class="space-y-1 text-sm"></div>
       <p class="muted" id="programmeTotal"></p>
       <details id="programmeEdit">
-        <summary class="muted cursor-pointer">要改再點開：不去某一間（分鐘改成 0）、總體介紹換地點、加合照</summary>
+        <summary class="muted cursor-pointer">要改再點開：不去某一間（分鐘改成 0）、總體介紹換地點、加合照或來賓報告</summary>
         <div class="mt-2 space-y-1">
           <div class="flex justify-end"><button class="btn btn-soft" id="addBlock" title="自己加一個流程區塊，例如合照" type="button">＋ 區塊</button></div>
           <table id="programmeTable"><thead><tr><th>開始</th><th>結束</th><th>類型</th><th>英文</th><th>第二語言</th><th></th></tr></thead><tbody></tbody></table>
@@ -892,7 +900,7 @@
     renderPastVisits();
   }
   function emptyVisit() {
-    return { visit_id: "", date: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10), start_time: "10:00", duration_minutes: 150, org: { name: "", name_local: "", type: "university", country: "" }, guests: [], headcount: 0, contact_teacher: "張俊彥", purpose: "", interests: [], language: "en", format: "tour", programme: [], itinerary: [{ room: "briefing", minutes: 20, location: "302" }, ...ROOMS.map((room) => ({ room, minutes: 20 }))], slides: [], text_edits: [], materials: { deck_pdf: "", photos: [], links: [] }, letters: {}, deck: {}, signbook: {}, dictation: {}, status: "draft" };
+    return { visit_id: "", date: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10), start_time: "10:00", duration_minutes: 150, org: { name: "", name_local: "", type: "university", country: "" }, guests: [], headcount: 0, contact_teacher: "張俊彥", purpose: "", interests: [], language: "en", format: "tour", special_notes: "", programme: [], itinerary: [{ room: "briefing", minutes: 20, location: "302" }, ...ROOMS.map((room) => ({ room, minutes: 20 }))], slides: [], text_edits: [], materials: { deck_pdf: "", photos: [], links: [] }, letters: {}, deck: {}, signbook: {}, dictation: {}, status: "draft" };
   }
   /**
    * 預設的今日流程（跟 `lib/visit.mjs defaultProgramme` 同一套規則：總體介紹 20、每間 20、剩下給綜合討論）。
@@ -954,6 +962,9 @@
       const filled = state.visit?.lab_minutes || {};
       const it = emptyVisit().itinerary.map((st) => (st.room === "briefing" ? { ...st, location: loc } : Number(filled[st.room]) > 0 ? { ...st, minutes: Number(filled[st.room]) } : st));
       renderProgramme(defaultProgramme({ start_time: $("startTime").value, duration_minutes: minutesBetween($("startTime").value, $("endTime").value), itinerary: it, format: "tour" }), it);
+      // 對方的報告不跟著座談一起消失：照原本的長度排回總體介紹後面
+      const talk = blocks.find((b) => b.kind === "guest");
+      if (talk) addGuestTalkRow({ minutes: (hhmm(talk.end) ?? NaN) - (hhmm(talk.start) ?? NaN) > 0 ? hhmm(talk.end) - hhmm(talk.start) : 15, title_en: talk.title_en, title_2nd: talk.title_2nd });
       retimeProgramme();
     }
     // 通告的寫法跟著座談與否（座談只問老師能否出席）：已經擬好的那一份就不對了，說一聲要重擬
@@ -971,6 +982,9 @@
     // 不然慢的那一輪後回來，畫面上的資料會跟上面選的那一場對不起來
     const seq = (selectVisit.seq = (selectVisit.seq || 0) + 1);
     const stale = () => seq !== selectVisit.seq;
+    // 特殊狀況那一格正在打字時不會被重填（fillSpecialNotes）；換一場就要換掉，不能把上一場的字帶過來
+    // （Safari 點按鈕不會把游標從那一格拿走）
+    if (document.activeElement === $("specialNotes")) $("specialNotes").blur();
     // **先同步換畫面，再去拿資料**：切到「＋ 新的一場」的人常常馬上就開始打字，
     // 如果等資料回來才清空表單，剛打的字會被清掉（而且看起來像沒反應——存檔也不會發生）
     for (const f of DRAFT_FIELDS) { const el = $(f); if (el) el.value = ""; } // 不要把上一場的信件、逐字稿留在畫面上
@@ -1012,6 +1026,7 @@
     if (!state.saved) $("saveInfo").textContent = "";
     $("forumMode").checked = v.format === "forum"; // 要在畫流程之前：空的流程照這個排預設的那一份
     $("forumNote").hidden = true;
+    fillSpecialNotes(v.special_notes || ""); // 也要在畫流程之前：「提到報告卻沒排」的提醒看這一格
     renderGuests(v.guests || []); renderProgramme(v.programme || [], v.itinerary); renderBackground(v.background);
     $("uncertainties").innerHTML = (v.uncertainties || []).map((u) => `<li>${esc(u)}</li>`).join("");
     $("afterSave").hidden = !state.saved;
@@ -1027,7 +1042,7 @@
    * updated_at 要送：伺服器拿它判斷「研究室剛在支援人力表上填的分鐘，這一份看過了沒」。
    * background（訪前功課）也送：還沒存檔就查好的那一份只在畫面上，靠存檔帶進去（伺服器只收比它手上新的那一份）。
    */
-  const SAVE_FIELDS = ["visit_id", "updated_at", "date", "start_time", "end_time", "duration_minutes", "org", "language", "format", "headcount", "contact_teacher", "purpose", "interests", "guests", "programme", "itinerary", "slides", "text_edits", "cover_text", "plan_rationale", "uncertainties", "background"];
+  const SAVE_FIELDS = ["visit_id", "updated_at", "date", "start_time", "end_time", "duration_minutes", "org", "language", "format", "special_notes", "headcount", "contact_teacher", "purpose", "interests", "guests", "programme", "itinerary", "slides", "text_edits", "cover_text", "plan_rationale", "uncertainties", "background"];
   const forSave = (v) => Object.fromEntries(SAVE_FIELDS.filter((k) => v?.[k] !== undefined).map((k) => [k, v[k]]));
   function readForm() {
     const v = forSave(state.visit || emptyVisit());
@@ -1037,6 +1052,7 @@
     // 電話也要讀回來：以前這張表沒有電話那一欄，名片上讀到的電話下一次自動存檔就被洗掉（存檔是整份名單換掉）
     v.guests = [...$("guestTable").tBodies[0].rows].map((tr) => ({ name: tr.cells[0].firstChild.value.trim(), title: tr.cells[1].firstChild.value.trim(), email: tr.cells[2].firstChild.value.trim(), phone: tr.cells[3].firstChild.value.trim(), affiliation: tr.cells[4].firstChild.value.trim(), role: tr.cells[5].firstChild.checked ? "lead" : "member", contact: tr.cells[6].firstChild.checked })).filter((g) => g.name || g.email || g.phone);
     v.format = isForumForm() ? "forum" : "tour";
+    v.special_notes = $("specialNotes").value;
     v.programme = readProgramme();
     v.itinerary = readItinerary();
     v.slides = Array.isArray(state.visit?.slides) ? state.visit.slides : [];
@@ -1079,7 +1095,8 @@
     $("programmeTable").tBodies[0].innerHTML = rows.map((b) => blockRow(b, it) + (b && b.kind === "tour" ? roomsRow(it) : "")).join("");
     updateProgrammeTotal();
   }
-  const KIND_LABEL = { briefing: "總體簡報", tour: "研究室參訪", discussion: "綜合討論", forum: "座談", photo: "合照", other: "其他" };
+  // guest：來訪方自己的報告（讀信讀到對方要報告就排在總體介紹後面，見 addGuestTalkRow）
+  const KIND_LABEL = { briefing: "總體簡報", guest: "來賓報告", tour: "研究室參訪", discussion: "綜合討論", forum: "座談", photo: "合照", other: "其他" };
   const briefingLocationOf = (it) => ((it || []).find((s) => String(s.room) === "briefing") || {}).location || "";
   // 簡報第 2 頁的「頁碼」那一欄不再給人填：產檔時照選了幾頁自己算（pptx.mjs）。舊資料裡 AI 填過的照樣帶著走
   const blockRow = (b = { kind: "discussion", title_en: "General discussion", title_2nd: "綜合討論" }, it) => `<tr data-slides-range="${esc(b.slides_range || "")}"><td><input type="time" value="${esc(b.start)}"></td><td><input type="time" value="${esc(b.end)}"></td><td><select>${Object.entries(KIND_LABEL).map(([k, label]) => `<option value="${k}" ${b.kind === k ? "selected" : ""}>${label}</option>`).join("")}</select>${b.kind === "briefing" ? `<input type="text" class="!w-20 ml-1" placeholder="地點 302" title="總體介紹在哪一間（空白就是 302）" value="${esc(briefingLocationOf(it === undefined ? state.visit?.itinerary : it))}" data-briefing-location>` : ""}</td><td><input type="text" value="${esc(b.title_en)}"></td><td><input type="text" value="${esc(b.title_2nd)}"></td><td><button type="button" class="muted" data-del-row title="刪掉這一列">✕</button></td></tr>`;
@@ -1126,7 +1143,7 @@
     for (const tr of rows) {
       const kind = rowKind(tr);
       const had = hhmm(tr.cells[1].firstChild.value) - hhmm(tr.cells[0].firstChild.value);
-      const len = kind === "tour" ? tour : Number.isFinite(had) && had > 0 ? had : kind === "photo" ? 5 : 20;
+      const len = kind === "tour" ? tour : Number.isFinite(had) && had > 0 ? had : kind === "photo" ? 5 : kind === "guest" ? 15 : 20;
       tr.cells[0].firstChild.value = toHHMM(cur);
       cur += len;
       tr.cells[1].firstChild.value = toHHMM(cur);
@@ -1159,8 +1176,15 @@
     const v = state.visit || {};
     const row = (time, body, indent = "") => `<div class="flex flex-wrap items-baseline gap-x-3 ${indent}"><span class="tabular-nums muted">${time}</span>${body}</div>`;
     const blockName = (b) => (b.kind !== "other" && KIND_LABEL[b.kind]) || b.title_2nd || b.title_en || KIND_LABEL.other;
+    // 來賓報告：寫出是誰報告（標題不是預設的那一句才寫）
+    const guestWho = (b) => {
+      if (b.kind !== "guest") return "";
+      const zh = String(b.title_2nd || "").trim().replace(/^來賓報告\s*[：:]?\s*/, "");
+      const en = String(b.title_en || "").trim().replace(/^(?:presentation by|guest presentation:?)\s*/i, "");
+      return zh || en;
+    };
     $("programmeView").innerHTML = readProgramme().map((b) => {
-      const head = row(`${esc(b.start)}–${esc(b.end)}`, `<span class="font-medium">${esc(blockName(b))}</span>${b.kind === "briefing" ? `<span class="muted">${esc(where)}</span>` : ""}`);
+      const head = row(`${esc(b.start)}–${esc(b.end)}`, `<span class="font-medium">${esc(blockName(b))}</span>${b.kind === "briefing" ? `<span class="muted">${esc(where)}</span>` : ""}${guestWho(b) ? `<span class="muted" data-ai-text>${esc(guestWho(b))}</span>` : ""}`);
       // 座談：底下一間一行，寫那一間的老師能否出席（各研究室在支援人力表上選的；還沒回就寫「未填」）
       if (b.kind === "forum") return head + ROOMS.map((room) => {
         const lead = (state.labs?.labs || []).find((l) => l.room === room)?.lead?.name_zh || "";
@@ -1179,7 +1203,48 @@
         return row(`${start}–${cur == null ? "" : toHHMM(cur)}`, `<span class="room" style="--tone:${roomTone(s.room)}">${esc(s.room)}</span><span>${s.minutes} 分</span>${host ? `<span><span class="muted">接待</span> ${esc(host)}</span>` : ""}${note}`, "pl-6");
       }).join("");
     }).join("");
+    updateGuestTalkHint();
   }
+  /**
+   * **來賓報告**（明確指示：「AI 的回覆要注意到對方來信有提到他們要報告，但是這個報告的時間 AI 沒有排入時間表」）：
+   * 在今日流程排一段 kind "guest"，接在總體介紹後面；時間從綜合討論（或座談）扣，扣到剩 10 分為止——
+   * 扣不夠就往後延，底下那一行會說比「幾點到幾點」多幾分。已經有一段就不再加。
+   * 讀信讀到對方要報告時自動排（pollExtract）；特殊狀況提到報告、流程裡卻沒有時，按「排進流程」也是這一支。
+   */
+  function addGuestTalkRow({ minutes = 15, title_en = "Guest presentation", title_2nd = "來賓報告" } = {}) {
+    const rows = programmeRows();
+    if (rows.some((tr) => rowKind(tr) === "guest")) return false;
+    const len = (tr) => (hhmm(tr.cells[1].firstChild.value) ?? NaN) - (hhmm(tr.cells[0].firstChild.value) ?? NaN);
+    const sink = rows.find((tr) => rowKind(tr) === "discussion") || rows.find((tr) => rowKind(tr) === "forum");
+    if (sink && len(sink) > 10) sink.cells[1].firstChild.value = toHHMM(hhmm(sink.cells[0].firstChild.value) + Math.max(10, len(sink) - minutes));
+    const brief = rows.find((tr) => rowKind(tr) === "briefing");
+    const at = (brief && hhmm(brief.cells[1].firstChild.value)) ?? hhmm($("startTime").value) ?? 600;
+    const html = blockRow({ kind: "guest", start: toHHMM(at), end: toHHMM(at + minutes), title_en, title_2nd });
+    if (brief) brief.insertAdjacentHTML("afterend", html);
+    else $("programmeTable").tBodies[0].insertAdjacentHTML("afterbegin", html);
+    retimeProgramme();
+    return true;
+  }
+  /** 特殊狀況提到來賓要報告，今日流程裡卻沒有這一段：說一聲，旁邊一顆「排進流程」（例如讀信之後才知道、或以前建的那幾場）。 */
+  function updateGuestTalkHint() {
+    const talk = /報告|簡報|發表|演講|presentation|give a (?:short )?talk|発表|プレゼン|발표/i;
+    $("guestTalkHint").hidden = !talk.test($("specialNotes").value) || readProgramme().some((b) => b.kind === "guest");
+  }
+  $("addGuestTalk").onclick = () => {
+    // 特殊狀況寫了幾分鐘（「約 10 分鐘」「10 minutes」）就排幾分鐘，沒寫就 15 分
+    const said = Number(($("specialNotes").value.match(/(\d{1,3})\s*-?\s*(?:分鐘|分間|分|minutes?|mins?\b|분)/i) || [])[1]) || 0;
+    if (addGuestTalkRow({ minutes: said > 0 && said <= 120 ? said : 15 })) syncProgramme();
+  };
+  /**
+   * 特殊狀況那一格擺回伺服器那一份。**正在打字的時候不蓋掉**：自動存檔回來會整份表單重填一次，
+   * 存檔在路上的那零點幾秒裡打的字，照伺服器那一份（存出去時的樣子）擺回去就不見了。
+   */
+  function fillSpecialNotes(text) {
+    const el = $("specialNotes");
+    if (!(document.activeElement === el && el.value !== fillSpecialNotes.last)) el.value = text;
+    fillSpecialNotes.last = text;
+  }
+  $("specialNotes").addEventListener("input", updateGuestTalkHint);
   const readItinerary = () => {
     const rooms = [...document.querySelectorAll("#itinerary input[data-room]")].map((i) => ({ room: i.dataset.room, minutes: Number(i.value) || 0 })).filter((s) => s.minutes > 0);
     // 總體介紹的分鐘數只有一個地方填——今日流程裡 briefing 那一列的起訖；地點也在那一列
@@ -1476,6 +1541,8 @@
     const ex = out.visit || {};
     const hasLabs = (ex.itinerary || []).some((s) => String(s.room) !== "briefing" && Number(s.minutes) > 0);
     fillForm({ ...emptyVisit(), ...ex, ...(hasLabs ? {} : { itinerary: emptyVisit().itinerary, programme: [] }), visit_id: "" });
+    // 對方在信裡說他們也要報告：那一段排進今日流程（接在總體介紹後面），不必等人發現少了
+    if (out.guest_talk) addGuestTalkRow(out.guest_talk);
     await saveVisit();
     flash("抽取完成，請逐項確認（尤其是名單的 email）");
   }

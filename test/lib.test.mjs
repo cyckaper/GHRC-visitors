@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
 import { weekdayOf } from "../public/lib/rota.mjs";
-import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, salutationLine, salutationPeople, settleSalutation, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, posterFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION, toForumProgramme, labStops, FORUM_TITLES, splitItems, sanitizeDictation, hasDictation, visitRecord, zhNumber, zhDate, promisedItems, thanksItems, talkedAbout, photoStem, isPhotoDuplicate, sameUrl, emailsOnFile, guestEmailFor } from "../lib/visit.mjs";
+import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, salutationLine, salutationPeople, settleSalutation, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, posterFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION, toForumProgramme, labStops, FORUM_TITLES, splitItems, sanitizeDictation, hasDictation, visitRecord, zhNumber, zhDate, promisedItems, thanksItems, talkedAbout, photoStem, isPhotoDuplicate, sameUrl, emailsOnFile, guestEmailFor, guestTalkPlan, guestTalks, guestTalkZh, sanitizeSpecialNotes, DEFAULT_GUEST_MINUTES, GUEST_TITLES, SPECIAL_NOTES_MAX } from "../lib/visit.mjs";
 
 const visit = {
   visit_id: "2026-10-07-uwa",
@@ -830,6 +830,60 @@ test("完整紀錄：事實照參訪資料排、重點一項對一項；AI 的�
   const forum = visitRecord({ ...v, format: "forum", attendance: { "301": "yes", "303": "no" }, programme: toForumProgramme(v.programme, v.start_time) }, LABS, null);
   assert.match(forum, /與中心老師座談（出席：張俊彥）/);
   assert.ok(!/研究室參訪/.test(forum), "座談的場次不寫研究室參訪");
+});
+
+test("來賓報告：信裡說對方也要報告就排一段（接在總體介紹後面），沒說多久先排 15 分、列進要確認的事", () => {
+  // 明確指示：「AI 的回覆要注意到對方來信，有提到他們要報告，但是這個報告的時間 AI 沒有排入時間表」
+  assert.equal(guestTalkPlan(null), null);
+  assert.equal(guestTalkPlan({ requested: false, minutes: 10 }), null, "沒說要報告就沒有這一段");
+  const kito = guestTalkPlan({ requested: true, minutes: 10, presenter: "Kenjiro Kito", topic: "研究簡介" });
+  assert.deepEqual(kito.block, { minutes: 10, title_en: "Presentation by Kenjiro Kito", title_2nd: "來賓報告：Kenjiro Kito" });
+  assert.equal(kito.note, "來賓要報告：Kenjiro Kito，研究簡介，約 10 分鐘", "特殊狀況寫一行，後面每一則 AI 都看得到");
+  assert.equal(kito.uncertainty, "");
+  const vague = guestTalkPlan({ requested: true, minutes: 0, presenter: "", topic: "" });
+  assert.deepEqual(vague.block, { minutes: DEFAULT_GUEST_MINUTES, ...GUEST_TITLES });
+  assert.equal(vague.note, "來賓要報告：來信提到對方也要報告");
+  assert.match(vague.uncertainty, /沒說多久：先排了 15 分鐘/);
+  assert.equal(guestTalkPlan({ requested: true, minutes: 500 }).block.minutes, 120, "信裡寫錯的長度不照抄");
+
+  // 今日流程裡的那一段：通告與紀錄寫出是誰報告；長度照起訖
+  const programme = [
+    { start: "10:00", end: "10:20", kind: "briefing", title_en: "Welcome", title_2nd: "歡迎" },
+    { start: "10:20", end: "10:30", kind: "guest", title_en: "Presentation by Kenjiro Kito", title_2nd: "來賓報告：Kenjiro Kito" },
+    { start: "10:30", end: "11:30", kind: "tour", title_en: "Laboratory visits", title_2nd: "研究室參訪" },
+    { start: "11:30", end: "11:50", kind: "discussion", title_en: "General discussion", title_2nd: "綜合討論" },
+  ];
+  assert.deepEqual(guestTalks({ programme }), [{ start: "10:20", end: "10:30", minutes: 10, title_en: "Presentation by Kenjiro Kito", title_2nd: "來賓報告：Kenjiro Kito" }]);
+  assert.deepEqual(guestTalks({ programme: programme.filter((b) => b.kind !== "guest") }), []);
+  assert.equal(guestTalkZh(programme[1]), "來賓報告：Kenjiro Kito");
+  assert.equal(guestTalkZh({ kind: "guest", title_en: "Presentation by Ada Wong", title_2nd: "" }), "來賓報告（Presentation by Ada Wong）", "只有英文標題：中文名稱＋括號裡的英文");
+  assert.equal(guestTalkZh({ kind: "guest", ...GUEST_TITLES, title_2nd: "" }), "來賓報告");
+
+  // 流程重排時，來賓報告維持自己的長度；算不出長度的先給 15 分
+  const v = { start_time: "09:00", itinerary: [{ room: "briefing", minutes: 20 }, { room: "301", minutes: 30 }, { room: "302", minutes: 30 }], programme };
+  assert.deepEqual(retimeProgramme(v).map((b) => [b.kind, b.start, b.end]), [["briefing", "09:00", "09:20"], ["guest", "09:20", "09:30"], ["tour", "09:30", "10:30"], ["discussion", "10:30", "10:50"]]);
+  const blank = retimeProgramme({ ...v, programme: programme.map((b) => (b.kind === "guest" ? { ...b, start: "", end: "" } : b)) });
+  assert.deepEqual(blank.find((b) => b.kind === "guest"), { ...programme[1], start: "09:20", end: "09:35" });
+  // 座談：拿掉研究室參訪，來賓報告照樣留著
+  assert.deepEqual(toForumProgramme(programme, "10:00").map((b) => b.kind), ["briefing", "guest", "forum"]);
+  // AI 排的流程套時間規則：來賓報告照原本的長度，從綜合討論扣
+  const timed = applyProgrammeTimes({ start_time: "10:00", duration_minutes: 150, itinerary: [{ room: "briefing", minutes: 20 }, ...["301", "302", "303", "304", "305"].map((room) => ({ room, minutes: 20 }))], programme });
+  assert.deepEqual(timed.programme.map((b) => [b.kind, b.start, b.end]), [["briefing", "10:00", "10:20"], ["guest", "10:20", "10:30"], ["tour", "10:30", "12:10"], ["discussion", "12:10", "12:25"]]);
+
+  // 完整紀錄的流程那一段：寫出是誰報告
+  const record = visitRecord({ date: "2026-11-02", start_time: "10:00", duration_minutes: 120, org: { name: "Kyushu University" }, itinerary: v.itinerary, programme }, LABS, null);
+  assert.match(record, /^2\. 10:20–10:30　來賓報告：Kenjiro Kito$/m);
+});
+
+test("特殊狀況：給 AI 看的說明，照送來的存（不去頭尾空白），只給主辦端看", () => {
+  // 明確指示：「在行程要加入一個特殊狀況……來指導後面 AI 的回覆」
+  assert.equal(sanitizeSpecialNotes(undefined), "");
+  assert.equal(sanitizeSpecialNotes(null), "");
+  assert.equal(sanitizeSpecialNotes("與淡路併團\r\n主賓是大會主席\r要特別致意\n"), "與淡路併團\n主賓是大會主席\n要特別致意\n", "正在打字的那一格存回來要一模一樣");
+  assert.equal(sanitizeSpecialNotes("x".repeat(SPECIAL_NOTES_MAX + 50)).length, SPECIAL_NOTES_MAX);
+  assert.equal(emptyVisit().special_notes, "");
+  // 來賓專頁拿不到（publicVisit 是白名單）
+  assert.equal(publicVisit({ ...emptyVisit(), visit_id: "2026-11-02-kito", special_notes: "主賓要特別禮遇" }).special_notes, undefined);
 });
 
 test("答應提供的資料：網址或上傳的檔案；信裡用完整的網址", () => {

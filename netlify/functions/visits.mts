@@ -1,7 +1,7 @@
 import { fail, json, nowISO, readJSON, requireAdmin, siteUrl } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
-import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, posterFingerprint, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes, needsGeo, sanitizeGeo, sanitizePublic, institutionKeys, visitEndAt, isForum, toForumProgramme, defaultProgramme, hasDictation } from "../../lib/visit.mjs";
+import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, posterFingerprint, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes, needsGeo, sanitizeGeo, sanitizePublic, institutionKeys, visitEndAt, isForum, toForumProgramme, defaultProgramme, hasDictation, sanitizeSpecialNotes } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
 import { purgePublicVisits } from "../lib/cdn.mts";
 import { dropDraft, moveDraft } from "./draft.mts";
@@ -297,6 +297,8 @@ export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   v.duration_minutes = spanned || Number(input.duration_minutes) || 90;
   v.end_time = endTimeOf(v);
   v.interests = Array.isArray(input.interests) ? input.interests.map(String) : [];
+  // 特殊狀況（給 AI 看的說明）：照送來的存，只統一換行、限長度
+  v.special_notes = sanitizeSpecialNotes((input as any).special_notes);
   v.programme = Array.isArray(input.programme) ? input.programme : [];
   v.itinerary = Array.isArray(input.itinerary) ? input.itinerary.map((s) => ({ room: String(s.room), minutes: Number(s.minutes) || 0, focus: s.focus || "", location: s.location ? String(s.location).slice(0, 60) : "" })) : [];
   // 研究室動線一定先一場總體介紹

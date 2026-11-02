@@ -2166,3 +2166,60 @@ test("座談的場次：存檔時換成總體介紹 → 座談；支援人力表
 
   await api(`/api/visits?id=${v.visit_id}`, { method: "DELETE", headers: admin });
 });
+
+test("特殊狀況與來賓報告：讀信讀到對方也要報告就排進流程，特殊狀況寫一行；通告、回報、確認信、感謝信都寫到", async () => {
+  // 明確指示：「在行程要加入一個特殊狀況……來指導後面 AI 的回覆，另外 AI 的回覆要注意到對方來信，有提到他們要報告，
+  // 但是這個報告的時間 AI 沒有排入時間表」
+  const letter = `Dear Prof. Chang,
+
+We will visit on 2099-12-03 at 10:00. I will give a 10-minute presentation about our studio work, and we will come in the same slot as another group, as arranged.
+
+Kenjiro Kito, Kyushu University
+kito@design.kyushu-u.example`;
+  const r = await extract({ email_text: letter });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.guest_talk, { minutes: 10, title_en: "Presentation by Kito", title_2nd: "來賓報告：Kito" });
+  assert.match(r.body.visit.special_notes, /^來賓要報告：Kito，約 10 分鐘$/m, "特殊狀況寫一行報告的事");
+  assert.match(r.body.visit.special_notes, /另一團/, "信裡提到的併團也先填進特殊狀況");
+  assert.ok(!r.body.visit.uncertainties.some((u) => /沒說多久/.test(u)));
+  // 沒說多久：先排 15 分，列進要確認的事
+  const vague = await extract({ email_text: "Dear Prof. Chang,\n\nWe would like to visit on 2099-12-04 and give a short presentation about our school.\n\nAda Wong, Example College\nada.wong@example.edu" });
+  assert.equal(vague.body.guest_talk.minutes, 15);
+  assert.ok(vague.body.visit.uncertainties.some((u) => /對方要報告，但信裡沒說多久：先排了 15 分鐘/.test(u)), JSON.stringify(vague.body.visit.uncertainties));
+  // 沒提到報告：沒有這一段，特殊狀況也是空的
+  const plain = await extract({ email_text: EMAIL });
+  assert.equal(plain.body.guest_talk, null);
+  assert.equal(plain.body.visit.special_notes, "");
+
+  // 存成一場（後台把那一段排在總體介紹後面；這裡照它排好的樣子送）
+  const programme = [
+    { start: "10:00", end: "10:20", kind: "briefing", title_en: "Welcome and centre overview", title_2nd: "歡迎與中心總體介紹" },
+    { start: "10:20", end: "10:30", kind: "guest", ...r.body.guest_talk },
+    { start: "10:30", end: "12:10", kind: "tour", title_en: "Laboratory visits", title_2nd: "研究室參訪" },
+    { start: "12:10", end: "12:25", kind: "discussion", title_en: "General discussion", title_2nd: "綜合討論" },
+  ].map(({ minutes, ...b }) => b);
+  const notes = `${r.body.visit.special_notes}\n主賓是大會主席，信裡要特別致意\n`;
+  const saved = await api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify({ ...r.body.visit, code: "kito", programme, special_notes: notes }) });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  const v = saved.body.visit;
+  assert.equal(v.special_notes, notes, "照送來的存：存回去的跟送出去的一樣（正在打字的那一格才不會跳）");
+  assert.deepEqual(v.programme.map((b) => b.kind), ["briefing", "guest", "tour", "discussion"]);
+  // 來賓專頁：流程上看得到對方的報告，特殊狀況拿不到
+  const pub = (await api(`/api/visits?id=${v.visit_id}&public=1`)).body.visit;
+  assert.equal(pub.special_notes, undefined, "特殊狀況只給主辦端與 AI");
+  assert.ok(pub.programme.some((b) => b.kind === "guest" && b.title_en === "Presentation by Kito"));
+
+  // 通告：當天動線寫出來賓報告（排好的字，不是 AI 寫的）；回報也列
+  const notice = (await runJob("letter", { visit_id: v.visit_id, kind: "notice" })).body.draft.body;
+  assert.match(notice, /^10:20–10:30　來賓報告：Kito$/m, notice);
+  const rundown = (await runJob("letter", { visit_id: v.visit_id, kind: "rundown" })).body.draft.body;
+  assert.match(rundown, /^10:20–10:30　來賓報告：Kito$/m, rundown);
+  // 確認信：流程寫到對方的報告（AI_MOCK 照真提示詞的結構）
+  const conf = (await runJob("letter", { visit_id: v.visit_id, kind: "confirmation", sender: "director" })).body.draft.body;
+  assert.match(conf, /Your presentation: 10:20–10:30 Presentation by Kito/, conf);
+  // 感謝信：順帶謝謝他的報告
+  const thanks = (await runJob("letter", { visit_id: v.visit_id, kind: "thanks", sender: "director" })).body.draft.body;
+  assert.match(thanks, /and for your presentation\./, thanks);
+
+  await api(`/api/visits?id=${v.visit_id}`, { method: "DELETE", headers: admin });
+});

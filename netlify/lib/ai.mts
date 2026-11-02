@@ -5,7 +5,7 @@ import { env } from "./http.mts";
 import { isMock } from "./data.mts";
 import type { DictationExtract, ResponseRow, SignbookEntry, Visit } from "./types.mts";
 import type { Extracted } from "./files.mts";
-import { allocateProgramme, briefingBlockMinutes, endTimeOf, FORUM_TITLES, isForum, labStops, salutationLine, salutationPeople, sanitizeDictation, settleSalutation, talkedAbout, thanksItems, zhDate } from "../../lib/visit.mjs";
+import { allocateProgramme, briefingBlockMinutes, endTimeOf, FORUM_TITLES, guestTalks, guestTalkZh, isForum, labStops, salutationLine, salutationPeople, sanitizeDictation, settleSalutation, talkedAbout, thanksItems, zhDate } from "../../lib/visit.mjs";
 import { parseVisitTable } from "../../lib/import.mjs";
 
 /**
@@ -30,6 +30,14 @@ export const CENTER_FACTS = `中心事實（所有輸出都要遵守）：
 - 不要給步行、鞋履、天氣、館舍之間移動之類的提醒（全程室內、同一層樓）。
 - 信件不感謝中心自己的人（主任、對口老師、同仁），感謝對象只有來賓與對方單位的窗口；也不替中心的人邀功。
 - 不放中心總預算數字；HEALS Design 是 301 專屬方法論，不是中心層級的方法論。`;
+
+/**
+ * **特殊狀況**（`visit.special_notes`）：主辦端在訪前第 5 步寫給 AI 看的說明——併團、對方的特別要求、要特別禮遇的貴賓……
+ * （明確指示：「來指導後面 AI 的回覆」）。寫給來賓的（確認信、感謝信）照著調整，但內部的交代不能原句照抄出去；
+ * 寫給中心自己的（通告、回報、紀錄）就直接帶到。
+ */
+const NOTES_FOR_GUESTS = `special_notes（有才給）是**主辦端寫給你的這一場的特殊狀況**，例如併團（同一時段還接待另一個單位）、對方的特別要求、主辦端要特別禮遇或強調的貴賓。**照著調整內容、重點與語氣，這幾條優先於上面的一般寫法**（但不能違反中心事實）。它是內部說明：不要原句照抄，不要寫出「特殊狀況」「主辦端交代」這類字；跟對方有關的安排（例如一起接待的另一個單位、對方的報告、對方提的要求）照實寫進去，內部的判斷與評語不要寫給來賓。`;
+const NOTES_FOR_STAFF = `special_notes（有才給）是**主辦端寫的這一場的特殊狀況**，例如併團（同一時段還接待另一個單位）、對方的特別要求、要特別接待或強調的貴賓。跟各研究室有關的（要多準備什麼、誰要特別接待、跟哪一團一起）一定要帶到，一兩句就好，不要整段照抄。`;
 
 /** Claude 接好了沒（AI_MOCK 也算——本機開發與測試用固定範例）。 */
 export const aiConfigured = (): boolean => !!(env("ANTHROPIC_API_KEY") || env("AI_MOCK"));
@@ -100,6 +108,13 @@ export const ExtractedSchema = z.object({
   purpose: z.string(),
   interests: z.array(z.string()),
   language: z.enum(LANGS),
+  /**
+   * 來訪方說他們**也要報告**（簡報、介紹自己的單位或研究）：排進今日流程（明確指示：「對方來信有提到他們要報告，
+   * 但是這個報告的時間 AI 沒有排入時間表」）。見 lib/visit.mjs guestTalkPlan。
+   */
+  guest_talk: z.object({ requested: z.boolean(), minutes: z.number().int(), presenter: z.string(), topic: z.string() }),
+  /** 信裡提到、排行程與寫信時要注意的事（併團、特別的要求、要特別禮遇的貴賓……），先填進後台的「特殊狀況」給人增刪。 */
+  special_notes: z.array(z.string()),
   candidate_dates: z.array(z.string()),
   uncertainties: z.array(z.string()),
 });
@@ -120,6 +135,8 @@ const EXTRACT_SYSTEM = `你是臺大生農學院綠色健康研究中心（GHRC�
 - contact_teacher：中心這邊負責聯絡的老師，只能是 ${TEACHERS.join("／")} 之一，看不出來留空。
 - purpose：來訪目的一句話；interests：信中透露的研究興趣關鍵字（英文，每項 2–6 字）。
 - language：來賓的第二語言層：台灣／華語團 zh、韓國 ko、日本 ja，其餘 en。
+- guest_talk：來訪方**自己也要報告**——信裡說他們要做簡報、介紹自己的學校／單位／研究、分享成果（例如 "give a short presentation"、"introduce our school"、「我們也準備了簡報」「研究簡介」「発表」「발표」）——requested=true。minutes 是信裡說的長度（「約 10 分鐘」就是 10），沒說就 0；presenter 是報告的人的姓名（照名單上的寫法，不含職稱），沒說留空；topic 是報告的主題（照信裡的說法，一句），沒說留空。只是想交流、討論、參觀的不算；中心這邊的簡報也不算。沒有就 requested=false，其他留空或 0。**這一段會排進今日流程**，所以信裡有提到就一定要標出來。
+- special_notes：信裡提到、主辦端排行程或寫信時要特別注意的事，一項一句、繁體中文。例如：跟另一個單位一起來、或同一時段要一起接待（併團）；指定想看的設備或研究室；要錄影或拍照；時間上的限制（要提早離開、要趕下一個行程）；行動上需要協助的安排（例如要用輪椅、需要電梯——只寫要安排什麼，不寫病情或原因）；要特別禮遇的貴賓（信裡寫到的頭銜，例如部長、校長、大會主席）；對方要我們先準備的東西。**不要重複**已經放在其他欄位的（日期時間、名單、來訪目的、興趣；要報告的事放 guest_talk），也不要寫還要確認的事（那是 uncertainties）；沒有就空陣列。
 - 不要編造。不知道的欄位留空字串／空陣列／0，並在 uncertainties 用中文列出需要人工確認的事項。
 
 手機截圖與聊天紀錄（簡訊、LINE 等）另外照這幾條讀：
@@ -227,6 +244,8 @@ export async function researchVisitor(visit: Visit): Promise<VisitBackground> {
     `來訪目的（來信寫的）：${visit.purpose || "（未填）"}`,
     `興趣關鍵字：${(visit.interests || []).join("、") || "（無）"}`,
     `名單：${(visit.guests || []).map((g) => [g.name, g.title, g.affiliation].filter(Boolean).join("／")).join("；") || "（無）"}`,
+    // 特殊狀況（主辦端寫的：併團、對方的要求、要特別禮遇的貴賓）——研判時一併考慮
+    ...(String(visit.special_notes || "").trim() ? [`主辦端說明（特殊狀況）：${String(visit.special_notes).trim().replace(/\n+/g, "；")}`] : []),
   ].join("\n");
   if (isMock()) return mockBackground(visit);
   const { notes, searched } = await researchNotes(
@@ -265,7 +284,7 @@ export const PlanSchema = z.object({
     z.object({
       start: z.string(),
       end: z.string(),
-      kind: z.enum(["briefing", "tour", "discussion", "forum", "photo", "other"]),
+      kind: z.enum(["briefing", "tour", "discussion", "forum", "photo", "guest", "other"]),
       title_en: z.string(),
       title_2nd: z.string(),
       rooms: z.array(z.string()),
@@ -304,6 +323,8 @@ const PLAN_SYSTEM = `你替 GHRC 排一次參訪的行程並從母簡報挑頁�
 - text_edits：只有在提供母簡報文字（master_text）時才填。針對第 1、2、3 頁，逐一給出 find（母簡報裡**逐字**存在的文字段落）與 replace（新文字），用來改單位名稱、流程表的時間／說明／頁碼、Contents 的章節列表。沒有 master_text 就給空陣列。
 - rationale：用中文兩三句說明**為什麼挑這幾個區塊**（後台把它放在選頁旁邊；有給 route 時行程是研究室填的，不必解釋行程）。
 - 總體介紹的地點由主辦端決定（見 briefing_location，預設 302），不用寫進輸出。
+- guest_talks 是來訪方自己的報告（kind="guest"，接在總體介紹後面）：programme 裡照原本的長度留著，不要拿掉。
+- special_notes 是主辦端寫的這一場的特殊狀況（例如對方特別想看什麼、要特別禮遇的貴賓）：挑頁時照著調整。
 
 ${CENTER_FACTS}`;
 
@@ -321,6 +342,8 @@ export async function planVisit(visit: Visit, slidesIndex: any, labs: any, maste
     // 今日流程是自動排的（各研究室在支援人力表上填的分鐘）：挑頁照這一份動線與總體簡報的長度，不要另排一份
     route: (visit.itinerary || []).filter((s) => s.room !== "briefing" && (Number(s.minutes) || 0) > 0).map((s) => ({ room: s.room, minutes: Number(s.minutes) })),
     briefing_minutes: briefingBlockMinutes(visit.programme) || Number(visit.itinerary?.find((s) => s.room === "briefing")?.minutes) || 20,
+    guest_talks: guestTalks(visit),
+    special_notes: String(visit.special_notes || "").trim() || undefined,
     slide_index: slidesIndex.slides,
     labs: (labs.labs || []).map((l: any) => ({ room: l.room, name_en: l.name_en, lead: l.lead?.name_zh, one_line_en: l.one_line_en })),
     master_text: masterText ? { slides: (masterText.slides || []).filter((s: any) => s.n <= 3) } : null,
@@ -424,10 +447,11 @@ export async function draftLetter(ctx: LetterContext): Promise<{ subject: string
     ctx.kind === "rundown"
       ? `你替 GHRC 草擬一則**回報給中心自己五間研究室**的訊息：通告發出去、各室回覆簡報人員之後，把定案的安排再送回去一次。收信的是同事，**一律用繁體中文**。
 語氣：同事之間，簡短、條列、看一眼就知道自己幾點要做什麼。不要客套話，不要感謝詞，不要公文腔。
-結構：1) 一句話說哪個單位、什麼時候來、幾位；2) **定案動線**——照 lab_stops 逐條列「幾點–幾點　房號　研究室　簡報人員　N 分鐘」，presenter 是空的就寫「（待補）」；3) 一兩句提醒當天的重點（來賓想看什麼、簡報大概講多久）；4) 最後一句「有問題直接回這則訊息」。
+結構：1) 一句話說哪個單位、什麼時候來、幾位；2) **定案動線**——照 lab_stops 逐條列「幾點–幾點　房號　研究室　簡報人員　N 分鐘」，presenter 是空的就寫「（待補）」；visit.programme 裡有 kind="guest"（**來賓報告**：對方自己要做的報告）就照時間排進這一段，寫「幾點–幾點　來賓報告（誰）」；3) 一兩句提醒當天的重點（來賓想看什麼、簡報大概講多久，以及 special_notes 裡跟各室有關的事）；4) 最後一句「有問題直接回這則訊息」。
 **format="forum"（座談的場次）**：不參觀研究室，第 2 段改成兩部分——先照 programme 列當天流程（幾點–幾點　內容），再列「座談出席」：照 attendees 逐條列「房號　研究室　老師　可參加／無法參加」（lead 是那一間的老師，attend 是空的就寫「（待回覆）」）。不要寫各室的時段與分鐘。
 **不要署名**：這一則是貼進中心自己的 LINE 群組，誰發的大家都看得到。
 時間與人員一律照提供的資料，不要自己改也不要補上沒有的人。回傳 subject 與純文字 body。
+${NOTES_FOR_STAFF}
 
 ${CENTER_FACTS}`
       : ctx.kind === "notice"
@@ -436,24 +460,27 @@ ${CENTER_FACTS}`
 結構，照這個順序：
 1) 開頭一行固定寫「各位老師好：」。
 2) 一句話說哪個單位、什麼時候來、幾位。
-3) 一兩句來賓背景與他們想看什麼（purpose／interests，沒有就省略）。
+3) 一兩句來賓背景與他們想看什麼（purpose／interests，沒有就省略）；special_notes 裡跟各研究室有關的事（併團、對方的特別要求、要特別接待的貴賓）也寫在這一段，簡短。
 4) **原封不動**放入提供的 route_block（當天動線），一個字都不要改、不要重排、不要補上各室的時間。
 5) **原封不動**放入提供的 roll_call_block（請各研究室回覆，下一行是支援人力表的網址），一個字都不要改，網址要完整（含 # 後面那一段，那是直接跳到這一場用的）。
 **roll_call_block 就是整則的最後一段，後面什麼都不要加**：不要回覆期限、不要署名、不要結尾的客套話——這一則是貼進中心自己的 LINE 群組，誰發的大家都看得到。
 只寫這一場真的有的資訊：沒有的欄位就不要提，不要自己補上參觀路線以外的安排，也不要另外再問 demo、設備、研究生之類的事——這一則只問一件事：誰來接待（要多少時間，老師在網址那張表上填）。
 **format="forum"（座談的場次）**：來賓是來跟中心老師們座談的，不參觀研究室——第 2 句要說明是座談；這一則只問一件事：老師能否出席座談（老師在網址那張表上選「可參加」或「無法參加」），不要提接待、參觀或分鐘。回傳 subject 與純文字 body。
+${NOTES_FOR_STAFF}
 
 ${CENTER_FACTS}`
       : ctx.kind === "confirmation"
       ? `你替 GHRC 草擬參訪確認信。語氣：同行學者之間的誠懇與簡潔，不是服務業。用來賓的語言寫（language=zh 用繁體中文；en 用英文；ko／ja 用英文為主並在開頭與結尾附一句該語言問候）。
 內容：確認日期時間與地點（臺大園藝系造園館三樓；總體介紹在 briefing_location 那一間，之後依序走訪研究室——**format="forum" 時不參觀研究室，之後是與中心老師座談**）、當天流程（附 programme）、專屬網頁連結（訪前可先看五間研究室的老師背景）、對口老師。
+programme 裡 kind="guest" 是**來賓自己的報告**（對方在來信裡說要報告）：流程裡一定要寫到，例如 "Presentation by Dr Kenjiro Kito (about 10 minutes)"——不要漏掉，也不要寫成中心的簡報。
 不要問來賓任何問題；不要加交通、步行、穿著、天氣之類的提醒；不要提到中心以外的地點或單位。署名用提供的 sender。回傳 subject 與純文字 body。
+${NOTES_FOR_GUESTS}
 
 ${CENTER_FACTS}`
       : `你替 GHRC 草擬參訪後的感謝信。語氣：同行學者之間的感謝與請益，不是滿意度調查。用來賓的語言寫（language=zh 用繁體中文；en 用英文；ko／ja 用英文為主並在開頭與結尾附一句該語言問候）。
 **精簡**（明確指示：「不重要的事不用再提，精簡就好」）。照這個順序，只寫這幾段：
 1) 稱呼：照 salutation 寫出**每一位來賓的姓名與頭銜**（明確指示：「要把參訪者名字頭銜加進去」）——主賓排第一，姓名一個字都不要改；頭銜照 title，太長就取最主要的那一個，title 空的就只寫姓名；寫成該語言自然的正式稱呼（例："Dear Professor Simon Kilbane and Dr Jane Doe,"；「Simon Kilbane 教授、王大明院長　您好：」）。more 大於 0 就在最後加 "and colleagues"／「及各位貴賓」。**不要用 "Dear colleagues"／「各位」這種通用稱呼取代名字**。
-2) 一兩句感謝來訪（可以提單位與日期）。
+2) 一兩句感謝來訪（可以提單位與日期）；有 guest_talks（來賓當天自己做的報告）就在這裡順帶謝謝他的報告，半句到一句，不評論內容。
 3) **參訪時談到的事**（明確指示：感謝信要自動帶入「參訪提到的事」）：有 talked_about（主持人訪後一項一項記下的重點，多半是中文的短句）就寫**一段，兩到四句**，讓對方看得出我們記得當天談了什麼：
    - notes（交流重點）與 questions（來賓的提問）挑最有份量的一兩件帶到，用對方讀得懂的完整句子寫，不要逐條照列；
    - follow_ups 是我們答應要做的事，**每一項都要寫到**（「如當天所談，我們會……」）；答應寄的檔案或連結就在下一段的清單裡，這裡說一句「附在下面」就好，不要重複網址；
@@ -466,6 +493,7 @@ ${CENTER_FACTS}`
 6) 一句收尾。
 7) 署名 sender。
 subject 一句就好（例如 "Thank you for visiting the Green Health Research Center"／「感謝蒞臨綠色健康研究中心」），不要再加別的。不要感謝中心自己的老師或同仁。回傳 subject 與純文字 body。
+${NOTES_FOR_GUESTS}
 
 ${CENTER_FACTS}`;
   const thanks = ctx.kind === "thanks";
@@ -486,6 +514,10 @@ ${CENTER_FACTS}`;
     // 感謝信：當天的簡報、現場合照（相簿）、答應提供的資料——一項一行；以及參訪時談到的事
     items: items.length ? items.map((p) => ({ kind: p.kind, title: p.title, url: p.url, ...(p.count ? { count: p.count } : {}), ...(p.attached ? { attached: p.attached } : {}) })) : undefined,
     talked_about: talked || undefined,
+    // 來賓當天自己做的報告（今日流程裡 kind="guest" 那一段）：感謝信順帶謝謝；確認信與通告看 programme 就有
+    guest_talks: thanks && guestTalks(v).length ? guestTalks(v).map((g: any) => ({ title: g.title_en || g.title_2nd, minutes: g.minutes })) : undefined,
+    // 特殊狀況（主辦端寫給 AI 看的：併團、對方的特別要求、要特別禮遇的貴賓）：每一則都照著寫
+    special_notes: String(v.special_notes || "").trim() || undefined,
     // 行前通告：當天幾點走到哪一間、各幾分鐘、誰負責（通告的主體就是這一份）
     // 行前通告／回報：當天幾點走到哪一間、各幾分鐘、誰負責、各室回覆的簡報人員
     lab_stops: internal
@@ -635,6 +667,7 @@ const RECORD_SYSTEM = `你替臺大綠色健康研究中心（GHRC）把主持�
 - **只根據那一項本身與 facts**：不要加入沒有的事實、數字、人名、單位、評價或客套話（例如「相談甚歡」「收穫豐碩」「圓滿成功」）。
   看不懂的縮寫、專有名詞、人名照原樣保留；英文詞照原樣保留（例如 ESG、app）。
 - 這是同行之間的學術交流：不要評分、不要用滿意度或服務業的用語。
+- facts.special_notes 是主辦端寫的這一場的特殊狀況（內部說明）：其中的事實（例如與另一個單位同一時段接待、來賓做了報告）可以寫進 overview；交代、判斷與評語不要寫進紀錄。facts.guest_talks 是來賓自己做的報告，overview 要提到。
 
 ${CENTER_FACTS}`;
 
@@ -659,6 +692,8 @@ export async function writeRecord(visit: Visit, labs: any): Promise<RecordProse>
     format: isForum(visit) ? "座談（與中心老師座談，不參觀研究室）" : "參觀研究室",
     rooms_visited: (labStops(visit, labs) as any[]).map((s) => `${s.room} ${s.name_zh}`),
     purpose: visit.purpose,
+    guest_talks: guestTalks(visit).map((g: any) => guestTalkZh(g)),
+    special_notes: String(visit.special_notes || "").trim() || undefined,
   };
   const payload = {
     facts,
@@ -692,7 +727,7 @@ export async function summarizeVisit(visit: Visit, responses: ResponseRow[]): Pr
   const guests = (visit.guests || []).map((g) => ({ name: g.name, title: g.title, affiliation: g.affiliation, role: g.role }));
   const payload = { visit: { ...visit, guests, letters: undefined }, responses };
   return plain(
-    `替 GHRC 寫一頁參訪摘要（繁體中文，Markdown，300 字內）。段落固定：誰來（單位、主要來賓、人數）；看了哪幾間各多久（用 visit.itinerary 當天排定的動線；visit.format 是 forum 的是**座談的場次、不參觀研究室**——這一段改寫「座談，不參觀研究室」，並列出席的老師：visit.attendance 是 yes 的那幾間的負責老師（no＝無法參加）；最想看什麼——**分兩行寫，來源不能混**：「來賓自己說」（responses 的 most_wanted_rooms）與「主持人聽到的」（visit.dictation.extracted：主持人一項一項記下的重點；visit.dictation.record 是依重點寫成的完整紀錄），只有一邊有資料就只寫那一邊；問了哪些問題；想合作誰（來賓回的 cooperate_rooms；口述裡的合作意願另外一行寫「主持人記下」）；收到什麼建議（responses 的 suggestion，不具名的不要試圖猜是誰）；待辦。沒有資料的段落寫「（無）」。不要評分、不要用滿意度用語。\n\n${CENTER_FACTS}`,
+    `替 GHRC 寫一頁參訪摘要（繁體中文，Markdown，300 字內）。段落固定：誰來（單位、主要來賓、人數）；看了哪幾間各多久（用 visit.itinerary 當天排定的動線；visit.format 是 forum 的是**座談的場次、不參觀研究室**——這一段改寫「座談，不參觀研究室」，並列出席的老師：visit.attendance 是 yes 的那幾間的負責老師（no＝無法參加）；最想看什麼——**分兩行寫，來源不能混**：「來賓自己說」（responses 的 most_wanted_rooms）與「主持人聽到的」（visit.dictation.extracted：主持人一項一項記下的重點；visit.dictation.record 是依重點寫成的完整紀錄），只有一邊有資料就只寫那一邊；問了哪些問題；想合作誰（來賓回的 cooperate_rooms；口述裡的合作意願另外一行寫「主持人記下」）；收到什麼建議（responses 的 suggestion，不具名的不要試圖猜是誰）；待辦。沒有資料的段落寫「（無）」。不要評分、不要用滿意度用語。visit.special_notes 是主辦端寫的這一場的特殊狀況（例如併團、對方的特別要求、要特別禮遇的貴賓），寫「誰來」時一併考慮；visit.programme 裡 kind="guest" 是來賓自己做的報告，「誰來」那一段提一句。\n\n${CENTER_FACTS}`,
     JSON.stringify(payload),
   );
 }
@@ -866,6 +901,9 @@ function mockExtract(text: string, images = 0): ExtractedVisit {
   const orgMatch = orgLine.match(/(University of [A-Z][A-Za-z ]+|[A-Z][A-Za-z]+ University|[^\s，。、]+大學|[^\s，。、]+高中)/);
   const cjk = (text.match(/[一-鿿]/g) || []).length;
   const date = (text.match(/\b(20\d{2}-\d{2}-\d{2})\b/) || [])[1] || "";
+  // 信裡說對方也要報告：照字面抓（真的 AI 照提示詞讀）；說了幾分鐘就是幾分鐘
+  const talk = /presentation|give a (?:short )?talk|報告|簡報|発表|발표/i.test(text.replace(/<\/?email>|以下是主辦端貼上的往來[^\n]*/g, ""));
+  const talkMinutes = Number((text.match(/(\d{1,3})\s*-?\s*(?:minutes?|mins?\b|分鐘|分間|분)/i) || [])[1]) || 0;
   return {
     org: { name: orgMatch?.[1] || orgLine.slice(0, 60) || "Visiting organisation", name_local: "", type: /university|大學|college|學院/i.test(orgLine) ? "university" : /高中|school/i.test(orgLine) ? "school" : /ministry|部|government|政府|agency/i.test(orgLine) ? "government" : "other", country: cjk > 50 ? "Taiwan" : "" },
     guests,
@@ -878,6 +916,8 @@ function mockExtract(text: string, images = 0): ExtractedVisit {
     purpose: "（AI_MOCK）依信件內容自動填入的示範目的",
     interests: ["green infrastructure", "health landscape"],
     language: cjk > 50 ? "zh" : /korea|한국/i.test(text) ? "ko" : /japan|日本/i.test(text) ? "ja" : "en",
+    guest_talk: { requested: talk, minutes: talk ? talkMinutes : 0, presenter: talk ? guests[0]?.name || "" : "", topic: "" },
+    special_notes: /併團|同一時段|another (?:group|delegation)/i.test(text) ? ["（AI_MOCK）來信提到同一時段還有另一團"] : [],
     candidate_dates: date ? [] : ["（AI_MOCK）日期未定"],
     uncertainties: ["AI_MOCK 模式：這是範例抽取，不是真正的 AI 結果", ...(images ? [`AI_MOCK：附了 ${images} 張截圖或照片（沒有真的讀）`] : [])],
   };
@@ -970,6 +1010,8 @@ function routeBlock(v: Visit, labs: any): string {
       ? "與中心老師座談"
       : b.kind === "photo"
       ? "合照"
+      : b.kind === "guest"
+      ? guestTalkZh(b) // 對方自己的報告（「來賓報告：Kenjiro Kito」）
       : b.title_2nd || b.title_en || "";
   const blocks = (v.programme || []).filter((b) => b && b.start && b.end);
   const lines = blocks.map((b) => `${b.start}–${b.end}　${label(b)}`);
@@ -1043,13 +1085,13 @@ function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, pro
           subject: `（AI_MOCK）定案回報：${v.org?.name || v.visit_id} ${v.date}`,
           body: isForum(v)
             ? `各位老師好：\n\n${head}　座談\n\n${(v.programme || []).map((b) => `${b.start}–${b.end}　${b.title_2nd || b.title_en}`).join("\n")}\n\n座談出席：\n${forumAttendees(v, ctx.labs).map((x) => `${x.room} ${x.name_zh}　${x.lead}　${x.attend || "（待回覆）"}`).join("\n")}\n\n有問題直接回這則訊息。`
-            : `各位老師好：\n\n${head}\n\n定案動線與簡報人員：\n${stops.map(line).join("\n")}\n\n有問題直接回這則訊息。`,
+            : `各位老師好：\n\n${head}\n\n定案動線與簡報人員：\n${[...guestTalks(v).map((g: any) => `${g.start}–${g.end}　${guestTalkZh(g)}`), ...stops.map(line)].join("\n")}\n\n有問題直接回這則訊息。`,
         };
   }
   if (ctx.kind === "confirmation") {
     return {
       subject: `(AI_MOCK) Your visit to the Green Health Research Center, ${v.date}`,
-      body: `Dear colleagues,\n\nWe look forward to welcoming ${v.org?.name || "you"} on ${v.date} at ${v.start_time}. We begin with a short overview in Room ${location}, Landscape Building, 3rd floor, ${isForum(v) ? "followed by a roundtable with the faculty" : "and then walk through the laboratories next door"}.\n\n${isForum(v) ? "Programme and the faculty you will meet" : "Programme and the laboratories you will see"}: ${pageUrl}\n\n${senderBlock(ctx)}`,
+      body: `Dear colleagues,\n\nWe look forward to welcoming ${v.org?.name || "you"} on ${v.date} at ${v.start_time}. We begin with a short overview in Room ${location}, Landscape Building, 3rd floor, ${isForum(v) ? "followed by a roundtable with the faculty" : "and then walk through the laboratories next door"}.${guestTalks(v).map((g: any) => `\n\nYour presentation: ${g.start}–${g.end} ${g.title_en || "Guest presentation"}`).join("")}\n\n${isForum(v) ? "Programme and the faculty you will meet" : "Programme and the laboratories you will see"}: ${pageUrl}\n\n${senderBlock(ctx)}`,
     };
   }
   // 跟真提示詞同一個結構：稱呼（每一位來賓的姓名與頭銜）、一句感謝、參訪時談到的事、當天的簡報與合照與答應提供的資料、
@@ -1058,7 +1100,7 @@ function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, pro
   const talk = mockTalked(talked);
   return {
     subject: `(AI_MOCK) Thank you for visiting the Green Health Research Center`,
-    body: `${salutationLine(v, v.language === "zh" ? "zh" : "en")}\n\nThank you for visiting us on ${v.date}.\n\n${talk ? `${talk}\n\n` : ""}${block ? `${block}\n\n` : ""}${responseBlock(v.language, ctx.i18n, respondUrl)}\n\nWith thanks,\n${senderBlock(ctx)}`,
+    body: `${salutationLine(v, v.language === "zh" ? "zh" : "en")}\n\nThank you for visiting us on ${v.date}${guestTalks(v).length ? ", and for your presentation" : ""}.\n\n${talk ? `${talk}\n\n` : ""}${block ? `${block}\n\n` : ""}${responseBlock(v.language, ctx.i18n, respondUrl)}\n\nWith thanks,\n${senderBlock(ctx)}`,
   };
 }
 

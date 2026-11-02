@@ -1261,15 +1261,57 @@ try {
   await page.click('[data-tab="pre"]');
   await page.selectOption("#visitSelect", "");
   const optionsBefore = await page.locator("#visitSelect option").count();
-  await page.fill("#emailText", "Dear Prof. Chang,\n\nWe would love to visit your center some time.\n\nAnna Lee, University of Testing\nanna.lee@testing.example");
+  // 信裡也說對方要報告（明確指示：「AI 的回覆要注意到對方來信，有提到他們要報告，但是這個報告的時間 AI 沒有排入時間表」）
+  await page.fill("#emailText", "Dear Prof. Chang,\n\nWe would love to visit your center some time. Our team would also like to give a 10-minute presentation about our work.\n\nAnna Lee, University of Testing\nanna.lee@testing.example");
   await page.click("#extractBtn");
   await page.waitForFunction(() => document.getElementById("orgName").value.includes("Testing"), null, { timeout: 90000 });
   check((await page.inputValue("#date")) === "" && (await page.isVisible("#dateMissing")), "an email that names no day leaves the date empty and says so, instead of filling in today");
+  {
+    // 讀信時就排進今日流程，接在總體介紹後面（時間從綜合討論扣）；特殊狀況寫一行，後面每一則 AI 寫的東西都看得到
+    const rows = await page.$$eval("#programmeView > div", (els) => els.map((e) => e.textContent.trim()));
+    check(/^10:00–10:20總體簡報/.test(rows[0]) && /^10:20–10:30來賓報告Anna Lee$/.test(rows[1]) && /^12:10–12:25綜合討論/.test(rows[rows.length - 1]), `the visitors' own presentation goes into the programme right after the overview, out of the discussion time (${rows.join(" | ")})`);
+    check(/^來賓要報告：Anna Lee，約 10 分鐘$/m.test(await page.inputValue("#specialNotes")) && (await page.isHidden("#guestTalkHint")), "…and the special-circumstances box says so, for every AI draft after it");
+  }
   await page.waitForTimeout(2000); // 自動存檔的間隔過了
   check((await page.locator("#visitSelect option").count()) === optionsBefore && (await page.inputValue("#visitSelect")) === "", "…and no visit is created under a made-up date");
   await page.fill("#date", "2026-12-01");
   await page.waitForFunction(() => document.getElementById("visitSelect").value === "2026-12-01-testing", null, { timeout: 15000 });
   check(await page.isHidden("#dateMissing"), "filling in the date saves it by itself, under that date");
+  {
+    const auth = { authorization: "Bearer e2e-token" };
+    const saved = async () => (await (await fetch(`${base}/api/visits?id=2026-12-01-testing`, { headers: auth })).json()).visit;
+    const until = async (fn, what) => {
+      for (let i = 0; i < 100; i++) { if (await fn()) return; await new Promise((r) => setTimeout(r, 300)); }
+      throw new Error(`FAIL: timed out waiting for ${what}`);
+    };
+    const kinds = async () => (await saved()).programme.map((b) => b.kind).join();
+    check((await kinds()) === "briefing,guest,tour,discussion" && /來賓要報告/.test((await saved()).special_notes), "…saved with the presentation slot and the special circumstances");
+    // 拿掉那一段：特殊狀況還寫著要報告，就提醒一聲，按一下照特殊狀況寫的分鐘排回去
+    await page.click("#programmeEdit summary");
+    await page.click('#programmeTable tbody tr:has(option[value="guest"][selected]) [data-del-row]');
+    await page.waitForSelector("#guestTalkHint:not([hidden])");
+    check(!/來賓報告/.test(await page.textContent("#programmeView")), "taking the slot out of the programme leaves the box saying they will present, so the page points it out…");
+    await page.click("#addGuestTalk");
+    await page.waitForFunction(() => /10:20–10:30來賓報告/.test(document.getElementById("programmeView").textContent), null, { timeout: 15000 });
+    check(await page.isHidden("#guestTalkHint"), "…and one click puts it back after the overview, for the 10 minutes the box mentions");
+    // 改成座談再改回來：對方的報告都還在（座談只拿掉研究室參訪）
+    await page.check("#forumMode");
+    await page.waitForFunction(() => /座談/.test(document.getElementById("programmeView").textContent), null, { timeout: 15000 });
+    check(/來賓報告/.test(await page.textContent("#programmeView")), "a roundtable keeps the visitors' presentation");
+    await page.uncheck("#forumMode");
+    await page.waitForFunction(() => /研究室參訪/.test(document.getElementById("programmeView").textContent), null, { timeout: 15000 });
+    check(/10:20–10:30來賓報告/.test(await page.textContent("#programmeView")), "…and so does going back to a laboratory tour");
+    // 等自動存檔把最後這一份存上去（排回去的那一段是預設的標題），再去看來賓專頁
+    await until(async () => { const s = await saved(); return s.format === "tour" && s.programme.map((x) => x.kind).join() === "briefing,guest,tour,discussion" && s.programme.find((x) => x.kind === "guest").title_en === "Guest presentation"; }, "the presentation slot put back to be saved");
+    // 來賓專頁：流程上看得到對方的報告；特殊狀況不在頁面上
+    const guest = await browser.newContext();
+    const gp = await guest.newPage();
+    await gp.goto(`${base}/2026-12-01-testing`);
+    await gp.waitForSelector("#programme li");
+    const shown = await gp.textContent("#programme");
+    check(/Guest presentation/.test(shown) && !/來賓要報告/.test(await gp.textContent("body")), `the guest page lists the visitors' presentation, and never shows the special circumstances (${shown.replace(/\s+/g, " ").slice(0, 160)})`);
+    await guest.close();
+  }
 
   // ── 簡訊、LINE 的手機截圖（明確指示：「申請參訪有時是簡訊，要能接受圖片資料來分析」「手機畫面截圖」）──
   await page.selectOption("#visitSelect", "");

@@ -1,5 +1,5 @@
 import { siteUrl, taipeiToday } from "../lib/http.mts";
-import { extractedDate } from "../../lib/visit.mjs";
+import { extractedDate, guestTalkPlan } from "../../lib/visit.mjs";
 import { extractVisit } from "../lib/ai.mts";
 import type { Extracted } from "../lib/files.mts";
 import { backgroundHandler } from "../lib/jobs.mts";
@@ -25,6 +25,10 @@ export default backgroundHandler<{ text?: string; attachments?: Extracted[]; key
     const extracted = await extractVisit(String(input.text || ""), taipeiToday(), attachments);
     // 日期：AI 給的，沒有就用候選的，再沒有就留空（後台說「填上日期才會存」）——**不補今天**
     const when = extractedDate(extracted.date, extracted.candidate_dates);
+    // 對方也要報告：今日流程多一段來賓報告（後台接在總體介紹後面，pollExtract 排），特殊狀況寫一行，沒說多久就列進要確認的事
+    const talk = guestTalkPlan(extracted.guest_talk);
+    // 特殊狀況：信裡提到要注意的事先填進去，主辦端再增刪；後面每一則 AI 寫的東西都照這一格
+    const notes = [...(talk ? [talk.note] : []), ...(extracted.special_notes || []).map((s) => String(s || "").trim()).filter(Boolean)];
     const visit = normalizeVisit(
       {
         org: extracted.org,
@@ -39,12 +43,13 @@ export default backgroundHandler<{ text?: string; attachments?: Extracted[]; key
         purpose: extracted.purpose,
         interests: extracted.interests,
         language: extracted.language,
-        uncertainties: [...extracted.uncertainties, ...when.notes],
+        special_notes: notes.join("\n"),
+        uncertainties: [...extracted.uncertainties, ...when.notes, ...(talk?.uncertainty ? [talk.uncertainty] : [])],
       } as any,
       siteUrl(req),
     );
     const files_read = attachments.map((a) => ({ name: a.name, kind: a.kind, chars: a.kind === "text" ? a.text.length : undefined }));
-    return { extracted, visit, files_read, warnings };
+    return { extracted, visit, files_read, warnings, guest_talk: talk ? talk.block : null };
   } finally {
     await dropStaged(keys);
   }
