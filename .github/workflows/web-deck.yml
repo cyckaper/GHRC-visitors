@@ -24,7 +24,7 @@ jobs:
   # 母簡報的分享關掉之後還會下載失敗）。手動觸發一律重建。
   check:
     name: anything to build?
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # ubuntu-latest 2026-10-19 起換成 26.04：LibreOffice、字型與 Python 的版本都會跟著變，先釘住
     outputs:
       build: ${{ steps.need.outputs.build }}
     steps:
@@ -38,7 +38,7 @@ jobs:
     name: web deck
     needs: check
     if: needs.check.outputs.build == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # ubuntu-latest 2026-10-19 起換成 26.04：LibreOffice、字型與 Python 的版本都會跟著變，先釘住
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4

@@ -16,7 +16,9 @@ concurrency:
 jobs:
   test:
     name: typecheck · unit · api · deck · e2e
-    runs-on: ubuntu-latest
+    # 釘在 24.04：ubuntu-latest 2026-10-19 起換成 26.04，Playwright 1.56.1 在 26.04 上裝不了 Chromium
+    # （"Playwright does not support chromium on ubuntu26.04-x64"），整個冒煙測試就跑不起來
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
