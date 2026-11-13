@@ -167,7 +167,7 @@
       <h2 class="font-semibold"><span class="num">2</span>確認訪客背景</h2>
       <p class="muted">AI 讀出來的一律要你看過。<b>名單上每個人的 email 最重要</b>——訪後信會寄給名單上每一個人，漏一個就少一份回饋；當場拿不到的可以之後在「後續」拍名片補。</p>
       <div class="grid sm:grid-cols-3 gap-3">
-        <div class="sm:col-span-2"><label class="f">單位名稱（英文為主）</label><input type="text" id="orgName"></div>
+        <div class="sm:col-span-2"><label class="f">單位名稱（英文為主）</label><input type="text" id="orgName"><p class="muted text-sm mt-1">只有中文名稱的單位（國內的高中、參訪團）英文可以空著，照樣會存成一場。</p><p class="err text-sm mt-1" id="orgMissing" hidden>單位名稱空著：英文或當地語填一個就會自己存</p></div>
         <div><label class="f">單位名稱（當地語）</label><input type="text" id="orgLocal"></div>
         <div><label class="f">單位類型</label><select id="orgType"><option value="government">政府單位</option><option value="university">大學</option><option value="enterprise">企業</option><option value="school">中小學／學生團</option><option value="ngo">NGO</option><option value="other">其他</option></select></div>
         <div><label class="f">國家</label><input type="text" id="orgCountry"></div>
@@ -1071,6 +1071,7 @@
     renderGuests(v.guests || []); renderProgramme(v.programme || [], v.itinerary); renderBackground(v.background);
     $("uncertainties").innerHTML = (v.uncertainties || []).map((u) => `<li>${esc(u)}</li>`).join("");
     $("afterSave").hidden = !state.saved;
+    showOrgMissing();
     renderProgress(v);
     if (state.saved) showSaved(v);
     renderPastVisits();
@@ -1357,7 +1358,7 @@
   }
   $("researchBtn").onclick = () => busy($("researchBtn"), async () => {
     const v = readForm();
-    if (!v.org?.name && !(v.guests || []).length) return flash("至少要有單位名稱或一個名單上的人，才查得到東西", "err");
+    if (!orgLabel(v.org) && !(v.guests || []).length) return flash("至少要有單位名稱或一個名單上的人，才查得到東西", "err");
     $("background").innerHTML = `<p class="muted">查資料中……AI 要讀幾個網頁，大約一到三分鐘，查完會直接出現在這裡。</p>`;
     // 查的一律是畫面上現在這一份（剛把某個人從名單刪掉，就不該再去查他）；存過檔的另外把進度與結果寫回那一場
     const b = await runJob("/api/research", { visit_id: state.saved ? state.visit.visit_id : "", visit: v }, noteInto("researchInfo"), "查資料中……");
@@ -1597,10 +1598,23 @@
    * 結果信裡明明寫 10/5，表單上是當天的 10/3（實際發生過），網址也跟著錯。
    */
   function showDateMissing() { $("dateMissing").hidden = !!$("date").value; }
+  /**
+   * 單位名稱：**英文或當地語填一個就算**（`lib/visit.mjs orgLabel` 同一套）。以前只認英文那一格——
+   * 讀信讀出「高中教師參訪團」放在當地語、英文空著，就一直停在「新的一場」的草稿，
+   * 按「AI 擬通告」只得到「請先選一場參訪」（實際回報：「都已經 AI 提取了還沒建新案」）。
+   */
+  const orgLabel = (o) => String(o?.name || "").trim() || String(o?.name_local || "").trim();
+  const orgTyped = () => !!($("orgName").value.trim() || $("orgLocal").value.trim());
+  /** 兩格都空著、別的已經填了（讀信讀不出是哪個單位）：說一聲填一個就會存，不然看起來像讀完了卻沒建成一場。 */
+  function showOrgMissing() {
+    const filled = $("guestTable").tBodies[0].rows.length || $("purpose").value.trim();
+    $("orgMissing").hidden = !!state.saved || orgTyped() || !filled;
+  }
   function scheduleSave() {
     showDateMissing();
+    showOrgMissing();
     // 連單位名稱或日期都還沒有，算不出 visit_id（日期＋代碼）：整份表單先暫存，填上了就存
-    if (!$("orgName").value.trim() || !$("date").value) return queueDraft();
+    if (!orgTyped() || !$("date").value) return queueDraft();
     clearTimeout(scheduleSave.t);
     scheduleSave.pending = true;
     $("saveInfo").textContent = "存檔中…";
@@ -1620,7 +1634,7 @@
     clearTimeout(scheduleSave.t);
     scheduleSave.pending = false;
     const v = readForm();
-    if (!v.org.name) return;
+    if (!orgLabel(v.org)) { showOrgMissing(); return; }
     if (!v.date) { showDateMissing(); return queueDraft(); } // 讀信讀不到日期：不要拿今天建一場，等人填
     if (saveVisit.running) { scheduleSave.t = setTimeout(saveVisit, AUTOSAVE_DELAY); return; } // 上一次還沒回來，等一下再存
     saveVisit.running = true;
@@ -1702,7 +1716,7 @@
     // 還沒有單位名稱就存不成一場（visit_id 要用它算），整份表單先暫存起來
     if (!state.saved) {
       const f = readForm();
-      if (f.org?.name || (f.guests || []).length || f.purpose || (f.interests || []).length || (f.programme || []).length) fields.form = f;
+      if (orgLabel(f.org) || (f.guests || []).length || f.purpose || (f.interests || []).length || (f.programme || []).length) fields.form = f;
     }
     return fields;
   }
@@ -1765,10 +1779,16 @@
   /** 那一份沒填完的草稿是什麼：單位名稱，沒有就是貼進來那封信的第一行。 */
   function draftLabel(d) {
     const f = d?.fields || {};
-    const org = String(f.form?.org?.name || "").trim();
+    const org = orgLabel(f.form?.org);
     if (org) return org;
     const line = String(f.emailText || "").split(/\r?\n/).map((x) => x.trim()).find(Boolean) || "";
     return line.length > 40 ? `${line.slice(0, 40)}…` : line;
+  }
+  /** 這一份草稿的單位已經有一場了（清單上的 org 是英文名稱，沒有就是當地語名稱）：多半就是它建成的。 */
+  const draftNorm = (x) => String(x || "").trim().toLowerCase().replace(/\s+/g, " ");
+  function alreadyMade(form) {
+    const names = [form?.org?.name, form?.org?.name_local].map(draftNorm).filter(Boolean);
+    return (state.visits || []).find((x) => names.includes(draftNorm(x.org)) || (x.org_local && names.includes(draftNorm(x.org_local)))) || null;
   }
   /** 沒有自己填進去的那一份：「有一份 10/2 08:15 沒填完的草稿：…」＋「帶回來」「不要這份草稿」。 */
   function renderDraftOffer() {
@@ -1776,8 +1796,7 @@
     $("draftRestore").hidden = !d;
     if (!d) return;
     const label = draftLabel(d);
-    const norm = (x) => String(x || "").trim().toLowerCase().replace(/\s+/g, " ");
-    const made = label && (state.visits || []).find((x) => norm(x.org) === norm(label)); // 同一個單位已經有一場：多半就是它建成的
+    const made = label && (alreadyMade(d.fields?.form) || (state.visits || []).find((x) => draftNorm(x.org) === draftNorm(label))); // 同一個單位已經有一場：多半就是它建成的
     $("saveInfo").innerHTML = `<span>有一份還沒存成一場的草稿</span> <span>（${esc(fmtStamp(d.saved_at))}${label ? ` · ${esc(label)}` : ""}）</span>${made ? `<span>，看起來已經建成這一場：</span><span>${esc(made.visit_id)}</span>` : ""}`;
   }
   /** 把還沒交出去的東西擺回畫面。各分頁載完（伺服器那一份填好）之後才做，不然會被蓋掉。 */
@@ -1786,9 +1805,12 @@
     // 那時候手上的 state.draft 還是上一場的，照擺就把上一場貼的信填進新的這一場（CI 上抓到的）
     const mine = state.draft && (!state.draft.id || state.draft.id === draftId());
     const fields = mine ? state.draft.fields || {} : {};
-    if (fields.form && !state.saved && !$("orgName").value.trim() && !$("guestTable").tBodies[0].rows.length) {
+    if (fields.form && !state.saved && !orgTyped() && !$("guestTable").tBodies[0].rows.length) {
       fillForm({ ...emptyVisit(), ...fields.form, visit_id: "" });
       $("saveInfo").textContent = "上次沒填完的內容留著了";
+      // 擺回來的這一份其實已經存得成一場（以前只認英文名稱，只有中文名稱的單位就一直停在草稿）：直接存，
+      // 不必等人再改一格。同一個單位已經有一場（多半就是它建成的）就不自己存，免得把舊的草稿蓋到那一場上
+      if (orgTyped() && $("date").value && !alreadyMade(fields.form)) scheduleSave();
     }
     for (const g of DRAFT_GROUPS) {
       for (const id of g.fields) { const el = $(id); if (el && fields[id] && el.value !== fields[id]) el.value = fields[id]; }
@@ -1830,7 +1852,8 @@
     state.draftOffer = null;
     state.draft = d;
     applyDraft();
-    queueDraft(); // 接著填的就是這一份：時間換成現在，下一次打開直接擺回來
+    // 接著填的就是這一份：時間換成現在，下一次打開直接擺回來。已經存得成一場的（applyDraft 已經叫了存檔）就不必再暫存
+    if (!scheduleSave.pending) queueDraft();
     flash("草稿帶回來了");
   };
   $("draftDiscard").onclick = () => busy($("draftDiscard"), async () => {
@@ -1880,7 +1903,7 @@
   $("orgType").addEventListener("change", renderPastVisits);
   $("deleteBtn").onclick = () => busy($("deleteBtn"), async () => {
     const v = state.visit;
-    if (!state.saved || !confirm(t(`刪掉「${v.org?.name || v.visit_id}」這一場？\n來賓專頁 ${v.visit_id} 會跟著消失。Drive 上的備份不會動。`))) return;
+    if (!state.saved || !confirm(t(`刪掉「${orgLabel(v.org) || v.visit_id}」這一場？\n來賓專頁 ${v.visit_id} 會跟著消失。Drive 上的備份不會動。`))) return;
     const r = await api(`/api/visits?id=${encodeURIComponent(v.visit_id)}`, { method: "DELETE" });
     if (!r.ok) return flash(r.error, "err");
     await loadVisits();
@@ -1978,7 +2001,7 @@
   function ics(v) {
     const start = new Date(`${v.date}T${v.start_time || "10:00"}:00+08:00`); const end = new Date(start.getTime() + (v.duration_minutes || 90) * 60000);
     const f = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z"); const url = `${location.origin}/admin.html#wrapup=${v.visit_id}`;
-    return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//GHRC Visit//EN", "BEGIN:VEVENT", `UID:${v.visit_id}@visit.healsdesign.org`, `DTSTAMP:${f(new Date())}`, `DTSTART:${f(start)}`, `DTEND:${f(end)}`, `SUMMARY:GHRC 參訪後續：${v.org?.name || v.visit_id}`, `DESCRIPTION:來賓離開後：1) 拍一張簽名簿 2) 講三十秒口述。\\n${url}`, `URL:${url}`, "BEGIN:VALARM", "TRIGGER:PT0M", "ACTION:DISPLAY", "DESCRIPTION:拍簽名簿、三十秒口述", "END:VALARM", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+    return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//GHRC Visit//EN", "BEGIN:VEVENT", `UID:${v.visit_id}@visit.healsdesign.org`, `DTSTAMP:${f(new Date())}`, `DTSTART:${f(start)}`, `DTEND:${f(end)}`, `SUMMARY:GHRC 參訪後續：${orgLabel(v.org) || v.visit_id}`, `DESCRIPTION:來賓離開後：1) 拍一張簽名簿 2) 講三十秒口述。\\n${url}`, `URL:${url}`, "BEGIN:VALARM", "TRIGGER:PT0M", "ACTION:DISPLAY", "DESCRIPTION:拍簽名簿、三十秒口述", "END:VALARM", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
   }
 
   /**
@@ -3418,7 +3441,7 @@
     for (const [id, k] of Object.entries(PUB_FIELDS)) $(id).value = pub[k] || "";
     $("pubHidden").checked = !!pub.hidden;
     $("pubInfo").textContent = "";
-    $("publicView").href = `/visits?org=${encodeURIComponent(v.org?.name || "")}`;
+    $("publicView").href = `/visits?org=${encodeURIComponent(orgLabel(v.org))}`;
     clearTimeout(fillPublic.t);
   }
   async function savePublic() {
@@ -3599,7 +3622,7 @@
     if (!v.ok) return flash(v.error, "err");
     const rec = v.visit.dictation?.record?.text || "";
     $("recordDetail").hidden = !rec; $("detailRecord").textContent = rec;
-    state.detailId = id; $("visitDetail").hidden = false; $("detailTitle").textContent = `${v.visit.date} ${v.visit.org?.name}`; $("summary").textContent = v.visit.summary || importedNote(v.visit) || "（還沒有摘要。參訪過完、有來賓回覆之後，系統會在每天凌晨自己產一份；想現在就要就按上面那顆按鈕。）";
+    state.detailId = id; $("visitDetail").hidden = false; $("detailTitle").textContent = `${v.visit.date} ${orgLabel(v.visit.org)}`; $("summary").textContent = v.visit.summary || importedNote(v.visit) || "（還沒有摘要。參訪過完、有來賓回覆之後，系統會在每天凌晨自己產一份；想現在就要就按上面那顆按鈕。）";
     const d = v.visit.drive;
 $("driveInfo").innerHTML = d?.backed_up_at
       ? `<span class="ok">Google Drive 已自動備份 ${esc(d.backed_up_at.slice(0, 16).replace("T", " "))}${d.items ? `（${d.items} 個檔案）` : ""}</span> <a class="underline" target="_blank" rel="noopener" href="${esc(d.url || "")}">在 Drive 開啟</a>${d.failed?.length ? `<span class="err block">${esc(d.failed.join("；"))}</span>` : ""}`
@@ -3645,7 +3668,7 @@ $("driveInfo").innerHTML = d?.backed_up_at
     $("cardList").innerHTML = cards
       .map((c) => `<span class="relative inline-block"><img src="${esc(mediaUrl(c.key))}" alt="名片" class="h-24 rounded-lg border object-cover"><button type="button" class="absolute -top-2 -right-2 bg-white rounded-full border px-1.5 text-xs" data-remove-card="${esc(c.key)}">✕</button><span class="block muted text-center">${esc((c.names || []).join("、") || "名片")}</span></span>`)
       .join("");
-    cnote(`${r.visit.org?.name || r.visit.visit_id}　名單目前 ${(r.visit.guests || []).length} 人，名片 ${cards.length} 張`);
+    cnote(`${orgLabel(r.visit.org) || r.visit.visit_id}　名單目前 ${(r.visit.guests || []).length} 人，名片 ${cards.length} 張`);
   }
   $("cardList").addEventListener("click", async (e) => {
     const b = e.target.closest("[data-remove-card]");

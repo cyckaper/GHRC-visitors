@@ -4,7 +4,7 @@ import { sniffImage } from "../lib/files.mts";
 import { triggerDriveSync } from "../lib/drive.mts";
 import { rotaKeyOk } from "./settings.mts";
 import { loadLabs } from "./labs.mts";
-import { LAB_PHOTO_MAX, LAB_PHOTO_ROOMS, isValidVisitId, labPhotoStats, photoVisitChoices, sanitizeLabPhotos } from "../../lib/visit.mjs";
+import { LAB_PHOTO_MAX, LAB_PHOTO_ROOMS, isValidVisitId, labPhotoStats, orgLabel, photoVisitChoices, sanitizeLabPhotos } from "../../lib/visit.mjs";
 import type { LabPhoto, Visit } from "../lib/types.mts";
 
 /**
@@ -45,7 +45,7 @@ export default async (req: Request) => {
       if (!admin) return fail(403, "照片庫只有主辦端看得到");
       const visits = await store.listVisits();
       const photos = visits
-        .flatMap((v) => sanitizeLabPhotos((v as any).lab_photos).map(({ device: _d, ...p }) => ({ ...p, visit_id: v.visit_id, date: v.date, org: v.org?.name || "", org_local: v.org?.name_local || "" })))
+        .flatMap((v) => sanitizeLabPhotos((v as any).lab_photos).map(({ device: _d, ...p }) => ({ ...p, visit_id: v.visit_id, date: v.date, org: orgLabel(v.org), org_local: v.org?.name_local || "" })))
         // 新的場次在前；同一場照拍攝時間（沒有就上傳時間）由早到晚，跟當天的順序一樣
         .sort((a, b) => b.date.localeCompare(a.date) || a.visit_id.localeCompare(b.visit_id) || String(a.taken || a.at).localeCompare(String(b.taken || b.at)));
       return json({ ok: true, photos });
@@ -71,7 +71,7 @@ export default async (req: Request) => {
       return new Response(m.bytes as BodyInit, { headers: { "content-type": m.contentType || "image/jpeg", "x-content-type-options": "nosniff", "cache-control": "private, max-age=3600" } });
     }
     const mine = DEVICE.test(device) ? list.filter((p) => p.device === device).map((p) => ({ id: p.id, room: p.room, name: p.name, at: p.at })) : [];
-    return json({ ok: true, visit_id: v.visit_id, date: v.date, org: v.org?.name || "", stats: labPhotoStats(list), mine });
+    return json({ ok: true, visit_id: v.visit_id, date: v.date, org: orgLabel(v.org), stats: labPhotoStats(list), mine });
   }
 
   if (req.method !== "POST") return fail(405, "method not allowed");

@@ -240,6 +240,48 @@ test("plan 也跑在背景：提示詞帶整份頁次索引，10 秒同樣不夠
   assert.ok(done.body.result.visit.programme.length, "行程留在工作上，前端輪到就拿得到");
 });
 
+test("只有中文名稱的單位也存成一場；新的一場撞到別的單位的網址，不會蓋掉人家那一場", async () => {
+  // 實際回報：「都已經 AI 提取了還沒建新案」——讀信讀出「高中教師參訪團」放在當地語那一格、英文空著，
+  // 以前只認英文名稱：存不起來，按「AI 擬通告」只得到「請先選一場參訪」
+  const put = (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const ex = await extract({ email_text: "張主任您好：\n\n我們預計 2099-11-17 上午 10:00 到中心參訪，約 20 位老師。\n\n某某高中教師參訪團\n聯絡人 王老師 0912-345-678" });
+  assert.equal(ex.status, 200, JSON.stringify(ex.body));
+  assert.deepEqual([ex.body.visit.org.name, ex.body.visit.org.name_local], ["", "某某高中教師參訪團"], "AI_MOCK 跟真的 AI 一樣：中文名稱放在當地語那一格");
+  const a = await put({ ...ex.body.visit, visit_id: "" });
+  assert.equal(a.status, 200, JSON.stringify(a.body));
+  assert.equal(a.body.visit.visit_id, "2099-11-17-visit", "中文名稱算不出代碼，就是 visit");
+  assert.equal(a.body.visit.page_url.endsWith("/2099-11-17-visit"), true);
+  const row = (await api("/api/visits", { headers: admin })).body.visits.find((v) => v.visit_id === "2099-11-17-visit");
+  assert.equal(row.org, "某某高中教師參訪團", "清單上（「這一場」的選單）寫中文名稱");
+  // 上一次其實存好了、回應沒回來：同一個單位再送一次「新的一場」還是那一場，不會多出一場
+  const again = await put({ ...ex.body.visit, visit_id: "", purpose: "改過的目的" });
+  assert.equal(again.body.visit.visit_id, "2099-11-17-visit");
+  assert.equal(again.body.visit.purpose, "改過的目的");
+  // 同一天另一團、也只有中文名稱：接 -2，不能把第一團那一場換成這一團
+  const b = await put({ org: { name: "", name_local: "某某國中參訪團", type: "school" }, date: "2099-11-17", start_time: "14:00", end_time: "16:00" });
+  assert.equal(b.status, 200, JSON.stringify(b.body));
+  assert.equal(b.body.visit.visit_id, "2099-11-17-visit-2");
+  assert.equal((await api("/api/visits?id=2099-11-17-visit", { headers: admin })).body.visit.org.name_local, "某某高中教師參訪團", "第一團那一場沒有被蓋掉");
+  // 英文名稱也一樣：同一天的臺大與臺師大，代碼都是 taiwan（以前第二個會直接寫進第一個那一場）
+  const ntu = await put({ org: { name: "National Taiwan University", country: "Taiwan" }, date: "2099-11-18" });
+  const ntnu = await put({ org: { name: "National Taiwan Normal University", country: "Taiwan" }, date: "2099-11-18" });
+  assert.deepEqual([ntu.body.visit.visit_id, ntnu.body.visit.visit_id], ["2099-11-18-taiwan", "2099-11-18-taiwan-2"]);
+  assert.equal((await api("/api/visits?id=2099-11-18-taiwan", { headers: admin })).body.visit.org.name, "National Taiwan University");
+  // 網址代碼是人打的、撞到別的單位：說一聲，不自己改
+  const typed = await put({ org: { name: "Another Institute" }, date: "2099-11-18", code: "taiwan" });
+  assert.equal(typed.status, 409);
+  assert.match(typed.body.error, /已經有一場叫 2099-11-18-taiwan 了/);
+  // 兩格都空著：存不起來
+  const none = await put({ org: { name: " ", name_local: "" }, date: "2099-11-19" });
+  assert.equal(none.status, 400);
+  assert.match(none.body.error, /單位名稱必填/);
+  // AI 擬通告：只有中文名稱的那一場照樣擬得出來（寫的是中文名稱）
+  const notice = await runJob("letter", { visit_id: "2099-11-17-visit", kind: "notice" });
+  assert.equal(notice.status, 200, JSON.stringify(notice.body));
+  assert.match(notice.body.draft.body, /某某高中教師參訪團/);
+  for (const id of ["2099-11-17-visit", "2099-11-17-visit-2", "2099-11-18-taiwan", "2099-11-18-taiwan-2"]) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
+});
+
 test("存檔：幾點開始、幾點結束是主，總分鐘跟著算", async () => {
   const put = async (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
   const r = await put({ org: { name: "Clock University" }, date: "2026-11-05", code: "clock", start_time: "09:30", end_time: "12:00" });

@@ -1,7 +1,7 @@
 import { fail, json, nowISO, readJSON, requireAdmin, siteUrl } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
-import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, posterFingerprint, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes, needsGeo, sanitizeGeo, sanitizePublic, institutionKeys, visitEndAt, isForum, toForumProgramme, defaultProgramme, hasDictation, sanitizeSpecialNotes } from "../../lib/visit.mjs";
+import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, posterFingerprint, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes, needsGeo, sanitizeGeo, sanitizePublic, institutionKeys, visitEndAt, isForum, toForumProgramme, defaultProgramme, hasDictation, sanitizeSpecialNotes, orgLabel, sameOrg } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
 import { purgePublicVisits } from "../lib/cdn.mts";
 import { dropDraft, moveDraft } from "./draft.mts";
@@ -50,7 +50,7 @@ export default async (req: Request) => {
     const all = await store.listVisits();
     // inst：同一個單位的每一場都一樣（中文名稱一樣、或英文名稱去掉空白與標點後一樣），資料分頁的地圖照這個合成一個點
     const inst = institutionKeys(all);
-    const list = all.map((v) => ({ visit_id: v.visit_id, date: v.date, org: v.org?.name, org_local: v.org?.name_local || "", type: v.org?.type, country: v.org?.country, headcount: v.headcount, status: v.status, language: v.language, guests: (v.guests || []).length, slides: (v.slides || []).length, summary: !!v.summary, updated_at: v.updated_at, geo: (v as any).geo ? { lat: (v as any).geo.lat, lon: (v as any).geo.lon, place: (v as any).geo.place, precision: (v as any).geo.precision } : null, geo_stale: needsGeo(v), group: (v as any).imported?.group || "", imported: !!(v as any).imported, inst: inst.get(v.visit_id) || "" }));
+    const list = all.map((v) => ({ visit_id: v.visit_id, date: v.date, org: orgLabel(v.org), org_local: v.org?.name_local || "", type: v.org?.type, country: v.org?.country, headcount: v.headcount, status: v.status, language: v.language, guests: (v.guests || []).length, slides: (v.slides || []).length, summary: !!v.summary, updated_at: v.updated_at, geo: (v as any).geo ? { lat: (v as any).geo.lat, lon: (v as any).geo.lon, place: (v as any).geo.place, precision: (v as any).geo.precision } : null, geo_stale: needsGeo(v), group: (v as any).imported?.group || "", imported: !!(v as any).imported, inst: inst.get(v.visit_id) || "" }));
     return json({ ok: true, visits: list, backend: store.backend });
   }
 
@@ -73,8 +73,21 @@ export default async (req: Request) => {
       }
     }
     const fromForm = normalizeVisit(body, siteUrl(req));
-    if (!fromForm.org?.name) return fail(400, "單位名稱必填");
+    // 英文或當地語填一個就好：只有中文名稱的單位（國內的高中、參訪團）也是一場
+    if (!orgLabel(fromForm.org)) return fail(400, "單位名稱必填（英文或當地語填一個就好）");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(fromForm.date)) return fail(400, "日期格式需為 YYYY-MM-DD");
+    // 新的一場：網址撞到**另一個單位**已經有的那一場，不能照舊寫進去——以前會直接把人家那一場的名稱、名單、行程
+    // 換成這一場的（同一天的臺大與臺師大，代碼都是 taiwan）。只有中文名稱的單位代碼都是 visit，同一天來兩團一定撞到。
+    // 代碼是自己算的就接 -2、-3；是人打的就說一聲（跟改網址代碼撞到同一句）。
+    // 同一個單位（上一次存檔其實建好了、只是回應沒回來）照舊是那一場。
+    if (!current) {
+      const clash = await store.getVisit(fromForm.visit_id);
+      if (clash && !sameOrg(clash.org, fromForm.org)) {
+        if (String((body as any).code || "").trim()) return fail(409, `已經有一場叫 ${fromForm.visit_id} 了，請換一個網址代碼`);
+        fromForm.visit_id = await freeVisitId(store, fromForm.visit_id);
+        fromForm.page_url = `${siteUrl(req)}/${fromForm.visit_id}`;
+      }
+    }
     const renamedFrom = current && fromForm.visit_id !== previousId ? previousId : "";
     if (renamedFrom && (await store.getVisit(fromForm.visit_id))) return fail(409, `已經有一場叫 ${fromForm.visit_id} 了，請換一個網址代碼`);
     // 後台表單那一份 ＋ 伺服器上現有的那一份。**一定要拿最新的那一份來合**：這一段在 updateVisit 裡跑，
@@ -254,6 +267,15 @@ async function savePoster(store: ReturnType<typeof getStore>, id: string, sent: 
  */
 const ROTA_FIELDS = ["presenters", "lab_minutes", "lab_minutes_at", "lab_added", "lab_hours", "attendance"] as const;
 
+/** 新的一場撞到別的單位的網址：接 -2、-3，找第一個沒人用的。 */
+async function freeVisitId(store: ReturnType<typeof getStore>, base: string): Promise<string> {
+  for (let i = 2; i < 100; i++) {
+    const id = `${base}-${i}`;
+    if (!(await store.getVisit(id))) return id;
+  }
+  return `${base}-${Date.now().toString(36).slice(-6)}`;
+}
+
 /** 這一場的網址還沒「用出去」：沒人回覆、兩封信都還沒寄出、沒放任何檔案、還沒備份到 Drive。 */
 async function isUnused(store: ReturnType<typeof getStore>, v: Visit): Promise<boolean> {
   const a = v as any;
@@ -337,7 +359,8 @@ export function normalizeVisit(input: Partial<Visit>, site: string): Visit {
   (v as any).attendance = {};
   delete (v as any).lab_hours;
   const code = String((input as any).code || "").trim();
-  if (!isValidVisitId(v.visit_id) || code) v.visit_id = makeVisitId(v.date, v.org.name, code);
+  // 代碼照英文名稱算；只有當地語名稱的單位照它算（中文算不出代碼，就是 visit）
+  if (!isValidVisitId(v.visit_id) || code) v.visit_id = makeVisitId(v.date, v.org.name || v.org.name_local, code);
   v.page_url = `${site}/${v.visit_id}`;
   return v;
 }

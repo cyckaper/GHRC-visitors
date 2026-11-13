@@ -87,7 +87,8 @@ try {
 
   // 「＋ 新的一場」：幾小時前沒填完的那一份不自己填進表單（實際回報：「我選了新的一場，但舊的資料還在」），
   // 只說一聲、問要不要帶回來；一小時內的（重新整理、不小心關掉）才直接擺回去
-  await page.evaluate(() => localStorage.setItem("ghrc-draft:new", JSON.stringify({ id: "new", saved_at: new Date(Date.now() - 3 * 3600e3).toISOString(), fields: { emailText: "Dear Prof. Chang, an email from this morning", form: { org: { name: "Earlier Draft University" } } } })));
+  // 草稿裡的表單一定帶著日期那一格（readForm 整份讀）；存不成一場的那一份就是日期空著的（讀信讀不到哪一天）
+  await page.evaluate(() => localStorage.setItem("ghrc-draft:new", JSON.stringify({ id: "new", saved_at: new Date(Date.now() - 3 * 3600e3).toISOString(), fields: { emailText: "Dear Prof. Chang, an email from this morning", form: { org: { name: "Earlier Draft University" }, date: "" } } })));
   await page.reload();
   await page.waitForFunction(() => /有一份還沒存成一場的草稿/.test(document.getElementById("saveInfo").textContent), null, { timeout: 20000 });
   check((await page.inputValue("#emailText")) === "" && (await page.inputValue("#orgName")) === "" && /Earlier Draft University/.test(await page.textContent("#saveInfo")), "a draft from hours ago is offered, not filled into the new visit by itself");
@@ -97,6 +98,19 @@ try {
   await page.click("#draftDiscard");
   await page.waitForFunction(() => document.getElementById("orgName").value === "" && document.getElementById("emailText").value === "" && !localStorage.getItem("ghrc-draft:new"), null, { timeout: 15000 });
   check(await page.isHidden("#draftRestore"), "…and “discard” empties the form for good");
+  // 只有中文名稱、日期也有的那一份（實際回報：「都已經 AI 提取了還沒建新案」——以前只認英文名稱，一直停在草稿）：
+  // 擺回表單就直接存成一場，不必再改一格。（剛剛清過草稿，站台記著清掉的時間；比它舊的那一份會被丟掉，所以這一份是剛剛的）
+  {
+    const before = await page.locator("#visitSelect option").count();
+    await page.evaluate(() => localStorage.setItem("ghrc-draft:new", JSON.stringify({ id: "new", saved_at: new Date().toISOString(), fields: { form: { org: { name: "", name_local: "某某國中教師參訪團", type: "school" }, date: "2026-12-03" } } })));
+    await page.reload();
+    await page.waitForFunction(() => /^2026-12-03-visit/.test(document.getElementById("preStatus").textContent), null, { timeout: 30000 });
+    const restoredId = await page.inputValue("#visitSelect");
+    check((await page.locator("#visitSelect option").count()) === before + 1 && (await page.inputValue("#orgLocal")) === "某某國中教師參訪團" && (await page.inputValue("#orgName")) === "", `a draft with only a Chinese organisation name and a date becomes a visit as soon as it is put back (${restoredId})`);
+    page.once("dialog", (d) => d.accept());
+    await page.click("#deleteBtn");
+    await page.waitForFunction((n) => document.querySelectorAll("#visitSelect option").length === n, before, { timeout: 30000 });
+  }
 
   await page.click('[data-tab="pre"]');
   await page.fill("#emailText", `Dear Prof. Chang,\n\nWe would like to visit on ${VISIT_DATE} at 10:00. My colleague Jane Doe <jane@uwa.edu.au> joins me.\n\nSimon Kilbane, University of Western Australia\nsimon@uwa.edu.au`);
@@ -1312,6 +1326,28 @@ try {
     const shown = await gp.textContent("#programme");
     check(/Guest presentation/.test(shown) && !/來賓要報告/.test(await gp.textContent("body")), `the guest page lists the visitors' presentation, and never shows the special circumstances (${shown.replace(/\s+/g, " ").slice(0, 160)})`);
     await guest.close();
+  }
+
+  // ── 只有中文名稱的單位（實際回報：「都已經 AI 提取了還沒建新案」）：讀信讀出「高中教師參訪團」放在當地語那一格、
+  //    英文空著——以前自動存檔只認英文名稱，一直停在「新的一場」的草稿，按「AI 擬通告」只得到「請先選一場參訪」──
+  {
+    await page.selectOption("#visitSelect", "");
+    await page.waitForFunction(() => document.getElementById("preStatus").textContent === "" && document.getElementById("orgName").value === "", null, { timeout: 15000 });
+    const before = await page.locator("#visitSelect option").count();
+    await page.fill("#emailText", "張主任您好：\n\n我們預計 2026-12-02 上午 10:00 到中心參訪，約 20 位老師，想了解園藝治療與健康景觀。\n\n某某高中教師參訪團\n聯絡人 王老師 0912-345-678");
+    await page.click("#extractBtn");
+    await page.waitForFunction(() => document.getElementById("orgLocal").value === "某某高中教師參訪團", null, { timeout: 90000 });
+    await page.waitForFunction(() => /^2026-12-02-visit/.test(document.getElementById("preStatus").textContent), null, { timeout: 30000 });
+    const localId = await page.inputValue("#visitSelect");
+    check((await page.inputValue("#orgName")) === "" && /^2026-12-02-visit(-\d+)?$/.test(localId) && (await page.locator("#visitSelect option").count()) === before + 1, `AI 抽取 of an organisation with only a Chinese name creates the visit by itself (${localId}), English name left empty`);
+    check(/某某高中教師參訪團/.test(await page.textContent(`#visitSelect option[value="${localId}"]`)) && await page.isHidden("#orgMissing"), "…and the visit menu shows it by its Chinese name");
+    await page.click("#noticeBtn");
+    await page.waitForFunction(() => /請各研究室回覆/.test(document.getElementById("noticeBody").value), null, { timeout: 60000 });
+    check(/某某高中教師參訪團/.test(await page.inputValue("#noticeBody")), "…so 「AI 擬通告」 drafts the notice for it instead of asking to pick a visit first");
+    await page.fill("#noticeBody", ""); // 不留暫存
+    page.once("dialog", (d) => d.accept());
+    await page.click("#deleteBtn");
+    await page.waitForFunction((n) => document.querySelectorAll("#visitSelect option").length === n, before, { timeout: 30000 });
   }
 
   // ── 簡訊、LINE 的手機截圖（明確指示：「申請參訪有時是簡訊，要能接受圖片資料來分析」「手機畫面截圖」）──

@@ -723,6 +723,8 @@
   "Google 沒有連上，請再按一次「連上 Google」。": "Google did not connect; press “Connect Google” again.",
   "只存成 Google 試算表": "Only save as a Google Sheet",
   "信裡沒有寫哪一天：填上日期就會自己存": "The email doesn't say which day: fill in the date and it saves itself",
+  "只有中文名稱的單位（國內的高中、參訪團）英文可以空著，照樣會存成一場。": "Organisations with only a Chinese name (local high schools, visiting groups) can leave the English name empty — the visit is still saved.",
+  "單位名稱空著：英文或當地語填一個就會自己存": "No organisation name yet: fill in either the English or the local name and it saves itself",
   "影片沒有一起存（舊版上傳的）：要播影片，按「更換」選原始的母簡報再放一次": "Its videos were not stored (uploaded by the old version): to play videos, press “Replace” and choose the original master deck again",
   "影片 # 支另外存著（# MB），產簡報時放回選到的那幾頁": "# videos stored separately (# MB); they go back into the chosen slides when you generate a deck",
   "母簡報已瘦身：# 支影片另外存在站台上（產簡報時放回選到的那幾頁）、縮小 # 張圖，# MB → # MB": "Master deck slimmed: # videos stored on the site separately (they go back into the chosen slides when you generate a deck), # images resized, # MB → # MB",

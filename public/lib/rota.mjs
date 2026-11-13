@@ -167,8 +167,8 @@ function card(v, labs) {
     : `<p class="rota-muted" style="margin-top:.5rem">行程還沒排，排好之後這裡就會列出要走哪幾間。</p>`;
   return `<section class="rota-card ${v.past ? "rota-past" : ""}" data-rota-visit="${esc(v.visit_id)}">
       <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:.25rem .75rem">
-        <b class="rota-title">${esc(v.org?.name)}</b>
-        ${v.org?.name_local && v.org.name_local !== v.org.name ? `<span class="rota-muted">${esc(v.org.name_local)}</span>` : ""}
+        <b class="rota-title">${esc(v.org?.name || v.org?.name_local)}</b>
+        ${v.org?.name && v.org.name_local && v.org.name_local !== v.org.name ? `<span class="rota-muted">${esc(v.org.name_local)}</span>` : ""}
         <span class="rota-muted">${esc(when)}</span>
         ${v.headcount ? `<span class="rota-muted">${esc(String(v.headcount))} 位</span>` : ""}
         ${v.forum ? `<span class="rota-tag" title="跟中心老師們座談，不參觀研究室：請選老師可參加或無法參加">座談・選可否出席</span>` : ""}

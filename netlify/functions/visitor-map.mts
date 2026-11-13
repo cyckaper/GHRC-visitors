@@ -1,7 +1,7 @@
 import { fail } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import { publicVisitsHeaders } from "../lib/cdn.mts";
-import { institutionKeys, needsGeo, visitEndAt } from "../../lib/visit.mjs";
+import { institutionKeys, needsGeo, orgLabel, visitEndAt } from "../../lib/visit.mjs";
 
 /**
  * 中心首頁的世界地圖（**公開**，不必登入）：來訪過的單位在哪裡
@@ -22,14 +22,14 @@ export default async (req: Request) => {
   const shown = (await getStore().listVisits()).filter((v) => {
     const end = visitEndAt(v).getTime();
     // 主辦端標了「不公開」的那一場，地圖上也不畫
-    return String(v.org?.name || "").trim() && Number.isFinite(end) && end <= now && !(v as any).public?.hidden;
+    return orgLabel(v.org) && Number.isFinite(end) && end <= now && !(v as any).public?.hidden;
   });
   // 同一個單位：中文名稱一樣、或英文名稱去掉空白與標點後一樣（拼法不同的同一家公司不要變成兩個點）。
   // 只拿要畫的那幾場來算：還沒來的那一場不能從這裡透出來
   const inst = institutionKeys(shown);
   const by = new Map<string, { name: string; local: string; country: string; geo: { lat: number | null } | null; visits: number; latest: string }>();
   for (const v of shown) {
-    const name = String(v.org?.name || "").trim();
+    const name = orgLabel(v.org); // 只有中文名稱的單位：名稱就是中文那一個（頁面上不會印兩次）
     const country = String(v.org?.country || "").trim();
     const key = inst.get(v.visit_id) || `${name.toLowerCase()}|${country.toLowerCase()}`;
     const g = (v as any).geo;

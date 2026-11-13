@@ -88,7 +88,7 @@ function programmeL2(block, lang, i18n) {
  * @param {object} visit  visits 表的一筆（org、guests、date、language、programme、itinerary、page_url）
  * @param {object} i18n   public/data/i18n.json
  * @returns {{lang:string, welcome:{en:string,l2:string}, programmeTitle:{en:string,l2:string}, caption:{en:string,l2:string},
- *   org:{en:string,l2:string}, people:Array<{name:string,title:string,lang:string}>, more:{count:number,en:string,l2:string},
+ *   org:{en:string,l2:string,lang:string}, people:Array<{name:string,title:string,lang:string}>, more:{count:number,en:string,l2:string},
  *   date:string, programme:Array<{time:string,en:string,l2:string,place_en:string,place_l2:string}>, qr_url:string,
  *   warnings:Array<{zh:string,en:string}>}}
  */
@@ -102,7 +102,12 @@ export function posterContent(visit, i18n) {
   const name = String(v.org?.name || "").trim();
   const local = String(v.org?.name_local || "").trim();
   let orgL2 = "";
-  if (local && local !== name) {
+  // 沒有英文名稱（國內的高中、參訪團常常只有中文名稱）：當地語名稱就是那一行大字，不要同一個名稱印兩次
+  if (!name && local) warnings.push({
+    zh: `這一場沒有英文名稱：海報上的單位名稱只印「${local}」（要印英文就在第 2 步填上英文名稱）。`,
+    en: `There is no English name, so only “${local}” is printed as the organisation name (enter the English name in step 2 to add it).`,
+  });
+  else if (local && local !== name) {
     if (writtenIn(local, lang)) orgL2 = local;
     else warnings.push({
       zh: `單位的當地語名稱「${local}」不是${langZh}，海報上不印（要印就在第 2 步改成對方自己的${langZh}寫法）。`,
@@ -145,7 +150,8 @@ export function posterContent(visit, i18n) {
     welcome: { en: String(en.poster_welcome || "Welcome"), l2: String(l2.poster_welcome || "") },
     programmeTitle: { en: String(en.poster_programme || "Programme"), l2: String(l2.poster_programme || "") },
     caption: { en: String(en.poster_qr || ""), l2: String(l2.poster_qr || "") },
-    org: { en: name || local, l2: orgL2 },
+    // lang：大字那一行是哪一種字（只有當地語名稱的時候就不是英文，海報換成那一種字的字型）
+    org: { en: name || local, l2: orgL2, lang: name ? "en" : scriptLang(local, lang) },
     people,
     more,
     date: String(v.date || ""),

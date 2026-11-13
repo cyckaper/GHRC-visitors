@@ -102,6 +102,7 @@ body { background: #DCE3DE; font-family: var(--ui); color: #1c1917; }
 .welcome-l2 span { display: inline-block; }
 .rule { width: 54mm; height: 1.4mm; background: var(--accent); margin-bottom: 13mm; }
 .name-en { font-family: var(--serif); font-weight: 700; line-height: 1.06; text-wrap: balance; }
+.name-en.local { font-family: var(--l2); line-height: 1.18; }
 .name-l2 { margin-top: 8mm; font-family: var(--l2); font-weight: 400; line-height: 1.28; text-wrap: balance; }
 .people { list-style: none; margin-top: 10mm; font-family: var(--serif); font-size: 10mm; line-height: 1.38; color: var(--field-fg-2); }
 .people b { color: var(--field-fg); font-weight: 700; }
@@ -303,7 +304,9 @@ function render(c, opts) {
 
   setText($("welcome-en"), c.welcome.en, "en");
   setText($("welcome-l2"), c.welcome.l2, attr);
-  setText($("name-en"), c.org.en, "en");
+  // 沒有英文名稱：當地語名稱就是那一行大字，換成那一種字的字型（標了語言，字型才找得對）
+  setText($("name-en"), c.org.en, c.org.lang && c.org.lang !== "en" ? ({ "zh-Hant": LANG_ATTR.zh }[c.org.lang] || c.org.lang) : "en");
+  $("name-en").classList.toggle("local", !!c.org.lang && c.org.lang !== "en");
   setText($("name-l2"), c.org.l2, attr);
 
   const ul = $("people");

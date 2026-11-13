@@ -1,6 +1,6 @@
 import { env, nowISO, siteUrl } from "./http.mts";
 import { getStore } from "./store.mts";
-import { labPhotoFileName, labPhotoRoomLabel, labPhotosPending, toCSV } from "../../lib/visit.mjs";
+import { labPhotoFileName, labPhotoRoomLabel, labPhotosPending, orgLabel, toCSV } from "../../lib/visit.mjs";
 import { apiDisabled, googleAccessToken, googleReady } from "./google.mts";
 import type { ResponseRow, Visit } from "./types.mts";
 
@@ -74,7 +74,7 @@ async function ensureFolder(name: string, parent: string): Promise<string> {
 /** 這場參訪在 Drive 上的資料夾（GHRC 參訪／<日期> <單位>），沒有就建。 */
 export async function ensureVisitFolder(visit: Visit): Promise<string> {
   const root = await ensureFolder(ROOT_FOLDER, driveConfig().parent);
-  return ensureFolder(`${visit.date} ${visit.org?.name || visit.visit_id}`.slice(0, 100), root);
+  return ensureFolder(`${visit.date} ${orgLabel(visit.org) || visit.visit_id}`.slice(0, 100), root);
 }
 
 /** 這一場資料夾底下的子資料夾（研究室照片／303），一層一層建；同一次備份裡建過的記在 cache，不必每一張都問一次 Drive。 */

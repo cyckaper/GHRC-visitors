@@ -3,7 +3,7 @@ import { nowISO, requireCron, siteUrl } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import { gmailReady, gmailSend } from "../lib/mail.mts";
 import { reminderTo } from "./settings.mts";
-import { visitEndAt, visitStartAt, wrapupSettled, wrapupTodo } from "../../lib/visit.mjs";
+import { orgLabel, visitEndAt, visitStartAt, wrapupSettled, wrapupTodo } from "../../lib/visit.mjs";
 import type { Visit } from "../lib/types.mts";
 
 /**
@@ -53,11 +53,11 @@ export default async (req: Request) => {
 
 const hhmm = (d: Date) => new Intl.DateTimeFormat("zh-TW", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
 
-const subject = (v: Visit) => `後續提醒：${v.org?.name || v.visit_id}（${v.date}）`;
+const subject = (v: Visit) => `後續提醒：${orgLabel(v.org) || v.visit_id}（${v.date}）`;
 
 function body(v: Visit, todo: { label: string; done: boolean; detail: string }[], site: string): string {
   return [
-    `${v.org?.name || v.visit_id} 的參訪剛結束（${v.date} ${hhmm(visitStartAt(v))}–${hhmm(visitEndAt(v))}）。`,
+    `${orgLabel(v.org) || v.visit_id} 的參訪剛結束（${v.date} ${hhmm(visitStartAt(v))}–${hhmm(visitEndAt(v))}）。`,
     "",
     "來賓離開後這幾件事，幾分鐘做完——隔一天記憶就掉了：",
     ...todo.map((t, i) => `${i + 1}. ${t.label}　${t.done ? `✓ 已做${t.detail ? `（${t.detail}）` : ""}` : "← 還沒"}`),

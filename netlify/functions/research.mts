@@ -40,6 +40,6 @@ export default async (req: Request) => {
     // 後台送上來的那一份優先：名單剛改過（例如刪掉一個人）而存檔還沒回來時，要查的是畫面上這一份
     draft = draft || visit;
   }
-  if (!draft?.org?.name && !(draft?.guests || []).length) return fail(400, "至少要有單位名稱或一個名單上的人，才查得到東西");
+  if (!draft?.org?.name && !draft?.org?.name_local && !(draft?.guests || []).length) return fail(400, "至少要有單位名稱或一個名單上的人，才查得到東西");
   return startBackground("research", { visit_id: id, visit: draft }, req);
 };

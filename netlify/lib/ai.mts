@@ -5,7 +5,7 @@ import { env } from "./http.mts";
 import { isMock } from "./data.mts";
 import type { DictationExtract, ResponseRow, SignbookEntry, Visit } from "./types.mts";
 import type { Extracted } from "./files.mts";
-import { allocateProgramme, briefingBlockMinutes, endTimeOf, FORUM_TITLES, guestTalks, guestTalkZh, isForum, labStops, salutationLine, salutationPeople, sanitizeDictation, settleSalutation, talkedAbout, thanksItems, zhDate } from "../../lib/visit.mjs";
+import { allocateProgramme, briefingBlockMinutes, endTimeOf, FORUM_TITLES, orgFullName, orgLabel, guestTalks, guestTalkZh, isForum, labStops, salutationLine, salutationPeople, sanitizeDictation, settleSalutation, talkedAbout, thanksItems, zhDate } from "../../lib/visit.mjs";
 import { parseVisitTable } from "../../lib/import.mjs";
 
 /**
@@ -129,7 +129,7 @@ const EXTRACT_SYSTEM = `你是臺大生農學院綠色健康研究中心（GHRC�
 規則：
 - guests：來訪方**每一位**被點名的人都要列出，含職稱、email 與電話（隨行者的 email 是訪後信寄送的關鍵，不要只留主要窗口）。**名單檔（<file> 區塊、PDF、名單照片）裡的每一列都是一個人**，表格欄位常見順序是姓名／職稱／單位／email，請對應好；沒有 email 的人也要列，email 留空。主要來賓 role=lead，其餘 member。**contact=true 給真正在往來這件事的人**（寄這封信的人、傳簡訊或 LINE 來的人、信裡指定的承辦人或秘書；他常常不是主賓，也可能不在來訪名單上但仍要列）——確認信預設只寄給 contact，所以寧可只標一兩個，不要全部標 true；看不出來就全部 false。affiliation 填該人的單位（可能與 org 不同）。
 - phone：電話號碼**照原樣抄**（保留 +886、09 開頭、括號與分隔符號），看不清楚的數字就整個留空，不要猜。**電話只放 phone**，不要寫進 purpose、interests 或 uncertainties。
-- org：來訪單位的正式名稱（英文為主，name_local 放當地語言名稱）；type 取 government／university／enterprise／school／ngo／other；country 用英文國名。
+- org：來訪單位的正式名稱（英文為主，name_local 放當地語言名稱）。**信裡只有中文（或其他當地語言）的名稱、看不出英文正式名稱時，name 留空、名稱寫在 name_local**——不要自己翻一個英文名稱；只有當地語名稱照樣建得成一場。type 取 government／university／enterprise／school／ngo／other；country 用英文國名。
 - headcount：預計人數；不知道就用 guests 人數。
 - date：來信**提議或約好**的參訪日期（YYYY-MM-DD）。**用問句提的也算**——「請問您下週 10/5（一）有空嗎？……10/5 週一早上 9:00 到中心」，date 就是那一天，不要因為對方還在問、還沒回覆就留空；還要跟對方確認的話在 uncertainties 寫一句。只有信裡**完全沒提日期**，或列了好幾個日期、看不出偏好哪一個，才留空字串，把那幾個日期放 candidate_dates（YYYY-MM-DD）。沒寫年份就用「今天」之後最近的那一個；信裡也寫了星期幾的話要對得上，對不上就在 uncertainties 說。start_time、end_time 用 HH:MM（台北時間），未提到留空——**來信通常寫「10:00-12:30」，照抽**。duration_minutes 只有在信裡直接寫分鐘數（例如「兩小時」）時才給，否則 0。
 - contact_teacher：中心這邊負責聯絡的老師，只能是 ${TEACHERS.join("／")} 之一，看不出來留空。
@@ -147,7 +147,7 @@ const EXTRACT_SYSTEM = `你是臺大生農學院綠色健康研究中心（GHRC�
 - **時間**：手機最上面狀態列的時鐘、每則訊息旁邊的傳送時間（例如 14:32）都**不是**參訪時間，不要拿來填 start_time／end_time；只有訊息內容裡說的時間（「早上 10 點到」「10:00-12:00」）才算。
 - 長截圖切成的段落、連續幾張截圖會**重疊**（每一張前面有編號，照編號的順序讀）：同一則訊息出現兩次只算一次，名單與人數不要因此重複。
 - 不要讀手機介面上的東西：電信業者、電量、通知橫幅、鍵盤、「已讀」、貼圖、輸入框裡還沒送出的字。
-- 聊天裡的單位名稱常是簡稱：org.name 寫正式名稱（看得出來才寫），看不出來就照訊息寫、在 uncertainties 說要確認，不要自己編一個英文名稱。`;
+- 聊天裡的單位名稱常是簡稱：寫正式名稱（看得出來才寫），看不出來就照訊息寫（英文寫在 org.name、中文等當地語言寫在 org.name_local），在 uncertainties 說要確認，不要自己編一個英文名稱。`;
 
 export async function extractVisit(emailText: string, today: string, attachments: Extracted[] = []): Promise<ExtractedVisit> {
   const texts = attachments.filter((a): a is Extract<Extracted, { kind: "text" }> => a.kind === "text");
@@ -238,7 +238,7 @@ async function researchNotes(user: string): Promise<{ notes: string; searched: b
 
 export async function researchVisitor(visit: Visit): Promise<VisitBackground> {
   const facts = [
-    `單位：${visit.org?.name || "（未填）"}${visit.org?.name_local ? `（${visit.org.name_local}）` : ""}`,
+    `單位：${orgFullName(visit.org) || "（未填）"}`,
     `單位類型：${visit.org?.type || "未知"}　國家：${visit.org?.country || "未知"}`,
     `日期：${visit.date || "未定"}　時間：${visit.start_time || "未定"}–${visit.end_time || "未定"}（共 ${visit.duration_minutes || 0} 分鐘）　人數：${visit.headcount || 0}`,
     `來訪目的（來信寫的）：${visit.purpose || "（未填）"}`,
@@ -261,7 +261,7 @@ export async function researchVisitor(visit: Visit): Promise<VisitBackground> {
 }
 
 function mockBackground(visit: Visit): VisitBackground {
-  const org = visit.org?.name || "（單位）";
+  const org = orgLabel(visit.org) || "（單位）";
   return {
     org_profile: `（AI_MOCK）${org} 是來信裡的來訪單位，這裡是研判用的範例資料。`,
     people: (visit.guests || []).slice(0, 3).map((g) => ({ name: g.name, note: `（AI_MOCK）${g.title || "職稱未知"}` })),
@@ -638,7 +638,7 @@ who_came（誰來，一句）、most_wanted_rooms（來賓在「最想看哪一�
 notes（交流重點：談了什麼、其他值得留下的話，一項一件事）、questions（來賓問了什麼，一題一項）、
 cooperation（合作意願，一項一件事；沒有就空陣列）、follow_ups（我們要做的後續事項，例如寄名片、寄論文、提供網址，一項一件事）。
 只抽口述裡有的，不要補；每一項保持簡短、用主持人的說法，不要自己編號。房號對應：301 張俊彥智能室、302 林寶秀規劃室、303 陳惠美模擬室、304 張伯茹全景影院、305 鄭佳昆 IVR 研究室。`,
-    `本次參訪：${visit.org?.name || ""}，${visit.date}。\n\n口述逐字稿：\n${transcript}`,
+    `本次參訪：${orgFullName(visit.org)}，${visit.date}。\n\n口述逐字稿：\n${transcript}`,
   );
   return sanitizeDictation(out);
 }
@@ -710,7 +710,7 @@ function mockRecord(visit: Visit, notes: DictationExtract): RecordProse {
   const end = (s: string) => (/[。.!?！？]$/.test(s) ? s : `${s}。`);
   const n = visit.headcount || visit.guests?.length || 0;
   return {
-    overview: `（AI_MOCK）${visit.org?.name || "來賓"}${n ? ` ${n} 位` : ""}於 ${zhDate(visit.date)}來訪本中心。`,
+    overview: `（AI_MOCK）${orgLabel(visit.org) || "來賓"}${n ? ` ${n} 位` : ""}於 ${zhDate(visit.date)}來訪本中心。`,
     notes: notes.notes.map(end),
     questions: notes.questions.map((q) => end(`來賓詢問：${q}`)),
     cooperation: notes.cooperation.map(end),
@@ -896,15 +896,18 @@ function mockExtract(text: string, images = 0): ExtractedVisit {
   });
   const phone = (text.match(/(?:\+886[\s-]?|\b0)9\d{2}[\s-]?\d{3}[\s-]?\d{3}\b/) || [])[0] || (images ? "0912-345-678" : "");
   if (!guests.length && phone) guests.push({ name: images ? "（AI_MOCK）截圖裡的聯絡人" : "（AI_MOCK）簡訊聯絡人", title: "", email: "", role: "lead", affiliation: "", phone, contact: true });
-  const orgLine = (text.split(/\r?\n/).find((l) => /university|大學|ministry|部|college|學院|高中|company|公司/i.test(l)) || "").trim();
-  const orgMatch = orgLine.match(/(University of [A-Z][A-Za-z ]+|[A-Z][A-Za-z]+ University|[^\s，。、]+大學|[^\s，。、]+高中)/);
+  const orgLine = (text.split(/\r?\n/).find((l) => /university|大學|ministry|部|college|學院|高中|參訪團|company|公司/i.test(l)) || "").trim();
+  const orgMatch = orgLine.match(/(University of [A-Z][A-Za-z ]+|[A-Z][A-Za-z]+ University|[^\s，。、]+大學|[^\s，。、]*高中[^\s，。、]*參訪團|[^\s，。、]+高中)/);
   const cjk = (text.match(/[一-鿿]/g) || []).length;
   const date = (text.match(/\b(20\d{2}-\d{2}-\d{2})\b/) || [])[1] || "";
   // 信裡說對方也要報告：照字面抓（真的 AI 照提示詞讀）；說了幾分鐘就是幾分鐘
   const talk = /presentation|give a (?:short )?talk|報告|簡報|発表|발표/i.test(text.replace(/<\/?email>|以下是主辦端貼上的往來[^\n]*/g, ""));
   const talkMinutes = Number((text.match(/(\d{1,3})\s*-?\s*(?:minutes?|mins?\b|分鐘|分間|분)/i) || [])[1]) || 0;
+  // 只有中文名稱（「高中教師參訪團」）：跟真的 AI 一樣放在當地語那一格、英文留空（實際發生過；後台照樣要建成一場）
+  const orgName = orgMatch?.[1] || orgLine.slice(0, 60);
+  const localOnly = !!orgName && !/[A-Za-z]/.test(orgName);
   return {
-    org: { name: orgMatch?.[1] || orgLine.slice(0, 60) || "Visiting organisation", name_local: "", type: /university|大學|college|學院/i.test(orgLine) ? "university" : /高中|school/i.test(orgLine) ? "school" : /ministry|部|government|政府|agency/i.test(orgLine) ? "government" : "other", country: cjk > 50 ? "Taiwan" : "" },
+    org: { name: localOnly ? "" : orgName || "Visiting organisation", name_local: localOnly ? orgName : "", type: /university|大學|college|學院/i.test(orgLine) ? "university" : /高中|school/i.test(orgLine) ? "school" : /ministry|部|government|政府|agency/i.test(orgLine) ? "government" : "other", country: cjk > 50 ? "Taiwan" : "" },
     guests,
     headcount: Math.max(guests.length, 1),
     date,
@@ -973,7 +976,7 @@ function mockPlan(visit: Visit, slidesIndex: any): Plan {
     programme: b,
     itinerary: [{ room: "briefing" as any, minutes: briefing, focus: "總體介紹" }, ...rooms.map((room) => ({ room, minutes: perRoom, focus: "" }))],
     slides,
-    cover_text: { org_line: visit.org?.name || "", guest_lines: lead ? [`${lead.name} ${lead.title}`.trim()] : [], date_line: visit.date },
+    cover_text: { org_line: orgLabel(visit.org), guest_lines: lead ? [`${lead.name} ${lead.title}`.trim()] : [], date_line: visit.date },
     text_edits: [],
     rationale: "（AI_MOCK）依單位類型與可用時間的示範排程，不是真正的 AI 結果。",
   };
@@ -1074,14 +1077,14 @@ function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, pro
     const stops = labStops(v, ctx.labs) as any[];
     const line = (x: any) => `${x.start}–${x.end}　${x.room} ${x.name_zh}　${ctx.kind === "rundown" ? (v as any).presenters?.[x.room] || "（待補）" : x.lead}　${x.minutes} 分`;
     const n = v.headcount || v.guests?.length || 0;
-    const head = `${v.org?.name || "（單位待補）"}　${v.date} ${v.start_time}–${endTimeOf(v)}${n ? `　${n} 位` : ""}`;
+    const head = `${orgLabel(v.org) || "（單位待補）"}　${v.date} ${v.start_time}–${endTimeOf(v)}${n ? `　${n} 位` : ""}`;
     return ctx.kind === "notice"
       ? {
-          subject: `（AI_MOCK）行前通告：${v.org?.name || v.visit_id} ${v.date} 來訪`,
+          subject: `（AI_MOCK）行前通告：${orgLabel(v.org) || v.visit_id} ${v.date} 來訪`,
           body: `各位老師好：\n\n${head}\n\n${routeBlock(v, ctx.labs)}\n\n${rollCallBlock(v, ctx.rotaUrl)}`,
         }
       : {
-          subject: `（AI_MOCK）定案回報：${v.org?.name || v.visit_id} ${v.date}`,
+          subject: `（AI_MOCK）定案回報：${orgLabel(v.org) || v.visit_id} ${v.date}`,
           body: isForum(v)
             ? `各位老師好：\n\n${head}　座談\n\n${(v.programme || []).map((b) => `${b.start}–${b.end}　${b.title_2nd || b.title_en}`).join("\n")}\n\n座談出席：\n${forumAttendees(v, ctx.labs).map((x) => `${x.room} ${x.name_zh}　${x.lead}　${x.attend || "（待回覆）"}`).join("\n")}\n\n有問題直接回這則訊息。`
             : `各位老師好：\n\n${head}\n\n定案動線與簡報人員：\n${[...guestTalks(v).map((g: any) => `${g.start}–${g.end}　${guestTalkZh(g)}`), ...stops.map(line)].join("\n")}\n\n有問題直接回這則訊息。`,
@@ -1090,7 +1093,7 @@ function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, pro
   if (ctx.kind === "confirmation") {
     return {
       subject: `(AI_MOCK) Your visit to the Green Health Research Center, ${v.date}`,
-      body: `Dear colleagues,\n\nWe look forward to welcoming ${v.org?.name || "you"} on ${v.date} at ${v.start_time}. We begin with a short overview in Room ${location}, Landscape Building, 3rd floor, ${isForum(v) ? "followed by a roundtable with the faculty" : "and then walk through the laboratories next door"}.${guestTalks(v).map((g: any) => `\n\nYour presentation: ${g.start}–${g.end} ${g.title_en || "Guest presentation"}`).join("")}\n\n${isForum(v) ? "Programme and the faculty you will meet" : "Programme and the laboratories you will see"}: ${pageUrl}\n\n${senderBlock(ctx)}`,
+      body: `Dear colleagues,\n\nWe look forward to welcoming ${orgLabel(v.org) || "you"} on ${v.date} at ${v.start_time}. We begin with a short overview in Room ${location}, Landscape Building, 3rd floor, ${isForum(v) ? "followed by a roundtable with the faculty" : "and then walk through the laboratories next door"}.${guestTalks(v).map((g: any) => `\n\nYour presentation: ${g.start}–${g.end} ${g.title_en || "Guest presentation"}`).join("")}\n\n${isForum(v) ? "Programme and the faculty you will meet" : "Programme and the laboratories you will see"}: ${pageUrl}\n\n${senderBlock(ctx)}`,
     };
   }
   // 跟真提示詞同一個結構：稱呼（每一位來賓的姓名與頭銜）、一句感謝、參訪時談到的事、當天的簡報與合照與答應提供的資料、
@@ -1119,9 +1122,9 @@ function mockDictation(t: string): DictationExtract {
 function mockSummary(v: Visit, responses: ResponseRow[]): string {
   const lead = v.guests?.find((g) => g.role === "lead") || v.guests?.[0];
   return [
-    `# ${v.org?.name || v.visit_id} · ${v.date}`,
+    `# ${orgLabel(v.org) || v.visit_id} · ${v.date}`,
     "",
-    `**誰來**：${v.org?.name || "（無）"}，${lead ? `${lead.name} ${lead.title}` : ""}，${v.headcount || v.guests?.length || 0} 人`,
+    `**誰來**：${orgFullName(v.org) || "（無）"}，${lead ? `${lead.name} ${lead.title}` : ""}，${v.headcount || v.guests?.length || 0} 人`,
     isForum(v)
       ? `**看了哪幾間**：座談，不參觀研究室${Object.entries((v as any).attendance || {}).some(([, a]) => a === "yes") ? `（出席：${Object.entries((v as any).attendance).filter(([, a]) => a === "yes").map(([room]) => room).sort().join("、")}）` : ""}`
       : `**看了哪幾間**：${(v.itinerary || []).filter((s) => Number(s.minutes) > 0).map((s) => `${s.room}（${s.minutes} 分）`).join("、") || "（無）"}`,

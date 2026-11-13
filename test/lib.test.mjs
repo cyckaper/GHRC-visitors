@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
 import { weekdayOf } from "../public/lib/rota.mjs";
-import { LAB_PHOTO_ROOMS, sanitizeLabPhotos, labPhotoStats, labPhotosPending, labPhotoFileName, photoVisitChoices, isLabPhotoKey } from "../lib/visit.mjs";
+import { LAB_PHOTO_ROOMS, sanitizeLabPhotos, labPhotoStats, labPhotosPending, labPhotoFileName, photoVisitChoices, isLabPhotoKey, orgLabel, orgFullName, sameOrg } from "../lib/visit.mjs";
 import { exifTaken, zipStore, looksHeif } from "../public/lib/photos.mjs";
 import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, salutationLine, salutationPeople, settleSalutation, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, posterFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION, toForumProgramme, labStops, FORUM_TITLES, splitItems, sanitizeDictation, hasDictation, visitRecord, zhNumber, zhDate, promisedItems, thanksItems, talkedAbout, photoStem, isPhotoDuplicate, sameUrl, emailsOnFile, guestEmailFor, guestTalkPlan, guestTalks, guestTalkZh, sanitizeSpecialNotes, DEFAULT_GUEST_MINUTES, GUEST_TITLES, SPECIAL_NOTES_MAX } from "../lib/visit.mjs";
 
@@ -189,6 +189,24 @@ test("讀信抽出來的日期：沒有就用候選的，都沒有就留空—�
   assert.equal(many.date, "2026-10-05", "第一個真的日期");
   assert.deepEqual(many.notes.slice(1), ["另一個候選日期：2026-10-06", "候選日期：十月初"], "其他候選照列，寫不成日期的也照列");
   assert.deepEqual(extractedDate("2026-10-05", ["2026-10-05", "2026-10-06"]).notes, ["另一個候選日期：2026-10-06"], "跟 date 一樣的那個不再列一次");
+});
+
+test("單位名稱：英文或當地語有一個就算（只有中文名稱的單位也是一場）", () => {
+  // 實際回報：「都已經 AI 提取了還沒建新案」——讀信讀出「高中教師參訪團」放在當地語那一格、英文空著，以前只認英文名稱
+  assert.equal(orgLabel({ name: "University of Western Australia", name_local: "西澳大學" }), "University of Western Australia");
+  assert.equal(orgLabel({ name: "  ", name_local: " 高中教師參訪團 " }), "高中教師參訪團");
+  assert.equal(orgLabel({}), "");
+  assert.equal(orgLabel(null), "");
+  assert.equal(orgFullName({ name: "University of Western Australia", name_local: "西澳大學" }), "University of Western Australia（西澳大學）");
+  assert.equal(orgFullName({ name: "", name_local: "高中教師參訪團" }), "高中教師參訪團", "只有中文名稱：不會只剩一對空括號");
+  assert.equal(orgFullName({ name: "Dun Yang", name_local: "Dun Yang" }), "Dun Yang");
+  // 同一個單位：中文一樣就是；英文要去掉空白標點後一樣、國家也一樣
+  assert.ok(sameOrg({ name: "", name_local: "高中教師參訪團" }, { name: "", name_local: "高中教師參訪團" }));
+  assert.ok(sameOrg({ name: "Dun Yang Engineering", country: "Taiwan" }, { name: "Dunyang Engineering", country: "Taiwan" }));
+  assert.ok(sameOrg({ name: "The University of Tokyo", name_local: "東京大学" }, { name: "Tokyo University", name_local: "東京大学" }), "中文（漢字）一樣就是同一個");
+  assert.ok(!sameOrg({ name: "", name_local: "高中教師參訪團" }, { name: "", name_local: "國中教師參訪團" }));
+  assert.ok(!sameOrg({ name: "National Taiwan University", country: "Taiwan" }, { name: "National Taiwan Normal University", country: "Taiwan" }), "網址代碼一樣（taiwan）的兩個不同學校");
+  assert.ok(!sameOrg({ name: "", name_local: "" }, { name: "", name_local: "" }), "兩邊都沒有名稱不算同一個");
 });
 
 test("visit id generation and validation", () => {
@@ -693,6 +711,7 @@ test("訪客地圖的位置：單位名稱或國家改了就要重查；座標�
   assert.equal(needsGeo({ org: { ...v.org, name: "Curtin University" }, geo }), true, "改了名字：查的是別的單位，要重查");
   assert.equal(needsGeo({ org: { ...v.org, country: "New Zealand" }, geo }), true, "改了國家也一樣");
   assert.equal(needsGeo({ org: { name: "", country: "Japan" } }), false, "沒有單位名稱的不查");
+  assert.equal(needsGeo({ org: { name: "", name_local: "臺北市立建國高級中學", country: "Taiwan" } }), true, "只有中文名稱的照查");
   // 0,0 是 AI「查不到」的慣用值、超出範圍的座標不可能對：一律退回「只知道國家」，不要畫在海上
   for (const bad of [{ lat: 0, lon: 0, precision: "city" }, { lat: 95, lon: 10, precision: "site" }, { lat: null, lon: 121, precision: "city" }, { lat: "x", lon: 121, precision: "city" }]) {
     const g = sanitizeGeo({ key: "k", place: "某處", ...bad });
@@ -724,9 +743,12 @@ test("公開的來訪紀錄：只列來過的、標了不公開的不列，原�
     v("2025-05-01-other", "2025-05-01", "Other Co", { public: { hidden: true } }),
     v("2099-01-01-future", "2099-01-01", "Future Ministry"),
     v("2025-06-01-noname", "2025-06-01", ""),
+    // 只有中文名稱的單位（英文那一格空著）也是來過的一場
+    { ...v("2025-04-01-visit", "2025-04-01", ""), org: { name: "", name_local: "高中教師參訪團", country: "Taiwan", type: "school" } },
   ], now);
-  assert.deepEqual(entries.map((e) => e.id), ["2025-05-01-1", "2024-01-08-1"], "新的在前；還沒來的、不公開的、沒有單位名稱的都不列");
-  const ws = entries[1];
+  assert.deepEqual(entries.map((e) => e.id), ["2025-05-01-1", "2025-04-01-1", "2024-01-08-1"], "新的在前；還沒來的、不公開的、沒有單位名稱的都不列");
+  assert.deepEqual([entries[1].orgs[0].name, entries[1].orgs[0].local], ["高中教師參訪團", "高中教師參訪團"], "只有中文名稱的照列，名稱就是中文那一個（頁面上跟在地名稱一樣就不印兩次）");
+  const ws = entries[2];
   assert.deepEqual(ws.orgs.map((o) => o.name), ["University of Helsinki", "UIUC"], "原表同一列拆出來的兩個單位是同一場");
   assert.equal(ws.people.zh, "Jyske 教授、Sullivan 教授");
   assert.deepEqual(ws.note, { zh: "研討會講者", en: "Workshop speakers" }, "同一場的交流重點只寫一次");
@@ -832,6 +854,9 @@ test("完整紀錄：事實照參訪資料排、重點一項對一項；AI 的�
   const forum = visitRecord({ ...v, format: "forum", attendance: { "301": "yes", "303": "no" }, programme: toForumProgramme(v.programme, v.start_time) }, LABS, null);
   assert.match(forum, /與中心老師座談（出席：張俊彥）/);
   assert.ok(!/研究室參訪/.test(forum), "座談的場次不寫研究室參訪");
+  // 只有中文名稱的單位：來訪單位那一行就是中文名稱，不會只剩一對空括號
+  const local = visitRecord({ ...v, org: { name: "", name_local: "高中教師參訪團", country: "Taiwan" } }, LABS, null);
+  assert.match(local, /^三、來訪單位：高中教師參訪團，Taiwan$/m);
 });
 
 test("來賓報告：信裡說對方也要報告就排一段（接在總體介紹後面），沒說多久先排 15 分、列進要確認的事", () => {
@@ -1054,11 +1079,13 @@ test("研究室照片：哪一場預設今天（正在進行的那一場）、�
     { visit_id: "2026-11-02-kyushu", date: "2026-11-02", start_time: "11:00", end_time: "12:30", org: { name: "Kyushu University", name_local: "九州大学" }, lab_photos: [{}, {}] },
     { visit_id: "2026-10-07-uwa", date: "2026-10-07", start_time: "10:00", org: { name: "UWA" } },
     { visit_id: "2026-11-03-next", date: "2026-11-03", start_time: "10:00", org: { name: "Tomorrow" } },
+    { visit_id: "2026-09-01-visit", date: "2026-09-01", start_time: "10:00", org: { name: "", name_local: "高中教師參訪團" } },
   ];
   const c = photoVisitChoices(visits, now);
+  assert.equal(c.visits.find((v) => v.visit_id === "2026-09-01-visit").org, "高中教師參訪團", "只有中文名稱的那一場，選單上寫中文名稱");
   assert.equal(c.today, "2026-11-02");
   assert.equal(c.default, "2026-11-02-kyushu", "今天有兩場：挑正在進行的那一場");
-  assert.deepEqual(c.visits.map((v) => v.visit_id), ["2026-11-02-kyushu", "2026-11-02-early", "2026-10-07-uwa"], "還沒到的不列，新的在前");
+  assert.deepEqual(c.visits.map((v) => v.visit_id), ["2026-11-02-kyushu", "2026-11-02-early", "2026-10-07-uwa", "2026-09-01-visit"], "還沒到的不列，新的在前");
   assert.equal(c.visits[0].photos, 2);
   assert.equal(c.visits[0].org_local, "九州大学");
   assert.equal(photoVisitChoices(visits, new Date("2026-11-02T08:00:00Z")).default, "2026-11-02-kyushu", "今天都結束了：挑開始時間最近的");

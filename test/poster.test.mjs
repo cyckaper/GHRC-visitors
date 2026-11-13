@@ -26,6 +26,12 @@ test("對方的名稱不翻譯：當地語名稱不是那個語言的字就不�
   assert.equal(posterContent({ language: "ja", org: { name: "Awaji Landscape Planning and Horticulture Academy", name_local: "淡路景観園芸学校" } }, i18n).org.l2, "淡路景観園芸学校", "日文的單位名稱可以全是漢字");
   assert.equal(posterContent({ language: "en", org: { name: "University of Western Australia", name_local: "" } }, i18n).org.l2, "", "沒有就不印，也不必說");
   assert.equal(posterContent({ language: "zh", org: { name: "Dun Yang Engineering", name_local: "Dun Yang Engineering" } }, i18n).org.l2, "", "跟英文一樣就不重複");
+  // 只有中文名稱（國內的高中、參訪團）：中文名稱就是那一行大字，用中文的字型；不印兩次，說一聲沒有英文
+  const local = posterContent({ language: "zh", org: { name: "", name_local: "高中教師參訪團" } }, i18n);
+  assert.deepEqual(local.org, { en: "高中教師參訪團", l2: "", lang: "zh-Hant" });
+  assert.equal(local.warnings.length, 1);
+  assert.match(local.warnings[0].zh, /沒有英文名稱/);
+  assert.equal(posterContent({ language: "zh", org: { name: "Dun Yang Engineering", name_local: "惇陽工程" } }, i18n).org.lang, "en", "有英文名稱的照舊是英文那一行");
   assert.ok(writtenIn("西澳大學", "zh") && !writtenIn("농촌진흥청", "zh") && !writtenIn("Western", "zh") && !writtenIn("", "ko"));
 });
 
