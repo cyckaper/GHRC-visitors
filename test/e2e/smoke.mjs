@@ -159,7 +159,7 @@ try {
   await page.click("#programmeEdit summary");
   // 行程只有一張表：每一間幾分鐘就長在「研究室參訪」那一列底下，總體介紹的地點在 briefing 那一列
   check((await page.locator("#programmeTable tr[data-rooms-row]").count()) === 1, "the lab minutes live inside the one schedule table");
-  check((await page.inputValue("#programmeTable [data-briefing-location]")) === "302", "briefing room defaults to 302, on the briefing row itself");
+  check((await page.inputValue("#programmeTable [data-briefing-location]")) === "301", "briefing room defaults to 301 (the 301 introduction follows right there), on the briefing row itself");
   check((await page.locator("#itinerary input[data-room]").count()) === 5, "one minutes box per lab");
   check(/五間合計 \d+ 分/.test(await page.textContent("#roomsTotal")), "it adds the lab minutes up");
   check((await page.locator("#programmeTable thead th").allTextContents()).every((t) => t !== "頁碼"), "nobody is asked to type slide numbers — the deck works them out");
@@ -1181,7 +1181,9 @@ try {
   check((await page.textContent("#lab-303")).includes("陳惠美") && !(await page.textContent("#lab-303")).includes("鄭佳昆"), "303 lists only 陳惠美");
   check((await page.textContent("#lab-305")).includes("IVR Research Lab") && !(await page.textContent("#lab-305")).includes("outside"), "305 is the IVR Research Lab");
   check((await leftEdge("#lab-303")) === labColor["303"] && (await leftEdge("#lab-305")) === labColor["305"] && labColor["303"] !== labColor["305"], "every lab card wears its own colour: 303 and 305 are both 驗證 but two different rooms");
-  check((await page.textContent("#briefing-card")).includes("302"), "guest page shows the briefing in 302");
+  // 2026-11-13 起總體介紹在 301：講完就在同一間接著 301 的介紹，下一站 302 是林寶秀老師
+  check((await page.textContent("#briefing-card")).includes("Room 301"), "guest page shows the briefing in 301");
+  check(await page.evaluate(() => [...document.querySelectorAll("#labs article")].slice(0, 3).map((a) => a.id).join(" ")) === "briefing-card lab-301 lab-302" && (await page.textContent("#lab-302")).includes("林寶秀"), "…followed right there by 301, then 302 with 林寶秀");
   check((await page.textContent("#lab-303")).includes("Landscape Simulation Lab") && (await page.textContent("#lab-303")).includes("景觀環境模擬室"), "the lab NAME keeps both scripts (a name is an identifier, not a translation)");
   check(!/[一-鿿]/.test(await page.textContent("#lab-303 p")), "…but the prose on the English page is English only: 中英文不在同一頁印兩份");
   check((await page.textContent("#programme li:first-child")).includes("Center overview") && !(await page.textContent("#programme li:first-child")).includes("總體介紹"), "programme block falls back to the English label when its English title is empty, and does not print the Chinese one");

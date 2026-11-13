@@ -48,7 +48,7 @@ export default backgroundHandler<{ visit?: Partial<Visit> }>("排程", async (in
     programme = photoIdx >= 0 ? [...programme.slice(0, photoIdx), { ...block, start: programme[photoIdx].start, end: programme[photoIdx].start }, ...programme.slice(photoIdx)] : [...programme, block];
     warnings.push("AI 排程漏了「綜合討論」，已補上一個區塊，請調整它與前後區塊的時間。");
   }
-  // 總體介紹的地點沿用主辦端填的（預設 302），AI 不決定地點
+  // 總體介紹的地點沿用主辦端填的（預設 301），AI 不決定地點
   const briefingLocation = visit.itinerary.find((s) => s.room === "briefing")?.location || "";
   let merged: Visit = {
     ...visit,

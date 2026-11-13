@@ -51,8 +51,10 @@ export function roomRange(rooms) {
 }
 
 const PLACE_L2 = { zh: (r) => `${r} 室`, ko: (r) => `${r}호`, ja: (r) => `${r}号室` };
+/** 總體介紹預設在哪一間：跟 `lib/visit.mjs DEFAULT_BRIEFING_LOCATION` 同一個值（瀏覽器讀不到那個檔；`npm test` 對過）。 */
+export const BRIEFING_ROOM = "301";
 
-/** 這一段在哪裡：研究室參訪寫走哪幾間，總體介紹寫在哪一間（空白就是 302），其他不寫——不猜。 */
+/** 這一段在哪裡：研究室參訪寫走哪幾間，總體介紹寫在哪一間（空白就是 301），其他不寫——不猜。 */
 function placeOf(block, visit) {
   const steps = Array.isArray(visit?.itinerary) ? visit.itinerary : [];
   if (block?.kind === "tour") {
@@ -62,7 +64,7 @@ function placeOf(block, visit) {
     return rooms.map(String);
   }
   if (block?.kind === "briefing") {
-    const at = String(steps.find((s) => String(s.room) === "briefing")?.location || "").trim() || "302";
+    const at = String(steps.find((s) => String(s.room) === "briefing")?.location || "").trim() || BRIEFING_ROOM;
     return /^\d{3}$/.test(at) ? [at] : [];
   }
   return [];

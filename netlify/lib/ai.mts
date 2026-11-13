@@ -5,7 +5,7 @@ import { env } from "./http.mts";
 import { isMock } from "./data.mts";
 import type { DictationExtract, ResponseRow, SignbookEntry, Visit } from "./types.mts";
 import type { Extracted } from "./files.mts";
-import { allocateProgramme, briefingBlockMinutes, endTimeOf, FORUM_TITLES, orgFullName, orgLabel, guestTalks, guestTalkZh, isForum, labStops, salutationLine, salutationPeople, sanitizeDictation, settleSalutation, talkedAbout, thanksItems, zhDate } from "../../lib/visit.mjs";
+import { allocateProgramme, briefingBlockMinutes, DEFAULT_BRIEFING_LOCATION, endTimeOf, FORUM_TITLES, orgFullName, orgLabel, guestTalks, guestTalkZh, isForum, labStops, salutationLine, salutationPeople, sanitizeDictation, settleSalutation, talkedAbout, thanksItems, zhDate } from "../../lib/visit.mjs";
 import { parseVisitTable } from "../../lib/import.mjs";
 
 /**
@@ -25,7 +25,8 @@ const ORG_TYPES = ["government", "university", "enterprise", "school", "ngo", "o
  * 或在信裡感謝中心自己的老師（第一場試跑的感謝信與確認信都出過這些錯）。
  */
 export const CENTER_FACTS = `中心事實（所有輸出都要遵守）：
-- 綠色健康研究中心（GHRC）只有五間研究室：301 健康景觀智能室（張俊彥）、302 療癒環境規劃室（林寶秀）、303 景觀環境模擬室（陳惠美）、304 全景影院體驗室（張伯茹）、305 IVR 研究室（鄭佳昆）。全部在臺大園藝系造園館三樓，彼此相鄰，全程室內；總體介紹預設在 302。
+- 綠色健康研究中心（GHRC）只有五間研究室：301 健康景觀智能室（張俊彥）、302 療癒環境規劃室（林寶秀）、303 景觀環境模擬室（陳惠美）、304 全景影院體驗室（張伯茹）、305 IVR 研究室（鄭佳昆）。全部在臺大園藝系造園館三樓，彼此相鄰，全程室內。
+- 參訪的預設動線：總體介紹在 301（張俊彥主任的研究室），**總體介紹完就在 301 直接接著介紹 301 的研究**（不必換教室）；接著 302 由林寶秀老師介紹他們的研究，再依動線走訪其他研究室。這一場的 briefing_location 或動線不一樣時，照這一場的寫。
 - 來信、名單或行程裡出現的其他地點與單位（例如智慧溫室、其他系所或中心）不是本中心的，不能寫成「我們的」研究室、團隊或設施；若非提不可，只能說是來賓當天另外參訪的單位，不替他們發言。
 - 不要給步行、鞋履、天氣、館舍之間移動之類的提醒（全程室內、同一層樓）。
 - 信件不感謝中心自己的人（主任、對口老師、同仁），感謝對象只有來賓與對方單位的窗口；也不替中心的人邀功。
@@ -322,7 +323,7 @@ const PLAN_SYSTEM = `你替 GHRC 排一次參訪的行程並從母簡報挑頁�
 - cover_text：封面要替換的三段文字：org_line（單位名稱，英文為主，可加當地語）、guest_lines（主要來賓一到三行：姓名 職稱）、date_line（例如「7 October 2026 · 2026年10月7日」）。
 - text_edits：只有在提供母簡報文字（master_text）時才填。針對第 1、2、3 頁，逐一給出 find（母簡報裡**逐字**存在的文字段落）與 replace（新文字），用來改單位名稱、流程表的時間／說明／頁碼、Contents 的章節列表。沒有 master_text 就給空陣列。
 - rationale：用中文兩三句說明**為什麼挑這幾個區塊**（後台把它放在選頁旁邊；有給 route 時行程是研究室填的，不必解釋行程）。
-- 總體介紹的地點由主辦端決定（見 briefing_location，預設 302），不用寫進輸出。
+- 總體介紹的地點由主辦端決定（見 briefing_location，預設 ${DEFAULT_BRIEFING_LOCATION}），不用寫進輸出。
 - guest_talks 是來訪方自己的報告（kind="guest"，接在總體介紹後面）：programme 裡照原本的長度留著，不要拿掉。
 - special_notes 是主辦端寫的這一場的特殊狀況（例如對方特別想看什麼、要特別禮遇的貴賓）：挑頁時照著調整。
 
@@ -336,7 +337,7 @@ export async function planVisit(visit: Visit, slidesIndex: any, labs: any, maste
       org: visit.org, guests: visit.guests, headcount: visit.headcount, date: visit.date, start_time: visit.start_time,
       duration_minutes: visit.duration_minutes, purpose: visit.purpose, interests: visit.interests, language: visit.language, contact_teacher: visit.contact_teacher,
     },
-    briefing_location: visit.itinerary?.find((s) => s.room === "briefing")?.location || "302",
+    briefing_location: visit.itinerary?.find((s) => s.room === "briefing")?.location || DEFAULT_BRIEFING_LOCATION,
     // forum＝座談的場次：不參觀研究室，挑頁不挑各研究室的頁
     format: isForum(visit) ? "forum" : "tour",
     // 今日流程是自動排的（各研究室在支援人力表上填的分鐘）：挑頁照這一份動線與總體簡報的長度，不要另排一份
@@ -440,7 +441,7 @@ export async function draftLetter(ctx: LetterContext): Promise<{ subject: string
   // …以及參訪時談到的事（主持人訪後一項一項記下的重點）
   const talked = ctx.kind === "thanks" ? (talkedAbout(v) as Record<string, string[]> | null) : null;
   const internal = ctx.kind === "notice" || ctx.kind === "rundown"; // 寄給中心自己的研究室，不是來賓
-  const briefingLocation = v.itinerary?.find((s) => s.room === "briefing")?.location || "302";
+  const briefingLocation = v.itinerary?.find((s) => s.room === "briefing")?.location || DEFAULT_BRIEFING_LOCATION;
   if (isMock()) return mockLetter(ctx, pageUrl, respondUrl, items, talked);
   const system =
     ctx.kind === "rundown"
@@ -470,7 +471,7 @@ ${NOTES_FOR_STAFF}
 ${CENTER_FACTS}`
       : ctx.kind === "confirmation"
       ? `你替 GHRC 草擬參訪確認信。語氣：同行學者之間的誠懇與簡潔，不是服務業。用來賓的語言寫（language=zh 用繁體中文；en 用英文；ko／ja 用英文為主並在開頭與結尾附一句該語言問候）。
-內容：確認日期時間與地點（臺大園藝系造園館三樓；總體介紹在 briefing_location 那一間，之後依序走訪研究室——**format="forum" 時不參觀研究室，之後是與中心老師座談**）、當天流程（附 programme）、專屬網頁連結（訪前可先看五間研究室的老師背景）、對口老師。
+內容：確認日期時間與地點（臺大園藝系造園館三樓；總體介紹在 briefing_location 那一間，**那一間也在動線上時（預設 301），總體介紹完就在同一間直接接著介紹那一間的研究**，之後依序走訪其他研究室——**format="forum" 時不參觀研究室，之後是與中心老師座談**）、當天流程（附 programme）、專屬網頁連結（訪前可先看五間研究室的老師背景）、對口老師。
 programme 裡 kind="guest" 是**來賓自己的報告**（對方在來信裡說要報告）：流程裡一定要寫到，例如 "Presentation by Dr Kenjiro Kito (about 10 minutes)"——不要漏掉，也不要寫成中心的簡報。
 不要問來賓任何問題；不要加交通、步行、穿著、天氣之類的提醒；不要提到中心以外的地點或單位。署名用提供的 sender。回傳 subject 與純文字 body。
 ${NOTES_FOR_GUESTS}
@@ -1003,7 +1004,7 @@ function routeBlock(v: Visit, labs: any): string {
   const brief = v.itinerary?.find((s) => String(s.room) === "briefing");
   const label = (b: any) =>
     b.kind === "briefing"
-      ? `${brief?.location || "302"}　歡迎與中心總體介紹`
+      ? `${brief?.location || DEFAULT_BRIEFING_LOCATION}　歡迎與中心總體介紹`
       : b.kind === "tour"
       ? `研究室參訪（${rooms.join("、") || "301–305"}，全程同一層樓）`
       : b.kind === "discussion"
@@ -1071,7 +1072,7 @@ function mockTalked(t: Record<string, string[]> | null): string {
 
 function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, promised: LetterItem[] = [], talked: Record<string, string[]> | null = null): { subject: string; body: string } {
   const v = ctx.visit;
-  const location = v.itinerary?.find((s) => s.room === "briefing")?.location || "302";
+  const location = v.itinerary?.find((s) => s.room === "briefing")?.location || DEFAULT_BRIEFING_LOCATION;
   if (ctx.kind === "notice" || ctx.kind === "rundown") {
     // 內部通告：中文、條列、貼得進 LINE、不署名。真提示詞同一個結構
     const stops = labStops(v, ctx.labs) as any[];
@@ -1093,7 +1094,7 @@ function mockLetter(ctx: LetterContext, pageUrl: string, respondUrl: string, pro
   if (ctx.kind === "confirmation") {
     return {
       subject: `(AI_MOCK) Your visit to the Green Health Research Center, ${v.date}`,
-      body: `Dear colleagues,\n\nWe look forward to welcoming ${orgLabel(v.org) || "you"} on ${v.date} at ${v.start_time}. We begin with a short overview in Room ${location}, Landscape Building, 3rd floor, ${isForum(v) ? "followed by a roundtable with the faculty" : "and then walk through the laboratories next door"}.${guestTalks(v).map((g: any) => `\n\nYour presentation: ${g.start}–${g.end} ${g.title_en || "Guest presentation"}`).join("")}\n\n${isForum(v) ? "Programme and the faculty you will meet" : "Programme and the laboratories you will see"}: ${pageUrl}\n\n${senderBlock(ctx)}`,
+      body: `Dear colleagues,\n\nWe look forward to welcoming ${orgLabel(v.org) || "you"} on ${v.date} at ${v.start_time}. We begin with a short overview in Room ${location}, Landscape Building, 3rd floor, ${isForum(v) ? "followed by a roundtable with the faculty" : (v.itinerary || []).find((s) => s.room !== "briefing" && Number(s.minutes) > 0)?.room === location ? `followed right there by the introduction of Lab ${location}, and then walk through the other laboratories next door` : "and then walk through the laboratories next door"}.${guestTalks(v).map((g: any) => `\n\nYour presentation: ${g.start}–${g.end} ${g.title_en || "Guest presentation"}`).join("")}\n\n${isForum(v) ? "Programme and the faculty you will meet" : "Programme and the laboratories you will see"}: ${pageUrl}\n\n${senderBlock(ctx)}`,
     };
   }
   // 跟真提示詞同一個結構：稱呼（每一位來賓的姓名與頭銜）、一句感謝、參訪時談到的事、當天的簡報與合照與答應提供的資料、

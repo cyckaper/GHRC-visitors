@@ -726,7 +726,7 @@ Claude API 抽出：單位、單位類型、國家、人名職稱、**隨行名�
   - 主賓＝名單上標「主賓」的人；四位以上寫前兩位＋「and N colleagues」（跟簡報封面 `coverLines` 同一個寫法，寧可少寫也不縮字）。隨行的人不上海報。
   - 流程的第二語言：主辦端寫的 `title_2nd` 是那個語言的字才用（預設那一欄是中文，韓國團不能印中文；日文只認有假名的——「綜合討論」不是日文）；
     不然固定的幾種區塊用 `i18n.json` 的 `kind_*`；主辦端自己加的區塊沒有那個語言的寫法就只印英文、提醒一聲。不由 AI 臨時翻譯。
-    地點只寫確定的：研究室參訪寫走哪幾間（「Rooms 301–304」「301–304호」，不去的那一間不寫），總體介紹寫在哪一間（預設 302）；其他不猜。
+    地點只寫確定的：研究室參訪寫走哪幾間（「Rooms 301–304」「301–304호」，不去的那一間不寫），總體介紹寫在哪一間（預設 301）；其他不猜。
   - 固定的字（Welcome、流程標題、QR 說明）在 `public/data/i18n.json` 的 `poster_*`：跟來賓專頁同一份、同一套母語者校對。
 - **版面**（不要改）：A1 直式三段——頁首（logo＋院校名稱，官方中英文，不翻成來訪者的語言）→ 主視覺（Welcome 放大到剛好一行、最大 132 mm，
   來訪者語言的歡迎詞是它的 40%，單位名稱最多兩行）→ 資訊區（日期、流程最多 7 段、QR）。**上半部就是合照背景**：來賓多半站在海報兩側合影，
@@ -1181,7 +1181,7 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
     因為官方附的本機伺服器讀的時候不給版本號、條件寫入也不是一次完成的，測不出「同時存」；
     同一支假伺服器上以前的寫法確實會掉格子（對照組），所以「全部留下來」不是運氣。
 - **一般存檔只寫後台表單管的欄位，別的端點寫的帶了也不算**：`POST /api/visits` 是整筆覆寫，但後台表單管不到的欄位
-  （`summary`／`summary_at`／`reminders`／`drive`／`cards`／`signbook`／`dictation`／`letters`／`materials`／`status`／`wrapup`／`imported`／`poster`／`lab_photos`，
+  （`summary`／`summary_at`／`reminders`／`drive`／`cards`／`signbook`／`dictation`／`letters`／`materials`／`status`／`wrapup`／`imported`／`poster`／`lab_photos`／`briefing_moved_at`，
   `visits.mts` 的 `KEPT`）**一律沿用伺服器上那一份，body 帶什麼都不算**；新的一場就從空的開始（拿別場的整份當底建一場，
   也不會把那一場的信件與檔案 key 帶過來——不然刪掉這一場會連那一場的照片、簽名簿一起刪）。要改這幾格就走寫它的那一支端點；
   「本次沒有」走 `POST /api/visits {visit_id, action:"wrapup", na}`（只動這一格）。
@@ -1246,7 +1246,18 @@ Netlify Functions 放 Claude API 與 Whisper 的呼叫，金鑰用 Netlify 環�
   時間是算出來的，不是第二個要填的欄位。表底下一行說「流程排了 N 分」，跟「幾點到幾點」差多少直接講。
   **存回去的資料結構沒變**（`programme` ＋ `itinerary`），簡報第 2 頁、ICS、來賓專頁、摘要都照舊吃同樣的東西。
   新建一場就先擺一份預設流程（`defaultProgramme()`，總體簡報 → 研究室參訪 → 綜合討論）——空白的表看不出要填什麼。
-- **現場動線第一站固定是總體介紹，地點預設 302**：`itinerary[0].room === "briefing"`，`location` 空白就是 302（`lib/visit.mjs DEFAULT_BRIEFING_LOCATION`），之後才是 301–305；`ensureBriefingFirst` 在存檔與排程時強制，AI 排程不決定地點。
+- **現場動線第一站固定是總體介紹，地點預設 301**：`itinerary[0].room === "briefing"`，`location` 空白就是 301（`lib/visit.mjs DEFAULT_BRIEFING_LOCATION`），之後才是 301–305；`ensureBriefingFirst` 在存檔與排程時強制，AI 排程不決定地點。
+  **2026-11-13 從 302 改到 301**（明確指示：「在整個訪客的流程開始簡報改在301，簡報完之後直接接著301的介紹，302交給林寶秀老師介紹他們的研究」）：
+  總體介紹完就在同一間接著 301 的介紹，不必換教室；動線本來就是 301 → 302 → …，302 是林寶秀老師自己介紹研究的那一站。
+  - 瀏覽器讀不到 `lib/visit.mjs`，所以 `public/admin.html` 與 `public/lib/poster.mjs` 各有一份 `BRIEFING_ROOM`，`npm test` 對過三邊一樣；AI 的提示詞（`CENTER_FACTS`）寫著預設動線，
+    確認信照「總體介紹完就在同一間接著介紹那一間」寫（那一間也在動線上時）。
+  - **以前建的每一場都把 302 存進去了**（`emptyVisit` 寫的是明確的值，不是空白）：只改預設的話，已經排好的下一場還是 302。所以
+    `netlify/lib/migrations.mts moveBriefingTo301()`：**後台一打開**（`GET /api/visits` 清單）就先把**還沒開始**、總體介紹還寫著 302 的那幾場換成 301
+    （`lib/visit.mjs briefingMoveTargets`；過去的不動——那幾場當天就是在 302）。**只做一次**：做完在媒體庫留 `migrations/briefing-301.json`（什麼時候、改了哪幾場），
+    之後有人特地改回 302 就照他的。出錯不擋清單，沒做完不留記號、下一次打開再試。寄出確認信、印了流程的海報之後才換的，照舊會標「行程已改」「需重印」。
+    **還開著舊畫面的分頁送回來的 302 不算**：搬的時候在那一場記 `briefing_moved_at`（列在 `KEPT`），存檔時送上來那一份的 `updated_at` 比它早，
+    總體介紹寫著 302 就照伺服器上的 301（跟研究室填的分鐘 `rota_applied` 同一個道理）——不然手機上開著搬之前的那一頁，打一個字就搬回 302。
+    已經擬好的通告不會自己改（「當天動線」那一行寫的還是 302），要再按一次「AI 擬通告」。
 - （**停用**：2026-10 改成網頁版簡報，後台已經沒有這個畫面）**AI 挑頁只拿挑頁那幾樣**（簡報分頁的 `pickBtn`）：選頁、第 1–3 頁的替換文字（`text_edits`／`cover_text`；封面其實由產檔照參訪紀錄自己換，見功能 2）、
   為什麼這樣挑（`plan_rationale`，顯示在選頁旁邊）。**今日流程與動線一律不動**（那是研究室填的），`warnings` 講的都是行程，不顯示；
   「這場不用簡報」那個勾也不歸它管——等 AI 的那一分鐘裡勾起來的，照人的意思。提示詞帶 `route`（動線上要去的那幾間）與

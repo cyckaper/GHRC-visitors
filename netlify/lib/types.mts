@@ -34,7 +34,7 @@ export interface ItineraryStep {
   room: string; // "briefing"（總體介紹，固定第一步）或 301–305
   minutes: number;
   focus?: string;
-  location?: string; // briefing 的地點，預設 302（lib/visit.mjs DEFAULT_BRIEFING_LOCATION）
+  location?: string; // briefing 的地點，預設 301（lib/visit.mjs DEFAULT_BRIEFING_LOCATION；2026-11-13 以前是 302）
 }
 
 /** 專屬頁面的「當天資料」：deck_pdf／photos 是媒體庫 key（materials/<visit_id>/<file>）或 https 連結。 */
@@ -119,6 +119,8 @@ export interface Visit {
   cards?: { key: string; names: string[]; read_at: string }[];
   /** 各研究室拍的照片（/api/labphotos，研究室的人從 /photos 上傳；只有主辦端看得到，見 lib/visit.mjs sanitizeLabPhotos）。 */
   lab_photos?: LabPhoto[];
+  /** 總體介紹從 302 搬到 301 的時間（netlify/lib/migrations.mts 寫的；之後舊畫面送回來的 302 不算） */
+  briefing_moved_at?: string;
   materials: Materials;
   // skip=true：這場不用簡報，只口頭介紹（後台「簡報」分頁勾的）
   // skip=true：這場不用簡報；fingerprint＝產檔那一刻的行程指紋（行程之後改了就知道這份 .pptx 是舊的）

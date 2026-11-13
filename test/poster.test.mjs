@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { posterContent, posterLang, writtenIn, roomRange } from "../public/lib/poster.mjs";
+import { posterContent, posterLang, writtenIn, roomRange, BRIEFING_ROOM } from "../public/lib/poster.mjs";
+import { DEFAULT_BRIEFING_LOCATION } from "../lib/visit.mjs";
 
 const i18n = JSON.parse(readFileSync("public/data/i18n.json", "utf8"));
 
@@ -61,8 +62,8 @@ test("流程的第二語言：自己寫的那一欄要是那個語言的字；�
   const c = posterContent(visit, i18n);
   assert.deepEqual(c.programme.map((r) => r.l2), [i18n.ko.kind_briefing, i18n.ko.kind_tour, "", "단체 사진"], "預設那一欄是中文，韓國團不能印中文");
   assert.deepEqual(c.programme.map((r) => r.en), ["Welcome and centre overview", "Laboratory visits", "Greenhouse walk", i18n.en.kind_photo]);
-  assert.deepEqual(c.programme.map((r) => r.place_en), ["Room 302", "Rooms 301, 302, 304", "", ""], "總體介紹預設在 302；不去的那一間（0 分）不寫");
-  assert.equal(c.programme[0].place_l2, "302호");
+  assert.deepEqual(c.programme.map((r) => r.place_en), ["Room 301", "Rooms 301, 302, 304", "", ""], "總體介紹預設在 301；不去的那一間（0 分）不寫");
+  assert.equal(c.programme[0].place_l2, "301호");
   assert.equal(c.programme[0].time, "14:00");
   assert.equal(c.warnings.length, 1);
   assert.match(c.warnings[0].en, /Greenhouse walk/);
@@ -85,4 +86,12 @@ test("房號：連號寫成範圍、不連號逐一列", () => {
   assert.equal(roomRange(["304", "301"]), "301, 304");
   assert.equal(roomRange(["302", "302"]), "302");
   assert.equal(roomRange([]), "");
+});
+
+test("總體介紹預設在哪一間：海報、後台、伺服器三邊同一個值（瀏覽器讀不到 lib/visit.mjs，各存一份）", () => {
+  assert.equal(BRIEFING_ROOM, DEFAULT_BRIEFING_LOCATION);
+  const admin = readFileSync("public/admin.html", "utf8");
+  assert.equal((admin.match(/const BRIEFING_ROOM = "(\d{3})";/) || [])[1], DEFAULT_BRIEFING_LOCATION);
+  assert.ok(!/location: "30\d"/.test(admin), "後台新的一場不寫死房號，一律用 BRIEFING_ROOM");
+  assert.ok(admin.includes(`placeholder="地點 ${DEFAULT_BRIEFING_LOCATION}"`) && admin.includes(`空白就是 ${DEFAULT_BRIEFING_LOCATION}`), "表上的提示也跟著寫同一間");
 });

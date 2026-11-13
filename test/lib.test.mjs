@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { scanAdmin, loadDict, missing } from "../scripts/i18n-scan.mjs";
 import { weekdayOf } from "../public/lib/rota.mjs";
-import { LAB_PHOTO_ROOMS, sanitizeLabPhotos, labPhotoStats, labPhotosPending, labPhotoFileName, photoVisitChoices, isLabPhotoKey, orgLabel, orgFullName, sameOrg } from "../lib/visit.mjs";
+import { LAB_PHOTO_ROOMS, sanitizeLabPhotos, labPhotoStats, labPhotosPending, labPhotoFileName, photoVisitChoices, isLabPhotoKey, orgLabel, orgFullName, sameOrg, briefingMoveTargets, OLD_BRIEFING_LOCATION } from "../lib/visit.mjs";
 import { exifTaken, zipStore, looksHeif } from "../public/lib/photos.mjs";
 import { minutesBetween, endTimeOf, snapSlidesToGroups, makeVisitId, isValidVisitId, sanitizeResponse, publicVisit, recipientList, toCSV, wrapupICS, ensureBriefingFirst, briefingBlockMinutes, emptyVisit, allocateProgramme, sanitizeMaterials, salutationLine, salutationPeople, settleSalutation, mergeGuests, applyProgrammeTimes, visitEndAt, wrapupTodo, wrapupNA, wrapupSettled, needsSummary, defaultProgramme, scheduleFingerprint, deckFingerprint, posterFingerprint, staleOutputs, withLabMinutes, retimeProgramme, rotaRooms, geoKey, needsGeo, sanitizeGeo, sanitizePublic, visitLogEntries, institutionKeys, extractedDate, DEFAULT_BRIEFING_LOCATION, toForumProgramme, labStops, FORUM_TITLES, splitItems, sanitizeDictation, hasDictation, visitRecord, zhNumber, zhDate, promisedItems, thanksItems, talkedAbout, photoStem, isPhotoDuplicate, sameUrl, emailsOnFile, guestEmailFor, guestTalkPlan, guestTalks, guestTalkZh, sanitizeSpecialNotes, DEFAULT_GUEST_MINUTES, GUEST_TITLES, SPECIAL_NOTES_MAX } from "../lib/visit.mjs";
 
@@ -52,12 +52,33 @@ test("the route always starts with a briefing step", () => {
   assert.equal(briefingBlockMinutes([]), null);
 });
 
-test("the briefing is in 302 unless the organiser says otherwise", () => {
-  assert.equal(DEFAULT_BRIEFING_LOCATION, "302");
-  assert.equal(emptyVisit().itinerary[0].location, "302");
-  assert.equal(ensureBriefingFirst([{ room: "301", minutes: 8 }])[0].location, "302");
-  assert.equal(ensureBriefingFirst([{ room: "briefing", minutes: 20, location: "" }])[0].location, "302");
+test("the briefing is in 301 unless the organiser says otherwise", () => {
+  // 2026-11-13 起從 302 改到 301（明確指示：「開始簡報改在301，簡報完之後直接接著301的介紹，302交給林寶秀老師介紹他們的研究」）
+  assert.equal(DEFAULT_BRIEFING_LOCATION, "301");
+  assert.equal(emptyVisit().itinerary[0].location, "301");
+  assert.deepEqual(emptyVisit().itinerary.map((s) => s.room), ["briefing", "301", "302", "303", "304", "305"], "總體介紹完直接接 301，下一站是 302");
+  assert.equal(ensureBriefingFirst([{ room: "301", minutes: 8 }])[0].location, "301");
+  assert.equal(ensureBriefingFirst([{ room: "briefing", minutes: 20, location: "" }])[0].location, "301");
   assert.equal(ensureBriefingFirst([{ room: "briefing", minutes: 20, location: "304" }])[0].location, "304", "an explicit location is kept");
+});
+
+test("總體介紹改在 301 那一天：還沒開始、還寫著舊預設 302 的那幾場才換", () => {
+  const it = (loc) => [{ room: "briefing", minutes: 20, location: loc }, { room: "301", minutes: 20 }, { room: "302", minutes: 20 }];
+  const now = new Date("2026-11-13T12:00:00Z"); // 台北晚上八點
+  const visits = [
+    { visit_id: "2026-11-17-visit", date: "2026-11-17", start_time: "10:00", itinerary: it("302") },
+    { visit_id: "2026-11-02-kyushu", date: "2026-11-02", start_time: "10:00", itinerary: it("302") }, // 過去的：當天就是在 302
+    { visit_id: "2026-11-13-evening", date: "2026-11-13", start_time: "19:00", itinerary: it("302") }, // 已經開始了
+    { visit_id: "2026-11-20-picked", date: "2026-11-20", start_time: "10:00", itinerary: it("305") }, // 特地選了別間
+    { visit_id: "2026-11-21-new", date: "2026-11-21", start_time: "10:00", itinerary: it("301") },
+    { visit_id: "2026-11-22-blank", date: "2026-11-22", start_time: "10:00", itinerary: it("") }, // 空白＝預設，本來就跟著走
+    { visit_id: "2026-11-23-none", date: "2026-11-23", start_time: "10:00", itinerary: [] },
+    { visit_id: "bad", date: "", itinerary: it("302") },
+  ];
+  assert.deepEqual(briefingMoveTargets(visits, now), ["2026-11-17-visit"]);
+  assert.deepEqual(briefingMoveTargets(visits, now.getTime()), ["2026-11-17-visit"], "時間給數字也可以");
+  assert.deepEqual(briefingMoveTargets(null, now), []);
+  assert.equal(OLD_BRIEFING_LOCATION, "302");
 });
 
 test("materials: only media keys or https links survive", () => {

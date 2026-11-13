@@ -663,6 +663,11 @@
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const ROOMS = ["301", "302", "303", "304", "305"];
+  /**
+   * 總體介紹預設在哪一間：跟 `lib/visit.mjs DEFAULT_BRIEFING_LOCATION` 同一個值（這一頁讀不到那個檔；`npm test` 對過）。
+   * 2026-11-13 起是 301：總體介紹完就在同一間接著 301 的介紹，302 是林寶秀老師自己介紹研究的那一站。
+   */
+  const BRIEFING_ROOM = "301";
   // **幾點開始、幾點結束**是主辦端真正在填的兩個時間；總分鐘由它們算出來（下游仍吃 duration_minutes）。
   // 規則與 lib/visit.mjs 的 minutesBetween／endTimeOf 同一套——那一份給伺服器與 CLI，這一份給畫面。
   const hhmm = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t == null ? "" : t).trim()); if (!m) return null; const h = +m[1], mi = +m[2]; return h > 23 || mi > 59 ? null : h * 60 + mi; };
@@ -941,7 +946,7 @@
     renderPastVisits();
   }
   function emptyVisit() {
-    return { visit_id: "", date: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10), start_time: "10:00", duration_minutes: 150, org: { name: "", name_local: "", type: "university", country: "" }, guests: [], headcount: 0, contact_teacher: "張俊彥", purpose: "", interests: [], language: "en", format: "tour", special_notes: "", programme: [], itinerary: [{ room: "briefing", minutes: 20, location: "302" }, ...ROOMS.map((room) => ({ room, minutes: 20 }))], slides: [], text_edits: [], materials: { deck_pdf: "", photos: [], links: [] }, letters: {}, deck: {}, signbook: {}, dictation: {}, status: "draft" };
+    return { visit_id: "", date: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10), start_time: "10:00", duration_minutes: 150, org: { name: "", name_local: "", type: "university", country: "" }, guests: [], headcount: 0, contact_teacher: "張俊彥", purpose: "", interests: [], language: "en", format: "tour", special_notes: "", programme: [], itinerary: [{ room: "briefing", minutes: 20, location: BRIEFING_ROOM }, ...ROOMS.map((room) => ({ room, minutes: 20 }))], slides: [], text_edits: [], materials: { deck_pdf: "", photos: [], links: [] }, letters: {}, deck: {}, signbook: {}, dictation: {}, status: "draft" };
   }
   /**
    * 預設的今日流程（跟 `lib/visit.mjs defaultProgramme` 同一套規則：總體介紹 20、每間 20、剩下給綜合討論）。
@@ -1141,7 +1146,7 @@
   const KIND_LABEL = { briefing: "總體簡報", guest: "來賓報告", tour: "研究室參訪", discussion: "綜合討論", forum: "座談", photo: "合照", other: "其他" };
   const briefingLocationOf = (it) => ((it || []).find((s) => String(s.room) === "briefing") || {}).location || "";
   // 簡報第 2 頁的「頁碼」那一欄不再給人填：產檔時照選了幾頁自己算（pptx.mjs）。舊資料裡 AI 填過的照樣帶著走
-  const blockRow = (b = { kind: "discussion", title_en: "General discussion", title_2nd: "綜合討論" }, it) => `<tr data-slides-range="${esc(b.slides_range || "")}"><td><input type="time" value="${esc(b.start)}"></td><td><input type="time" value="${esc(b.end)}"></td><td><select>${Object.entries(KIND_LABEL).map(([k, label]) => `<option value="${k}" ${b.kind === k ? "selected" : ""}>${label}</option>`).join("")}</select>${b.kind === "briefing" ? `<input type="text" class="!w-20 ml-1" placeholder="地點 302" title="總體介紹在哪一間（空白就是 302）" value="${esc(briefingLocationOf(it === undefined ? state.visit?.itinerary : it))}" data-briefing-location>` : ""}</td><td><input type="text" value="${esc(b.title_en)}"></td><td><input type="text" value="${esc(b.title_2nd)}"></td><td><button type="button" class="muted" data-del-row title="刪掉這一列">✕</button></td></tr>`;
+  const blockRow = (b = { kind: "discussion", title_en: "General discussion", title_2nd: "綜合討論" }, it) => `<tr data-slides-range="${esc(b.slides_range || "")}"><td><input type="time" value="${esc(b.start)}"></td><td><input type="time" value="${esc(b.end)}"></td><td><select>${Object.entries(KIND_LABEL).map(([k, label]) => `<option value="${k}" ${b.kind === k ? "selected" : ""}>${label}</option>`).join("")}</select>${b.kind === "briefing" ? `<input type="text" class="!w-20 ml-1" placeholder="地點 301" title="總體介紹在哪一間（空白就是 301）" value="${esc(briefingLocationOf(it === undefined ? state.visit?.itinerary : it))}" data-briefing-location>` : ""}</td><td><input type="text" value="${esc(b.title_en)}"></td><td><input type="text" value="${esc(b.title_2nd)}"></td><td><button type="button" class="muted" data-del-row title="刪掉這一列">✕</button></td></tr>`;
   /** 「研究室參訪」那一列底下的五間：一間一個分鐘數，留 0 就是不去。 */
   const roomsRow = (it) => {
     const by = new Map((it || []).map((s, i) => [String(s.room), { ...s, order: i }]));
@@ -1214,7 +1219,7 @@
    */
   function renderProgrammeView() {
     const it = readItinerary();
-    const where = it[0]?.location || "302";
+    const where = it[0]?.location || BRIEFING_ROOM;
     const v = state.visit || {};
     const row = (time, body, indent = "") => `<div class="flex flex-wrap items-baseline gap-x-3 ${indent}"><span class="tabular-nums muted">${time}</span>${body}</div>`;
     const blockName = (b) => (b.kind !== "other" && KIND_LABEL[b.kind]) || b.title_2nd || b.title_en || KIND_LABEL.other;

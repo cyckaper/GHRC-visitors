@@ -1,10 +1,11 @@
 import { fail, json, nowISO, readJSON, requireAdmin, siteUrl } from "../lib/http.mts";
 import { getStore } from "../lib/store.mts";
 import type { Visit } from "../lib/types.mts";
-import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, posterFingerprint, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes, needsGeo, sanitizeGeo, sanitizePublic, institutionKeys, visitEndAt, isForum, toForumProgramme, defaultProgramme, hasDictation, sanitizeSpecialNotes, orgLabel, sameOrg } from "../../lib/visit.mjs";
+import { briefingBlockMinutes, deckFingerprint, emptyVisit, ensureBriefingFirst, isValidVisitId, makeVisitId, publicVisit, sanitizeMaterials, staleOutputs, posterFingerprint, toCSV, minutesBetween, endTimeOf, wrapupNA, retimeProgramme, withLabMinutes, needsGeo, sanitizeGeo, sanitizePublic, institutionKeys, visitEndAt, isForum, toForumProgramme, defaultProgramme, hasDictation, sanitizeSpecialNotes, orgLabel, sameOrg, OLD_BRIEFING_LOCATION } from "../../lib/visit.mjs";
 import { triggerDriveSync } from "../lib/drive.mts";
 import { purgePublicVisits } from "../lib/cdn.mts";
 import { dropDraft, moveDraft } from "./draft.mts";
+import { runMigrations } from "../lib/migrations.mts";
 
 /**
  * GET  /api/visits?id=X&public=1   來賓端可見子集（不需授權）
@@ -45,6 +46,9 @@ export default async (req: Request) => {
       // 算在伺服器這一邊，指紋的算法就只有一份。
       return json({ ok: true, visit: v, responses, stale: staleOutputs(v) });
     }
+    // 只做一次的資料更正（例如 2026-11-13 總體介紹從 302 改到 301）：後台一打開就是這一支，先做完再列——
+    // 接著打開的那一場就是改過的那一份。做過的只多讀一個小檔；出錯不擋清單
+    await runMigrations(store);
     // geo：訪客地圖上這個單位在哪裡（/api/geo 查的）；geo_stale：還沒查、或單位改過名字，資料分頁會自己去查
     // group：匯入的舊紀錄裡，原表同一列拆出來的那幾筆（算同一場）；imported：這一場是從以前的名單匯入的
     const all = await store.listVisits();
@@ -136,6 +140,14 @@ export default async (req: Request) => {
         if (step && Number(step.minutes) > 0) merged.itinerary = withLabMinutes(merged.itinerary, room, Number(step.minutes)) as Visit["itinerary"];
       }
       if (unseen.length) merged.programme = retimeProgramme(merged) as Visit["programme"];
+      // 總體介紹從 302 搬到 301 的那一次（netlify/lib/migrations.mts）：還開著舊畫面的分頁（它手上那一份比搬的時間早）
+      // 送回來的 302 是搬之前讀的，不算——不然那一場一存檔又回到 302。看過之後要改回 302 就照他的
+      const movedAt = String((existing as any)?.briefing_moved_at || "");
+      if (movedAt && (!base || base < movedAt)) {
+        const sent = (merged.itinerary || []).find((s) => String(s.room) === "briefing");
+        const kept = (existing!.itinerary || []).find((s) => String(s.room) === "briefing");
+        if (sent && kept && String(sent.location || "").trim() === OLD_BRIEFING_LOCATION) sent.location = kept.location;
+      }
       merged.created_at = existing?.created_at || nowISO();
       merged.updated_at = nowISO();
       // 剛產出來的那一份簡報：把**這一刻的行程指紋**記下來，之後行程改了才知道手上那個 .pptx 是舊的。
@@ -198,7 +210,8 @@ function hasHappened(v: Visit): boolean {
  * 後台表單管不到的欄位——別的端點或背景工作在寫：摘要（summary）、後續提醒（reminder-cron）、Drive 備份、
  * 名片、簽名簿、口述、當天資料（materials）、信件與寄出紀錄（letter）、寄信時跟著改的狀態（status）、
  * 後續那四件事的「本次沒有」（wrapup，走 `action: "wrapup"`）、從以前的名單匯入的來源（imported，匯入時寫的）、
- * 歡迎海報輸出的紀錄（poster，走 `action: "poster"`）、各研究室上傳的照片（lab_photos，只有 /api/labphotos 在寫）。
+ * 歡迎海報輸出的紀錄（poster，走 `action: "poster"`）、各研究室上傳的照片（lab_photos，只有 /api/labphotos 在寫）、
+ * 總體介紹從 302 搬到 301 的時間（briefing_moved_at，只有 netlify/lib/migrations.mts 在寫）。
  * 一般存檔**帶了也不算**，一律沿用伺服器上那一份。
  *
  * 以前是「body 沒帶才沿用」，可是後台的 readForm() 一直是把手上那一份**整個**送回來的，這幾格幾乎每次都帶著，
@@ -206,7 +219,7 @@ function hasHappened(v: Visit): boolean {
  * isUnused() 又把網址當成還沒用出去，下一次改日期或代碼就搬家，寄出去的那個連結跟著失效。
  * 提醒紀錄被洗掉則會害後續提醒重寄一次。要改這幾格，走寫它的那一支端點。
  */
-const KEPT = ["summary", "summary_at", "reminders", "drive", "cards", "signbook", "dictation", "letters", "materials", "status", "wrapup", "imported", "poster", "lab_photos"] as const;
+const KEPT = ["summary", "summary_at", "reminders", "drive", "cards", "signbook", "dictation", "letters", "materials", "status", "wrapup", "imported", "poster", "lab_photos", "briefing_moved_at"] as const;
 
 /**
  * 訪前功課（background）要保留哪一份。research-background 會把結果寫回存過檔的那一場；

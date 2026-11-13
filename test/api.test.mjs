@@ -4,7 +4,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -323,7 +323,7 @@ test("plan → programme, itinerary, slides (always-slides present), then save",
   assert.equal(mins(planned.programme.find((b) => b.kind === "briefing")), 20);
   assert.equal(mins(disc), 10);
   assert.equal(planned.itinerary[0].minutes, 20);
-  assert.equal(planned.itinerary[0].location, "302", "the briefing is in 302 by default");
+  assert.equal(planned.itinerary[0].location, "301", "the briefing is in 301 by default");
   assert.ok(planned.itinerary.slice(1).every((s) => s.minutes === 11));
   const p2 = await plan({ ...visit, itinerary: [{ room: "briefing", minutes: 20, location: "304" }] });
   assert.equal(p2.body.visit.itinerary[0].location, "304", "an organiser-chosen briefing room survives the AI plan");
@@ -2398,4 +2398,42 @@ test("研究室照片：研究室的人用支援人力表那把鑰匙上傳（�
   assert.equal(needsSync((await api(`/api/visits?id=${a}`, { headers: admin })).body.visit, []), true, "新傳上來的照片要備份");
   // 一批傳完：備份一次（這裡沒接 Drive，就只是 200）
   assert.equal((await json({ action: "done", visit_id: a })).status, 200);
+});
+
+test("總體介紹改在 301：還沒開始、還寫著舊預設 302 的那幾場，後台一打開就一次換成 301；過去的不動，之後特地選 302 的照他的", async () => {
+  // 明確指示（2026-11-13）：「在整個訪客的流程開始簡報改在301，簡報完之後直接接著301的介紹，302交給林寶秀老師介紹他們的研究」
+  const put = (body) => api("/api/visits", { method: "POST", headers: admin, body: JSON.stringify(body) });
+  const get = async (id) => (await api(`/api/visits?id=${id}`, { headers: admin })).body.visit;
+  const fresh = await put({ org: { name: "Briefing Default University" }, date: "2099-03-01", code: "brief-new" });
+  assert.equal(fresh.body.visit.itinerary[0].location, "301", "新的一場預設就是 301");
+  // 改之前建的（每一場都把 302 存進去了）：一場在將來、一場已經過去
+  const it302 = [{ room: "briefing", minutes: 20, location: "302" }, ...["301", "302", "303"].map((room) => ({ room, minutes: 20 }))];
+  const future = (await put({ org: { name: "Briefing Future University" }, date: "2099-03-02", code: "brief-future", itinerary: it302 })).body.visit;
+  const past = (await put({ org: { name: "Briefing Past University" }, date: "2026-01-05", code: "brief-past", itinerary: it302 })).body.visit;
+  assert.equal(future.itinerary[0].location, "302", "存檔照送來的存（特地寫的房號不會被換掉）");
+  // 這個測試的站台早就做過一次了：把記號拿掉，就是「部署之後第一次打開後台」
+  const mark = path.join(tmp, "media", "migrations", "briefing-301.json");
+  await rm(mark, { force: true });
+  await rm(`${mark}.meta.json`, { force: true });
+  const list = await api("/api/visits", { headers: admin });
+  assert.equal(list.status, 200);
+  const moved = await get(future.visit_id);
+  assert.equal(moved.itinerary[0].location, "301", "將來的那一場換成 301");
+  assert.ok(moved.updated_at > future.updated_at, "算改過了（Drive 備份、一頁摘要才會跟上）");
+  assert.deepEqual(moved.itinerary.slice(1), future.itinerary.slice(1), "只動總體介紹的地點");
+  assert.equal((await get(past.visit_id)).itinerary[0].location, "302", "過去的那一場當天就是在 302，不改");
+  const done = JSON.parse(await readFile(mark, "utf8"));
+  assert.ok(done.changed.includes(future.visit_id) && !done.changed.includes(past.visit_id) && !done.changed.includes(fresh.body.visit.visit_id), JSON.stringify(done));
+  assert.ok(moved.briefing_moved_at, "記下什麼時候搬的");
+  // 還開著舊畫面的分頁（手上那一份是搬之前讀的）打一個字自動存檔：送回來的 302 不算，打的字照存
+  const stale = await put({ ...future, purpose: "舊畫面打的字" });
+  assert.equal(stale.status, 200);
+  assert.equal(stale.body.visit.itinerary[0].location, "301", "舊畫面送回來的 302 不會把它搬回去");
+  assert.equal(stale.body.visit.purpose, "舊畫面打的字");
+  assert.equal(stale.body.visit.briefing_moved_at, moved.briefing_moved_at, "一般存檔帶什麼都不算");
+  // 做過了：之後有人特地選回 302（手上是搬過之後的那一份），再打開也不會又被改
+  await put({ ...stale.body.visit, itinerary: it302 });
+  await api("/api/visits", { headers: admin });
+  assert.equal((await get(future.visit_id)).itinerary[0].location, "302", "只做一次");
+  for (const id of [fresh.body.visit.visit_id, future.visit_id, past.visit_id]) await api(`/api/visits?id=${id}`, { method: "DELETE", headers: admin });
 });

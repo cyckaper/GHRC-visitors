@@ -362,7 +362,7 @@
   const route = steps.map((s) => s.room).filter((r) => r !== "briefing");
   const ordered = [...labsData.labs].sort((a, b) => rank(a.room) - rank(b.room));
   function rank(room) { const i = route.indexOf(room); return i < 0 ? 100 + Number(room) : i; }
-  // 動線第一站：總體介紹（總體簡報），預設在 302
+  // 動線第一站：總體介紹（總體簡報），預設在 301（總體介紹完就在 301 接著介紹 301，下一站 302）
   // 座談的場次：總體介紹之後是座談（不是走訪研究室），標題也不寫「與研究室」
   const briefingKey = forum ? "kind_briefing" : "briefing";
   const hintKey = forum ? "briefing_hint_forum" : "briefing_hint";
